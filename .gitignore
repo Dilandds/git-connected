@@ -1,43 +1,24 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-*.egg
-
-# Virtual Environment
-venv/
-env/
-ENV/
-venv*/
-
-# PyInstaller
-*.spec.bak
-*.manifest
-
-# Application builds
-*.app
-*.dmg
-*.exe
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Logs
+logs
 *.log
-app_debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Test files
-test_*.py
-check_*.py
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
