@@ -67,6 +67,7 @@ class AnnotationCard(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         self.init_ui()
         self._update_style()
+        self._update_tooltip()
     
     def init_ui(self):
         """Initialize the card UI."""
@@ -164,6 +165,28 @@ class AnnotationCard(QFrame):
         """Update the card with new annotation data."""
         self.annotation = annotation
         self._update_style()
+        self._update_tooltip()
+    
+    def _update_tooltip(self):
+        """Update the hover tooltip with annotation details."""
+        status = "✓ Validated" if self.annotation.is_validated else "⏳ Pending - Click to edit"
+        coord = f"({self.annotation.point[0]:.2f}, {self.annotation.point[1]:.2f}, {self.annotation.point[2]:.2f})"
+        
+        tooltip_parts = [
+            f"<b>Point {self.annotation.id}</b>",
+            f"<br><b>Status:</b> {status}",
+            f"<br><b>Location:</b> {coord}",
+        ]
+        
+        if self.annotation.text:
+            # Truncate long text
+            text_preview = self.annotation.text[:100] + "..." if len(self.annotation.text) > 100 else self.annotation.text
+            tooltip_parts.append(f"<br><b>Note:</b> {text_preview}")
+        
+        if self.annotation.image_paths:
+            tooltip_parts.append(f"<br><b>Photos:</b> {len(self.annotation.image_paths)} attached")
+        
+        self.setToolTip("".join(tooltip_parts))
 
 
 class AnnotationPanel(QWidget):
