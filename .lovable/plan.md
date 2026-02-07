@@ -1,158 +1,145 @@
 
 
-# Ruler/Measurement Tool Implementation Plan
+# Annotation Export with Reader Mode
 
 ## Overview
 
-Add a precise ruler tool for measuring 3D objects with orthographic pre-defined views (Front, Side, Top, Bottom, Rear) for accuracy. When the ruler mode is activated, the viewer automatically switches to orthographic projection and displays view selection buttons.
+This plan implements a comprehensive annotation sharing system that allows ECTOFORM users to export 3D files with annotations, and automatically opens annotated files in **Reader Mode** (view-only). New 3D objects without annotations will have full **Annotation Mode** available.
 
----
-
-## UI Design Recommendation
-
-### Toolbar Integration
-
-Add a new "Ruler" toggle button to the existing `ViewControlsToolbar`:
+## Workflow
 
 ```text
-+---------------------------------------------------------------+
-| [Grid] [Light] [Solid] | [Reset] [Front] [Side] [Top] | [📏 Ruler] [⛶] [📂] [↻] |
-+---------------------------------------------------------------+
++---------------------------+     +---------------------------+
+|  User A: Create Model     |     |  User B: Receive File     |
++---------------------------+     +---------------------------+
+           |                                   |
+           v                                   v
+  Load new 3D file              Open file with annotations
+           |                                   |
+           v                                   v
+  Enable Annotation Mode        Auto-detect Reader Mode
+  (Gray dots -> Black)                         |
+           |                                   v
+           v                     Display annotations (view-only)
+  Export with Annotations        - See all markers (black dots)
+  (.annotations.json +           - Hover for tooltips
+   images folder)                - Click to view comments/photos
+           |                     - Annotation button disabled
+           v                                   |
+  Share file bundle              Cannot add/edit/delete
+  (model + annotations + images)   annotations
++---------------------------+     +---------------------------+
 ```
 
-When **Ruler mode is active**, a secondary measurement toolbar appears below with view options:
+## What You'll Get
+
+1. **Enhanced Export**: Export any 3D format (STL, STEP, OBJ, 3DM, IGES) with annotations
+2. **Bundled Images**: Photos attached to annotations are copied to a dedicated folder
+3. **Automatic Reader Mode**: When opening a file with annotations, ECTOFORM enters read-only mode
+4. **Visual Indicators**: Clear UI feedback showing "Reader Mode" status
+5. **View-Only Popup**: Clicking annotation dots opens a simplified view (no edit/delete options)
+
+## Technical Details
+
+### 1. Enhanced Annotation Exporter
+
+Update `core/annotation_exporter.py` to:
+- Copy attached images to a `{model_name}_annotations/` folder alongside the model
+- Store relative paths to images in the JSON sidecar file
+- Add a `reader_mode: true` flag to mark files as read-only when shared
+- Support all input formats (the sidecar JSON works with any format)
+
+### 2. Reader Mode Detection in Main Window
+
+Modify `stl_viewer.py` to:
+- Check for existing annotations when loading a file
+- If annotations exist, set a `reader_mode` flag
+- Disable the Annotation toolbar button when in Reader Mode
+- Show a banner or indicator: "📖 Reader Mode - View Only"
+
+### 3. New Reader-Only Popup
+
+Create `ui/annotation_viewer_popup.py`:
+- Simplified popup that shows comment text and photos
+- No "Delete" or text editing functionality
+- Only a "Close" button
+- Used when clicking annotations in Reader Mode
+
+### 4. Annotation Panel Updates
+
+Modify `ui/annotation_panel.py`:
+- Add `set_reader_mode(enabled: bool)` method
+- In reader mode:
+  - Hide "Clear All" button
+  - Cards show view-only styling
+  - Clicking cards opens the viewer popup (not editor)
+
+### 5. Toolbar Updates
+
+Modify `ui/toolbar.py`:
+- Disable "Annotate" button when Reader Mode is active
+- Show tooltip: "Annotations are read-only for imported files"
+
+### 6. Export Menu Enhancement
+
+Add an export option in the sidebar that:
+- Prompts user to choose output format (STL, OBJ, etc.)
+- Bundles model + annotation JSON + images folder
+- Shows confirmation with file list
+
+### File Structure for Shared Annotations
+
+When exporting `MyModel.stl` with annotations:
 
 ```text
-+---------------------------------------------------------------+
-| 📐 Measure Mode  |  [Front] [Side] [Top] [Bottom] [Rear]  |  [Exit Ruler]  |
-+---------------------------------------------------------------+
+MyModel.stl                       # The 3D model
+MyModel.annotations.json          # Annotation data with reader_mode flag
+MyModel_annotations/              # Folder for attached images
+  ├── annotation_1_photo_1.jpg
+  ├── annotation_1_photo_2.png
+  └── annotation_3_photo_1.jpg
 ```
 
-### Measurement Workflow
+### Reader Mode Flag in JSON
 
-1. Click "Ruler" button - activates measure mode
-2. View automatically switches to **Front** (orthographic projection)
-3. User can select other views: Side, Top, Bottom, Rear
-4. Click two points on the model to measure distance
-5. Distance displayed as an overlay annotation with a line connecting the points
-
-### Visual Feedback
-
-- Active measurement points shown as small spheres (color: `#5294E2`)
-- Connecting line between points (dashed or solid)
-- Distance label positioned at midpoint of the measurement line
-- All measurements cleared when exiting ruler mode or changing views
-
----
-
-## Technical Implementation
-
-### 1. New File: `ui/ruler_toolbar.py`
-
-A secondary toolbar widget that appears when ruler mode is active:
-
-| Component | Purpose |
-|-----------|---------|
-| `RulerToolbar(QWidget)` | Collapsible toolbar for measurement views |
-| View buttons | Front, Side, Top, Bottom, Rear - each switches to orthographic |
-| Clear button | Clears all current measurements |
-| Exit button | Exits ruler mode |
-
-### 2. Modify: `ui/toolbar.py`
-
-- Add new `ruler_btn` (📏 Ruler) to the utility actions section
-- Add signal: `toggle_ruler = pyqtSignal()`
-- Track state: `self.ruler_mode_enabled = False`
-
-### 3. Modify: `viewer_widget.py`
-
-Add measurement functionality using PyVista's built-in picking:
-
-```python
-# New methods to add:
-def enable_ruler_mode(self):
-    """Enable point-to-point measurement mode."""
-    self.ruler_mode = True
-    self.measurement_points = []
-    self.plotter.enable_point_picking(
-        callback=self._on_point_picked,
-        show_message=False,
-        use_mesh=True
-    )
-    # Switch to orthographic projection
-    self.plotter.enable_parallel_projection()
-
-def _on_point_picked(self, point):
-    """Handle point picked for measurement."""
-    self.measurement_points.append(point)
-    # Add sphere marker at picked point
-    sphere = pv.Sphere(radius=0.5, center=point)
-    self.plotter.add_mesh(sphere, color='#5294E2', name=f'measure_pt_{len(self.measurement_points)}')
-    
-    if len(self.measurement_points) == 2:
-        # Calculate and display distance
-        distance = self._calculate_distance(self.measurement_points[0], self.measurement_points[1])
-        self._draw_measurement_line(distance)
-        self.measurement_points = []  # Reset for next measurement
+```text
+{
+  "version": "1.0",
+  "reader_mode": true,
+  "model_file": "MyModel.stl",
+  "annotations": [
+    {
+      "id": 1,
+      "point": [10.5, 20.3, 5.0],
+      "text": "Check this edge",
+      "is_validated": true,
+      "image_paths": ["MyModel_annotations/annotation_1_photo_1.jpg"]
+    }
+  ]
+}
 ```
 
-### 4. Modify: `stl_viewer.py`
+## Files to Create
 
-Connect new signals:
+| File | Purpose |
+|------|---------|
+| `ui/annotation_viewer_popup.py` | Read-only popup for viewing annotations |
 
-```python
-def _connect_toolbar_signals(self):
-    # ... existing connections ...
-    self.toolbar.toggle_ruler.connect(self._toggle_ruler_mode)
-    
-def _toggle_ruler_mode(self):
-    """Toggle ruler/measurement mode."""
-    if self.toolbar.ruler_mode_enabled:
-        self.viewer_widget.enable_ruler_mode()
-        self.ruler_toolbar.show()
-        self._view_front()  # Auto-switch to front view
-    else:
-        self.viewer_widget.disable_ruler_mode()
-        self.ruler_toolbar.hide()
-```
+## Files to Modify
 
-### 5. View Methods for Measurement (Orthographic)
+| File | Changes |
+|------|---------|
+| `core/annotation_exporter.py` | Add image bundling, reader_mode flag, export all formats |
+| `stl_viewer.py` | Detect reader mode on file load, show indicator |
+| `ui/annotation_panel.py` | Add reader mode support, disable editing when active |
+| `ui/annotation_popup.py` | Minor updates for reader mode compatibility |
+| `ui/toolbar.py` | Disable Annotate button in reader mode |
+| `ui/sidebar_panel.py` | Add "Export with Annotations" button (optional) |
 
-| View | PyVista Method | Camera Position |
-|------|----------------|-----------------|
-| Front | `view_yz()` | +X axis looking at YZ plane |
-| Side (Right) | `view_xz()` | +Y axis looking at XZ plane |
-| Top | `view_xy()` | +Z axis looking at XY plane |
-| Bottom | `view_xy()` + flip | -Z axis looking at XY plane |
-| Rear | `view_yz()` + flip | -X axis looking at YZ plane |
+## Implementation Notes
 
----
-
-## File Changes Summary
-
-| File | Action | Changes |
-|------|--------|---------|
-| `ui/ruler_toolbar.py` | **Create** | New measurement toolbar with view buttons |
-| `ui/toolbar.py` | Modify | Add ruler button and signal |
-| `ui/styles.py` | Modify | Add ruler toolbar styles |
-| `viewer_widget.py` | Modify | Add measurement/picking methods |
-| `stl_viewer.py` | Modify | Connect signals, manage ruler toolbar visibility |
-
----
-
-## Technical Notes
-
-### PyVista Measurement Capabilities
-
-PyVista supports:
-- `enable_point_picking()` - Pick points on mesh surface
-- `enable_parallel_projection()` - Orthographic view for accurate measurement
-- `add_lines()` - Draw measurement lines
-- `add_point_labels()` - Display distance annotations
-
-### Accuracy Considerations
-
-- Orthographic projection eliminates perspective distortion
-- Pre-defined views ensure consistent measurement planes
-- Point snapping to mesh vertices ensures precise picks
+- The `.annotations.json` sidecar approach already works with all file formats
+- Images are copied (not moved) to preserve originals
+- Reader Mode is determined by the presence of existing annotations on file load
+- Users can still use all other tools (ruler, views, etc.) in Reader Mode
 
