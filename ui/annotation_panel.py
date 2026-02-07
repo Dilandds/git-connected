@@ -1,5 +1,6 @@
 """
 Annotation Panel UI for displaying and managing 3D model annotations.
+Updated: Test commit for local sync verification.
 """
 import logging
 from dataclasses import dataclass, field
