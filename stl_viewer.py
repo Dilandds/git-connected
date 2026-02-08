@@ -237,18 +237,18 @@ class STLViewerWindow(QMainWindow):
         """Load a file that was dropped on the viewer."""
         logger.info(f"_load_dropped_file: Loading dropped file: {file_path}")
         
-        # Validate file extension (allow .efm files too)
+        # Validate file extension (allow .ecto files too)
         file_ext = file_path.lower()
-        if file_ext.endswith('.efm'):
-            # Handle .efm files
-            self._load_efm_file(file_path)
+        if file_ext.endswith('.ecto'):
+            # Handle .ecto files
+            self._load_ecto_file(file_path)
             return
         
         if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs')):
             QMessageBox.warning(
                 self,
                 "Invalid File",
-                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .efm extension)."
+                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .ecto extension)."
             )
             return
         
@@ -594,21 +594,21 @@ class STLViewerWindow(QMainWindow):
 
     
     def upload_stl_file(self):
-        """Open file dialog and load selected 3D or .efm file."""
+        """Open file dialog and load selected 3D or .ecto file."""
         logger.info("upload_stl_file: Opening file dialog...")
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select 3D File",
             "",
-            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.efm);;ECTOFORM Bundle (*.efm);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;All Files (*)"
+            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;All Files (*)"
         )
         
         if file_path:
             logger.info(f"upload_stl_file: File selected: {file_path}")
             
-            # Check if it's an .efm file
-            if file_path.lower().endswith('.efm'):
-                self._load_efm_file(file_path)
+            # Check if it's an .ecto file
+            if file_path.lower().endswith('.ecto'):
+                self._load_ecto_file(file_path)
                 return
             
             # Validate file extension for regular 3D files
@@ -618,7 +618,7 @@ class STLViewerWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Invalid File",
-                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .efm extension)."
+                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .ecto extension)."
                 )
                 return
             
@@ -791,29 +791,29 @@ class STLViewerWindow(QMainWindow):
         logger.info("save_current_annotations: Annotations will be saved on export")
         return True
     
-    def _load_efm_file(self, efm_path: str):
-        """Load an .efm bundle file."""
-        logger.info(f"_load_efm_file: Loading .efm file: {efm_path}")
+    def _load_ecto_file(self, ecto_path: str):
+        """Load an .ecto bundle file."""
+        logger.info(f"_load_ecto_file: Loading .ecto file: {ecto_path}")
         
         try:
-            from core.efm_format import EfmFormat
+            from core.ecto_format import EctoFormat
             
-            # Import the .efm bundle
-            model_path, annotations, reader_mode, temp_dir = EfmFormat.import_efm(efm_path)
+            # Import the .ecto bundle
+            model_path, annotations, reader_mode, temp_dir = EctoFormat.import_ecto(ecto_path)
             
             if model_path is None:
                 # temp_dir contains error message in this case
                 QMessageBox.critical(
                     self,
                     "Error",
-                    f"Failed to open .efm file:\n{temp_dir}"
+                    f"Failed to open .ecto file:\n{temp_dir}"
                 )
                 return
             
             # Store temp_dir for cleanup on next load or app exit
-            if hasattr(self, '_efm_temp_dir') and self._efm_temp_dir:
-                EfmFormat.cleanup_temp_dir(self._efm_temp_dir)
-            self._efm_temp_dir = temp_dir
+            if hasattr(self, '_ecto_temp_dir') and self._ecto_temp_dir:
+                EctoFormat.cleanup_temp_dir(self._ecto_temp_dir)
+            self._ecto_temp_dir = temp_dir
             
             # Load the extracted model
             success = self.viewer_widget.load_stl(model_path)
@@ -822,16 +822,16 @@ class STLViewerWindow(QMainWindow):
                 QMessageBox.critical(
                     self,
                     "Error",
-                    f"Failed to load model from .efm bundle"
+                    f"Failed to load model from .ecto bundle"
                 )
-                EfmFormat.cleanup_temp_dir(temp_dir)
-                self._efm_temp_dir = None
+                EctoFormat.cleanup_temp_dir(temp_dir)
+                self._ecto_temp_dir = None
                 return
             
-            # Update window title with original filename from .efm
-            filename = Path(efm_path).stem  # Remove .efm extension
-            self.setWindowTitle(f"ECTOFORM - {filename}.efm")
-            self.toolbar.set_loaded_filename(f"{filename}.efm")
+            # Update window title with original filename from .ecto
+            filename = Path(ecto_path).stem  # Remove .ecto extension
+            self.setWindowTitle(f"ECTOFORM - {filename}.ecto")
+            self.toolbar.set_loaded_filename(f"{filename}.ecto")
             self.toolbar.set_stl_loaded(True)
             
             # Update dimensions display
@@ -839,7 +839,7 @@ class STLViewerWindow(QMainWindow):
                 mesh = self.viewer_widget.current_mesh
                 if mesh is not None:
                     mesh_data = MeshCalculator.get_mesh_data(mesh)
-                    self.sidebar_panel.update_dimensions(mesh_data, efm_path)
+                    self.sidebar_panel.update_dimensions(mesh_data, ecto_path)
             
             # Clear existing annotations first
             self._clear_all_annotations()
@@ -848,7 +848,7 @@ class STLViewerWindow(QMainWindow):
             if annotations:
                 self.annotation_panel.load_annotations(annotations)
                 
-                # Always enable reader mode for .efm files
+                # Always enable reader mode for .ecto files
                 self.toolbar.set_reader_mode(True)
                 self.annotation_panel.set_reader_mode(True)
                 self.annotation_panel.show()
@@ -863,30 +863,30 @@ class STLViewerWindow(QMainWindow):
                     if hasattr(self.viewer_widget, 'add_annotation_marker'):
                         self.viewer_widget.add_annotation_marker(ann_id, point, color)
                 
-                logger.info(f"_load_efm_file: Loaded {len(annotations)} annotations (reader_mode=True)")
+                logger.info(f"_load_ecto_file: Loaded {len(annotations)} annotations (reader_mode=True)")
                 self._update_sidebar_annotation_count()
             else:
                 # Even without annotations, enable reader mode
                 self.toolbar.set_reader_mode(True)
                 self.annotation_panel.set_reader_mode(True)
             
-            logger.info(f"_load_efm_file: Successfully loaded .efm file")
+            logger.info(f"_load_ecto_file: Successfully loaded .ecto file")
             
         except Exception as e:
-            logger.error(f"_load_efm_file: Error loading .efm file: {e}", exc_info=True)
+            logger.error(f"_load_ecto_file: Error loading .ecto file: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to open .efm file:\n{str(e)}"
+                f"Failed to open .ecto file:\n{str(e)}"
             )
     
     def closeEvent(self, event):
         """Handle window close - cleanup temp directories."""
-        # Cleanup any extracted .efm temp directory
-        if hasattr(self, '_efm_temp_dir') and self._efm_temp_dir:
+        # Cleanup any extracted .ecto temp directory
+        if hasattr(self, '_ecto_temp_dir') and self._ecto_temp_dir:
             try:
-                from core.efm_format import EfmFormat
-                EfmFormat.cleanup_temp_dir(self._efm_temp_dir)
+                from core.ecto_format import EctoFormat
+                EctoFormat.cleanup_temp_dir(self._ecto_temp_dir)
             except Exception:
                 pass
         super().closeEvent(event)

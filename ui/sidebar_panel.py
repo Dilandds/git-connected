@@ -941,7 +941,7 @@ class SidebarPanel(QWidget):
         return None
     
     def create_export_annotations_section(self):
-        """Create the Export as .efm section."""
+        """Create the Export as .ecto section."""
         card = QFrame()
         card.setObjectName("exportAnnotationsCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -954,7 +954,7 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title_label = QLabel("Export as .efm")
+        title_label = QLabel("Export as .ecto")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -971,7 +971,7 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Description
-        desc_label = QLabel("Export a single .efm file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .efm files.")
+        desc_label = QLabel("Export a single .ecto file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .ecto files.")
         desc_font = QFont()
         desc_font.setPointSize(11)
         desc_label.setFont(desc_font)
@@ -985,7 +985,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.annotation_count_label)
         
         # Export button
-        self.export_annotations_btn = QPushButton("Export as .efm")
+        self.export_annotations_btn = QPushButton("Export as .ecto")
         self.export_annotations_btn.setObjectName("exportAnnotationsBtn")
         self.export_annotations_btn.setMinimumHeight(44)
         self.export_annotations_btn.setEnabled(False)
@@ -1010,7 +1010,7 @@ class SidebarPanel(QWidget):
                 color: {default_theme.text_primary};
             }}
         """)
-        self.export_annotations_btn.clicked.connect(self.export_as_efm)
+        self.export_annotations_btn.clicked.connect(self.export_as_ecto)
         card_layout.addWidget(self.export_annotations_btn)
         
         # Information footer
@@ -1062,8 +1062,8 @@ class SidebarPanel(QWidget):
             self.annotation_count_label.setText(f"📌 {count} annotation{'s' if count != 1 else ''} ready to export")
             self.export_annotations_btn.setEnabled(self.has_stl_loaded)
     
-    def export_as_efm(self):
-        """Export the current model as an .efm bundle file."""
+    def export_as_ecto(self):
+        """Export the current model as an .ecto bundle file."""
         if not self.has_stl_loaded:
             QMessageBox.warning(
                 self,
@@ -1089,7 +1089,7 @@ class SidebarPanel(QWidget):
             reply = QMessageBox.question(
                 self,
                 "No Annotations",
-                "There are no annotations to include.\nDo you want to export the model as .efm without annotations?",
+                "There are no annotations to include.\nDo you want to export the model as .ecto without annotations?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -1097,31 +1097,31 @@ class SidebarPanel(QWidget):
                 return
         
         # Open save dialog
-        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.efm"
+        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.ecto"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export as ECTOFORM Bundle",
             default_name,
-            "ECTOFORM Bundle (*.efm);;All Files (*)"
+            "ECTOFORM Bundle (*.ecto);;All Files (*)"
         )
         
         if not file_path:
             return
         
-        # Ensure .efm extension
-        if not file_path.lower().endswith('.efm'):
-            file_path += '.efm'
+        # Ensure .ecto extension
+        if not file_path.lower().endswith('.ecto'):
+            file_path += '.ecto'
         
         try:
-            from core.efm_format import EfmFormat
+            from core.ecto_format import EctoFormat
             
             # Show progress
             self.export_annotations_btn.setEnabled(False)
             self.export_annotations_btn.setText("Exporting...")
             QApplication.processEvents()
             
-            # Export as .efm bundle
-            success, result = EfmFormat.export(
+            # Export as .ecto bundle
+            success, result = EctoFormat.export(
                 mesh=mesh,
                 annotations=annotations,
                 output_path=file_path,
@@ -1131,7 +1131,7 @@ class SidebarPanel(QWidget):
             
             # Restore button
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export as .efm")
+            self.export_annotations_btn.setText("Export as .ecto")
             
             if success:
                 # Build success message
@@ -1154,16 +1154,16 @@ class SidebarPanel(QWidget):
                 QMessageBox.critical(
                     self,
                     "Export Error",
-                    f"Failed to create .efm bundle:\n{result}"
+                    f"Failed to create .ecto bundle:\n{result}"
                 )
         except Exception as e:
-            logger.error(f"Error exporting as .efm: {e}")
+            logger.error(f"Error exporting as .ecto: {e}")
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export as .efm")
+            self.export_annotations_btn.setText("Export as .ecto")
             QMessageBox.critical(
                 self,
                 "Export Error",
-                f"Failed to create .efm bundle:\n{str(e)}"
+                f"Failed to create .ecto bundle:\n{str(e)}"
             )
     
     def _get_annotations(self):
