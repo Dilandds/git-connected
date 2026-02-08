@@ -941,7 +941,7 @@ class SidebarPanel(QWidget):
         return None
     
     def create_export_annotations_section(self):
-        """Create the Export with Annotations section."""
+        """Create the Export as .ecto section."""
         card = QFrame()
         card.setObjectName("exportAnnotationsCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -954,14 +954,14 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title_label = QLabel("Export with Annotations")
+        title_label = QLabel("Export as .ecto")
         title_font = QFont()
         title_font.setPointSize(14)
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         
-        icon_label = QLabel("📝")
+        icon_label = QLabel("📦")
         icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
         icon_label.setAlignment(Qt.AlignCenter)
         
@@ -971,7 +971,7 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Description
-        desc_label = QLabel("Export the 3D model with all annotations bundled.\nRecipients will see annotations in read-only mode.")
+        desc_label = QLabel("Export a single .ecto file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .ecto files.")
         desc_font = QFont()
         desc_font.setPointSize(11)
         desc_label.setFont(desc_font)
@@ -985,7 +985,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.annotation_count_label)
         
         # Export button
-        self.export_annotations_btn = QPushButton("Export with Annotations")
+        self.export_annotations_btn = QPushButton("Export as .ecto")
         self.export_annotations_btn.setObjectName("exportAnnotationsBtn")
         self.export_annotations_btn.setMinimumHeight(44)
         self.export_annotations_btn.setEnabled(False)
@@ -1010,7 +1010,7 @@ class SidebarPanel(QWidget):
                 color: {default_theme.text_primary};
             }}
         """)
-        self.export_annotations_btn.clicked.connect(self.export_with_annotations)
+        self.export_annotations_btn.clicked.connect(self.export_as_ecto)
         card_layout.addWidget(self.export_annotations_btn)
         
         # Information footer
@@ -1035,7 +1035,7 @@ class SidebarPanel(QWidget):
         info_icon.setFixedWidth(18)
         info_icon.setAlignment(Qt.AlignTop)
         
-        disclaimer = QLabel("Creates: model file + .annotations.json + images folder. Share all files together.")
+        disclaimer = QLabel("Single file contains: model + annotations + photos. Recipients open it directly in ECTOFORM.")
         disclaimer_font = QFont()
         disclaimer_font.setPointSize(9)
         disclaimer.setFont(disclaimer_font)
@@ -1062,8 +1062,8 @@ class SidebarPanel(QWidget):
             self.annotation_count_label.setText(f"📌 {count} annotation{'s' if count != 1 else ''} ready to export")
             self.export_annotations_btn.setEnabled(self.has_stl_loaded)
     
-    def export_with_annotations(self):
-        """Export the current model with all annotations bundled."""
+    def export_as_ecto(self):
+        """Export the current model as an .ecto bundle file."""
         if not self.has_stl_loaded:
             QMessageBox.warning(
                 self,
@@ -1089,7 +1089,7 @@ class SidebarPanel(QWidget):
             reply = QMessageBox.question(
                 self,
                 "No Annotations",
-                "There are no annotations to export.\nDo you want to export the model without annotations?",
+                "There are no annotations to include.\nDo you want to export the model as .ecto without annotations?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -1097,67 +1097,73 @@ class SidebarPanel(QWidget):
                 return
         
         # Open save dialog
-        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}_annotated.stl"
-        file_path, selected_filter = QFileDialog.getSaveFileName(
+        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.ecto"
+        file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Model with Annotations",
+            "Export as ECTOFORM Bundle",
             default_name,
-            "STL Files (*.stl);;OBJ Files (*.obj);;All Files (*)"
+            "ECTOFORM Bundle (*.ecto);;All Files (*)"
         )
         
         if not file_path:
             return
         
-        # Ensure appropriate extension
-        if not any(file_path.lower().endswith(ext) for ext in ['.stl', '.obj']):
-            file_path += '.stl'
+        # Ensure .ecto extension
+        if not file_path.lower().endswith('.ecto'):
+            file_path += '.ecto'
         
         try:
-            from core.annotation_exporter import AnnotationExporter
+            from core.ecto_format import EctoFormat
             
             # Show progress
             self.export_annotations_btn.setEnabled(False)
             self.export_annotations_btn.setText("Exporting...")
             QApplication.processEvents()
             
-            # Export model with annotations
-            success, result = AnnotationExporter.export_with_model(
-                mesh, 
-                annotations, 
-                file_path,
-                reader_mode=True  # Recipients see read-only annotations
+            # Export as .ecto bundle
+            success, result = EctoFormat.export(
+                mesh=mesh,
+                annotations=annotations,
+                output_path=file_path,
+                source_format='stl',
+                original_filename=self.current_stl_filename
             )
             
             # Restore button
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export with Annotations")
+            self.export_annotations_btn.setText("Export as .ecto")
             
             if success:
                 # Build success message
-                msg = f"Export complete!\n\n{result}\n\nFiles created:"
-                msg += f"\n• {os.path.basename(file_path)}"
+                msg = f"Export complete!\n\nCreated: {os.path.basename(file_path)}"
                 if annotations:
-                    msg += f"\n• {os.path.splitext(os.path.basename(file_path))[0]}.annotations.json"
-                    # Check if images folder was created
-                    images_folder = AnnotationExporter.get_images_folder_path(file_path)
-                    if os.path.exists(images_folder):
-                        msg += f"\n• {os.path.basename(images_folder)}/ (images)"
+                    msg += f"\n\n📦 Bundle contains:"
+                    msg += f"\n• 3D Model (STL)"
+                    msg += f"\n• {len(annotations)} annotation{'s' if len(annotations) != 1 else ''}"
+                    # Count images
+                    image_count = sum(len(ann.get('image_paths', [])) for ann in annotations)
+                    if image_count > 0:
+                        msg += f"\n• {image_count} attached photo{'s' if image_count != 1 else ''}"
+                else:
+                    msg += f"\n\n📦 Bundle contains: 3D Model only"
+                
+                msg += "\n\nRecipients can open this file in ECTOFORM."
                 
                 QMessageBox.information(self, "Export Complete", msg)
             else:
                 QMessageBox.critical(
                     self,
                     "Export Error",
-                    f"Failed to export model with annotations:\n{result}"
+                    f"Failed to create .ecto bundle:\n{result}"
                 )
         except Exception as e:
-            logger.error(f"Error exporting with annotations: {e}")
+            logger.error(f"Error exporting as .ecto: {e}")
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export with Annotations")
+            self.export_annotations_btn.setText("Export as .ecto")
             QMessageBox.critical(
                 self,
                 "Export Error",
-                f"Failed to export model with annotations:\n{str(e)}"
+                f"Failed to create .ecto bundle:\n{str(e)}"
             )
     
     def _get_annotations(self):
