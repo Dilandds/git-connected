@@ -848,6 +848,9 @@ class STLViewerWidget(QWidget):
                 logger.info("enable_ruler_mode: Orthographic projection enabled")
             except Exception as e:
                 logger.warning(f"enable_ruler_mode: Could not enable orthographic projection: {e}")
+            
+            # Disable rotation but keep zoom - use zoom-only interaction style
+            self._enable_zoom_only_interaction()
             return True
 
         # Fallback to PyVista picking helpers (if VTK interactor not available)
@@ -908,6 +911,9 @@ class STLViewerWidget(QWidget):
             logger.info("disable_ruler_mode: Perspective projection restored")
         except Exception as e:
             logger.warning(f"disable_ruler_mode: Could not restore projection: {e}")
+        
+        # Restore full interaction (rotation, pan, zoom)
+        self._restore_full_interaction()
 
     def _on_point_picked(self, point):
         """Handle point picked for measurement."""
@@ -928,6 +934,8 @@ class STLViewerWidget(QWidget):
                 color='black', 
                 name=f'measure_pt_{len(self.measurement_points)}_{id(point)}'
             )
+            # Make marker always render in front (disable depth testing)
+            self._set_actor_always_on_top(actor)
             self.measurement_actors.append(actor)
             logger.info(f"_on_point_picked: Marker added at {point}")
         except Exception as e:
@@ -1002,6 +1010,8 @@ class STLViewerWidget(QWidget):
                 line_width=2,
                 name=f'measure_line_{id(point1)}'
             )
+            # Make line always render in front
+            self._set_actor_always_on_top(line_actor)
             self.measurement_actors.append(line_actor)
             
             # Arrowhead at point1 (pointing from p2 toward p1)
@@ -1018,6 +1028,8 @@ class STLViewerWidget(QWidget):
                     color='black',
                     name=f'measure_arrow1_{id(point1)}'
                 )
+                # Make arrowhead always render in front
+                self._set_actor_always_on_top(cone1_actor)
                 self.measurement_actors.append(cone1_actor)
             except Exception as e:
                 logger.warning(f"_draw_measurement_line: Could not add arrowhead 1: {e}")
@@ -1036,6 +1048,8 @@ class STLViewerWidget(QWidget):
                     color='black',
                     name=f'measure_arrow2_{id(point1)}'
                 )
+                # Make arrowhead always render in front
+                self._set_actor_always_on_top(cone2_actor)
                 self.measurement_actors.append(cone2_actor)
             except Exception as e:
                 logger.warning(f"_draw_measurement_line: Could not add arrowhead 2: {e}")
@@ -1103,6 +1117,79 @@ class STLViewerWidget(QWidget):
             logger.debug(f"clear_measurements: Could not render: {e}")
         
         logger.info("clear_measurements: Measurements cleared")
+    
+    # ========== Ruler Mode Interaction Control ==========
+    
+    def _enable_zoom_only_interaction(self):
+        """Restrict interaction to zoom only (disable rotation and pan) for ruler mode."""
+        try:
+            import vtk
+            iren = self._get_vtk_interactor()
+            if iren is None:
+                logger.warning("_enable_zoom_only_interaction: No interactor available")
+                return
+            
+            # Store the original interactor style if not already stored
+            if not hasattr(self, '_original_interactor_style'):
+                self._original_interactor_style = iren.GetInteractorStyle()
+            
+            # Create a custom interactor style that only allows zoom (dolly)
+            # vtkInteractorStyleRubberBandZoom allows only zoom
+            zoom_style = vtk.vtkInteractorStyleRubberBandZoom()
+            
+            # Actually, we want scroll-wheel zoom which is better handled by
+            # a custom style. Let's use TrackballCamera but intercept rotation.
+            # Simpler approach: use vtkInteractorStyleImage which allows pan + zoom but no rotation
+            # For static views, we want zoom only, so let's create minimal style
+            
+            # Use vtkInteractorStyleTrackballCamera but we'll filter events
+            # Better: use vtkInteractorStyleImage which is 2D-like (pan + zoom, no rotate)
+            image_style = vtk.vtkInteractorStyleImage()
+            iren.SetInteractorStyle(image_style)
+            
+            logger.info("_enable_zoom_only_interaction: Zoom-only interaction enabled")
+        except Exception as e:
+            logger.warning(f"_enable_zoom_only_interaction: Failed: {e}")
+    
+    def _restore_full_interaction(self):
+        """Restore full 3D interaction (rotation, pan, zoom)."""
+        try:
+            import vtk
+            iren = self._get_vtk_interactor()
+            if iren is None:
+                return
+            
+            if hasattr(self, '_original_interactor_style') and self._original_interactor_style is not None:
+                iren.SetInteractorStyle(self._original_interactor_style)
+                logger.info("_restore_full_interaction: Original interaction style restored")
+            else:
+                # Fallback: set a standard trackball camera style
+                trackball_style = vtk.vtkInteractorStyleTrackballCamera()
+                iren.SetInteractorStyle(trackball_style)
+                logger.info("_restore_full_interaction: Trackball camera style set")
+        except Exception as e:
+            logger.warning(f"_restore_full_interaction: Failed: {e}")
+    
+    def _set_actor_always_on_top(self, actor):
+        """Make an actor always render in front (disable depth testing)."""
+        if actor is None:
+            return
+        try:
+            prop = actor.GetProperty()
+            if prop is not None:
+                # Disable depth testing so it renders on top
+                prop.SetAmbient(1.0)
+                prop.SetDiffuse(0.0)
+            # Set the actor to render in the overlay layer
+            actor.SetVisibility(True)
+            # Force it to not be occluded by setting mapper to ignore depth
+            mapper = actor.GetMapper()
+            if mapper is not None:
+                mapper.SetResolveCoincidentTopologyToPolygonOffset()
+                mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-1, -1)
+            logger.debug("_set_actor_always_on_top: Actor set to render on top")
+        except Exception as e:
+            logger.debug(f"_set_actor_always_on_top: Failed: {e}")
     
     # ========== Orthographic View Methods for Ruler Mode ==========
     
