@@ -1,145 +1,158 @@
 
 
-# Annotation Export with Reader Mode
+# Custom ECTOFORM File Format (.ecto)
 
 ## Overview
 
-This plan implements a comprehensive annotation sharing system that allows ECTOFORM users to export 3D files with annotations, and automatically opens annotated files in **Reader Mode** (view-only). New 3D objects without annotations will have full **Annotation Mode** available.
+This plan introduces a new **`.ecto`** file format - a single, self-contained file that bundles the 3D model, annotations, and attached images. Only ECTOFORM can open this format, making it the perfect solution for sharing annotated 3D models.
+
+## The Solution: `.ecto` Format
+
+The `.ecto` format is essentially a **renamed ZIP archive** with a specific internal structure. This approach is:
+
+- **Simple to implement** - Uses Python's built-in `zipfile` module
+- **Self-contained** - One file contains everything
+- **Reliable** - ZIP is a battle-tested format
+- **Transparent to users** - They just see a single `.ecto` file
+
+```text
+MyModel.ecto (internally a ZIP archive)
+├── manifest.json          # Metadata + format version
+├── model.stl              # The 3D geometry (or .obj, etc.)
+├── annotations.json       # Annotation data with reader_mode flag
+└── images/                # Folder with attached photos
+    ├── annotation_1_photo_1.jpg
+    └── annotation_2_photo_1.png
+```
 
 ## Workflow
 
 ```text
 +---------------------------+     +---------------------------+
-|  User A: Create Model     |     |  User B: Receive File     |
+|  User A: Create & Export  |     |  User B: Open .ecto File  |
 +---------------------------+     +---------------------------+
            |                                   |
            v                                   v
-  Load new 3D file              Open file with annotations
+  Load 3D file (any format)       Double-click or File > Open
            |                                   |
            v                                   v
-  Enable Annotation Mode        Auto-detect Reader Mode
-  (Gray dots -> Black)                         |
-           |                                   v
-           v                     Display annotations (view-only)
-  Export with Annotations        - See all markers (black dots)
-  (.annotations.json +           - Hover for tooltips
-   images folder)                - Click to view comments/photos
-           |                     - Annotation button disabled
-           v                                   |
-  Share file bundle              Cannot add/edit/delete
-  (model + annotations + images)   annotations
+  Add annotations + photos        ECTOFORM extracts to temp
+           |                                   |
+           v                                   v
+  Click "Export as .ecto"         Loads model + annotations
+           |                                   |
+           v                                   v
+  Single MyModel.ecto file        Auto-enables Reader Mode
+  ready to share!                 (view-only annotations)
 +---------------------------+     +---------------------------+
 ```
 
 ## What You'll Get
 
-1. **Enhanced Export**: Export any 3D format (STL, STEP, OBJ, 3DM, IGES) with annotations
-2. **Bundled Images**: Photos attached to annotations are copied to a dedicated folder
-3. **Automatic Reader Mode**: When opening a file with annotations, ECTOFORM enters read-only mode
-4. **Visual Indicators**: Clear UI feedback showing "Reader Mode" status
-5. **View-Only Popup**: Clicking annotation dots opens a simplified view (no edit/delete options)
+1. **Single file sharing** - No more ZIP + unzip workflow
+2. **All data bundled** - Model, annotations, and photos in one file
+3. **Auto Reader Mode** - Recipients see annotations but can't edit
+4. **Native OS integration** - Can register `.ecto` extension on Windows/macOS
+5. **Any source format** - Works with STL, STEP, OBJ, IGES, 3DM inputs
 
 ## Technical Details
 
-### 1. Enhanced Annotation Exporter
+### 1. New ECTO Format Handler
 
-Update `core/annotation_exporter.py` to:
-- Copy attached images to a `{model_name}_annotations/` folder alongside the model
-- Store relative paths to images in the JSON sidecar file
-- Add a `reader_mode: true` flag to mark files as read-only when shared
-- Support all input formats (the sidecar JSON works with any format)
-
-### 2. Reader Mode Detection in Main Window
-
-Modify `stl_viewer.py` to:
-- Check for existing annotations when loading a file
-- If annotations exist, set a `reader_mode` flag
-- Disable the Annotation toolbar button when in Reader Mode
-- Show a banner or indicator: "📖 Reader Mode - View Only"
-
-### 3. New Reader-Only Popup
-
-Create `ui/annotation_viewer_popup.py`:
-- Simplified popup that shows comment text and photos
-- No "Delete" or text editing functionality
-- Only a "Close" button
-- Used when clicking annotations in Reader Mode
-
-### 4. Annotation Panel Updates
-
-Modify `ui/annotation_panel.py`:
-- Add `set_reader_mode(enabled: bool)` method
-- In reader mode:
-  - Hide "Clear All" button
-  - Cards show view-only styling
-  - Clicking cards opens the viewer popup (not editor)
-
-### 5. Toolbar Updates
-
-Modify `ui/toolbar.py`:
-- Disable "Annotate" button when Reader Mode is active
-- Show tooltip: "Annotations are read-only for imported files"
-
-### 6. Export Menu Enhancement
-
-Add an export option in the sidebar that:
-- Prompts user to choose output format (STL, OBJ, etc.)
-- Bundles model + annotation JSON + images folder
-- Shows confirmation with file list
-
-### File Structure for Shared Annotations
-
-When exporting `MyModel.stl` with annotations:
+Create `core/ecto_format.py`:
 
 ```text
-MyModel.stl                       # The 3D model
-MyModel.annotations.json          # Annotation data with reader_mode flag
-MyModel_annotations/              # Folder for attached images
-  ├── annotation_1_photo_1.jpg
-  ├── annotation_1_photo_2.png
-  └── annotation_3_photo_1.jpg
+class EctoFormat:
+    @staticmethod
+    def export(mesh, annotations, output_path, source_format='stl'):
+        """
+        Create .ecto bundle:
+        1. Create temp directory
+        2. Save mesh as model.{format}
+        3. Create annotations.json with reader_mode=True
+        4. Copy all attached images to images/
+        5. Create manifest.json with metadata
+        6. ZIP everything into output_path
+        7. Cleanup temp directory
+        """
+    
+    @staticmethod
+    def import_ecto(ecto_path):
+        """
+        Open .ecto bundle:
+        1. Extract to temp directory
+        2. Read manifest.json for format info
+        3. Return (model_path, annotations, reader_mode)
+        """
+    
+    @staticmethod
+    def is_ecto_file(file_path):
+        """Check if file is a valid .ecto format"""
 ```
 
-### Reader Mode Flag in JSON
+### 2. Manifest Structure
 
 ```text
 {
-  "version": "1.0",
-  "reader_mode": true,
-  "model_file": "MyModel.stl",
-  "annotations": [
-    {
-      "id": 1,
-      "point": [10.5, 20.3, 5.0],
-      "text": "Check this edge",
-      "is_validated": true,
-      "image_paths": ["MyModel_annotations/annotation_1_photo_1.jpg"]
-    }
-  ]
+    "format_version": "1.0",
+    "created_by": "ECTOFORM",
+    "created_at": "2025-02-08T12:00:00Z",
+    "model_file": "model.stl",
+    "model_format": "stl",
+    "reader_mode": true,
+    "annotation_count": 5,
+    "has_images": true
 }
 ```
+
+### 3. Update File Loading
+
+Modify `stl_viewer.py` to:
+- Accept `.ecto` in the file filter
+- Detect `.ecto` extension and use `EctoFormat.import_ecto()`
+- Extract to a temp directory, load the model, then load annotations
+
+### 4. Update Sidebar Export
+
+Modify `ui/sidebar_panel.py` to:
+- Change "Export with Annotations" to export as `.ecto` format
+- Show save dialog with `.ecto` filter
+- Call `EctoFormat.export()` with current mesh and annotations
+
+### 5. OS Integration (Optional Enhancement)
+
+For Windows/macOS builds:
+- Register `.ecto` file extension with ECTOFORM
+- Users can double-click `.ecto` files to open directly
 
 ## Files to Create
 
 | File | Purpose |
 |------|---------|
-| `ui/annotation_viewer_popup.py` | Read-only popup for viewing annotations |
+| `core/ecto_format.py` | Handle .ecto bundle creation and extraction |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `core/annotation_exporter.py` | Add image bundling, reader_mode flag, export all formats |
-| `stl_viewer.py` | Detect reader mode on file load, show indicator |
-| `ui/annotation_panel.py` | Add reader mode support, disable editing when active |
-| `ui/annotation_popup.py` | Minor updates for reader mode compatibility |
-| `ui/toolbar.py` | Disable Annotate button in reader mode |
-| `ui/sidebar_panel.py` | Add "Export with Annotations" button (optional) |
+| `stl_viewer.py` | Add .ecto to file filters, handle extraction on load |
+| `ui/sidebar_panel.py` | Update export button to create .ecto files |
+| `core/annotation_exporter.py` | Minor updates for internal bundling |
+
+## Advantages Over Alternatives
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **ZIP bundle** | Standard format | Requires manual unzip |
+| **glTF/GLB extras** | Industry standard | Complex, limited metadata |
+| **Custom binary** | Compact | Hard to debug, version issues |
+| **`.ecto` (ZIP-based)** | Single file, easy to implement, debuggable | ECTOFORM-only (which is the goal!) |
 
 ## Implementation Notes
 
-- The `.annotations.json` sidecar approach already works with all file formats
-- Images are copied (not moved) to preserve originals
-- Reader Mode is determined by the presence of existing annotations on file load
-- Users can still use all other tools (ruler, views, etc.) in Reader Mode
+- Uses Python's `zipfile` module (no new dependencies)
+- Temp extraction uses `tempfile.mkdtemp()` for safety
+- Cleanup happens after loading or on app exit
+- Format is future-proof with version field in manifest
+- Internally uses existing `AnnotationExporter` logic
 
