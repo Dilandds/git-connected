@@ -130,7 +130,7 @@ class SidebarPanel(QWidget):
         
         # Info label
         info_label = QLabel(
-            "Click the button above\nto load a 3D file (STL, STEP, 3DM, OBJ, IGES)\nfor 3D visualization."
+            "Click the button above\nto load a 3D file (STL, STEP, 3DM, OBJ, IGES, ECTO)\nfor 3D visualization."
         )
         info_label.setObjectName("infoLabel")
         info_label.setAlignment(Qt.AlignCenter)
