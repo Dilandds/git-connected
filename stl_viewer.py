@@ -52,6 +52,7 @@ class STLViewerWindow(QMainWindow):
         super().__init__()
         debug_print("STLViewerWindow: Parent initialized")
         logger.info("STLViewerWindow: Parent initialized")
+        self._annotations_exported = False  # Track if annotations have been exported
         self.init_ui()
         debug_print("STLViewerWindow: Initialization complete")
         logger.info("STLViewerWindow: Initialization complete")
@@ -90,6 +91,7 @@ class STLViewerWindow(QMainWindow):
         self.sidebar_panel = SidebarPanel()
         self.sidebar_panel.upload_btn.clicked.connect(self.upload_stl_file)
         self.sidebar_panel.export_scaled_stl.connect(self.export_scaled_stl)
+        self.sidebar_panel.annotations_exported.connect(self._on_annotations_exported)
         splitter.addWidget(self.sidebar_panel)
         logger.info("init_ui: Sidebar panel created")
         
@@ -215,14 +217,70 @@ class STLViewerWindow(QMainWindow):
     def _clear_current_model(self):
         """Clear the current model from the viewer."""
         logger.info("_clear_current_model: Clearing current model...")
+        
+        # Check if there are unsaved annotations
+        annotations = self.annotation_panel.get_annotations()
+        if annotations:
+            if not self._annotations_exported:
+                # Warn user about unsaved annotations
+                reply = QMessageBox.warning(
+                    self,
+                    "Unsaved Annotations",
+                    f"You have {len(annotations)} annotation(s) that have not been exported.\n\n"
+                    "Would you like to export them as .ecto before clearing?\n\n"
+                    "• Click 'Yes' to export first\n"
+                    "• Click 'No' to clear without exporting\n"
+                    "• Click 'Cancel' to go back",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    # Trigger export
+                    self.sidebar_panel.export_as_ecto()
+                    return  # Don't clear yet, user will export first
+                elif reply == QMessageBox.Cancel:
+                    return  # User cancelled, don't clear
+                # If No, continue with clearing
+            else:
+                # Annotations were exported, just confirm clearing
+                reply = QMessageBox.question(
+                    self,
+                    "Clear Model",
+                    f"You have {len(annotations)} annotation(s). Are you sure you want to clear everything?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+        
+        # Clear the viewer
         if hasattr(self.viewer_widget, 'clear_viewer'):
             self.viewer_widget.clear_viewer()
-            # Update toolbar state
-            self.toolbar.set_stl_loaded(False)
-            # Reset window title
-            self.setWindowTitle("ECTOFORM")
-            # Reset toolbar load button tooltip
-            self.toolbar.set_loaded_filename(None)
+        
+        # Update toolbar state
+        self.toolbar.set_stl_loaded(False)
+        
+        # Reset window title
+        self.setWindowTitle("ECTOFORM")
+        
+        # Reset toolbar load button tooltip
+        self.toolbar.set_loaded_filename(None)
+        
+        # Clear all annotations from panel and viewer
+        self._clear_all_annotations()
+        
+        # Hide annotation panel if visible
+        if self.annotation_panel.isVisible():
+            self._exit_annotation_mode()
+        
+        # Reset sidebar panel dimensions and calculations
+        self.sidebar_panel.reset_all_data()
+        
+        # Reset annotation export tracking
+        self._annotations_exported = False
+        
+        logger.info("_clear_current_model: Model and all data cleared")
     
     def _connect_viewer_signals(self):
         """Connect viewer widget signals for drag-and-drop."""
@@ -576,7 +634,14 @@ class STLViewerWindow(QMainWindow):
         """Update the sidebar panel with the current annotation count."""
         count = len(self.annotation_panel.annotations)
         self.sidebar_panel.update_annotation_count(count)
+        # Reset export flag when annotations change (new annotations added)
+        if count > 0:
+            self._annotations_exported = False
     
+    def _on_annotations_exported(self):
+        """Handle annotations exported event."""
+        self._annotations_exported = True
+        logger.info("_on_annotations_exported: Annotations have been exported")
     def _toggle_fullscreen(self):
         """Toggle fullscreen mode."""
         if self.toolbar.is_fullscreen:

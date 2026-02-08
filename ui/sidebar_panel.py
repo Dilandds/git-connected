@@ -23,6 +23,9 @@ class SidebarPanel(QWidget):
     # Signal emitted when export is requested (file_path, scale_factor)
     export_scaled_stl = pyqtSignal(str, float)
     
+    # Signal emitted when annotations are exported as .ecto
+    annotations_exported = pyqtSignal()
+    
     # Material density data (g/cm³)
     MATERIALS = [
         ("24 carat gold (999)", 19.32),
@@ -1134,6 +1137,9 @@ class SidebarPanel(QWidget):
             self.export_annotations_btn.setText("Export as .ecto")
             
             if success:
+                # Emit signal that annotations were exported
+                self.annotations_exported.emit()
+                
                 # Build success message
                 msg = f"Export complete!\n\nCreated: {os.path.basename(file_path)}"
                 if annotations:
@@ -1175,3 +1181,45 @@ class SidebarPanel(QWidget):
                 return parent.annotation_panel.export_annotations()
             parent = parent.parent()
         return []
+    
+    def reset_all_data(self):
+        """Reset all data displays to initial state."""
+        # Reset dimensions
+        self.width_row.set_value("--")
+        self.height_row.set_value("--")
+        self.depth_row.set_value("--")
+        self.volume_row.set_value("--")
+        
+        # Reset surface area
+        self.surface_total_row.set_value("--")
+        self.surface_cm_row.set_value("--")
+        
+        # Reset weight
+        self.weight_volume_row.set_value("--")
+        self.weight_density_row.set_value("--")
+        self.weight_result_row.set_value("--")
+        
+        # Reset scale results
+        self.reset_scale_results()
+        
+        # Reset target weight input
+        self.target_weight_input.clear()
+        
+        # Reset annotation count
+        self.update_annotation_count(0)
+        
+        # Reset internal state
+        self.current_volume_mm3 = 0.0
+        self.current_weight_grams = 0.0
+        self.current_dimensions = {'width': 0.0, 'height': 0.0, 'depth': 0.0}
+        self.current_surface_area_cm2 = 0.0
+        self.current_stl_filename = ""
+        self.has_stl_loaded = False
+        self.has_scaled_data = False
+        self.calculated_scale_factor = 1.0
+        
+        # Update button states
+        self.calculate_scale_btn.setEnabled(False)
+        self.update_pdf_button_state()
+        
+        logger.info("reset_all_data: All sidebar data reset")
