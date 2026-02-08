@@ -1503,17 +1503,21 @@ class STLViewerWidget(QWidget):
             return None
         
         try:
-            # Use a small fixed-ratio size (~0.15% of model) for consistent precise markers
+            # Flat 1.5% of max dimension — consistent across all model sizes
             try:
                 bounds = self.current_mesh.bounds
-                max_dim = max(
-                    bounds[1] - bounds[0],
-                    bounds[3] - bounds[2],
-                    bounds[5] - bounds[4],
+                dim_x = bounds[1] - bounds[0]
+                dim_y = bounds[3] - bounds[2]
+                dim_z = bounds[5] - bounds[4]
+                max_dim = max(dim_x, dim_y, dim_z)
+                sphere_radius = max_dim * 0.012
+                logger.info(
+                    f"add_annotation_marker: dims=({dim_x:.2f}, {dim_y:.2f}, {dim_z:.2f}) "
+                    f"max_dim={max_dim:.2f} → radius={sphere_radius:.4f} "
+                    f"({sphere_radius/max_dim*100:.1f}% of model)"
                 )
-                sphere_radius = max(max_dim * 0.0015, 0.02)
             except Exception:
-                sphere_radius = 0.3
+                sphere_radius = 0.5
             
             sphere = pv.Sphere(radius=sphere_radius, center=point)
             actor = self.plotter.add_mesh(
