@@ -1,22 +1,22 @@
 
 
-# Custom ECTOFORM File Format (.ecto)
+# Custom ECTOFORM File Format (.efm)
 
 ## Overview
 
-This plan introduces a new **`.ecto`** file format - a single, self-contained file that bundles the 3D model, annotations, and attached images. Only ECTOFORM can open this format, making it the perfect solution for sharing annotated 3D models.
+This plan introduces a new **`.efm`** file format - a single, self-contained file that bundles the 3D model, annotations, and attached images. Only ECTOFORM can open this format, making it the perfect solution for sharing annotated 3D models.
 
-## The Solution: `.ecto` Format
+## The Solution: `.efm` Format
 
-The `.ecto` format is essentially a **renamed ZIP archive** with a specific internal structure. This approach is:
+The `.efm` format is essentially a **renamed ZIP archive** with a specific internal structure. This approach is:
 
 - **Simple to implement** - Uses Python's built-in `zipfile` module
 - **Self-contained** - One file contains everything
 - **Reliable** - ZIP is a battle-tested format
-- **Transparent to users** - They just see a single `.ecto` file
+- **Transparent to users** - They just see a single `.efm` file
 
 ```text
-MyModel.ecto (internally a ZIP archive)
+MyModel.efm (internally a ZIP archive)
 ├── manifest.json          # Metadata + format version
 ├── model.stl              # The 3D geometry (or .obj, etc.)
 ├── annotations.json       # Annotation data with reader_mode flag
@@ -29,7 +29,7 @@ MyModel.ecto (internally a ZIP archive)
 
 ```text
 +---------------------------+     +---------------------------+
-|  User A: Create & Export  |     |  User B: Open .ecto File  |
+|  User A: Create & Export  |     |  User B: Open .efm File   |
 +---------------------------+     +---------------------------+
            |                                   |
            v                                   v
@@ -39,10 +39,10 @@ MyModel.ecto (internally a ZIP archive)
   Add annotations + photos        ECTOFORM extracts to temp
            |                                   |
            v                                   v
-  Click "Export as .ecto"         Loads model + annotations
+  Click "Export as .efm"          Loads model + annotations
            |                                   |
            v                                   v
-  Single MyModel.ecto file        Auto-enables Reader Mode
+  Single MyModel.efm file         Auto-enables Reader Mode
   ready to share!                 (view-only annotations)
 +---------------------------+     +---------------------------+
 ```
@@ -52,21 +52,21 @@ MyModel.ecto (internally a ZIP archive)
 1. **Single file sharing** - No more ZIP + unzip workflow
 2. **All data bundled** - Model, annotations, and photos in one file
 3. **Auto Reader Mode** - Recipients see annotations but can't edit
-4. **Native OS integration** - Can register `.ecto` extension on Windows/macOS
+4. **Native OS integration** - Can register `.efm` extension on Windows/macOS
 5. **Any source format** - Works with STL, STEP, OBJ, IGES, 3DM inputs
 
 ## Technical Details
 
-### 1. New ECTO Format Handler
+### 1. EFM Format Handler
 
-Create `core/ecto_format.py`:
+File: `core/efm_format.py`:
 
 ```text
-class EctoFormat:
+class EfmFormat:
     @staticmethod
     def export(mesh, annotations, output_path, source_format='stl'):
         """
-        Create .ecto bundle:
+        Create .efm bundle:
         1. Create temp directory
         2. Save mesh as model.{format}
         3. Create annotations.json with reader_mode=True
@@ -77,17 +77,17 @@ class EctoFormat:
         """
     
     @staticmethod
-    def import_ecto(ecto_path):
+    def import_efm(efm_path):
         """
-        Open .ecto bundle:
+        Open .efm bundle:
         1. Extract to temp directory
         2. Read manifest.json for format info
         3. Return (model_path, annotations, reader_mode)
         """
     
     @staticmethod
-    def is_ecto_file(file_path):
-        """Check if file is a valid .ecto format"""
+    def is_efm_file(file_path):
+        """Check if file is a valid .efm format"""
 ```
 
 ### 2. Manifest Structure
@@ -105,39 +105,13 @@ class EctoFormat:
 }
 ```
 
-### 3. Update File Loading
+## Implementation Status: ✅ COMPLETE
 
-Modify `stl_viewer.py` to:
-- Accept `.ecto` in the file filter
-- Detect `.ecto` extension and use `EctoFormat.import_ecto()`
-- Extract to a temp directory, load the model, then load annotations
-
-### 4. Update Sidebar Export
-
-Modify `ui/sidebar_panel.py` to:
-- Change "Export with Annotations" to export as `.ecto` format
-- Show save dialog with `.ecto` filter
-- Call `EctoFormat.export()` with current mesh and annotations
-
-### 5. OS Integration (Optional Enhancement)
-
-For Windows/macOS builds:
-- Register `.ecto` file extension with ECTOFORM
-- Users can double-click `.ecto` files to open directly
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `core/ecto_format.py` | Handle .ecto bundle creation and extraction |
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `stl_viewer.py` | Add .ecto to file filters, handle extraction on load |
-| `ui/sidebar_panel.py` | Update export button to create .ecto files |
-| `core/annotation_exporter.py` | Minor updates for internal bundling |
+| File | Status |
+|------|--------|
+| `core/efm_format.py` | ✅ Created |
+| `stl_viewer.py` | ✅ Updated - .efm support in file dialogs and loading |
+| `ui/sidebar_panel.py` | ✅ Updated - Export as .efm button |
 
 ## Advantages Over Alternatives
 
@@ -146,13 +120,5 @@ For Windows/macOS builds:
 | **ZIP bundle** | Standard format | Requires manual unzip |
 | **glTF/GLB extras** | Industry standard | Complex, limited metadata |
 | **Custom binary** | Compact | Hard to debug, version issues |
-| **`.ecto` (ZIP-based)** | Single file, easy to implement, debuggable | ECTOFORM-only (which is the goal!) |
-
-## Implementation Notes
-
-- Uses Python's `zipfile` module (no new dependencies)
-- Temp extraction uses `tempfile.mkdtemp()` for safety
-- Cleanup happens after loading or on app exit
-- Format is future-proof with version field in manifest
-- Internally uses existing `AnnotationExporter` logic
+| **`.efm` (ZIP-based)** | Single file, easy to implement, debuggable | ECTOFORM-only (which is the goal!) |
 
