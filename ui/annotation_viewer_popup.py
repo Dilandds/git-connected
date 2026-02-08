@@ -3,21 +3,167 @@ Annotation Viewer Popup - Read-only popup for viewing annotations.
 Used when opening files with existing annotations (Reader Mode).
 """
 import os
+import shutil
 import logging
 from typing import List, Optional
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QScrollArea, QFrame, QWidget, QTextEdit
+    QScrollArea, QFrame, QWidget, QTextEdit, QFileDialog, QMenu
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QFont, QPixmap, QCursor
 from ui.styles import default_theme
 
 logger = logging.getLogger(__name__)
 
 
+class ImageViewerDialog(QDialog):
+    """Full-size image viewer dialog with download option."""
+    
+    def __init__(self, image_path: str, parent=None):
+        super().__init__(parent)
+        self.image_path = image_path
+        self.setWindowTitle("View Image")
+        self.setModal(True)
+        self.setMinimumSize(600, 500)
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize the viewer UI."""
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {default_theme.card_background};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        
+        # Image container with scroll
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background: transparent;")
+        
+        # Image label
+        self.img_label = QLabel()
+        self.img_label.setAlignment(Qt.AlignCenter)
+        self.img_label.setStyleSheet("background: transparent;")
+        
+        # Load image at full size (limited to dialog size)
+        if os.path.exists(self.image_path):
+            pixmap = QPixmap(self.image_path)
+            if not pixmap.isNull():
+                # Scale to fit while maintaining aspect ratio
+                max_size = 800
+                if pixmap.width() > max_size or pixmap.height() > max_size:
+                    scaled = pixmap.scaled(
+                        max_size, max_size,
+                        Qt.KeepAspectRatio,
+                        Qt.SmoothTransformation
+                    )
+                    self.img_label.setPixmap(scaled)
+                else:
+                    self.img_label.setPixmap(pixmap)
+                
+                # Resize dialog to fit image
+                img_width = min(pixmap.width() + 40, 900)
+                img_height = min(pixmap.height() + 100, 700)
+                self.resize(img_width, img_height)
+            else:
+                self.img_label.setText("❌ Failed to load image")
+        else:
+            self.img_label.setText("❌ Image not found")
+        
+        scroll.setWidget(self.img_label)
+        layout.addWidget(scroll, 1)
+        
+        # File path label
+        filename = os.path.basename(self.image_path)
+        path_label = QLabel(f"📁 {filename}")
+        path_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+        path_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(path_label)
+        
+        # Button row
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        
+        # Download button
+        download_btn = QPushButton("💾 Save As...")
+        download_btn.setFixedHeight(36)
+        download_btn.setCursor(Qt.PointingHandCursor)
+        download_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #5294E2;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 20px;
+                font-size: 12px;
+                color: white;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #4A84D2;
+            }}
+        """)
+        download_btn.clicked.connect(self._download_image)
+        btn_layout.addWidget(download_btn)
+        
+        btn_layout.addStretch()
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.setFixedHeight(36)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {default_theme.row_bg_standard};
+                border: 1px solid {default_theme.border_light};
+                border-radius: 6px;
+                padding: 8px 24px;
+                font-size: 12px;
+                color: {default_theme.text_primary};
+            }}
+            QPushButton:hover {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+        """)
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def _download_image(self):
+        """Save the image to user-selected location."""
+        if not os.path.exists(self.image_path):
+            return
+        
+        # Get original filename and extension
+        original_name = os.path.basename(self.image_path)
+        _, ext = os.path.splitext(original_name)
+        
+        # Open save dialog
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Image",
+            original_name,
+            f"Image Files (*{ext});;All Files (*.*)"
+        )
+        
+        if save_path:
+            try:
+                shutil.copy2(self.image_path, save_path)
+                logger.info(f"Image saved to {save_path}")
+            except Exception as e:
+                logger.error(f"Failed to save image: {e}")
+
+
 class ImageViewThumbnail(QFrame):
-    """A read-only thumbnail widget for displaying an attached image."""
+    """A read-only thumbnail widget for displaying an attached image with maximize/download options."""
+    
+    clicked = pyqtSignal(str)  # Emits image path when clicked
     
     def __init__(self, image_path: str, parent=None):
         super().__init__(parent)
@@ -27,11 +173,16 @@ class ImageViewThumbnail(QFrame):
     def init_ui(self):
         """Initialize the thumbnail UI."""
         self.setFixedSize(80, 80)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Click to view full size\nRight-click for options")
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {default_theme.card_background};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
+            }}
+            QFrame:hover {{
+                border: 2px solid #5294E2;
             }}
         """)
         
@@ -61,6 +212,70 @@ class ImageViewThumbnail(QFrame):
             self.img_label.setText("❌")
         
         layout.addWidget(self.img_label)
+    
+    def mousePressEvent(self, event):
+        """Handle mouse clicks."""
+        if event.button() == Qt.LeftButton:
+            self._show_full_image()
+        elif event.button() == Qt.RightButton:
+            self._show_context_menu(event.globalPos())
+        super().mousePressEvent(event)
+    
+    def _show_full_image(self):
+        """Open the image in a full-size viewer dialog."""
+        dialog = ImageViewerDialog(self.image_path, self)
+        dialog.exec_()
+    
+    def _show_context_menu(self, pos):
+        """Show context menu with options."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_light};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 8px 16px;
+                border-radius: 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+        """)
+        
+        view_action = menu.addAction("🔍 View Full Size")
+        download_action = menu.addAction("💾 Save As...")
+        
+        action = menu.exec_(pos)
+        
+        if action == view_action:
+            self._show_full_image()
+        elif action == download_action:
+            self._download_image()
+    
+    def _download_image(self):
+        """Save the image to user-selected location."""
+        if not os.path.exists(self.image_path):
+            return
+        
+        original_name = os.path.basename(self.image_path)
+        _, ext = os.path.splitext(original_name)
+        
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Image",
+            original_name,
+            f"Image Files (*{ext});;All Files (*.*)"
+        )
+        
+        if save_path:
+            try:
+                shutil.copy2(self.image_path, save_path)
+                logger.info(f"Image saved to {save_path}")
+            except Exception as e:
+                logger.error(f"Failed to save image: {e}")
 
 
 class AnnotationViewerPopup(QDialog):
@@ -160,7 +375,7 @@ class AnnotationViewerPopup(QDialog):
         
         # Photos section
         if self.image_paths:
-            photos_label = QLabel(f"Photos ({len(self.image_paths)}):")
+            photos_label = QLabel(f"Photos ({len(self.image_paths)}) - Click to view:")
             photos_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px; font-weight: bold;")
             main_layout.addWidget(photos_label)
             
