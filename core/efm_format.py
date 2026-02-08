@@ -1,7 +1,7 @@
 """
-ECTO Format Handler - Custom .ecto file format for ECTOFORM.
+EFM Format Handler - Custom .efm file format for ECTOFORM.
 
-The .ecto format is a ZIP-based bundle containing:
+The .efm format is a ZIP-based bundle containing:
 - manifest.json: Metadata and format version
 - model.{format}: The 3D geometry (STL, OBJ, etc.)
 - annotations.json: Annotation data with reader_mode flag
@@ -19,27 +19,27 @@ from typing import List, Optional, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Format version for .ecto files
-ECTO_FORMAT_VERSION = "1.0"
+# Format version for .efm files
+EFM_FORMAT_VERSION = "1.0"
 
 
-class EctoFormat:
-    """Handler for .ecto file format - a single-file bundle for sharing annotated 3D models."""
+class EfmFormat:
+    """Handler for .efm file format - a single-file bundle for sharing annotated 3D models."""
     
     # Supported model formats
     SUPPORTED_FORMATS = ['stl', 'obj']
     
     @staticmethod
-    def is_ecto_file(file_path: str) -> bool:
-        """Check if a file is a valid .ecto format.
+    def is_efm_file(file_path: str) -> bool:
+        """Check if a file is a valid .efm format.
         
         Args:
             file_path: Path to the file to check
             
         Returns:
-            True if the file is a valid .ecto bundle
+            True if the file is a valid .efm bundle
         """
-        if not file_path.lower().endswith('.ecto'):
+        if not file_path.lower().endswith('.efm'):
             return False
         
         if not os.path.exists(file_path):
@@ -65,18 +65,18 @@ class EctoFormat:
                 
                 return True
         except (zipfile.BadZipFile, json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"is_ecto_file: Not a valid .ecto file: {e}")
+            logger.debug(f"is_efm_file: Not a valid .efm file: {e}")
             return False
     
     @staticmethod
     def export(mesh, annotations: List[dict], output_path: str, 
                source_format: str = 'stl', original_filename: str = None) -> Tuple[bool, str]:
-        """Create an .ecto bundle containing the model, annotations, and images.
+        """Create an .efm bundle containing the model, annotations, and images.
         
         Args:
             mesh: PyVista mesh object to export
             annotations: List of annotation dictionaries
-            output_path: Path for the output .ecto file
+            output_path: Path for the output .efm file
             source_format: Format to save the model as ('stl' or 'obj')
             original_filename: Original filename for metadata
             
@@ -86,19 +86,19 @@ class EctoFormat:
         if mesh is None:
             return False, "No mesh provided"
         
-        # Ensure output has .ecto extension
-        if not output_path.lower().endswith('.ecto'):
-            output_path += '.ecto'
+        # Ensure output has .efm extension
+        if not output_path.lower().endswith('.efm'):
+            output_path += '.efm'
         
         # Validate source format
         source_format = source_format.lower()
-        if source_format not in EctoFormat.SUPPORTED_FORMATS:
+        if source_format not in EfmFormat.SUPPORTED_FORMATS:
             source_format = 'stl'
         
         temp_dir = None
         try:
             # Create temp directory for building the bundle
-            temp_dir = tempfile.mkdtemp(prefix='ecto_export_')
+            temp_dir = tempfile.mkdtemp(prefix='efm_export_')
             logger.info(f"export: Created temp directory: {temp_dir}")
             
             # 1. Save the mesh
@@ -157,7 +157,7 @@ class EctoFormat:
             
             # 4. Create manifest.json
             manifest = {
-                'format_version': ECTO_FORMAT_VERSION,
+                'format_version': EFM_FORMAT_VERSION,
                 'created_by': 'ECTOFORM',
                 'created_at': datetime.now().isoformat(),
                 'model_file': model_filename,
@@ -186,11 +186,11 @@ class EctoFormat:
                         img_path = os.path.join(images_dir, img_file)
                         zf.write(img_path, f'images/{img_file}')
             
-            logger.info(f"export: Created .ecto bundle at {output_path}")
+            logger.info(f"export: Created .efm bundle at {output_path}")
             return True, output_path
             
         except Exception as e:
-            logger.error(f"export: Failed to create .ecto bundle: {e}", exc_info=True)
+            logger.error(f"export: Failed to create .efm bundle: {e}", exc_info=True)
             return False, str(e)
         
         finally:
@@ -203,30 +203,30 @@ class EctoFormat:
                     logger.warning(f"export: Failed to cleanup temp directory: {e}")
     
     @staticmethod
-    def import_ecto(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str]:
-        """Open an .ecto bundle and extract its contents.
+    def import_efm(efm_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str]:
+        """Open an .efm bundle and extract its contents.
         
         Extracts the bundle to a temporary directory and returns paths to the contents.
         The caller is responsible for cleaning up the temp directory when done.
         
         Args:
-            ecto_path: Path to the .ecto file
+            efm_path: Path to the .efm file
             
         Returns:
             tuple: (model_path: str or None, annotations: list or None, reader_mode: bool, temp_dir: str)
                    Returns (None, None, False, error_message) on failure
         """
-        if not os.path.exists(ecto_path):
-            return None, None, False, f"File not found: {ecto_path}"
+        if not os.path.exists(efm_path):
+            return None, None, False, f"File not found: {efm_path}"
         
-        if not EctoFormat.is_ecto_file(ecto_path):
-            return None, None, False, "Invalid .ecto file format"
+        if not EfmFormat.is_efm_file(efm_path):
+            return None, None, False, "Invalid .efm file format"
         
         temp_dir = None
         try:
             # Create temp directory for extraction
-            temp_dir = tempfile.mkdtemp(prefix='ecto_import_')
-            logger.info(f"import_ecto: Extracting to temp directory: {temp_dir}")
+            temp_dir = tempfile.mkdtemp(prefix='efm_import_')
+            logger.info(f"import_efm: Extracting to temp directory: {temp_dir}")
             
             # Extract the archive
             with zipfile.ZipFile(ecto_path, 'r') as zf:
@@ -270,14 +270,14 @@ class EctoFormat:
                             resolved_paths.append(img_path)
                     ann['image_paths'] = resolved_paths
             
-            logger.info(f"import_ecto: Successfully extracted. Model: {model_path}, "
+            logger.info(f"import_efm: Successfully extracted. Model: {model_path}, "
                        f"Annotations: {len(annotations) if annotations else 0}, "
                        f"Reader mode: {reader_mode}")
             
             return model_path, annotations, reader_mode, temp_dir
             
         except Exception as e:
-            logger.error(f"import_ecto: Failed to import .ecto file: {e}", exc_info=True)
+            logger.error(f"import_efm: Failed to import .efm file: {e}", exc_info=True)
             # Cleanup on failure
             if temp_dir and os.path.exists(temp_dir):
                 try:
@@ -287,17 +287,17 @@ class EctoFormat:
             return None, None, False, str(e)
     
     @staticmethod
-    def get_manifest(ecto_path: str) -> Optional[Dict[str, Any]]:
-        """Read the manifest from an .ecto file without full extraction.
+    def get_manifest(efm_path: str) -> Optional[Dict[str, Any]]:
+        """Read the manifest from an .efm file without full extraction.
         
         Args:
-            ecto_path: Path to the .ecto file
+            efm_path: Path to the .efm file
             
         Returns:
             Manifest dictionary or None on failure
         """
         try:
-            with zipfile.ZipFile(ecto_path, 'r') as zf:
+            with zipfile.ZipFile(efm_path, 'r') as zf:
                 manifest_data = zf.read('manifest.json')
                 return json.loads(manifest_data.decode('utf-8'))
         except Exception as e:
