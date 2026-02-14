@@ -213,6 +213,7 @@ class STLViewerWindow(QMainWindow):
         self.ruler_toolbar.view_rear.connect(self._ruler_view_rear)
         self.ruler_toolbar.clear_measurements.connect(self._clear_measurements)
         self.ruler_toolbar.exit_ruler.connect(self._exit_ruler_mode)
+        self.ruler_toolbar.unit_changed.connect(self._ruler_unit_changed)
     
     def _clear_current_model(self):
         """Clear the current model from the viewer."""
@@ -486,6 +487,12 @@ class STLViewerWindow(QMainWindow):
         """Clear all measurements from the viewer."""
         if hasattr(self.viewer_widget, 'clear_measurements'):
             self.viewer_widget.clear_measurements()
+    
+    def _ruler_unit_changed(self, unit_key):
+        """Handle unit change from ruler toolbar."""
+        if hasattr(self.viewer_widget, '_ruler_unit'):
+            self.viewer_widget._ruler_unit = unit_key
+            logger.info(f"_ruler_unit_changed: Unit set to {unit_key}")
     
     # ========== Annotation Mode Methods ==========
     

@@ -95,6 +95,7 @@ class RulerToolbar(QWidget):
     view_rear = pyqtSignal()
     clear_measurements = pyqtSignal()
     exit_ruler = pyqtSignal()
+    unit_changed = pyqtSignal(str)  # Emits unit key: "mm", "cm", "m", "inch", "ft"
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -179,6 +180,32 @@ class RulerToolbar(QWidget):
         self.bottom_btn.clicked.connect(self._on_bottom_clicked)
         layout.addWidget(self.bottom_btn)
         
+        # Separator before units
+        sep_units = QFrame()
+        sep_units.setFrameShape(QFrame.VLine)
+        sep_units.setFrameShadow(QFrame.Plain)
+        sep_units.setStyleSheet(f"color: {default_theme.border_highlight};")
+        sep_units.setFixedWidth(1)
+        layout.addWidget(sep_units)
+        
+        # Unit selector
+        unit_label = QLabel("Unit:")
+        unit_label.setStyleSheet(f"""
+            color: {default_theme.text_secondary};
+            font-size: 10px;
+            background: transparent;
+        """)
+        layout.addWidget(unit_label)
+        
+        self._unit_buttons = {}
+        for unit_key, unit_text in [("mm", "MM"), ("cm", "CM"), ("m", "M"), ("inch", "INCH"), ("ft", "FT")]:
+            btn = RulerViewButton(unit_text)
+            btn.clicked.connect(lambda checked=False, k=unit_key: self._on_unit_clicked(k))
+            self._unit_buttons[unit_key] = btn
+            layout.addWidget(btn)
+        self._unit_buttons["mm"].set_active(True)  # Default unit
+        self._current_unit = "mm"
+        
         # Separator
         separator2 = QFrame()
         separator2.setFrameShape(QFrame.VLine)
@@ -262,6 +289,13 @@ class RulerToolbar(QWidget):
     def _on_exit_clicked(self):
         """Handle exit ruler mode button click."""
         self.exit_ruler.emit()
+    
+    def _on_unit_clicked(self, unit_key):
+        """Handle unit button click."""
+        self._current_unit = unit_key
+        for k, btn in self._unit_buttons.items():
+            btn.set_active(k == unit_key)
+        self.unit_changed.emit(unit_key)
     
     def reset_to_front(self):
         """Reset view selection to front (called when entering ruler mode)."""
