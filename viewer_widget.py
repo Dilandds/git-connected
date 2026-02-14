@@ -924,12 +924,56 @@ class STLViewerWidget(QWidget):
         # Restore full interaction (rotation, pan, zoom)
         self._restore_full_interaction()
 
+    def _snap_to_axis(self, point1, point2):
+        """Snap point2 so the measurement is strictly horizontal or vertical on screen.
+        
+        Uses the camera's right and up vectors to determine screen-space axes,
+        then constrains point2 to move only along the dominant screen direction.
+        """
+        import numpy as np
+        try:
+            camera = self.plotter.renderer.GetActiveCamera()
+            # Get camera basis vectors
+            view_up = np.array(camera.GetViewUp())
+            cam_dir = np.array(camera.GetDirectionOfProjection())
+            view_right = np.cross(cam_dir, view_up)
+            # Normalize
+            view_right = view_right / (np.linalg.norm(view_right) + 1e-12)
+            view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
+            
+            p1 = np.array(point1)
+            p2 = np.array(point2)
+            delta = p2 - p1
+            
+            # Project delta onto screen axes
+            dx_screen = np.dot(delta, view_right)
+            dy_screen = np.dot(delta, view_up)
+            
+            # Snap to the dominant axis
+            if abs(dx_screen) >= abs(dy_screen):
+                # Horizontal measurement
+                snapped = p1 + view_right * dx_screen
+            else:
+                # Vertical measurement
+                snapped = p1 + view_up * dy_screen
+            
+            logger.info(f"_snap_to_axis: Snapped from {point2} to {snapped} (dx={dx_screen:.4f}, dy={dy_screen:.4f})")
+            return tuple(snapped)
+        except Exception as e:
+            logger.warning(f"_snap_to_axis: Could not snap, using original point: {e}")
+            return point2
+
     def _on_point_picked(self, point):
         """Handle point picked for measurement."""
         if not self.ruler_mode or point is None:
             return
         
         logger.info(f"_on_point_picked: Point picked at {point}")
+        
+        # If this is the second point, snap to horizontal or vertical axis
+        if len(self.measurement_points) == 1:
+            point = self._snap_to_axis(self.measurement_points[0], point)
+        
         self.measurement_points.append(point)
         
         # Calculate adaptive sphere size based on mesh bounds
