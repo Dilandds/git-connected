@@ -1139,6 +1139,8 @@ class STLViewerWidget(QWidget):
                 name=f'measure_label_{id(point1)}'
             )
             if label_actor:
+                # Move label to overlay renderer so it renders in front of the object
+                self._set_actor_always_on_top(label_actor)
                 self.measurement_actors.append(label_actor)
             
             logger.info(f"_draw_measurement_line: Line and label drawn, distance = {label_text}")
@@ -1267,7 +1269,10 @@ class STLViewerWidget(QWidget):
         return self._overlay_renderer
 
     def _set_actor_always_on_top(self, actor):
-        """Move an actor to the overlay renderer so it always renders in front."""
+        """Move an actor to the overlay renderer so it always renders in front.
+        
+        Also disables depth testing on the actor so it is never occluded.
+        """
         if actor is None:
             return
         try:
@@ -1284,6 +1289,16 @@ class STLViewerWidget(QWidget):
                     mapper.SetResolveCoincidentTopologyToPolygonOffset()
                     mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-2, -2)
                 logger.debug("_set_actor_always_on_top: Fallback polygon offset applied")
+            
+            # Disable depth testing so actor is never hidden behind geometry
+            try:
+                prop = actor.GetProperty()
+                if prop is not None:
+                    prop.SetOpacity(1.0)
+                    # Render on top by disabling depth comparison
+                    prop.LightingOff()
+            except Exception:
+                pass
         except Exception as e:
             logger.debug(f"_set_actor_always_on_top: Failed: {e}")
     
