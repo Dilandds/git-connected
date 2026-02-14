@@ -87,6 +87,26 @@ class STLViewerWidget(QWidget):
         self._ruler_click_observer_id = None
         self._ruler_picker = None
         
+        # Perpendicular guide lines (shown after first point pick)
+        self._ruler_guide_actors = []
+        
+        # Completed measurements for dragging
+        self._completed_measurements = []  # List of {'actors': [...], 'p1': np.array, 'p2': np.array, 'distance': float}
+        self._dragging_measurement = None  # Index into _completed_measurements
+        self._drag_start_screen = None  # (x, y) screen coords at drag start
+        self._drag_axis = None  # 'h' or 'v' — locked after initial drag direction
+        self._drag_original_p1 = None
+        self._drag_original_p2 = None
+        self._ruler_mouse_move_id = None
+        self._ruler_mouse_release_id = None
+        self._ruler_right_click_id = None
+        
+        # Current ruler view axes (set by ortho view methods)
+        # h_axis and v_axis are indices into xyz (0=X, 1=Y, 2=Z)
+        self._ruler_h_axis = 1  # default front view: H=Y
+        self._ruler_v_axis = 2  # default front view: V=Z
+        self._ruler_view_dir = 0  # axis we're looking along
+        
         # Annotation mode state
         self.annotation_mode = False
         self.annotations = []  # List of annotation data: {'id': int, 'point': tuple, 'actor': vtk_actor}
@@ -860,6 +880,8 @@ class STLViewerWidget(QWidget):
             
             # Disable rotation but keep zoom - use zoom-only interaction style
             self._enable_zoom_only_interaction()
+            # Install drag observers for moving completed measurements
+            self._install_ruler_drag_observers()
             return True
 
         # Fallback to PyVista picking helpers (if VTK interactor not available)
@@ -903,8 +925,10 @@ class STLViewerWidget(QWidget):
         self.ruler_mode = False
         self.measurement_points = []
 
-        # Remove our observer (if installed)
+        # Remove our observers (if installed)
         self._uninstall_ruler_click_picking()
+        self._uninstall_ruler_drag_observers()
+        self._remove_perpendicular_guides()
 
         try:
             self.plotter.disable_picking()
@@ -929,38 +953,52 @@ class STLViewerWidget(QWidget):
         if not self.ruler_mode or point is None:
             return
         
+        import numpy as np
         logger.info(f"_on_point_picked: Point picked at {point}")
+        point = np.array(point)
         self.measurement_points.append(point)
         
         # Calculate adaptive sphere size based on mesh bounds
         sphere_radius = self._get_measurement_marker_size()
         
         # Add sphere marker at picked point
+        marker_actor = None
         try:
             sphere = pv.Sphere(radius=sphere_radius, center=point)
-            actor = self.plotter.add_mesh(
+            marker_actor = self.plotter.add_mesh(
                 sphere, 
                 color='#FF69B4', 
                 name=f'measure_pt_{len(self.measurement_points)}_{id(point)}'
             )
             # Make marker always render in front (disable depth testing)
-            self._set_actor_always_on_top(actor)
-            self.measurement_actors.append(actor)
+            self._set_actor_always_on_top(marker_actor)
+            self.measurement_actors.append(marker_actor)
             logger.info(f"_on_point_picked: Marker added at {point}")
         except Exception as e:
             logger.warning(f"_on_point_picked: Could not add marker: {e}")
         
-        # If we have two points, calculate and display the measurement
-        if len(self.measurement_points) == 2:
+        if len(self.measurement_points) == 1:
+            # First point — draw perpendicular guide lines
+            self._draw_perpendicular_guides(point)
+        elif len(self.measurement_points) == 2:
+            # Second point — remove guides and draw measurement
+            self._remove_perpendicular_guides()
             distance = self._calculate_distance(
                 self.measurement_points[0], 
                 self.measurement_points[1]
             )
-            self._draw_measurement_line(
+            measurement_actors = self._draw_measurement_line(
                 self.measurement_points[0],
                 self.measurement_points[1],
                 distance
             )
+            # Store as a completed draggable measurement
+            self._completed_measurements.append({
+                'actors': list(measurement_actors) if measurement_actors else [],
+                'p1': np.array(self.measurement_points[0]),
+                'p2': np.array(self.measurement_points[1]),
+                'distance': distance,
+            })
             # Reset for next measurement
             self.measurement_points = []
     
@@ -992,8 +1030,13 @@ class STLViewerWidget(QWidget):
         return distance
     
     def _draw_measurement_line(self, point1, point2, distance):
-        """Draw measurement line with arrowheads and distance label between two points."""
+        """Draw measurement line with arrowheads and distance label between two points.
+        
+        Returns:
+            list: List of actors created for this measurement (for drag tracking).
+        """
         import numpy as np
+        created_actors = []
         
         try:
             p1 = np.array(point1)
@@ -1002,7 +1045,7 @@ class STLViewerWidget(QWidget):
             length = np.linalg.norm(direction)
             
             if length == 0:
-                return
+                return created_actors
             
             dir_unit = direction / length
             
@@ -1021,11 +1064,11 @@ class STLViewerWidget(QWidget):
                 smooth_shading=True,
                 name=f'measure_line_{id(point1)}'
             )
-            # Make line always render in front
             self._set_actor_always_on_top(line_actor)
             self.measurement_actors.append(line_actor)
+            created_actors.append(line_actor)
             
-            # Arrowhead at point1 (pointing from p2 toward p1)
+            # Arrowhead at point1
             try:
                 cone1 = pv.Cone(
                     center=p1 + dir_unit * (arrow_tip_length / 2),
@@ -1034,18 +1077,14 @@ class STLViewerWidget(QWidget):
                     radius=arrow_tip_radius,
                     resolution=20,
                 )
-                cone1_actor = self.plotter.add_mesh(
-                    cone1,
-                    color='black',
-                    name=f'measure_arrow1_{id(point1)}'
-                )
-                # Make arrowhead always render in front
+                cone1_actor = self.plotter.add_mesh(cone1, color='black', name=f'measure_arrow1_{id(point1)}')
                 self._set_actor_always_on_top(cone1_actor)
                 self.measurement_actors.append(cone1_actor)
+                created_actors.append(cone1_actor)
             except Exception as e:
                 logger.warning(f"_draw_measurement_line: Could not add arrowhead 1: {e}")
             
-            # Arrowhead at point2 (pointing from p1 toward p2)
+            # Arrowhead at point2
             try:
                 cone2 = pv.Cone(
                     center=p2 - dir_unit * (arrow_tip_length / 2),
@@ -1054,26 +1093,17 @@ class STLViewerWidget(QWidget):
                     radius=arrow_tip_radius,
                     resolution=20,
                 )
-                cone2_actor = self.plotter.add_mesh(
-                    cone2,
-                    color='black',
-                    name=f'measure_arrow2_{id(point1)}'
-                )
-                # Make arrowhead always render in front
+                cone2_actor = self.plotter.add_mesh(cone2, color='black', name=f'measure_arrow2_{id(point1)}')
                 self._set_actor_always_on_top(cone2_actor)
                 self.measurement_actors.append(cone2_actor)
+                created_actors.append(cone2_actor)
             except Exception as e:
                 logger.warning(f"_draw_measurement_line: Could not add arrowhead 2: {e}")
             
             # Calculate midpoint for label
-            midpoint = [
-                (point1[0] + point2[0]) / 2,
-                (point1[1] + point2[1]) / 2,
-                (point1[2] + point2[2]) / 2,
-            ]
+            midpoint = [(point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2, (point1[2] + point2[2]) / 2]
             
-            # Add distance label at midpoint
-            # Format distance with appropriate precision
+            # Format distance
             if distance < 1:
                 label_text = f"{distance:.4f} mm"
             elif distance < 100:
@@ -1081,29 +1111,23 @@ class STLViewerWidget(QWidget):
             else:
                 label_text = f"{distance:.1f} mm"
             
-            # Add the label using point labels
             label_points = pv.PolyData([midpoint])
             label_actor = self.plotter.add_point_labels(
-                label_points,
-                [label_text],
-                font_size=12,
-                text_color='black',
-                font_family='arial',
-                bold=True,
-                show_points=False,
-                always_visible=True,
+                label_points, [label_text], font_size=12, text_color='black',
+                font_family='arial', bold=True, show_points=False, always_visible=True,
                 name=f'measure_label_{id(point1)}'
             )
             if label_actor:
                 self.measurement_actors.append(label_actor)
+                created_actors.append(label_actor)
             
             logger.info(f"_draw_measurement_line: Line and label drawn, distance = {label_text}")
-            
-            # Force render to show the measurement
             self.plotter.render()
             
         except Exception as e:
             logger.error(f"_draw_measurement_line: Failed to draw measurement: {e}", exc_info=True)
+        
+        return created_actors
     
     def clear_measurements(self):
         """Clear all measurement visualizations from the viewer."""
@@ -1111,6 +1135,9 @@ class STLViewerWidget(QWidget):
             return
         
         logger.info("clear_measurements: Clearing all measurements...")
+        
+        # Remove guides first
+        self._remove_perpendicular_guides()
         
         # Remove all measurement actors from both main and overlay renderers
         overlay = getattr(self, '_overlay_renderer', None)
@@ -1127,6 +1154,8 @@ class STLViewerWidget(QWidget):
         
         self.measurement_actors = []
         self.measurement_points = []
+        self._completed_measurements = []
+        self._dragging_measurement = None
         
         try:
             self.plotter.render()
@@ -1134,6 +1163,247 @@ class STLViewerWidget(QWidget):
             logger.debug(f"clear_measurements: Could not render: {e}")
         
         logger.info("clear_measurements: Measurements cleared")
+    
+    # ========== Perpendicular Guide Lines ==========
+    
+    def _draw_perpendicular_guides(self, point):
+        """Draw horizontal and vertical guide lines through a point in the current view plane."""
+        import numpy as np
+        self._remove_perpendicular_guides()
+        
+        if self.current_mesh is None or self.plotter is None:
+            return
+        
+        try:
+            bounds = self.current_mesh.bounds
+            extents = [bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4]]
+            max_ext = max(extents) * 1.5
+            
+            h_ax = self._ruler_h_axis
+            v_ax = self._ruler_v_axis
+            
+            h_start = np.array(point, dtype=float)
+            h_end = np.array(point, dtype=float)
+            h_start[h_ax] = point[h_ax] - max_ext
+            h_end[h_ax] = point[h_ax] + max_ext
+            
+            v_start = np.array(point, dtype=float)
+            v_end = np.array(point, dtype=float)
+            v_start[v_ax] = point[v_ax] - max_ext
+            v_end[v_ax] = point[v_ax] + max_ext
+            
+            tube_radius = max(max(extents) * 0.0008, 0.01)
+            
+            h_line = pv.Line(h_start, h_end)
+            h_tube = h_line.tube(radius=tube_radius, n_sides=8)
+            h_actor = self.plotter.add_mesh(h_tube, color='#3B82F6', opacity=0.5, name='ruler_guide_h')
+            self._set_actor_always_on_top(h_actor)
+            self._ruler_guide_actors.append(h_actor)
+            
+            v_line = pv.Line(v_start, v_end)
+            v_tube = v_line.tube(radius=tube_radius, n_sides=8)
+            v_actor = self.plotter.add_mesh(v_tube, color='#3B82F6', opacity=0.5, name='ruler_guide_v')
+            self._set_actor_always_on_top(v_actor)
+            self._ruler_guide_actors.append(v_actor)
+            
+            self.plotter.render()
+            logger.info("_draw_perpendicular_guides: Guides drawn")
+        except Exception as e:
+            logger.warning(f"_draw_perpendicular_guides: Failed: {e}")
+    
+    def _remove_perpendicular_guides(self):
+        """Remove perpendicular guide line actors."""
+        if self.plotter is None:
+            return
+        overlay = getattr(self, '_overlay_renderer', None)
+        for actor in self._ruler_guide_actors:
+            try:
+                self.plotter.remove_actor(actor)
+            except Exception:
+                pass
+            try:
+                if overlay is not None:
+                    overlay.RemoveActor(actor)
+            except Exception:
+                pass
+        self._ruler_guide_actors = []
+    
+    # ========== Measurement Dragging ==========
+    
+    def _install_ruler_drag_observers(self):
+        """Install mouse-move and mouse-release observers for dragging measurements."""
+        try:
+            import vtk
+            iren = self._get_vtk_interactor()
+            if iren is None:
+                return
+            self._ruler_mouse_move_id = iren.AddObserver("MouseMoveEvent", self._on_ruler_mouse_move, 0.5)
+            self._ruler_mouse_release_id = iren.AddObserver("LeftButtonReleaseEvent", self._on_ruler_mouse_release, 1.0)
+            self._ruler_right_click_id = iren.AddObserver("RightButtonPressEvent", self._on_ruler_right_click, 1.0)
+            logger.info("_install_ruler_drag_observers: Drag observers installed")
+        except Exception as e:
+            logger.warning(f"_install_ruler_drag_observers: Failed: {e}")
+    
+    def _uninstall_ruler_drag_observers(self):
+        """Remove drag-related observers."""
+        iren = self._get_vtk_interactor()
+        if iren is None:
+            return
+        for attr in ('_ruler_mouse_move_id', '_ruler_mouse_release_id', '_ruler_right_click_id'):
+            obs_id = getattr(self, attr, None)
+            if obs_id is not None:
+                try:
+                    iren.RemoveObserver(obs_id)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+    
+    def _find_measurement_near_screen(self, sx, sy, threshold=15):
+        """Find a completed measurement near screen coords. Returns index or None."""
+        import numpy as np
+        renderer = getattr(self.plotter, 'renderer', None)
+        if renderer is None:
+            return None
+        try:
+            import vtk
+            coord = vtk.vtkCoordinate()
+            coord.SetCoordinateSystemToWorld()
+            for idx, meas in enumerate(self._completed_measurements):
+                coord.SetValue(*meas['p1'])
+                s1 = coord.GetComputedDisplayValue(renderer)
+                coord.SetValue(*meas['p2'])
+                s2 = coord.GetComputedDisplayValue(renderer)
+                dist = self._point_segment_dist_2d(sx, sy, s1[0], s1[1], s2[0], s2[1])
+                if dist < threshold:
+                    return idx
+        except Exception as e:
+            logger.debug(f"_find_measurement_near_screen: {e}")
+        return None
+    
+    @staticmethod
+    def _point_segment_dist_2d(px, py, ax, ay, bx, by):
+        """Distance from point to line segment in 2D."""
+        import math
+        dx, dy = bx - ax, by - ay
+        if dx == 0 and dy == 0:
+            return math.hypot(px - ax, py - ay)
+        t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+    
+    def _on_ruler_right_click(self, obj, event):
+        """Right-click near a measurement to start dragging it."""
+        if not self.ruler_mode or self.plotter is None:
+            return
+        iren = self._get_vtk_interactor()
+        if iren is None:
+            return
+        try:
+            x, y = iren.GetEventPosition()
+        except Exception:
+            return
+        import numpy as np
+        idx = self._find_measurement_near_screen(x, y)
+        if idx is not None:
+            self._dragging_measurement = idx
+            self._drag_start_screen = (x, y)
+            self._drag_axis = None
+            self._drag_original_p1 = np.array(self._completed_measurements[idx]['p1'])
+            self._drag_original_p2 = np.array(self._completed_measurements[idx]['p2'])
+            logger.info(f"_on_ruler_right_click: Started drag on measurement {idx}")
+    
+    def _on_ruler_mouse_move(self, obj, event):
+        """Handle mouse move during measurement drag."""
+        if self._dragging_measurement is None:
+            return
+        import numpy as np
+        iren = self._get_vtk_interactor()
+        if iren is None:
+            return
+        try:
+            x, y = iren.GetEventPosition()
+        except Exception:
+            return
+        
+        sx, sy = self._drag_start_screen
+        dx_screen, dy_screen = x - sx, y - sy
+        
+        if self._drag_axis is None:
+            if abs(dx_screen) < 3 and abs(dy_screen) < 3:
+                return
+            self._drag_axis = 'h' if abs(dx_screen) >= abs(dy_screen) else 'v'
+        
+        renderer = getattr(self.plotter, 'renderer', None)
+        if renderer is None:
+            return
+        
+        try:
+            import vtk
+            coord = vtk.vtkCoordinate()
+            coord.SetCoordinateSystemToDisplay()
+            coord.SetValue(float(sx), float(sy), 0.0)
+            w0 = np.array(coord.GetComputedWorldValue(renderer))
+            coord.SetValue(float(x), float(y), 0.0)
+            w1 = np.array(coord.GetComputedWorldValue(renderer))
+            
+            world_delta = np.zeros(3)
+            if self._drag_axis == 'h':
+                world_delta[self._ruler_h_axis] = w1[self._ruler_h_axis] - w0[self._ruler_h_axis]
+            else:
+                world_delta[self._ruler_v_axis] = w1[self._ruler_v_axis] - w0[self._ruler_v_axis]
+            
+            new_p1 = self._drag_original_p1 + world_delta
+            new_p2 = self._drag_original_p2 + world_delta
+            self._redraw_dragged_measurement(self._dragging_measurement, new_p1, new_p2)
+        except Exception as e:
+            logger.debug(f"_on_ruler_mouse_move: {e}")
+    
+    def _on_ruler_mouse_release(self, obj, event):
+        """Finalize drag on mouse release."""
+        if self._dragging_measurement is None:
+            return
+        meas = self._completed_measurements[self._dragging_measurement]
+        logger.info(f"_on_ruler_mouse_release: Drag finished at p1={meas['p1']}, p2={meas['p2']}")
+        self._dragging_measurement = None
+        self._drag_start_screen = None
+        self._drag_axis = None
+        self._drag_original_p1 = None
+        self._drag_original_p2 = None
+    
+    def _redraw_dragged_measurement(self, idx, new_p1, new_p2):
+        """Remove old actors for a measurement and redraw at new position."""
+        import numpy as np
+        meas = self._completed_measurements[idx]
+        
+        overlay = getattr(self, '_overlay_renderer', None)
+        for actor in meas['actors']:
+            try:
+                self.plotter.remove_actor(actor)
+            except Exception:
+                pass
+            try:
+                if overlay is not None:
+                    overlay.RemoveActor(actor)
+            except Exception:
+                pass
+            if actor in self.measurement_actors:
+                self.measurement_actors.remove(actor)
+        
+        new_actors = self._draw_measurement_line(new_p1, new_p2, meas['distance'])
+        
+        sphere_radius = self._get_measurement_marker_size()
+        for pt in [new_p1, new_p2]:
+            try:
+                sphere = pv.Sphere(radius=sphere_radius, center=pt)
+                marker = self.plotter.add_mesh(sphere, color='#FF69B4', name=f'measure_drag_pt_{id(pt)}')
+                self._set_actor_always_on_top(marker)
+                self.measurement_actors.append(marker)
+                new_actors.append(marker)
+            except Exception:
+                pass
+        
+        meas['actors'] = new_actors
+        meas['p1'] = np.array(new_p1)
+        meas['p2'] = np.array(new_p2)
     
     # ========== Ruler Mode Interaction Control ==========
     
@@ -1252,6 +1522,9 @@ class STLViewerWidget(QWidget):
         try:
             self.plotter.view_yz()
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 1  # Y
+            self._ruler_v_axis = 2  # Z
+            self._ruler_view_dir = 0  # X
             logger.info("view_front_ortho: Front orthographic view set")
         except Exception as e:
             logger.warning(f"view_front_ortho: Could not set view: {e}")
@@ -1263,6 +1536,9 @@ class STLViewerWidget(QWidget):
         try:
             self.plotter.view_xz()
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 0  # X
+            self._ruler_v_axis = 2  # Z
+            self._ruler_view_dir = 1  # Y
             logger.info("view_right_ortho: Right orthographic view set")
         except Exception as e:
             logger.warning(f"view_right_ortho: Could not set view: {e}")
@@ -1272,9 +1548,11 @@ class STLViewerWidget(QWidget):
         if self.plotter is None:
             return
         try:
-            # Left view: looking down the -Y axis
             self.plotter.view_xz(negative=True)
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 0  # X
+            self._ruler_v_axis = 2  # Z
+            self._ruler_view_dir = 1  # Y
             logger.info("view_left_ortho: Left orthographic view set")
         except Exception as e:
             logger.warning(f"view_left_ortho: Could not set view: {e}")
@@ -1286,6 +1564,9 @@ class STLViewerWidget(QWidget):
         try:
             self.plotter.view_xy()
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 0  # X
+            self._ruler_v_axis = 1  # Y
+            self._ruler_view_dir = 2  # Z
             logger.info("view_top_ortho: Top orthographic view set")
         except Exception as e:
             logger.warning(f"view_top_ortho: Could not set view: {e}")
@@ -1295,9 +1576,11 @@ class STLViewerWidget(QWidget):
         if self.plotter is None:
             return
         try:
-            # Bottom view: looking down the -Z axis
             self.plotter.view_xy(negative=True)
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 0  # X
+            self._ruler_v_axis = 1  # Y
+            self._ruler_view_dir = 2  # Z
             logger.info("view_bottom_ortho: Bottom orthographic view set")
         except Exception as e:
             logger.warning(f"view_bottom_ortho: Could not set view: {e}")
@@ -1307,9 +1590,11 @@ class STLViewerWidget(QWidget):
         if self.plotter is None:
             return
         try:
-            # Rear view: looking down the -X axis
             self.plotter.view_yz(negative=True)
             self.plotter.enable_parallel_projection()
+            self._ruler_h_axis = 1  # Y
+            self._ruler_v_axis = 2  # Z
+            self._ruler_view_dir = 0  # X
             logger.info("view_rear_ortho: Rear orthographic view set")
         except Exception as e:
             logger.warning(f"view_rear_ortho: Could not set view: {e}")
