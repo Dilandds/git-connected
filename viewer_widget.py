@@ -82,6 +82,7 @@ class STLViewerWidget(QWidget):
         self.ruler_mode = False
         self.measurement_points = []
         self.measurement_actors = []  # Track measurement visualization actors
+        self._ruler_unit = "mm"  # Current measurement unit
 
         # Ruler picking internals (VTK observer-based; more reliable than PyVista helpers in QtInteractor)
         self._ruler_click_observer_id = None
@@ -1227,13 +1228,19 @@ class STLViewerWidget(QWidget):
             ]
             
             # Add distance label at midpoint
-            # Format distance with appropriate precision
-            if distance < 1:
-                label_text = f"{distance:.4f} mm"
-            elif distance < 100:
-                label_text = f"{distance:.2f} mm"
+            # Convert distance based on selected unit
+            unit = getattr(self, '_ruler_unit', 'mm')
+            conversion = {"mm": 1.0, "cm": 0.1, "m": 0.001, "inch": 1.0 / 25.4, "ft": 1.0 / 304.8}
+            unit_labels = {"mm": "mm", "cm": "cm", "m": "m", "inch": "in", "ft": "ft"}
+            converted = distance * conversion.get(unit, 1.0)
+            suffix = unit_labels.get(unit, "mm")
+            
+            if converted < 1:
+                label_text = f"{converted:.4f} {suffix}"
+            elif converted < 100:
+                label_text = f"{converted:.2f} {suffix}"
             else:
-                label_text = f"{distance:.1f} mm"
+                label_text = f"{converted:.1f} {suffix}"
             
             # Add the label using point labels
             label_points = pv.PolyData([midpoint])
