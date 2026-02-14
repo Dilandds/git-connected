@@ -90,6 +90,12 @@ class STLViewerWidget(QWidget):
         # Perpendicular guide lines (shown after first point pick)
         self._ruler_guide_actors = []
         
+        # Perpendicular constraint state (after first point, mouse snaps to H or V)
+        self._ruler_first_point = None  # np.array — the first picked point
+        self._ruler_snap_axis = None  # 'h' or 'v' — locked after initial movement direction
+        self._ruler_preview_actor = None  # live preview line actor
+        self._ruler_preview_dot_actor = None  # live preview dot actor
+        
         # Completed measurements for dragging
         self._completed_measurements = []  # List of {'actors': [...], 'p1': np.array, 'p2': np.array, 'distance': float}
         self._dragging_measurement = None  # Index into _completed_measurements
@@ -841,6 +847,10 @@ class STLViewerWidget(QWidget):
             offset = np.dot(focal_pt - world_near, cam_dir)
             world_pos = world_near + cam_dir * offset
 
+            # --- Snap to perpendicular axis if first point is placed ---
+            if self._ruler_first_point is not None and len(self.measurement_points) == 1:
+                world_pos = self._snap_to_perpendicular(world_pos)
+
             logger.info(
                 f"_on_ruler_left_click: screen=({x},{y}) world={world_pos}"
             )
@@ -929,6 +939,9 @@ class STLViewerWidget(QWidget):
         self._uninstall_ruler_click_picking()
         self._uninstall_ruler_drag_observers()
         self._remove_perpendicular_guides()
+        self._remove_ruler_preview()
+        self._ruler_first_point = None
+        self._ruler_snap_axis = None
 
         try:
             self.plotter.disable_picking()
@@ -978,11 +991,16 @@ class STLViewerWidget(QWidget):
             logger.warning(f"_on_point_picked: Could not add marker: {e}")
         
         if len(self.measurement_points) == 1:
-            # First point — draw perpendicular guide lines
+            # First point — draw perpendicular guide lines and start constraint tracking
+            self._ruler_first_point = np.array(point)
+            self._ruler_snap_axis = None  # will be determined by mouse movement direction
             self._draw_perpendicular_guides(point)
         elif len(self.measurement_points) == 2:
-            # Second point — remove guides and draw measurement
+            # Second point — remove guides/preview and draw measurement
             self._remove_perpendicular_guides()
+            self._remove_ruler_preview()
+            self._ruler_first_point = None
+            self._ruler_snap_axis = None
             distance = self._calculate_distance(
                 self.measurement_points[0], 
                 self.measurement_points[1]
@@ -1228,6 +1246,104 @@ class STLViewerWidget(QWidget):
                 pass
         self._ruler_guide_actors = []
     
+    # ========== Perpendicular Constraint Helpers ==========
+    
+    def _snap_to_perpendicular(self, world_pos):
+        """Snap a world position to the perpendicular axis from the first point."""
+        import numpy as np
+        if self._ruler_first_point is None:
+            return world_pos
+        
+        p1 = self._ruler_first_point
+        delta = world_pos - p1
+        h_ax = self._ruler_h_axis
+        v_ax = self._ruler_v_axis
+        
+        # Determine axis if not locked yet
+        if self._ruler_snap_axis is None:
+            if abs(delta[h_ax]) >= abs(delta[v_ax]):
+                self._ruler_snap_axis = 'h'
+            else:
+                self._ruler_snap_axis = 'v'
+        
+        # Constrain: keep only the movement along the chosen axis
+        snapped = np.array(p1, dtype=float)
+        if self._ruler_snap_axis == 'h':
+            snapped[h_ax] = world_pos[h_ax]
+        else:
+            snapped[v_ax] = world_pos[v_ax]
+        return snapped
+    
+    def _update_ruler_perpendicular_preview(self):
+        """Update the live preview line/dot showing where the second point would land."""
+        import numpy as np
+        iren = self._get_vtk_interactor()
+        if iren is None or self.plotter is None:
+            return
+        
+        try:
+            x, y = iren.GetEventPosition()
+        except Exception:
+            return
+        
+        renderer = getattr(self.plotter, 'renderer', None)
+        if renderer is None:
+            return
+        
+        try:
+            import vtk
+            camera = renderer.GetActiveCamera()
+            focal_pt = np.array(camera.GetFocalPoint())
+            
+            coord = vtk.vtkCoordinate()
+            coord.SetCoordinateSystemToDisplay()
+            coord.SetValue(float(x), float(y), 0.0)
+            world_near = np.array(coord.GetComputedWorldValue(renderer))
+            cam_dir = np.array(camera.GetDirectionOfProjection())
+            offset = np.dot(focal_pt - world_near, cam_dir)
+            world_pos = world_near + cam_dir * offset
+            
+            # Snap to perpendicular
+            snapped = self._snap_to_perpendicular(world_pos)
+            
+            # Remove old preview actors
+            self._remove_ruler_preview()
+            
+            p1 = self._ruler_first_point
+            sphere_radius = self._get_measurement_marker_size()
+            
+            # Draw preview line
+            line = pv.Line(p1, snapped)
+            tube = line.tube(radius=max(sphere_radius * 0.3, 0.005), n_sides=8)
+            self._ruler_preview_actor = self.plotter.add_mesh(
+                tube, color='#FF69B4', opacity=0.6, name='ruler_preview_line'
+            )
+            self._set_actor_always_on_top(self._ruler_preview_actor)
+            
+            # Draw preview dot at snapped position
+            sphere = pv.Sphere(radius=sphere_radius, center=snapped)
+            self._ruler_preview_dot_actor = self.plotter.add_mesh(
+                sphere, color='#FF69B4', opacity=0.6, name='ruler_preview_dot'
+            )
+            self._set_actor_always_on_top(self._ruler_preview_dot_actor)
+            
+            self.plotter.render()
+        except Exception as e:
+            logger.debug(f"_update_ruler_perpendicular_preview: {e}")
+    
+    def _remove_ruler_preview(self):
+        """Remove the live preview line and dot actors."""
+        if self.plotter is None:
+            return
+        for attr in ('_ruler_preview_actor', '_ruler_preview_dot_actor'):
+            actor = getattr(self, attr, None)
+            if actor is not None:
+                try:
+                    self.plotter.remove_actor(actor)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
     # ========== Measurement Dragging ==========
     
     def _install_ruler_drag_observers(self):
@@ -1312,10 +1428,17 @@ class STLViewerWidget(QWidget):
             logger.info(f"_on_ruler_right_click: Started drag on measurement {idx}")
     
     def _on_ruler_mouse_move(self, obj, event):
-        """Handle mouse move during measurement drag."""
+        """Handle mouse move for perpendicular constraint preview and measurement drag."""
+        import numpy as np
+        
+        # --- Perpendicular constraint live preview (first point placed, waiting for second) ---
+        if self._ruler_first_point is not None and len(self.measurement_points) == 1 and self._dragging_measurement is None:
+            self._update_ruler_perpendicular_preview()
+            return
+        
+        # --- Measurement dragging ---
         if self._dragging_measurement is None:
             return
-        import numpy as np
         iren = self._get_vtk_interactor()
         if iren is None:
             return
