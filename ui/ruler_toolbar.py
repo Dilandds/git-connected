@@ -3,7 +3,7 @@ Secondary toolbar for ruler/measurement mode with orthographic view presets.
 """
 import logging
 from PyQt5.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton, QFrame
+    QWidget, QHBoxLayout, QLabel, QPushButton, QFrame, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont
@@ -188,7 +188,7 @@ class RulerToolbar(QWidget):
         sep_units.setFixedWidth(1)
         layout.addWidget(sep_units)
         
-        # Unit selector
+        # Unit selector dropdown
         unit_label = QLabel("Unit:")
         unit_label.setStyleSheet(f"""
             color: {default_theme.text_secondary};
@@ -197,14 +197,51 @@ class RulerToolbar(QWidget):
         """)
         layout.addWidget(unit_label)
         
-        self._unit_buttons = {}
-        for unit_key, unit_text in [("mm", "MM"), ("cm", "CM"), ("m", "M"), ("inch", "INCH"), ("ft", "FT")]:
-            btn = RulerViewButton(unit_text)
-            btn.clicked.connect(lambda checked=False, k=unit_key: self._on_unit_clicked(k))
-            self._unit_buttons[unit_key] = btn
-            layout.addWidget(btn)
-        self._unit_buttons["mm"].set_active(True)  # Default unit
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(["MM", "CM", "M", "INCH", "FT"])
+        self.unit_combo.setCurrentIndex(0)
         self._current_unit = "mm"
+        self.unit_combo.setFixedHeight(26)
+        self.unit_combo.setMinimumWidth(70)
+        self.unit_combo.setCursor(Qt.PointingHandCursor)
+        self.unit_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {default_theme.row_bg_standard};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_light};
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 500;
+            }}
+            QComboBox:hover {{
+                background-color: {default_theme.row_bg_hover};
+                border: 1px solid {default_theme.border_medium};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 18px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid {default_theme.text_secondary};
+                margin-right: 6px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {default_theme.row_bg_standard};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_medium};
+                border-radius: 4px;
+                selection-background-color: {default_theme.button_primary};
+                selection-color: {default_theme.text_white};
+                padding: 2px;
+                outline: none;
+            }}
+        """)
+        self.unit_combo.currentTextChanged.connect(self._on_unit_combo_changed)
+        layout.addWidget(self.unit_combo)
         
         # Separator
         separator2 = QFrame()
@@ -290,11 +327,11 @@ class RulerToolbar(QWidget):
         """Handle exit ruler mode button click."""
         self.exit_ruler.emit()
     
-    def _on_unit_clicked(self, unit_key):
-        """Handle unit button click."""
+    def _on_unit_combo_changed(self, text):
+        """Handle unit dropdown change."""
+        unit_map = {"MM": "mm", "CM": "cm", "M": "m", "INCH": "inch", "FT": "ft"}
+        unit_key = unit_map.get(text, "mm")
         self._current_unit = unit_key
-        for k, btn in self._unit_buttons.items():
-            btn.set_active(k == unit_key)
         self.unit_changed.emit(unit_key)
     
     def reset_to_front(self):
