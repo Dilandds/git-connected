@@ -3,6 +3,7 @@ Annotation Panel UI for displaying and managing 3D model annotations.
 Workflow: Gray dots (pending) → Click to open popup → Add text/photos → Done → Black dot (validated)
 """
 import logging
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Callable
@@ -24,14 +25,14 @@ READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
 
 
 def _rounded_text_pixmap(text: str, size: int = 28) -> QPixmap:
-    """Create a rounded circle with text inside (white fill, black border)."""
+    """Create a rounded circle with text inside (light blue transparent fill, black border)."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     painter.setRenderHint(QPainter.TextAntialiasing)
-    # White fill, black outline
-    painter.setBrush(QBrush(QColor("#FFFFFF")))
+    # Light blue transparent fill, black outline
+    painter.setBrush(QBrush(QColor("#DBEAFE")))
     painter.setPen(QPen(QColor("#000000"), 2))
     margin = 2
     painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
@@ -117,11 +118,13 @@ class AnnotationCard(QFrame):
     delete_requested = pyqtSignal(int)   # annotation_id
     focus_requested = pyqtSignal(int)    # annotation_id
     label_edited = pyqtSignal(int, str)  # annotation_id, new_label
+    hover_changed = pyqtSignal(int, bool)  # annotation_id, is_hovered
     
-    def __init__(self, annotation: Annotation, reader_mode: bool = False, parent=None):
+    def __init__(self, annotation: Annotation, reader_mode: bool = False, display_number: int = None, parent=None):
         super().__init__(parent)
         self.annotation = annotation
         self._reader_mode = reader_mode
+        self._display_number = display_number if display_number is not None else annotation.id
         self.setObjectName("annotationCard")
         self.setCursor(Qt.PointingHandCursor)
         self.init_ui()
@@ -138,14 +141,16 @@ class AnnotationCard(QFrame):
         layout.setSpacing(8)
         
         # Point indicator (colored dot) - Gray for pending, Black for validated
+        # Larger on Windows (font rendering differs from Mac)
+        _dot_width = 22 if sys.platform == 'win32' else 16
         self.point_indicator = QLabel("●")
-        self.point_indicator.setFixedWidth(16)
+        self.point_indicator.setFixedWidth(_dot_width)
         self.point_indicator.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.point_indicator)
         
-        # Rounded date badge
+        # Rounded number badge (display number: 1, 2, 3...)
         self.date_icon = QLabel()
-        self.date_icon.setPixmap(_rounded_text_pixmap(str(self.annotation.id)))
+        self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number)))
         self.date_icon.setFixedSize(28, 28)
         self.date_icon.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.date_icon)
@@ -174,7 +179,7 @@ class AnnotationCard(QFrame):
         
         # Status label below the editable label
         self.status_label = QLabel()
-        self.status_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 9px;")
+        self.status_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 9px; background-color: transparent;")
         
         info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
@@ -188,7 +193,7 @@ class AnnotationCard(QFrame):
         # Date (small text) - where coordinates were shown
         date_text = _format_annotation_date(self.annotation.created_at, include_time=False) if self.annotation.created_at else str(self.annotation.id)
         self.coord_label = QLabel(date_text)
-        self.coord_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 9px;")
+        self.coord_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 9px; background-color: transparent;")
         layout.addWidget(self.coord_label)
         
         # Delete button (cross)
@@ -226,6 +231,24 @@ class AnnotationCard(QFrame):
             self.clicked.emit(self.annotation.id)
         super().mousePressEvent(event)
     
+    def enterEvent(self, event):
+        """Hover entered - highlight 3D marker yellow."""
+        self.hover_changed.emit(self.annotation.id, True)
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Hover left - restore 3D marker color. Skip if entering a child widget."""
+        rw = event.relatedWidget() if hasattr(event, 'relatedWidget') else None
+        if rw is not None:
+            w = rw
+            while w and w != self:
+                w = w.parent() if hasattr(w, 'parent') else None
+            if w == self:  # entering a descendant of this card
+                super().leaveEvent(event)
+                return
+        self.hover_changed.emit(self.annotation.id, False)
+        super().leaveEvent(event)
+    
     def _update_style(self):
         """Update the card style based on validation status and reader mode."""
         if self._reader_mode:
@@ -253,7 +276,8 @@ class AnnotationCard(QFrame):
             border_color = "#E5E7EB"
             self.status_label.setText("Click to edit")
         
-        self.point_indicator.setStyleSheet(f"color: {indicator_color}; font-size: 14px;")
+        _dot_font = 20 if sys.platform == 'win32' else 14
+        self.point_indicator.setStyleSheet(f"color: {indicator_color}; font-size: {_dot_font}px; background-color: transparent;")
         self.setStyleSheet(f"""
             QFrame#annotationCard {{
                 background-color: {bg_color};
@@ -261,15 +285,23 @@ class AnnotationCard(QFrame):
                 border-radius: 8px;
             }}
             QFrame#annotationCard:hover {{
-                background-color: #E5E7EB;
+                background-color: rgba(219, 234, 254, 0.7);
+            }}
+            QFrame#annotationCard QLabel {{
+                background-color: transparent;
+            }}
+            QFrame#annotationCard QLineEdit {{
+                background-color: transparent;
             }}
         """)
     
-    def update_annotation(self, annotation: Annotation):
-        """Update the card with new annotation data."""
+    def update_annotation(self, annotation: Annotation, display_number: int = None):
+        """Update the card with new annotation data and optional display number (1, 2, 3...)."""
         self.annotation = annotation
-        self.date_icon.setPixmap(_rounded_text_pixmap(str(annotation.id)))
-        self.coord_label.setText(_format_annotation_date(annotation.created_at, include_time=False) if annotation.created_at else str(annotation.id))
+        if display_number is not None:
+            self._display_number = display_number
+        self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number)))
+        self.coord_label.setText(_format_annotation_date(annotation.created_at, include_time=False) if annotation.created_at else str(self._display_number))
         self.label_edit.blockSignals(True)
         self.label_edit.setText(annotation.label)
         self.label_edit.blockSignals(False)
@@ -282,7 +314,7 @@ class AnnotationCard(QFrame):
         date_str = _format_annotation_date(self.annotation.created_at, include_time=True) if self.annotation.created_at else f"#{self.annotation.id}"
         
         tooltip_parts = [
-            f"<b>{self.annotation.label}</b> #{self.annotation.id}",
+            f"<b>{self.annotation.label}</b> #{self._display_number}",
             f"<br><b>Status:</b> {status}",
             f"<br><b>Date:</b> {date_str}",
         ]
@@ -308,6 +340,7 @@ class AnnotationPanel(QWidget):
     open_popup_requested = pyqtSignal(int)  # annotation_id - request to open popup
     open_viewer_popup_requested = pyqtSignal(int)  # annotation_id - request to open viewer popup (reader mode)
     focus_annotation = pyqtSignal(int)     # annotation_id
+    annotation_hovered = pyqtSignal(int, bool)  # annotation_id, is_hovered (for 3D marker highlight)
     exit_annotation_mode = pyqtSignal()
     clear_all_requested = pyqtSignal()
     
@@ -509,12 +542,14 @@ class AnnotationPanel(QWidget):
         self._next_id += 1
         self.annotations.append(annotation)
         
-        # Create card
-        card = AnnotationCard(annotation, reader_mode=self._reader_mode)
+        # Create card (display_number = position in list, 1-based)
+        display_number = len(self.annotations)  # we just appended
+        card = AnnotationCard(annotation, reader_mode=self._reader_mode, display_number=display_number)
         card.clicked.connect(self._on_card_clicked)
         card.delete_requested.connect(self._on_delete_requested)
         card.focus_requested.connect(self._on_focus_requested)
         card.label_edited.connect(self._on_label_edited)
+        card.hover_changed.connect(self.annotation_hovered.emit)
         
         self.annotation_cards[annotation.id] = card
         self.content_layout.addWidget(card)
@@ -529,7 +564,7 @@ class AnnotationPanel(QWidget):
         return annotation
     
     def remove_annotation(self, annotation_id: int):
-        """Remove an annotation by ID."""
+        """Remove an annotation by ID and renumber remaining (1, 2, 3...)."""
         # Find and remove from list
         self.annotations = [a for a in self.annotations if a.id != annotation_id]
         
@@ -544,8 +579,11 @@ class AnnotationPanel(QWidget):
             self.empty_label.show()
             self.clear_btn.setEnabled(False)
         
+        # Renumber remaining cards (1, 2, 3...)
+        self._refresh_display_numbers()
+        
         self.annotation_deleted.emit(annotation_id)
-        logger.info(f"Annotation removed: id={annotation_id}")
+        logger.info(f"Annotation removed: id={annotation_id}, renumbered to {[i+1 for i in range(len(self.annotations))]}")
     
     def clear_all(self):
         """Remove all annotations."""
@@ -564,19 +602,34 @@ class AnnotationPanel(QWidget):
                 return a
         return None
     
+    def get_display_number(self, annotation_id: int) -> int:
+        """Get display number (1-based index) for an annotation. Returns 0 if not found."""
+        for i, a in enumerate(self.annotations):
+            if a.id == annotation_id:
+                return i + 1
+        return 0
+    
+    def _refresh_display_numbers(self):
+        """Update display numbers on all cards after a delete (1, 2, 3...)."""
+        for i, ann in enumerate(self.annotations):
+            card = self.annotation_cards.get(ann.id)
+            if card is not None:
+                card.update_annotation(ann, display_number=i + 1)
+    
     def load_annotations(self, data: List[dict]):
         """Load annotations from serialized data."""
         self.clear_all()
-        for item in data:
+        for i, item in enumerate(data):
             annotation = Annotation.from_dict(item)
             self.annotations.append(annotation)
             
-            # Create card
-            card = AnnotationCard(annotation, reader_mode=self._reader_mode)
+            # Create card (display_number = 1, 2, 3...)
+            card = AnnotationCard(annotation, reader_mode=self._reader_mode, display_number=i + 1)
             card.clicked.connect(self._on_card_clicked)
             card.delete_requested.connect(self._on_delete_requested)
             card.focus_requested.connect(self._on_focus_requested)
             card.label_edited.connect(self._on_label_edited)
+            card.hover_changed.connect(self.annotation_hovered.emit)
             
             self.annotation_cards[annotation.id] = card
             self.content_layout.addWidget(card)

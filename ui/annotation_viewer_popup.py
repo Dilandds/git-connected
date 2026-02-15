@@ -283,7 +283,7 @@ class AnnotationViewerPopup(QDialog):
     
     def __init__(self, annotation_id: int, point: tuple, text: str = "", 
                  image_paths: Optional[List[str]] = None, label: str = "Point",
-                 created_at=None, parent=None):
+                 created_at=None, display_number: int = None, parent=None):
         super().__init__(parent)
         self.annotation_id = annotation_id
         self.point = point
@@ -291,8 +291,9 @@ class AnnotationViewerPopup(QDialog):
         self.image_paths = image_paths or []
         self.label = label
         self.created_at = created_at
+        self._display_number = display_number if display_number is not None else annotation_id
         
-        self.setWindowTitle(f"View Annotation {label} {annotation_id}")
+        self.setWindowTitle(f"View Annotation {label} {self._display_number}")
         self.setModal(False)
         self.setMinimumSize(320, 300)
         self.setMaximumSize(400, 450)
@@ -325,10 +326,10 @@ class AnnotationViewerPopup(QDialog):
         header_layout.addWidget(anno_icon)
         from ui.annotation_panel import _rounded_text_pixmap
         num_icon = QLabel()
-        num_icon.setPixmap(_rounded_text_pixmap(str(self.annotation_id), size=32))
+        num_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), size=32))
         num_icon.setFixedSize(32, 32)
         header_layout.addWidget(num_icon)
-        title_label = QLabel(f"{self.label} {self.annotation_id}")
+        title_label = QLabel(f"{self.label} {self._display_number}")
         title_font = QFont()
         title_font.setBold(True)
         title_font.setPointSize(13)

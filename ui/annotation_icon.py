@@ -1,10 +1,20 @@
 """Shared annotation icon helper for crisp rendering across different sizes."""
 import os
+import sys
+from pathlib import Path
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication
 
-_ICON_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets", "annotation_icon.png"))
+
+def _get_assets_base():
+    """Return base path for assets (handles PyInstaller frozen bundle)."""
+    if getattr(sys, 'frozen', False):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent.parent
+
+
+_ICON_PATH = str(_get_assets_base() / 'assets' / 'annotation_icon.png')
 
 
 def get_annotation_icon_path():

@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QFrame, QComboBox, QSizePolicy, QGraphicsDropShadowEffect,
     QLineEdit, QFileDialog, QMessageBox, QApplication
 )
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings
 from PyQt5.QtGui import QFont, QColor, QDoubleValidator
 from ui.components import DimensionRow, SurfaceAreaRow, WeightRow, Separator, ScaleResultRow, ReportCheckbox
 from ui.styles import get_button_style, default_theme
@@ -61,6 +61,8 @@ class SidebarPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._settings = QSettings("ECTOFORM", "Sidebar")
+        self._adjust_weight_expanded = self._settings.value("adjust_weight_expanded", True, type=bool)
         self.current_volume_mm3 = 0.0
         self.current_weight_grams = 0.0
         self.current_dimensions = {'width': 0.0, 'height': 0.0, 'depth': 0.0}
@@ -154,9 +156,9 @@ class SidebarPanel(QWidget):
         self.adjust_weight_group = self.create_adjust_weight_section()
         layout.addWidget(self.adjust_weight_group)
         
-        # Create PDF Report section
-        self.pdf_report_group = self.create_pdf_report_section()
-        layout.addWidget(self.pdf_report_group)
+        # Create PDF Report section (commented out for now - uncomment to re-enable 3D PDF export)
+        # self.pdf_report_group = self.create_pdf_report_section()
+        # layout.addWidget(self.pdf_report_group)
         
         # Create Export with Annotations section
         self.export_annotations_group = self.create_export_annotations_section()
@@ -365,7 +367,7 @@ class SidebarPanel(QWidget):
         return card
     
     def create_adjust_weight_section(self):
-        """Create the adjust to target weight section."""
+        """Create the adjust to target weight section (collapsible)."""
         card = QFrame()
         card.setObjectName("adjustWeightCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -374,9 +376,41 @@ class SidebarPanel(QWidget):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
         
-        # Header row with title and icon
-        header_layout = QHBoxLayout()
+        # Header row with title, icon, and collapse button (clickable)
+        header_btn = QPushButton()
+        header_btn.setObjectName("adjustWeightHeader")
+        header_btn.setCursor(Qt.PointingHandCursor)
+        header_btn.setFlat(True)
+        header_btn.setStyleSheet(f"""
+            QPushButton#adjustWeightHeader {{
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }}
+            QPushButton#adjustWeightHeader:hover {{
+                background: transparent;
+            }}
+        """)
+        header_layout = QHBoxLayout(header_btn)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
+        
+        self._adjust_weight_collapse_btn = QPushButton("▼" if self._adjust_weight_expanded else "▶")
+        self._adjust_weight_collapse_btn.setFixedSize(24, 24)
+        self._adjust_weight_collapse_btn.setCursor(Qt.PointingHandCursor)
+        self._adjust_weight_collapse_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                font-size: 12px;
+                color: {default_theme.text_secondary};
+            }}
+            QPushButton:hover {{
+                color: {default_theme.text_primary};
+            }}
+        """)
+        self._adjust_weight_collapse_btn.clicked.connect(self._toggle_adjust_weight)
         
         title_label = QLabel("Adjust to Target Weight")
         title_font = QFont()
@@ -389,10 +423,18 @@ class SidebarPanel(QWidget):
         icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
         icon_label.setAlignment(Qt.AlignCenter)
         
+        header_layout.addWidget(self._adjust_weight_collapse_btn)
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
-        card_layout.addLayout(header_layout)
+        header_btn.clicked.connect(self._toggle_adjust_weight)
+        card_layout.addWidget(header_btn)
+        
+        # Content widget (collapsible)
+        self._adjust_weight_content = QWidget()
+        content_layout = QVBoxLayout(self._adjust_weight_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
         
         # Target weight input
         input_layout = QHBoxLayout()
@@ -415,7 +457,7 @@ class SidebarPanel(QWidget):
         
         input_layout.addWidget(self.target_weight_input)
         input_layout.addWidget(unit_label)
-        card_layout.addLayout(input_layout)
+        content_layout.addLayout(input_layout)
         
         # Calculate button
         self.calculate_scale_btn = QPushButton("Calculate Scale")
@@ -444,11 +486,11 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.calculate_scale_btn.clicked.connect(self.calculate_scale)
-        card_layout.addWidget(self.calculate_scale_btn)
+        content_layout.addWidget(self.calculate_scale_btn)
         
         # Separator
         separator = Separator(self)
-        card_layout.addWidget(separator)
+        content_layout.addWidget(separator)
         
         # Results section title
         results_label = QLabel("Scaled Results")
@@ -457,39 +499,39 @@ class SidebarPanel(QWidget):
         results_font.setBold(True)
         results_label.setFont(results_font)
         results_label.setStyleSheet(f"color: {default_theme.text_secondary}; margin-top: 4px;")
-        card_layout.addWidget(results_label)
+        content_layout.addWidget(results_label)
         
         # Scale factor row
         self.scale_factor_row = ScaleResultRow("Scale factor", "--", "highlight", self)
-        card_layout.addWidget(self.scale_factor_row)
+        content_layout.addWidget(self.scale_factor_row)
         
         # New dimensions rows
         self.new_x_row = ScaleResultRow("New X (Length)", "--", "standard", self)
         self.new_y_row = ScaleResultRow("New Y (Width)", "--", "standard", self)
         self.new_z_row = ScaleResultRow("New Z (Height)", "--", "standard", self)
-        card_layout.addWidget(self.new_x_row)
-        card_layout.addWidget(self.new_y_row)
-        card_layout.addWidget(self.new_z_row)
+        content_layout.addWidget(self.new_x_row)
+        content_layout.addWidget(self.new_y_row)
+        content_layout.addWidget(self.new_z_row)
         
         # New volume row (with subtle border to differentiate from dimensions)
         self.new_volume_row = ScaleResultRow("New Volume", "--", "volume", self)
-        card_layout.addWidget(self.new_volume_row)
+        content_layout.addWidget(self.new_volume_row)
         
         # Weight comparison separator
         separator2 = Separator(self)
-        card_layout.addWidget(separator2)
+        content_layout.addWidget(separator2)
         
         # Weight comparison title
         comparison_label = QLabel("Weight Comparison")
         comparison_label.setFont(results_font)
         comparison_label.setStyleSheet(f"color: {default_theme.text_secondary}; margin-top: 4px;")
-        card_layout.addWidget(comparison_label)
+        content_layout.addWidget(comparison_label)
         
         # Weight comparison rows
         self.original_weight_row = ScaleResultRow("Original weight", "--", "comparison", self)
         self.target_weight_row = ScaleResultRow("Target weight", "--", "highlight", self)
-        card_layout.addWidget(self.original_weight_row)
-        card_layout.addWidget(self.target_weight_row)
+        content_layout.addWidget(self.original_weight_row)
+        content_layout.addWidget(self.target_weight_row)
         
         # Export button
         self.export_scaled_btn = QPushButton("Export Scaled STL")
@@ -518,15 +560,25 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.export_scaled_btn.clicked.connect(self.export_scaled_stl_file)
-        card_layout.addWidget(self.export_scaled_btn)
+        content_layout.addWidget(self.export_scaled_btn)
+        
+        card_layout.addWidget(self._adjust_weight_content)
+        self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
         
         # Add shadow effect
         self._add_card_shadow(card)
         
         return card
     
+    def _toggle_adjust_weight(self):
+        """Toggle the adjust to target weight section."""
+        self._adjust_weight_expanded = not self._adjust_weight_expanded
+        self._settings.setValue("adjust_weight_expanded", self._adjust_weight_expanded)
+        self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
+        self._adjust_weight_collapse_btn.setText("▼" if self._adjust_weight_expanded else "▶")
+    
     def create_pdf_report_section(self):
-        """Create the 3D PDF export section."""
+        """Create the 3D PDF export section. (UI currently commented out - uncomment in init to show)"""
         card = QFrame()
         card.setObjectName("pdfReportCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -843,7 +895,8 @@ class SidebarPanel(QWidget):
     
     def update_pdf_button_state(self):
         """Update the PDF export button based on available data."""
-        self.export_pdf_btn.setEnabled(self.has_stl_loaded)
+        if hasattr(self, 'export_pdf_btn'):
+            self.export_pdf_btn.setEnabled(self.has_stl_loaded)
     
     def export_pdf_report(self):
         """Generate and export 3D PDF with multiple views."""

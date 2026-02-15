@@ -6,7 +6,7 @@ import os
 import logging
 import pyvista as pv
 from pyvistaqt import QtInteractor
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout, QGridLayout
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.drop_zone_overlay import DropZoneOverlay
 
@@ -54,7 +54,7 @@ class STLViewerWidget(QWidget):
         
         # Container for the 3D viewer
         self.viewer_container = QWidget()
-        self.viewer_layout = QVBoxLayout(self.viewer_container)
+        self.viewer_layout = QGridLayout(self.viewer_container)
         self.viewer_layout.setContentsMargins(0, 0, 0, 0)
         
         # No placeholder - drop overlay handles empty state
@@ -75,6 +75,7 @@ class STLViewerWidget(QWidget):
         self.plotter = None
         self.current_mesh = None
         self.current_actor = None  # Track the mesh actor to remove it specifically
+        self._orientation_widget = None  # Bottom-right rotation gizmo (annotation mode only)
         self._initialized = False
         self._model_loaded = False
         
@@ -164,7 +165,7 @@ class STLViewerWidget(QWidget):
             QApplication.processEvents()
             
             # Add plotter to viewer container layout
-            self.viewer_layout.addWidget(self.plotter.interactor)
+            self.viewer_layout.addWidget(self.plotter.interactor, 0, 0)
             QApplication.processEvents()
             
             debug_print("STLViewerWidget: Configuring plotter settings...")
@@ -517,7 +518,6 @@ class STLViewerWidget(QWidget):
                 specular_power=20  # Reduced for softer specular
             )
             logger.info("load_stl: Mesh added to plotter")
-            
             # Ensure renderer settings are still active after adding mesh
             # This preserves visual quality when uploading files multiple times
             self._restore_renderer_settings()
@@ -559,6 +559,8 @@ class STLViewerWidget(QWidget):
         if self.plotter is None:
             return
         logger.info("clear_viewer: Clearing viewer...")
+        # Remove orientation gizmo if present
+        self._remove_orientation_gizmo()
         # Remove mesh actor if it exists
         if self.current_actor is not None:
             try:
@@ -567,6 +569,7 @@ class STLViewerWidget(QWidget):
                 pass
         self.plotter.clear()
         self.plotter.add_axes()
+        self._orientation_widget = None  # Cleared with plotter
         
         # Restore renderer settings after clearing
         self._restore_renderer_settings()
@@ -908,12 +911,12 @@ class STLViewerWidget(QWidget):
         if world_pos is None:
             return
 
-        # Snap to nearest mesh vertex when close (helps connect corners); else snap to perpendicular
+        # Snap to nearest mesh vertex when close (helps connect corners); else maybe snap to H/V if close
         nearest = self._get_nearest_mesh_point(world_pos)
         if nearest != world_pos:
             snapped = nearest  # Use corner/vertex when close
         else:
-            snapped = self._snap_to_axis(self.measurement_points[0], world_pos)  # Horizontal/vertical
+            snapped = self._maybe_snap_to_axis(self.measurement_points[0], world_pos)
 
         self._update_preview_line(self.measurement_points[0], snapped)
 
@@ -1051,6 +1054,49 @@ class STLViewerWidget(QWidget):
             logger.warning(f"_snap_to_axis: Could not snap, using original point: {e}")
             return point2
 
+    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=15):
+        """Snap to horizontal or vertical only when the line is close to that axis.
+        
+        If the angle from first to second point is within threshold_deg of horizontal
+        or vertical (in screen space), snap to that axis. Otherwise return point2
+        unchanged for free diagonal placement.
+        """
+        import math
+        import numpy as np
+        try:
+            camera = self.plotter.renderer.GetActiveCamera()
+            view_up = np.array(camera.GetViewUp())
+            cam_dir = np.array(camera.GetDirectionOfProjection())
+            view_right = np.cross(cam_dir, view_up)
+            view_right = view_right / (np.linalg.norm(view_right) + 1e-12)
+            view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
+
+            p1 = np.array(point1)
+            p2 = np.array(point2)
+            delta = p2 - p1
+
+            dx_screen = np.dot(delta, view_right)
+            dy_screen = np.dot(delta, view_up)
+
+            # Same point or negligible movement
+            if abs(dx_screen) < 1e-12 and abs(dy_screen) < 1e-12:
+                return point2
+
+            # Angle from horizontal: 0 = horizontal, 90 = vertical
+            angle_deg = math.degrees(math.atan2(abs(dy_screen), abs(dx_screen)))
+
+            if angle_deg < threshold_deg:
+                # Close to horizontal
+                return self._snap_to_axis(point1, point2)
+            if angle_deg > (90 - threshold_deg):
+                # Close to vertical
+                return self._snap_to_axis(point1, point2)
+            # Free diagonal
+            return point2
+        except Exception as e:
+            logger.warning(f"_maybe_snap_to_axis: Could not check angle, using original point: {e}")
+            return point2
+
     def _on_point_picked(self, point):
         """Handle point picked for measurement."""
         if not self.ruler_mode or point is None:
@@ -1058,9 +1104,9 @@ class STLViewerWidget(QWidget):
         
         logger.info(f"_on_point_picked: Point picked at {point}")
         
-        # If this is the second point, snap to horizontal or vertical axis
+        # If this is the second point, maybe snap to H/V when close to axis
         if len(self.measurement_points) == 1:
-            point = self._snap_to_axis(self.measurement_points[0], point)
+            point = self._maybe_snap_to_axis(self.measurement_points[0], point)
         
         self.measurement_points.append(point)
         
@@ -1568,6 +1614,14 @@ class STLViewerWidget(QWidget):
         
         # Install click picking for annotations
         if self._install_annotation_click_picking():
+            # Hide bottom-left XYZ axes (we show camera orientation gizmo in bottom right instead)
+            try:
+                self.plotter.hide_axes()
+            except Exception:
+                pass
+            # Add interactive orientation cube in bottom right for rotating when zoomed in
+            # (clicking on model adds annotations, so use this to rotate view instead)
+            self._add_orientation_gizmo()
             logger.info("enable_annotation_mode: Annotation mode enabled")
             return True
         
@@ -1592,8 +1646,47 @@ class STLViewerWidget(QWidget):
         except Exception:
             pass
         
+        self._remove_orientation_gizmo()
+        # Restore bottom-left XYZ axes
+        try:
+            self.plotter.show_axes()
+        except Exception:
+            pass
         logger.info("disable_annotation_mode: Annotation mode disabled")
     
+    def _add_orientation_gizmo(self):
+        """Add camera orientation gizmo - click/drag to rotate the 3D view (gizmo stays fixed)."""
+        if self.plotter is None:
+            return
+        try:
+            if self._orientation_widget is not None:
+                # Re-show if we had hidden it
+                if hasattr(self._orientation_widget, 'SetEnabled'):
+                    self._orientation_widget.SetEnabled(1)
+                return
+            # add_camera_orientation_widget: click on handles to rotate CAMERA (not the gizmo)
+            # vtkOrientationMarkerWidget with interactive=True moves the gizmo - wrong
+            # vtkCameraOrientationWidget rotates the view when you interact - correct
+            self._orientation_widget = self.plotter.add_camera_orientation_widget(animate=True)
+            # Position in bottom-right (VTK representation)
+            rep = self._orientation_widget.GetRepresentation() if hasattr(self._orientation_widget, 'GetRepresentation') else None
+            if rep is not None and hasattr(rep, 'AnchorToLowerRight'):
+                rep.AnchorToLowerRight()
+            logger.info("_add_orientation_gizmo: Camera orientation widget added")
+        except Exception as e:
+            logger.warning(f"_add_orientation_gizmo: Could not add: {e}")
+            self._orientation_widget = None
+
+    def _remove_orientation_gizmo(self):
+        """Hide the orientation gizmo (keeps widget for reuse)."""
+        if self._orientation_widget is None:
+            return
+        try:
+            if hasattr(self._orientation_widget, 'SetEnabled'):
+                self._orientation_widget.SetEnabled(0)
+        except Exception as e:
+            logger.debug(f"_remove_orientation_gizmo: {e}")
+
     def _install_annotation_click_picking(self) -> bool:
         """Install VTK observer for annotation point picking."""
         try:
@@ -1618,18 +1711,20 @@ class STLViewerWidget(QWidget):
         except Exception:
             pass
         
-        # Restrict to model actor
-        if self.current_actor is not None:
-            try:
-                self.current_actor.SetPickable(True)
-                self._annotation_picker.PickFromListOn()
-                self._annotation_picker.AddPickList(self.current_actor)
-            except Exception as e:
-                logger.debug(f"_install_annotation_click_picking: Could not restrict pick list: {e}")
-                try:
-                    self._annotation_picker.PickFromListOff()
-                except Exception:
-                    pass
+        # Restrict to model actor only - must not pick empty space or other actors
+        if self.current_actor is None:
+            logger.warning("_install_annotation_click_picking: No mesh actor to restrict picking")
+            self._annotation_picker = None
+            return False
+        try:
+            self.current_actor.SetPickable(True)
+            self._annotation_picker.PickFromListOn()
+            self._annotation_picker.AddPickList(self.current_actor)
+            logger.debug("_install_annotation_click_picking: Picking restricted to model mesh")
+        except Exception as e:
+            logger.warning(f"_install_annotation_click_picking: Could not restrict pick list: {e}")
+            self._annotation_picker = None
+            return False
         
         try:
             self._annotation_click_observer_id = iren.AddObserver(
@@ -1685,6 +1780,21 @@ class STLViewerWidget(QWidget):
             except Exception:
                 renderer = None
         
+        # Reject clicks outside the 3D view viewport
+        try:
+            if renderer is not None and self.plotter.ren_win is not None:
+                vp = renderer.GetViewport()
+                size = self.plotter.ren_win.GetSize()
+                vp_x_min = int(vp[0] * size[0])
+                vp_x_max = int(vp[2] * size[0])
+                vp_y_min = int(vp[1] * size[1])
+                vp_y_max = int(vp[3] * size[1])
+                if x < vp_x_min or x > vp_x_max or y < vp_y_min or y > vp_y_max:
+                    logger.info(f"_on_annotation_left_click: Click ({x},{y}) outside viewport, ignored")
+                    return
+        except Exception:
+            pass
+        
         if renderer is None:
             logger.info("_on_annotation_left_click: No renderer available")
             return
@@ -1696,10 +1806,28 @@ class STLViewerWidget(QWidget):
                 logger.info(f"_on_annotation_left_click: No hit at ({x}, {y})")
                 return
             
+            # Must have picked the mesh actor, not overlay or other geometry
+            picked_actor = self._annotation_picker.GetActor()
+            if picked_actor is None or picked_actor != self.current_actor:
+                logger.info(f"_on_annotation_left_click: Pick hit wrong actor (not mesh), ignored")
+                return
+            
             # Use exact pick position on surface - do NOT snap to vertices, which pulls
             # annotations to triangle corners/edges and prevents placing on plain surfaces
             picked_world = self._annotation_picker.GetPickPosition()
             point_tuple = tuple(float(c) for c in picked_world)
+            
+            # Validate: point must be within mesh bounds (reject picks outside model)
+            if self.current_mesh is not None:
+                bounds = self.current_mesh.bounds
+                max_dim = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 0.01)
+                margin = max_dim * 0.001
+                if (point_tuple[0] < bounds[0] - margin or point_tuple[0] > bounds[1] + margin or
+                    point_tuple[1] < bounds[2] - margin or point_tuple[1] > bounds[3] + margin or
+                    point_tuple[2] < bounds[4] - margin or point_tuple[2] > bounds[5] + margin):
+                    logger.info(f"_on_annotation_left_click: Point {point_tuple} outside mesh bounds, ignored")
+                    return
+            
             logger.info(f"_on_annotation_left_click: hit at {point_tuple}")
             
             # Call the callback if set
@@ -1753,8 +1881,13 @@ class STLViewerWidget(QWidget):
                 diffuse=0.7,
                 ambient=0.2,
                 smooth_shading=True,
-                name=f'annotation_marker_{annotation_id}'
+                name=f'annotation_marker_{annotation_id}',
+                reset_camera=False  # Preserve user's zoom/pan when adding annotation
             )
+            try:
+                actor.SetPickable(False)  # Don't pick annotation markers - only the model
+            except Exception:
+                pass
             
             # Add date label slightly above the sphere so it's visible
             label_actor = None
@@ -1765,15 +1898,20 @@ class STLViewerWidget(QWidget):
                 label_actor = self.plotter.add_point_labels(
                     label_points,
                     [display_date],
-                    font_size=10,
+                    font_size=18,
                     text_color='black',
                     font_family='arial',
                     bold=True,
                     show_points=False,
                     always_visible=True,
-                    name=f'annotation_label_{annotation_id}'
+                    name=f'annotation_label_{annotation_id}',
+                    reset_camera=False  # Preserve user's zoom/pan
                 )
                 if label_actor:
+                    try:
+                        label_actor.SetPickable(False)  # Don't pick labels
+                    except Exception:
+                        pass
                     self._set_actor_always_on_top(label_actor)
             except Exception as e:
                 logger.debug(f"add_annotation_marker: Could not add date label: {e}")
@@ -1904,6 +2042,10 @@ class STLViewerWidget(QWidget):
         
         self.annotations = []
         self.annotation_actors = []
+        
+        # If in annotation mode, hide the orientation gizmo when clearing
+        if getattr(self, 'annotation_mode', False):
+            self._remove_orientation_gizmo()
         
         try:
             self.plotter.render()

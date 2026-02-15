@@ -385,13 +385,22 @@ class STLViewerWindow(QMainWindow):
                     prop.EdgeVisibilityOff()
                     prop.SetRepresentationToWireframe()
                 elif mode == 'shaded':
+                    # Shaded: silvery metallic look, no wires, shiny silver grey and black
                     prop.SetRepresentationToSurface()
-                    prop.EdgeVisibilityOn()
-                    prop.SetEdgeColor(0.2, 0.2, 0.2)
-                    prop.SetLineWidth(1.0)
-                else:  # solid
+                    prop.EdgeVisibilityOff()  # No wireframe edges
+                    prop.SetColor(0.72, 0.72, 0.76)  # Silver grey
+                    prop.SetAmbient(0.25)   # Darker ambient for pronounced shadows
+                    prop.SetDiffuse(0.55)   # Moderate diffuse
+                    prop.SetSpecular(0.65)  # Strong specular for shine
+                    prop.SetSpecularPower(90)  # Sharp metallic highlights
+                else:  # solid - unchanged from default
                     prop.SetRepresentationToSurface()
                     prop.EdgeVisibilityOff()
+                    prop.SetColor(0.68, 0.85, 0.90)  # Restore lightblue
+                    prop.SetAmbient(0.7)
+                    prop.SetDiffuse(0.4)
+                    prop.SetSpecular(0.2)
+                    prop.SetSpecularPower(20)
                 self.viewer_widget.plotter.render()
             except Exception as e:
                 logger.warning(f"Could not set render mode: {e}")
@@ -513,6 +522,7 @@ class STLViewerWindow(QMainWindow):
         self.annotation_panel.open_popup_requested.connect(self._on_open_popup_requested)
         self.annotation_panel.open_viewer_popup_requested.connect(self._on_open_viewer_popup_requested)
         self.annotation_panel.focus_annotation.connect(self._on_focus_annotation)
+        self.annotation_panel.annotation_hovered.connect(self._on_annotation_hovered)
         self.annotation_panel.exit_annotation_mode.connect(self._exit_annotation_mode)
         self.annotation_panel.clear_all_requested.connect(self._clear_all_annotations)
     
@@ -539,14 +549,12 @@ class STLViewerWindow(QMainWindow):
             self._exit_annotation_mode()
     
     def _exit_annotation_mode(self):
-        """Exit annotation mode and remove all annotation markers from 3D view."""
+        """Exit annotation mode; keep annotations saved and visible on the model."""
         if hasattr(self.viewer_widget, 'disable_annotation_mode'):
             self.viewer_widget.disable_annotation_mode()
-        # Clear number tags and dots from 3D view (they were persisting on exit)
-        self._clear_all_annotations()
         self.annotation_panel.hide()
         self.toolbar.reset_annotation_state()
-        logger.info("_exit_annotation_mode: Annotation mode disabled, markers cleared")
+        logger.info("_exit_annotation_mode: Annotation mode disabled, annotations kept")
     
     def _on_annotation_point_picked(self, point: tuple):
         """Handle point picked for annotation - creates gray dot."""
@@ -555,11 +563,12 @@ class STLViewerWindow(QMainWindow):
         # Add annotation to panel (pending/gray)
         annotation = self.annotation_panel.add_annotation(point)
         
-        # Add gray visual marker to the viewer (pending state)
+        # Add gray visual marker to the viewer (display_number = position in list)
         if hasattr(self.viewer_widget, 'add_annotation_marker'):
+            display_num = self.annotation_panel.get_display_number(annotation.id)
             self.viewer_widget.add_annotation_marker(
                 annotation.id, point, '#909d92',
-                display_date=str(annotation.id)
+                display_date=str(display_num or len(self.annotation_panel.annotations))
             )  # Light grey
     
     def _on_annotation_added(self, annotation):
@@ -568,10 +577,9 @@ class STLViewerWindow(QMainWindow):
         self._update_sidebar_annotation_count()
     
     def _on_annotation_deleted(self, annotation_id: int):
-        """Handle annotation deleted event."""
-        if hasattr(self.viewer_widget, 'remove_annotation_marker'):
-            self.viewer_widget.remove_annotation_marker(annotation_id)
-        logger.info(f"_on_annotation_deleted: Annotation {annotation_id} removed")
+        """Handle annotation deleted event - refresh all 3D markers with renumbered labels (1, 2, 3...)."""
+        self._refresh_annotation_markers()
+        logger.info(f"_on_annotation_deleted: Annotation {annotation_id} removed, markers renumbered")
         self._update_sidebar_annotation_count()
     
     def _on_open_popup_requested(self, annotation_id: int):
@@ -583,6 +591,7 @@ class STLViewerWindow(QMainWindow):
             return
         
         # Create and show popup
+        display_num = self.annotation_panel.get_display_number(annotation.id)
         popup = AnnotationPopup(
             annotation_id=annotation.id,
             point=annotation.point,
@@ -590,6 +599,7 @@ class STLViewerWindow(QMainWindow):
             image_paths=annotation.image_paths,
             label=annotation.label,
             created_at=annotation.created_at,
+            display_number=display_num,
             parent=self
         )
         
@@ -614,6 +624,7 @@ class STLViewerWindow(QMainWindow):
             return
         
         # Create and show viewer popup (read-only)
+        display_num = self.annotation_panel.get_display_number(annotation.id)
         popup = AnnotationViewerPopup(
             annotation_id=annotation.id,
             point=annotation.point,
@@ -621,6 +632,7 @@ class STLViewerWindow(QMainWindow):
             image_paths=annotation.image_paths,
             label=annotation.label,
             created_at=annotation.created_at,
+            display_number=display_num,
             parent=self
         )
         
@@ -667,6 +679,29 @@ class STLViewerWindow(QMainWindow):
         """Handle focus annotation request."""
         if hasattr(self.viewer_widget, 'focus_on_annotation'):
             self.viewer_widget.focus_on_annotation(annotation_id)
+    
+    def _on_annotation_hovered(self, annotation_id: int, is_hovered: bool):
+        """Handle annotation card hover - highlight 3D marker yellow when hovering."""
+        if hasattr(self.viewer_widget, 'set_annotation_selected'):
+            self.viewer_widget.set_annotation_selected(annotation_id, is_hovered)
+    
+    def _refresh_annotation_markers(self):
+        """Refresh all 3D markers with current display numbers (1, 2, 3...)."""
+        if not hasattr(self.viewer_widget, 'clear_all_annotation_markers'):
+            return
+        self.viewer_widget.clear_all_annotation_markers()
+        annotations = self.annotation_panel.get_annotations()
+        if not annotations:
+            return
+        reader_mode = self.annotation_panel.is_reader_mode()
+        for i, ann in enumerate(annotations):
+            display_number = i + 1
+            if reader_mode:
+                color = '#1821b4' if ann.is_read else '#36cd2e'  # Blue=read, green=unread
+            else:
+                color = '#1821b4' if ann.is_validated else '#909d92'  # Blue=validated, grey=pending
+            if hasattr(self.viewer_widget, 'add_annotation_marker'):
+                self.viewer_widget.add_annotation_marker(ann.id, ann.point, color, display_date=str(display_number))
     
     def _clear_all_annotations(self):
         """Clear all annotations."""
@@ -865,8 +900,8 @@ class STLViewerWindow(QMainWindow):
                     self.annotation_panel.show()
                     logger.info(f"Reader Mode enabled for {file_path}")
                 
-                # Add markers to the viewer
-                for ann_data in annotations:
+                # Add markers to the viewer (display_number = 1, 2, 3...)
+                for i, ann_data in enumerate(annotations):
                     ann_id = ann_data['id']
                     point = tuple(ann_data['point'])
                     is_validated = ann_data.get('is_validated', False)
@@ -876,9 +911,8 @@ class STLViewerWindow(QMainWindow):
                         color = '#1821b4' if is_read else '#36cd2e'  # Blue=read, green=unread
                     else:
                         color = '#1821b4' if is_validated else '#909d92'  # Blue if validated, light grey if pending
-                    # Show annotation number near dot
                     if hasattr(self.viewer_widget, 'add_annotation_marker'):
-                        self.viewer_widget.add_annotation_marker(ann_id, point, color, display_date=str(ann_id))
+                        self.viewer_widget.add_annotation_marker(ann_id, point, color, display_date=str(i + 1))
                 
                 logger.info(f"Loaded {len(annotations)} annotations for {file_path} (reader_mode={reader_mode})")
                 
@@ -964,8 +998,8 @@ class STLViewerWindow(QMainWindow):
             if annotations:
                 self.annotation_panel.load_annotations(annotations)
                 
-                # Add markers: reader mode = green/blue (is_read), sender mode = grey/blue (is_validated)
-                for ann_data in annotations:
+                # Add markers: display_number = 1, 2, 3...
+                for i, ann_data in enumerate(annotations):
                     ann_id = ann_data['id']
                     point = tuple(ann_data['point'])
                     if reader_mode:
@@ -975,7 +1009,7 @@ class STLViewerWindow(QMainWindow):
                         is_validated = ann_data.get('is_validated', False)
                         color = '#1821b4' if is_validated else '#909d92'  # Blue=validated, grey=pending
                     if hasattr(self.viewer_widget, 'add_annotation_marker'):
-                        self.viewer_widget.add_annotation_marker(ann_id, point, color, display_date=str(ann_id))
+                        self.viewer_widget.add_annotation_marker(ann_id, point, color, display_date=str(i + 1))
                 
                 logger.info(f"_load_ecto_file: Loaded {len(annotations)} annotations (reader_mode={reader_mode})")
                 self._update_sidebar_annotation_count()
@@ -991,7 +1025,28 @@ class STLViewerWindow(QMainWindow):
             )
     
     def closeEvent(self, event):
-        """Handle window close - cleanup temp directories."""
+        """Handle window close - prompt for unsaved annotations, then cleanup."""
+        # Check for unsaved annotations before closing
+        annotations = self.annotation_panel.get_annotations()
+        if annotations and not self._annotations_exported:
+            reply = QMessageBox.warning(
+                self,
+                "Unsaved Annotations",
+                f"You have {len(annotations)} annotation(s) that have not been exported.\n\n"
+                "Would you like to export them as .ecto before closing?\n\n"
+                "• Click 'Yes' to export first\n"
+                "• Click 'No' to close without exporting\n"
+                "• Click 'Cancel' to stay",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                event.ignore()
+                self.sidebar_panel.export_as_ecto()
+                return
+            if reply == QMessageBox.Cancel:
+                event.ignore()
+                return
         # Cleanup any extracted .ecto temp directory
         if hasattr(self, '_ecto_temp_dir') and self._ecto_temp_dir:
             try:

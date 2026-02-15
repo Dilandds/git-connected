@@ -273,7 +273,7 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.clicked.connect(self._on_theme_clicked)
         content_layout.addWidget(self.theme_btn)
         
-        self.render_mode_btn = ToolbarButton("◇", "Solid ▾", "")
+        self.render_mode_btn = ToolbarButton("◇", "Solid ▼", "")
         self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
         content_layout.addWidget(self.render_mode_btn)
         
@@ -461,7 +461,7 @@ class ViewControlsToolbar(QWidget):
         icons = {'solid': '◇', 'wireframe': '◈', 'shaded': '◆'}
         labels = {'solid': 'Solid', 'wireframe': 'Wireframe', 'shaded': 'Shaded'}
         self.render_mode_btn.set_icon(icons[mode])
-        self.render_mode_btn.set_label(f"{labels[mode]} ▾")
+        self.render_mode_btn.set_label(f"{labels[mode]} ▼")
         self.render_mode_btn.set_active(mode != 'solid')
         self.render_mode_changed.emit(mode)
     
