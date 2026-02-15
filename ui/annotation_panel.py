@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Colors for annotation states
 PENDING_COLOR = '#909d92'   # Light grey - unvalidated
 VALIDATED_COLOR = '#1821b4'  # Blue - validated
-READER_UNREAD_COLOR = '#0fb302'  # Green - unread in reader mode
+READER_UNREAD_COLOR = '#1821b4'  # Blue - unread in reader mode
 READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
 
 
@@ -152,8 +152,8 @@ class AnnotationCard(QFrame):
                 self.status_label.setText("✓ Read")
             else:
                 indicator_color = READER_UNREAD_COLOR
-                bg_color = "#F0FFF0"  # Light green tint
-                border_color = "#86EFAC"
+                bg_color = "#F3F4F6"
+                border_color = "#D1D5DB"
                 self.status_label.setText("● Unread")
         elif self.annotation.is_validated:
             # Blue for validated
