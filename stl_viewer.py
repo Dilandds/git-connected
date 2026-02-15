@@ -192,7 +192,7 @@ class STLViewerWindow(QMainWindow):
         """Connect toolbar signals to handler methods."""
         self.toolbar.toggle_grid.connect(self._toggle_grid)
         self.toolbar.toggle_theme.connect(self._toggle_theme)
-        self.toolbar.toggle_wireframe.connect(self._toggle_wireframe)
+        self.toolbar.render_mode_changed.connect(self._set_render_mode)
         self.toolbar.reset_rotation.connect(self._reset_rotation)
         self.toolbar.view_front.connect(self._view_front)
         self.toolbar.view_side.connect(self._view_side)
@@ -375,17 +375,26 @@ class STLViewerWindow(QMainWindow):
             except Exception as e:
                 logger.warning(f"Could not toggle theme: {e}")
     
-    def _toggle_wireframe(self):
-        """Toggle wireframe display mode."""
+    def _set_render_mode(self, mode):
+        """Set render mode: solid, wireframe, or shaded."""
         if hasattr(self.viewer_widget, 'current_actor') and self.viewer_widget.current_actor is not None:
             try:
-                if self.toolbar.wireframe_enabled:
-                    self.viewer_widget.current_actor.GetProperty().SetRepresentationToWireframe()
-                else:
-                    self.viewer_widget.current_actor.GetProperty().SetRepresentationToSurface()
+                prop = self.viewer_widget.current_actor.GetProperty()
+                if mode == 'wireframe':
+                    prop.SetRepresentationToSurface()
+                    prop.EdgeVisibilityOff()
+                    prop.SetRepresentationToWireframe()
+                elif mode == 'shaded':
+                    prop.SetRepresentationToSurface()
+                    prop.EdgeVisibilityOn()
+                    prop.SetEdgeColor(0.2, 0.2, 0.2)
+                    prop.SetLineWidth(1.0)
+                else:  # solid
+                    prop.SetRepresentationToSurface()
+                    prop.EdgeVisibilityOff()
                 self.viewer_widget.plotter.render()
             except Exception as e:
-                logger.warning(f"Could not toggle wireframe: {e}")
+                logger.warning(f"Could not set render mode: {e}")
     
     def _reset_rotation(self):
         """Reset view to default isometric rotation."""

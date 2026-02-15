@@ -5,7 +5,7 @@ import logging
 import os
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel,
-    QSizePolicy, QFrame, QSpacerItem, QApplication
+    QSizePolicy, QFrame, QSpacerItem, QApplication, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap
@@ -206,7 +206,7 @@ class ViewControlsToolbar(QWidget):
     # Signals for viewer controls
     toggle_grid = pyqtSignal()
     toggle_theme = pyqtSignal()
-    toggle_wireframe = pyqtSignal()
+    render_mode_changed = pyqtSignal(str)  # 'solid', 'wireframe', 'shaded'
     reset_rotation = pyqtSignal()
     view_front = pyqtSignal()
     view_side = pyqtSignal()
@@ -223,7 +223,7 @@ class ViewControlsToolbar(QWidget):
         # State tracking
         self.grid_enabled = True
         self.dark_theme = False
-        self.wireframe_enabled = False
+        self.render_mode = 'solid'  # 'solid', 'wireframe', 'shaded'
         self.is_fullscreen = False
         self.ruler_mode_enabled = False
         self.annotation_mode_enabled = False
@@ -273,9 +273,9 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.clicked.connect(self._on_theme_clicked)
         content_layout.addWidget(self.theme_btn)
         
-        self.wireframe_btn = ToolbarButton("◇", "Solid", "")
-        self.wireframe_btn.clicked.connect(self._on_wireframe_clicked)
-        content_layout.addWidget(self.wireframe_btn)
+        self.render_mode_btn = ToolbarButton("◇", "Solid ▾", "")
+        self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
+        content_layout.addWidget(self.render_mode_btn)
         
         # Spacer between groups
         content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
@@ -416,17 +416,54 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.set_active(self.dark_theme)
         self.toggle_theme.emit()
     
-    def _on_wireframe_clicked(self):
-        """Handle wireframe toggle."""
-        self.wireframe_enabled = not self.wireframe_enabled
-        if self.wireframe_enabled:
-            self.wireframe_btn.set_label("Wireframe")
-            self.wireframe_btn.set_icon("◈")
-        else:
-            self.wireframe_btn.set_label("Solid")
-            self.wireframe_btn.set_icon("◇")
-        self.wireframe_btn.set_active(self.wireframe_enabled)
-        self.toggle_wireframe.emit()
+    def _show_render_mode_menu(self):
+        """Show dropdown menu for render mode selection."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 6px;
+                padding: 4px 0;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                color: {default_theme.text_primary};
+                font-size: 11px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+            QMenu::item:checked {{
+                font-weight: bold;
+            }}
+        """)
+
+        modes = [
+            ("solid", "◇", "Solid"),
+            ("wireframe", "◈", "Wireframe"),
+            ("shaded", "◆", "Shaded"),
+        ]
+        for mode_id, icon, label in modes:
+            action = menu.addAction(f"{icon}  {label}")
+            action.setCheckable(True)
+            action.setChecked(self.render_mode == mode_id)
+            action.triggered.connect(lambda checked, m=mode_id: self._set_render_mode(m))
+
+        # Show below the button
+        menu.exec_(self.render_mode_btn.mapToGlobal(
+            self.render_mode_btn.rect().bottomLeft()
+        ))
+
+    def _set_render_mode(self, mode):
+        """Set the render mode and update button appearance."""
+        self.render_mode = mode
+        icons = {'solid': '◇', 'wireframe': '◈', 'shaded': '◆'}
+        labels = {'solid': 'Solid', 'wireframe': 'Wireframe', 'shaded': 'Shaded'}
+        self.render_mode_btn.set_icon(icons[mode])
+        self.render_mode_btn.set_label(f"{labels[mode]} ▾")
+        self.render_mode_btn.set_active(mode != 'solid')
+        self.render_mode_changed.emit(mode)
     
     def _on_reset_clicked(self):
         """Handle reset rotation."""
