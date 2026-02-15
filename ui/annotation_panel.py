@@ -16,8 +16,8 @@ from ui.styles import default_theme
 logger = logging.getLogger(__name__)
 
 # Colors for annotation states
-PENDING_COLOR = '#9CA3AF'   # Gray - unvalidated
-VALIDATED_COLOR = '#000000'  # Black - validated
+PENDING_COLOR = '#62645e'   # Dark grey - unvalidated
+VALIDATED_COLOR = '#1821b4'  # Blue - validated
 
 
 @dataclass

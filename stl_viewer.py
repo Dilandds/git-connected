@@ -546,7 +546,7 @@ class STLViewerWindow(QMainWindow):
         
         # Add gray visual marker to the viewer (pending state)
         if hasattr(self.viewer_widget, 'add_annotation_marker'):
-            self.viewer_widget.add_annotation_marker(annotation.id, point, '#9CA3AF')  # Gray
+            self.viewer_widget.add_annotation_marker(annotation.id, point, '#62645e')  # Dark grey
     
     def _on_annotation_added(self, annotation):
         """Handle annotation added event."""
@@ -611,7 +611,7 @@ class STLViewerWindow(QMainWindow):
         
         # Update marker color to black (validated)
         if hasattr(self.viewer_widget, 'update_annotation_marker_color'):
-            self.viewer_widget.update_annotation_marker_color(annotation_id, '#000000')  # Black
+            self.viewer_widget.update_annotation_marker_color(annotation_id, '#1821b4')  # Blue
         
         logger.info(f"_on_popup_validated: Annotation {annotation_id} validated")
     
@@ -834,9 +834,9 @@ class STLViewerWindow(QMainWindow):
                     # In reader mode, all dots are black (validated view)
                     # In normal mode, use gray/black based on validation state
                     if reader_mode:
-                        color = '#000000'  # Black for reader mode
+                        color = '#1821b4'  # Blue for reader mode
                     else:
-                        color = '#000000' if is_validated else '#9CA3AF'  # Black if validated, gray if pending
+                        color = '#1821b4' if is_validated else '#62645e'  # Blue if validated, dark grey if pending
                     
                     if hasattr(self.viewer_widget, 'add_annotation_marker'):
                         self.viewer_widget.add_annotation_marker(ann_id, point, color)
@@ -929,8 +929,8 @@ class STLViewerWindow(QMainWindow):
                 for ann_data in annotations:
                     ann_id = ann_data['id']
                     point = tuple(ann_data['point'])
-                    # All dots are black in reader mode
-                    color = '#000000'
+                    # All dots are blue in reader mode
+                    color = '#1821b4'
                     
                     if hasattr(self.viewer_widget, 'add_annotation_marker'):
                         self.viewer_widget.add_annotation_marker(ann_id, point, color)
