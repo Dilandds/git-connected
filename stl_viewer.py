@@ -840,7 +840,7 @@ class STLViewerWindow(QMainWindow):
                     # In reader mode, all dots are black (validated view)
                     # In normal mode, use gray/black based on validation state
                     if reader_mode:
-                        color = '#0fb302'  # Green for unread in reader mode
+                        color = '#1821b4'  # Blue for all annotations in reader mode
                     else:
                         color = '#1821b4' if is_validated else '#909d92'  # Blue if validated, light grey if pending
                     
