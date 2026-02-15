@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # Colors for annotation states
 PENDING_COLOR = '#909d92'   # Light grey - unvalidated
 VALIDATED_COLOR = '#1821b4'  # Blue - validated
+READER_UNREAD_COLOR = '#0fb302'  # Green - unread in reader mode
+READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
 
 
 @dataclass
@@ -29,6 +31,7 @@ class Annotation:
     is_validated: bool = False  # Gray (pending) vs Black (validated)
     image_paths: List[str] = field(default_factory=list)
     is_expanded: bool = True
+    is_read: bool = False  # For reader mode: Green (unread) vs Blue (read)
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -60,9 +63,10 @@ class AnnotationCard(QFrame):
     delete_requested = pyqtSignal(int)   # annotation_id
     focus_requested = pyqtSignal(int)    # annotation_id
     
-    def __init__(self, annotation: Annotation, parent=None):
+    def __init__(self, annotation: Annotation, reader_mode: bool = False, parent=None):
         super().__init__(parent)
         self.annotation = annotation
+        self._reader_mode = reader_mode
         self.setObjectName("annotationCard")
         self.setCursor(Qt.PointingHandCursor)
         self.init_ui()
@@ -138,17 +142,29 @@ class AnnotationCard(QFrame):
         super().mousePressEvent(event)
     
     def _update_style(self):
-        """Update the card style based on validation status."""
-        if self.annotation.is_validated:
-            # Black for validated
+        """Update the card style based on validation status and reader mode."""
+        if self._reader_mode:
+            # Reader mode: Green for unread, Blue for read
+            if self.annotation.is_read:
+                indicator_color = READER_READ_COLOR
+                bg_color = "#F3F4F6"
+                border_color = "#D1D5DB"
+                self.status_label.setText("✓ Read")
+            else:
+                indicator_color = READER_UNREAD_COLOR
+                bg_color = "#F0FFF0"  # Light green tint
+                border_color = "#86EFAC"
+                self.status_label.setText("● Unread")
+        elif self.annotation.is_validated:
+            # Blue for validated
             indicator_color = VALIDATED_COLOR
-            bg_color = "#F3F4F6"  # Light gray
+            bg_color = "#F3F4F6"
             border_color = "#D1D5DB"
             self.status_label.setText("✓ Validated")
         else:
             # Gray for pending
             indicator_color = PENDING_COLOR
-            bg_color = "#F9FAFB"  # Very light gray
+            bg_color = "#F9FAFB"
             border_color = "#E5E7EB"
             self.status_label.setText("Click to edit")
         
@@ -367,8 +383,9 @@ class AnnotationPanel(QWidget):
             # Hide clear button
             self.clear_btn.hide()
             # Update card styling
-            for card in self.annotation_cards.values():
-                card.status_label.setText("📖 View only")
+        for card in self.annotation_cards.values():
+                card._reader_mode = True
+                card._update_style()
         else:
             # Show instructions, hide banner
             self.reader_mode_banner.hide()
@@ -393,7 +410,7 @@ class AnnotationPanel(QWidget):
         self.annotations.append(annotation)
         
         # Create card
-        card = AnnotationCard(annotation)
+        card = AnnotationCard(annotation, reader_mode=self._reader_mode)
         card.clicked.connect(self._on_card_clicked)
         card.delete_requested.connect(self._on_delete_requested)
         card.focus_requested.connect(self._on_focus_requested)
@@ -454,7 +471,7 @@ class AnnotationPanel(QWidget):
             self.annotations.append(annotation)
             
             # Create card
-            card = AnnotationCard(annotation)
+            card = AnnotationCard(annotation, reader_mode=self._reader_mode)
             card.clicked.connect(self._on_card_clicked)
             card.delete_requested.connect(self._on_delete_requested)
             card.focus_requested.connect(self._on_focus_requested)
@@ -477,9 +494,20 @@ class AnnotationPanel(QWidget):
     def _on_card_clicked(self, annotation_id: int):
         """Handle card click - request to open popup (edit or view based on mode)."""
         if self._reader_mode:
+            # Mark as read
+            self.mark_as_read(annotation_id)
             self.open_viewer_popup_requested.emit(annotation_id)
         else:
             self.open_popup_requested.emit(annotation_id)
+    
+    def mark_as_read(self, annotation_id: int):
+        """Mark an annotation as read (for reader mode)."""
+        annotation = self.get_annotation_by_id(annotation_id)
+        if annotation and not annotation.is_read:
+            annotation.is_read = True
+            if annotation_id in self.annotation_cards:
+                self.annotation_cards[annotation_id].update_annotation(annotation)
+            logger.info(f"Annotation marked as read: id={annotation_id}")
     
     def _on_delete_requested(self, annotation_id: int):
         """Handle delete request from a card."""

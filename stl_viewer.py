@@ -602,6 +602,12 @@ class STLViewerWindow(QMainWindow):
         )
         
         popup.show()
+        
+        # Mark as read and update marker color to blue
+        self.annotation_panel.mark_as_read(annotation_id)
+        if hasattr(self.viewer_widget, 'update_annotation_marker_color'):
+            self.viewer_widget.update_annotation_marker_color(annotation_id, '#1821b4')  # Blue for read
+        
         logger.info(f"_on_open_viewer_popup_requested: Opened viewer popup for annotation {annotation_id}")
     
     def _on_popup_validated(self, annotation_id: int, text: str, image_paths: list):
@@ -834,7 +840,7 @@ class STLViewerWindow(QMainWindow):
                     # In reader mode, all dots are black (validated view)
                     # In normal mode, use gray/black based on validation state
                     if reader_mode:
-                        color = '#1821b4'  # Blue for reader mode
+                        color = '#0fb302'  # Green for unread in reader mode
                     else:
                         color = '#1821b4' if is_validated else '#909d92'  # Blue if validated, light grey if pending
                     
