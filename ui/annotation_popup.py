@@ -215,7 +215,7 @@ class AnnotationPopup(QDialog):
         self.photos_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.photos_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.photos_scroll.setWidgetResizable(True)
-        self.photos_scroll.setMinimumHeight(200)
+        self.photos_scroll.setMinimumHeight(250)
         self.photos_scroll.setFrameShape(QFrame.NoFrame)
         self.photos_scroll.setStyleSheet("background: transparent;")
         self.photos_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -226,12 +226,10 @@ class AnnotationPopup(QDialog):
         self.photos_layout.setSpacing(8)
         
         self.photos_scroll.setWidget(self.photos_container)
-        main_layout.addWidget(self.photos_scroll)
+        main_layout.addWidget(self.photos_scroll, 1)  # stretch factor 1 to fill space
         
         # Load existing thumbnails
         self._refresh_thumbnails()
-        
-        main_layout.addStretch()
         
         # Action buttons
         btn_layout = QHBoxLayout()
