@@ -130,9 +130,12 @@ class STLViewerWidget(QWidget):
             QTimer.singleShot(500, self._initialize_plotter)
     
     def resizeEvent(self, event):
-        """Handle resize - force render BEFORE super() on Windows so VTK sees new size (fixes black screen)."""
+        """Handle resize - force background color + render on Windows so VTK sees new size (fixes black screen)."""
         if sys.platform == 'win32' and self.plotter is not None and self._model_loaded:
             try:
+                # Re-apply background color so VTK framebuffer uses correct clear color after resize
+                bg = getattr(self.plotter, 'background_color', 'white')
+                self.plotter.background_color = bg
                 self._sync_overlay_viewport()
                 self.plotter.render()  # Force render BEFORE super() - VTK must see new size
             except Exception as e:

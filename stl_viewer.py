@@ -210,12 +210,16 @@ class STLViewerWindow(QMainWindow):
             QTimer.singleShot(200, self._trigger_viewer_render)
     
     def _trigger_viewer_render(self):
-        """Force render on viewer plotter (called after resize/maximize)."""
+        """Force background color + render on viewer (called after resize/maximize)."""
         if hasattr(self, 'viewer_widget') and getattr(self.viewer_widget, 'plotter', None) is not None:
             try:
+                # Re-apply background color so VTK framebuffer uses correct clear color after resize
+                plotter = self.viewer_widget.plotter
+                bg = getattr(plotter, 'background_color', 'white')
+                plotter.background_color = bg
                 if hasattr(self.viewer_widget, '_sync_overlay_viewport'):
                     self.viewer_widget._sync_overlay_viewport()
-                self.viewer_widget.plotter.render()
+                plotter.render()
             except Exception as e:
                 logger.warning(f"maximize render: {e}")
     
