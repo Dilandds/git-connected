@@ -10,6 +10,9 @@ from pathlib import Path
 # These help with PyVista/VTK rendering issues on macOS
 os.environ.setdefault('MESA_GL_VERSION_OVERRIDE', '3.3')
 os.environ.setdefault('VTK_USE_OSMESA', '0')  # Try hardware rendering first
+# Windows: VTK MSAA can conflict with Qt format and cause black screen on resize/maximize
+if sys.platform == 'win32':
+    os.environ.setdefault('VTK_FORCE_MSAA', '0')
 # Uncomment below if hardware rendering fails:
 # os.environ['VTK_USE_OSMESA'] = '1'  # Force software rendering
 
@@ -62,14 +65,17 @@ def main():
     
     logger.info("=" * 50)
     logger.info("Starting ECTOFORM Application")
+    logger.info(f"Platform: {sys.platform}, Python: {sys.version.split()[0]}")
+    logger.info(f"App log file: {log_file}")
     logger.info("=" * 50)
     
     try:
         # Request multi-sampling for OpenGL on Windows (improves 3D rendering quality)
+        # Use 4x MSAA - 8x can cause framebuffer reallocation issues on resize/maximize (black screen)
         if sys.platform == 'win32':
             from PyQt5.QtGui import QSurfaceFormat
             fmt = QSurfaceFormat()
-            fmt.setSamples(8)  # Request 8x MSAA for the OpenGL context
+            fmt.setSamples(4)
             QSurfaceFormat.setDefaultFormat(fmt)
         print("Step 1: Creating QApplication...", file=sys.stderr)
         safe_flush(sys.stderr)

@@ -115,6 +115,9 @@ class STLViewerWidget(QWidget):
         self._annotation_picker = None
         self._annotation_callback = None  # Callback when point is picked for annotation
 
+        # Windows resize debounce (prevents black screen on maximize)
+        self._resize_render_timer = None
+
         debug_print("STLViewerWidget: Basic initialization complete, QtInteractor will be created after window is shown")
         logger.info("STLViewerWidget: Basic initialization complete, QtInteractor will be created after window is shown")
     
@@ -130,20 +133,45 @@ class STLViewerWidget(QWidget):
             QTimer.singleShot(500, self._initialize_plotter)
     
     def resizeEvent(self, event):
-        """Handle resize - force re-render on Windows to prevent black screen."""
+        """Handle resize - force re-render on Windows to prevent black screen (maximize, etc.)."""
         super().resizeEvent(event)
         if sys.platform == 'win32' and self.plotter is not None and self._model_loaded:
-            QTimer.singleShot(50, self._force_render_after_resize)
+            size = event.size()
+            logger.info(f"resizeEvent: Windows resize {size.width()}x{size.height()}, scheduling deferred render")
+            # Debounce: cancel pending render, schedule new one after resize settles
+            if self._resize_render_timer is not None:
+                self._resize_render_timer.stop()
+            self._resize_render_timer = QTimer(self)
+            self._resize_render_timer.setSingleShot(True)
+            self._resize_render_timer.timeout.connect(self._force_render_after_resize)
+            self._resize_render_timer.start(150)  # Longer delay for maximize to settle
     
     def _force_render_after_resize(self):
         """Deferred render after resize (Windows fix for black screen)."""
+        if self._resize_render_timer is not None:
+            self._resize_render_timer.stop()
+            self._resize_render_timer = None
         if self.plotter is None:
             return
         try:
+            logger.info("_force_render_after_resize: Syncing overlay and rendering (first pass)")
+            self._sync_overlay_viewport()
+            self.plotter.render()
+            # Second render after short delay - helps with large resizes (maximize)
+            QTimer.singleShot(100, self._second_render_after_resize)
+        except Exception as e:
+            logger.warning(f"_force_render_after_resize: {e}")
+    
+    def _second_render_after_resize(self):
+        """Second render pass for large resizes (maximize)."""
+        if self.plotter is None:
+            return
+        try:
+            logger.info("_second_render_after_resize: Second render pass (maximize fix)")
             self._sync_overlay_viewport()
             self.plotter.render()
         except Exception as e:
-            logger.debug(f"resize render: {e}")
+            logger.warning(f"_second_render_after_resize: {e}")
     
     def _initialize_plotter(self):
         """Initialize the PyVista plotter (called after window is shown)."""
