@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFileDialog,
     QMessageBox, QSplitter, QFrame, QApplication
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent, QTimer
 # Try QtInteractor first, fallback to offscreen if it fails
 try:
     from viewer_widget import STLViewerWidget
@@ -93,6 +93,7 @@ class STLViewerWindow(QMainWindow):
         logger.info("init_ui: Creating splitter...")
         splitter = QSplitter(Qt.Horizontal)
         splitter.setStyleSheet(f"background-color: {default_theme.background};")
+        splitter.setOpaqueResize(False)  # Windows: reduces black screen during resize/maximize
         main_layout.addWidget(splitter)
         
         logger.info("init_ui: Creating sidebar panel...")
@@ -195,6 +196,28 @@ class STLViewerWindow(QMainWindow):
     def apply_styling(self):
         """Apply minimalistic styling with floating card design."""
         self.setStyleSheet(get_global_stylesheet())
+    
+    def resizeEvent(self, event):
+        """Trigger viewer render on resize (Windows black screen fix)."""
+        super().resizeEvent(event)
+        if sys.platform == 'win32' and hasattr(self, 'viewer_widget') and getattr(self.viewer_widget, 'plotter', None):
+            QTimer.singleShot(100, self._trigger_viewer_render)
+    
+    def changeEvent(self, event):
+        """Trigger viewer render on maximize (Windows black screen fix)."""
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowStateChange and sys.platform == 'win32' and self.isMaximized():
+            QTimer.singleShot(200, self._trigger_viewer_render)
+    
+    def _trigger_viewer_render(self):
+        """Force render on viewer plotter (called after resize/maximize)."""
+        if hasattr(self, 'viewer_widget') and getattr(self.viewer_widget, 'plotter', None) is not None:
+            try:
+                if hasattr(self.viewer_widget, '_sync_overlay_viewport'):
+                    self.viewer_widget._sync_overlay_viewport()
+                self.viewer_widget.plotter.render()
+            except Exception as e:
+                logger.warning(f"maximize render: {e}")
     
     def _connect_toolbar_signals(self):
         """Connect toolbar signals to handler methods."""

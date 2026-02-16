@@ -70,12 +70,12 @@ def main():
     logger.info("=" * 50)
     
     try:
-        # Request multi-sampling for OpenGL on Windows (improves 3D rendering quality)
-        # Use 4x MSAA - 8x can cause framebuffer reallocation issues on resize/maximize (black screen)
+        # Request multi-sampling for OpenGL on Windows
+        # MSAA=0 - framebuffer reallocation on resize/maximize causes black screen; FXAA used in viewer instead
         if sys.platform == 'win32':
             from PyQt5.QtGui import QSurfaceFormat
             fmt = QSurfaceFormat()
-            fmt.setSamples(4)
+            fmt.setSamples(0)
             QSurfaceFormat.setDefaultFormat(fmt)
         print("Step 1: Creating QApplication...", file=sys.stderr)
         safe_flush(sys.stderr)
@@ -226,6 +226,13 @@ def main():
         print("Step 3: Creating main window...", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("Step 3: Creating main window...")
+        # Log VTK/PyVista versions (vtk>=9.1 recommended for Windows resize fixes)
+        try:
+            import vtk
+            import pyvista as pv
+            logger.info(f"VTK: {vtk.vtkVersion.GetVTKVersion()}, PyVista: {pv.__version__}")
+        except Exception as e:
+            logger.debug(f"Could not log VTK/PyVista versions: {e}")
         window = STLViewerWindow()
         print("✓ Main window created successfully", file=sys.stderr)
         safe_flush(sys.stderr)
