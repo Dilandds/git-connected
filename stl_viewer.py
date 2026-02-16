@@ -63,12 +63,16 @@ class STLViewerWindow(QMainWindow):
         
         logger.info("init_ui: Setting window title and size...")
         self.setWindowTitle("ECTOFORM")
-        self.setMinimumSize(1400, 900)
+        if sys.platform == 'win32':
+            min_w, min_h = 1600, 1000
+        else:
+            min_w, min_h = 1400, 900
+        self.setMinimumSize(min_w, min_h)
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
-        self.resize(1400, 900)
+        self.resize(min_w, min_h)
         
         # Center window on screen
         screen = QApplication.primaryScreen().geometry()

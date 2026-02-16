@@ -3,6 +3,7 @@ Top horizontal toolbar for 3D view controls.
 """
 import logging
 import os
+import sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel,
     QSizePolicy, QFrame, QSpacerItem, QApplication, QMenu, QAction
@@ -89,6 +90,9 @@ class ToolbarButton(QPushButton):
             # Use QFontMetrics with the actual font for reliable measurement
             fm = QFontMetrics(self.text_label.font())
             label_w = fm.horizontalAdvance(text)
+            # Windows font metrics can underestimate; add buffer to prevent clipping
+            if sys.platform == 'win32':
+                label_w += 10
             spacing = self._layout.spacing()
         else:
             label_w = 0

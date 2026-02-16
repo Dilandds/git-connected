@@ -129,6 +129,22 @@ class STLViewerWidget(QWidget):
             # Process events multiple times to ensure everything is ready
             QTimer.singleShot(500, self._initialize_plotter)
     
+    def resizeEvent(self, event):
+        """Handle resize - force re-render on Windows to prevent black screen."""
+        super().resizeEvent(event)
+        if sys.platform == 'win32' and self.plotter is not None and self._model_loaded:
+            QTimer.singleShot(50, self._force_render_after_resize)
+    
+    def _force_render_after_resize(self):
+        """Deferred render after resize (Windows fix for black screen)."""
+        if self.plotter is None:
+            return
+        try:
+            self._sync_overlay_viewport()
+            self.plotter.render()
+        except Exception as e:
+            logger.debug(f"resize render: {e}")
+    
     def _initialize_plotter(self):
         """Initialize the PyVista plotter (called after window is shown)."""
         if self._initialized:
