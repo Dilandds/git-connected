@@ -2,9 +2,9 @@ name: Build and Test (macOS & Windows)
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, master, develop, feature/viewer-pygfx-poc ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, feature/viewer-pygfx-poc ]
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
