@@ -168,17 +168,34 @@ jobs:
         Get-Item $exePath | Format-List
         Write-Host "✓ EXE file verified (GUI apps can't be tested headless)"
     
-    - name: Upload EXE as artifact
+    - name: Copy launcher .bat files to dist
+      run: |
+        Copy-Item ECTOFORM_SoftwareOpenGL.bat dist\ -ErrorAction SilentlyContinue
+        Copy-Item ECTOFORM_Offscreen.bat dist\ -ErrorAction SilentlyContinue
+        Copy-Item ECTOFORM_BothFixes.bat dist\ -ErrorAction SilentlyContinue
+        Copy-Item LAUNCHERS_README.txt dist\ -ErrorAction SilentlyContinue
+        Get-ChildItem dist\*.bat, dist\*.txt -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  Added $_" }
+    
+    - name: Create ZIP distribution
+      run: |
+        $zipPath = "ECTOFORM-Windows.zip"
+        if (Test-Path $zipPath) {
+          Remove-Item $zipPath -Force
+        }
+        Compress-Archive -Path "dist\*" -DestinationPath $zipPath -Force
+        $zipInfo = Get-Item $zipPath
+        Write-Host "✓ Created $zipPath ($([math]::Round($zipInfo.Length / 1MB, 2)) MB)" -ForegroundColor Green
+    
+    - name: Upload ZIP as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ECTOFORM-Windows
-        path: |
-          dist/ECTOFORM.exe
+        name: ECTOFORM-Windows.zip
+        path: ECTOFORM-Windows.zip
         retention-days: 30
     
     - name: Build summary
       run: |
         echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ EXE created successfully" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Executable verified" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ ZIP distribution created (ECTOFORM-Windows.zip)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Build completed on Windows" >> $GITHUB_STEP_SUMMARY
