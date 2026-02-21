@@ -216,14 +216,19 @@ class STLViewerWindow(QMainWindow):
             QTimer.singleShot(200, self._trigger_viewer_render)
     
     def _trigger_viewer_render(self):
-        """Force background color + render on viewer (called after resize/maximize)."""
-        if hasattr(self, 'viewer_widget') and getattr(self.viewer_widget, 'plotter', None) is not None:
+        """Force VTK refresh on viewer (called after resize/maximize)."""
+        plotter = getattr(self.viewer_widget, 'plotter', None) if hasattr(self, 'viewer_widget') else None
+        if plotter is not None:
             try:
-                plotter = self.viewer_widget.plotter
-                # Re-apply background color so VTK framebuffer uses correct clear color after resize
+                # vtkPropPicker.Pick forces display update (known workaround for black screen)
+                import vtk
+                picker = vtk.vtkPropPicker()
+                picker.Pick(0, 0, 0, plotter.renderer)
+            except Exception as e:
+                logger.debug(f"trigger pick: {e}")
+            try:
                 bg = getattr(plotter, 'background_color', 'white')
                 plotter.background_color = bg
-                # Reset camera clipping range (VTK: can fix black screen when camera clips data)
                 ren = getattr(plotter, 'renderer', None)
                 if ren is not None and hasattr(ren, 'ResetCameraClippingRange'):
                     ren.ResetCameraClippingRange()

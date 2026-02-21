@@ -130,18 +130,24 @@ class STLViewerWidget(QWidget):
             QTimer.singleShot(500, self._initialize_plotter)
     
     def resizeEvent(self, event):
-        """Handle resize - force background color + render on Windows so VTK sees new size (fixes black screen)."""
-        if sys.platform == 'win32' and self.plotter is not None and self._model_loaded:
+        """Handle resize - force VTK refresh on Windows (fixes black screen)."""
+        if sys.platform == 'win32' and self.plotter is not None:
             try:
-                # Re-apply background color so VTK framebuffer uses correct clear color after resize
+                # vtkPropPicker.Pick forces display update and eliminates black frame (known workaround)
+                import vtk
+                picker = vtk.vtkPropPicker()
+                picker.Pick(0, 0, 0, self.plotter.renderer)
+            except Exception as e:
+                logger.debug(f"resize pick: {e}")
+            try:
+                # Re-apply background color and render
                 bg = getattr(self.plotter, 'background_color', 'white')
                 self.plotter.background_color = bg
-                # Reset camera clipping range (VTK discourse: can fix black screen when camera clips data)
                 ren = getattr(self.plotter, 'renderer', None)
                 if ren is not None and hasattr(ren, 'ResetCameraClippingRange'):
                     ren.ResetCameraClippingRange()
                 self._sync_overlay_viewport()
-                self.plotter.render()  # Force render BEFORE super() - VTK must see new size
+                self.plotter.render()
             except Exception as e:
                 logger.debug(f"resize render: {e}")
         super().resizeEvent(event)
