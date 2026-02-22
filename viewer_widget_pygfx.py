@@ -7,7 +7,7 @@ import sys
 import os
 import logging
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout
+from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout, QVBoxLayout, QLabel, QFrame
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent
 from ui.drop_zone_overlay import DropZoneOverlay
 
@@ -125,6 +125,29 @@ class STLViewerWidget(QWidget):
         self._ruler_event_filter_installed = False
         self._camera_before_ruler = None  # Store PerspectiveCamera to restore on exit
         self._controller_before_ruler = None  # Store controller state for zoom-only
+
+        # Annotation mode state
+        self.annotation_mode = False
+        self.annotations = []  # List of {'id', 'point', 'marker', 'label', 'base_color', 'display_date', 'selected'}
+        self.annotation_actors = []  # All pygfx objects for annotation markers/labels
+        self._annotation_callback = None
+        self._annotation_event_filter_installed = False
+        self._annotation_trimesh = None  # trimesh.Trimesh for raycasting
+
+        # Object control label overlay (shown above gizmo in annotation mode)
+        self._object_control_overlay = QFrame()
+        self._object_control_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._object_control_overlay.setStyleSheet("background: transparent;")
+        overlay_layout = QVBoxLayout(self._object_control_overlay)
+        overlay_layout.setContentsMargins(0, 0, 24, 85)
+        overlay_layout.setAlignment(Qt.AlignRight | Qt.AlignBottom)
+        self._object_control_label = QLabel("3D control")
+        self._object_control_label.setStyleSheet(
+            "color: #000000; font-size: 10px; font-weight: 500; background: transparent;"
+        )
+        overlay_layout.addWidget(self._object_control_label, 0, Qt.AlignRight)
+        self._object_control_overlay.hide()
+        self.layout.addWidget(self._object_control_overlay)
 
         _debug_print("STLViewerWidget (pygfx): Basic init complete")
 
@@ -357,6 +380,7 @@ class STLViewerWidget(QWidget):
             self.set_render_mode(self._render_mode)
 
             self.current_mesh = pv_mesh
+            self._annotation_trimesh = mesh_tri  # Keep trimesh for raycasting in annotation mode
             self._model_loaded = True
             self._show_overlay(False)
 
@@ -559,6 +583,7 @@ class STLViewerWidget(QWidget):
             except Exception:
                 pass
         self.current_mesh = None
+        self._annotation_trimesh = None
         self._model_loaded = False
         self._show_overlay(True)
         if self._canvas:
@@ -789,8 +814,10 @@ class STLViewerWidget(QWidget):
             return None
 
     def eventFilter(self, obj, event):
-        """Qt event filter: when ruler_mode, handle click/move/wheel on canvas or its descendants."""
-        if not self.ruler_mode or self._canvas is None:
+        """Qt event filter: handle ruler_mode and annotation_mode events."""
+        if self._canvas is None:
+            return super().eventFilter(obj, event)
+        if not self.ruler_mode and not self.annotation_mode:
             return super().eventFilter(obj, event)
         # Check if obj is canvas, self, viewer_container, or a descendant of any
         is_our_widget = obj in (self._canvas, self, self.viewer_container)
@@ -802,7 +829,10 @@ class STLViewerWidget(QWidget):
                     break
                 w = w.parent() if hasattr(w, 'parent') and callable(w.parent) else None
         if is_our_widget:
-            return self._ruler_event_filter_impl(obj, event)
+            if self.ruler_mode:
+                return self._ruler_event_filter_impl(obj, event)
+            if self.annotation_mode:
+                return self._annotation_event_filter_impl(obj, event)
         return super().eventFilter(obj, event)
 
     def _ruler_event_filter_impl(self, obj, event):
@@ -1276,3 +1306,422 @@ class STLViewerWidget(QWidget):
             self.drop_overlay.raise_()
         else:
             self.drop_overlay.hide()
+
+    # ========== Annotation Mode Methods ==========
+
+    def enable_annotation_mode(self, callback=None):
+        """Enable annotation mode for adding 3D point annotations on mesh surface.
+
+        Args:
+            callback: Function to call when a point is picked. Receives (point_tuple,).
+        """
+        if not self._initialized or self._scene is None:
+            logger.warning("enable_annotation_mode (pygfx): Not initialized")
+            return False
+        if self.current_mesh is None or self._mesh_obj is None:
+            logger.warning("enable_annotation_mode (pygfx): No mesh loaded")
+            return False
+
+        logger.info("enable_annotation_mode (pygfx): Enabling...")
+        self.annotation_mode = True
+        self._annotation_callback = callback
+
+        # Disable ruler mode if active
+        if self.ruler_mode:
+            self.disable_ruler_mode()
+
+        # Install Qt event filter for click picking
+        if not self._annotation_event_filter_installed and self._canvas is not None:
+            self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
+            self._annotation_event_filter_installed = True
+
+        # Show 3D control overlay
+        if self._object_control_overlay is not None:
+            self._object_control_overlay.show()
+            self._object_control_overlay.raise_()
+
+        logger.info("enable_annotation_mode (pygfx): Annotation mode enabled")
+        return True
+
+    def disable_annotation_mode(self):
+        """Disable annotation mode."""
+        logger.info("disable_annotation_mode (pygfx): Disabling...")
+        self.annotation_mode = False
+        self._annotation_callback = None
+
+        # Remove event filter
+        if self._annotation_event_filter_installed and self._canvas is not None:
+            self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
+            self._annotation_event_filter_installed = False
+
+        # Hide 3D control overlay
+        if self._object_control_overlay is not None:
+            self._object_control_overlay.hide()
+
+        logger.info("disable_annotation_mode (pygfx): Annotation mode disabled")
+
+    def _annotation_event_filter_impl(self, obj, event):
+        """Handle annotation mode events. Only intercept left clicks for picking."""
+        if not self.annotation_mode or self._canvas is None:
+            return False
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.pos()
+            self._on_annotation_click(pos.x(), pos.y())
+            return True  # Consume click so it doesn't rotate
+        return False  # Let other events (wheel zoom, right-click rotate) pass through
+
+    def _on_annotation_click(self, x, y):
+        """Handle left click in annotation mode: raycast against mesh to pick surface point."""
+        if not self.annotation_mode or self._annotation_trimesh is None:
+            return
+
+        # Build ray from screen coords
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return
+
+        try:
+            import trimesh
+            # Raycast against mesh
+            locations, index_ray, index_tri = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin],
+                ray_directions=[ray_direction],
+            )
+            if len(locations) == 0:
+                logger.info(f"_on_annotation_click: No hit at ({x}, {y})")
+                return
+
+            # Pick closest intersection to camera
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            closest_idx = np.argmin(dists)
+            point_tuple = tuple(float(c) for c in locations[closest_idx])
+
+            logger.info(f"_on_annotation_click: Hit at {point_tuple}")
+
+            if self._annotation_callback is not None:
+                self._annotation_callback(point_tuple)
+
+        except Exception as e:
+            logger.error(f"_on_annotation_click: Raycasting failed: {e}", exc_info=True)
+
+    def _screen_to_ray(self, x, y):
+        """Convert screen (x, y) to a world-space ray (origin, direction). Returns (origin, direction) or (None, None)."""
+        if self._camera is None or self._canvas is None:
+            return None, None
+        try:
+            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
+        except Exception:
+            return None, None
+        if cw <= 0 or ch <= 0:
+            return None, None
+        try:
+            ndc_x = 2.0 * float(x) / cw - 1.0
+            ndc_y = 1.0 - 2.0 * float(y) / ch
+
+            vm = np.array(self._camera.view_matrix)
+            ipm = np.array(self._camera.projection_matrix_inverse)
+            ivm = np.linalg.inv(vm)
+
+            ndc_near = np.array([ndc_x, ndc_y, 0, 1])
+            ndc_far = np.array([ndc_x, ndc_y, 1, 1])
+            world_near = ivm @ ipm @ ndc_near
+            world_far = ivm @ ipm @ ndc_far
+            world_near = world_near[:3] / (world_near[3] + 1e-12)
+            world_far = world_far[:3] / (world_far[3] + 1e-12)
+
+            direction = world_far - world_near
+            d_norm = np.linalg.norm(direction)
+            if d_norm < 1e-12:
+                return None, None
+            direction = direction / d_norm
+            return world_near, direction
+        except Exception as e:
+            logger.debug(f"_screen_to_ray: {e}")
+            return None, None
+
+    def add_annotation_marker(self, annotation_id: int, point: tuple, color: str = '#909d92',
+                              display_date: str = None) -> object:
+        """Add a visible marker sphere + numbered label for an annotation point.
+
+        Args:
+            annotation_id: Unique ID for the annotation
+            point: (x, y, z) world coordinates
+            color: Marker color hex string
+            display_date: Label text (e.g. '1', '2')
+
+        Returns:
+            The pygfx marker object, or None
+        """
+        if not self._initialized or self._scene is None or self.current_mesh is None:
+            return None
+
+        display_date = display_date or str(annotation_id)
+
+        try:
+            import pygfx as gfx
+
+            # Sphere radius: 1.2% of max model dimension
+            bounds = self.current_mesh.bounds
+            max_dim = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 0.01)
+            sphere_radius = max_dim * 0.012
+
+            # Create sphere marker (always on top via depth_test=False)
+            geom = gfx.sphere_geometry(sphere_radius, 24, 16)
+            r, g, b = self._hex_to_rgb_normalized(color)
+            mat = gfx.MeshPhongMaterial(
+                color=(r, g, b),
+                specular=(0.6, 0.6, 0.6),
+                shininess=50,
+                depth_test=False,
+                depth_write=False,
+            )
+            mat.render_queue = 4000  # Always on top
+            marker = gfx.Mesh(geom, mat)
+            marker.local.position = point
+            self._scene.add(marker)
+
+            # Create numbered label above sphere
+            label_offset = sphere_radius * 1.8
+            label_pos = (point[0], point[1] + label_offset, point[2])
+            text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+            tr, tg, tb = self._hex_to_rgb_normalized(text_color)
+
+            lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
+            lbl_mat.depth_test = False
+            lbl_mat.depth_write = False
+            lbl_mat.render_queue = 4001
+            label = gfx.Text(
+                text=display_date,
+                material=lbl_mat,
+                font_size=16,
+                anchor="middle-center",
+                screen_space=True,
+            )
+            label.local.position = label_pos
+            self._scene.add(label)
+
+            ann_data = {
+                'id': annotation_id,
+                'point': point,
+                'marker': marker,
+                'label': label,
+                'base_color': color,
+                'display_date': display_date,
+                'selected': False,
+            }
+            self.annotations.append(ann_data)
+            self.annotation_actors.extend([marker, label])
+
+            if self._canvas:
+                self._canvas.request_draw()
+
+            logger.info(f"add_annotation_marker (pygfx): Added id={annotation_id} at {point}")
+            return marker
+
+        except Exception as e:
+            logger.error(f"add_annotation_marker (pygfx): Failed: {e}", exc_info=True)
+            return None
+
+    def update_annotation_marker_color(self, annotation_id: int, color: str):
+        """Update color of an annotation marker and its label."""
+        for ann in self.annotations:
+            if ann['id'] == annotation_id:
+                ann['base_color'] = color
+                if not ann.get('selected', False):
+                    try:
+                        r, g, b = self._hex_to_rgb_normalized(color)
+                        ann['marker'].material.color = (r, g, b)
+                    except Exception as e:
+                        logger.debug(f"update_annotation_marker_color: {e}")
+                # Update label text color for contrast
+                self._update_label_color(ann, color)
+                if self._canvas:
+                    self._canvas.request_draw()
+                break
+
+    def set_annotation_selected(self, annotation_id: int, selected: bool):
+        """Set annotation marker to yellow when selected, restore base color when deselected."""
+        if selected:
+            for ann in self.annotations:
+                if ann.get('selected', False):
+                    ann['selected'] = False
+                    try:
+                        r, g, b = self._hex_to_rgb_normalized(ann.get('base_color', '#909d92'))
+                        ann['marker'].material.color = (r, g, b)
+                        self._update_label_color(ann, ann.get('base_color', '#909d92'))
+                    except Exception:
+                        pass
+        for ann in self.annotations:
+            if ann['id'] == annotation_id:
+                ann['selected'] = selected
+                color = '#FACC15' if selected else ann.get('base_color', '#909d92')
+                try:
+                    r, g, b = self._hex_to_rgb_normalized(color)
+                    ann['marker'].material.color = (r, g, b)
+                    self._update_label_color(ann, color)
+                except Exception as e:
+                    logger.debug(f"set_annotation_selected: {e}")
+                if self._canvas:
+                    self._canvas.request_draw()
+                break
+
+    def remove_annotation_marker(self, annotation_id: int):
+        """Remove an annotation marker by ID."""
+        for i, ann in enumerate(self.annotations):
+            if ann['id'] == annotation_id:
+                try:
+                    self._scene.remove(ann['marker'])
+                    if ann['marker'] in self.annotation_actors:
+                        self.annotation_actors.remove(ann['marker'])
+                except Exception:
+                    pass
+                try:
+                    self._scene.remove(ann['label'])
+                    if ann['label'] in self.annotation_actors:
+                        self.annotation_actors.remove(ann['label'])
+                except Exception:
+                    pass
+                self.annotations.pop(i)
+                if self._canvas:
+                    self._canvas.request_draw()
+                logger.info(f"remove_annotation_marker (pygfx): Removed id={annotation_id}")
+                break
+
+    def update_annotation_labels_from_list(self, annotations_with_display):
+        """Update labels whose display number changed (renumber after delete).
+
+        Args:
+            annotations_with_display: List of (annotation_id, display_number, color) tuples.
+        """
+        import pygfx as gfx
+        lookup = {aid: (dnum, color) for aid, dnum, color in annotations_with_display}
+        updated = 0
+        for ann in self.annotations:
+            aid = ann['id']
+            if aid not in lookup:
+                continue
+            display_number, color = lookup[aid]
+            new_display = str(display_number)
+            if ann.get('display_date') != new_display or ann.get('base_color') != color:
+                ann['display_date'] = new_display
+                ann['base_color'] = color
+                # Update label text
+                try:
+                    ann['label'].set_text(new_display)
+                except Exception:
+                    try:
+                        # Recreate label if set_text not available
+                        self._scene.remove(ann['label'])
+                        if ann['label'] in self.annotation_actors:
+                            self.annotation_actors.remove(ann['label'])
+                        bounds = self.current_mesh.bounds
+                        max_dim = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 0.01)
+                        sphere_radius = max_dim * 0.012
+                        label_offset = sphere_radius * 1.8
+                        point = ann['point']
+                        label_pos = (point[0], point[1] + label_offset, point[2])
+                        text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+                        tr, tg, tb = self._hex_to_rgb_normalized(text_color)
+                        lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
+                        lbl_mat.depth_test = False
+                        lbl_mat.depth_write = False
+                        lbl_mat.render_queue = 4001
+                        new_label = gfx.Text(text=new_display, material=lbl_mat, font_size=16,
+                                             anchor="middle-center", screen_space=True)
+                        new_label.local.position = label_pos
+                        self._scene.add(new_label)
+                        ann['label'] = new_label
+                        self.annotation_actors.append(new_label)
+                    except Exception as e2:
+                        logger.debug(f"update_annotation_labels_from_list: recreate failed: {e2}")
+                # Update marker color
+                if not ann.get('selected', False):
+                    try:
+                        r, g, b = self._hex_to_rgb_normalized(color)
+                        ann['marker'].material.color = (r, g, b)
+                    except Exception:
+                        pass
+                self._update_label_color(ann, color)
+                updated += 1
+        if updated > 0 and self._canvas:
+            self._canvas.request_draw()
+        logger.debug(f"update_annotation_labels_from_list (pygfx): Updated {updated}")
+
+    def clear_all_annotation_markers(self):
+        """Remove all annotation markers and labels."""
+        for ann in self.annotations:
+            try:
+                self._scene.remove(ann['marker'])
+            except Exception:
+                pass
+            try:
+                self._scene.remove(ann['label'])
+            except Exception:
+                pass
+        self.annotations = []
+        self.annotation_actors = []
+        if self._canvas:
+            self._canvas.request_draw()
+        logger.info("clear_all_annotation_markers (pygfx): Cleared")
+
+    def focus_on_annotation(self, annotation_id: int):
+        """Focus the camera on a specific annotation point."""
+        for ann in self.annotations:
+            if ann['id'] == annotation_id:
+                point = ann['point']
+                try:
+                    if self._mesh_obj is not None:
+                        self._safe_set_aspect()
+                        # Point camera at annotation while keeping current view direction
+                        cam_pos = np.array(self._camera.local.position)
+                        center = np.array(self._get_view_center_and_distance()[0])
+                        view_dir = center - cam_pos
+                        view_dir_norm = np.linalg.norm(view_dir)
+                        if view_dir_norm > 1e-12:
+                            view_dir = view_dir / view_dir_norm
+                        # Move camera to look at annotation point from same distance
+                        bounds = self.current_mesh.bounds
+                        max_dim = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 1.0)
+                        dist = max_dim * 1.0
+                        new_pos = np.array(point) - view_dir * dist
+                        self._camera.local.position = tuple(new_pos)
+                        self._camera.show_pos(point)
+                    if self._canvas:
+                        self._canvas.request_draw()
+                    logger.info(f"focus_on_annotation (pygfx): Focused on id={annotation_id}")
+                except Exception as e:
+                    logger.warning(f"focus_on_annotation (pygfx): Failed: {e}")
+                break
+
+    def _update_label_color(self, ann: dict, badge_color: str):
+        """Update label text color for contrast against badge color."""
+        try:
+            text_color = '#FFFFFF' if self._is_dark_hex_color(badge_color) else '#000000'
+            r, g, b = self._hex_to_rgb_normalized(text_color)
+            ann['label'].material.color = (r, g, b)
+        except Exception:
+            pass
+
+    def _hex_to_rgb_normalized(self, hex_color: str) -> tuple:
+        """Convert hex color to normalized RGB tuple (0-1)."""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+        return (r, g, b)
+
+    def _is_dark_hex_color(self, hex_color: str) -> bool:
+        """Return True if color is dark (use white text for contrast)."""
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) != 6:
+            return False
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+        return 0.299 * r + 0.587 * g + 0.114 * b < 0.5
