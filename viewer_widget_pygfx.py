@@ -1,11 +1,13 @@
 """
 Minimal 3D Viewer Widget using pygfx + wgpu for STL file visualization.
 WebGPU-based (avoids OpenGL) - intended to fix Windows black screen.
-Only file upload and display; other features (ruler, annotations, etc.) not implemented.
+Settings match PyVista viewer for consistent default view and rendering.
 """
 import sys
 import os
+import math
 import logging
+import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout
 from PyQt5.QtCore import Qt, pyqtSignal
 from ui.drop_zone_overlay import DropZoneOverlay
@@ -112,9 +114,35 @@ class STLViewerWidget(QWidget):
             self.viewer_layout.addWidget(self._canvas)
 
             self._renderer = gfx.WgpuRenderer(self._canvas)
+            # SSAA for sharp edges (PyVista uses FXAA/SSAA)
+            try:
+                self._renderer.pixel_scale = 2
+            except Exception:
+                pass
+
             self._scene = gfx.Scene()
+            # White background (PyVista: background_color='white')
+            background = gfx.Background.from_color("#ffffff")
+            self._scene.add(background)
+
+            # PyVista-equivalent lighting: main (1,1,1) intensity 1.0, fill (-1,-0.5,0.5) intensity 0.4
             self._scene.add(gfx.AmbientLight())
-            self._scene.add(gfx.DirectionalLight())
+            light1 = gfx.DirectionalLight(color="white", intensity=1.0)
+            light1.local.position = (1, 1, 1)
+            light1.look_at((0, 0, 0))
+            self._scene.add(light1)
+            light2 = gfx.DirectionalLight(color="white", intensity=0.4)
+            light2.local.position = (-1, -0.5, 0.5)
+            light2.look_at((0, 0, 0))
+            self._scene.add(light2)
+
+            # Axes (positioned when mesh loads)
+            try:
+                self._axes = gfx.AxesHelper(1.0)
+                self._axes.visible = False  # Show when mesh loaded
+                self._scene.add(self._axes)
+            except Exception:
+                self._axes = None
 
             w, h = max(400, self.width()), max(300, self.height())
             self._camera = gfx.PerspectiveCamera(50, w / h)
@@ -163,25 +191,41 @@ class STLViewerWidget(QWidget):
 
         try:
             import pygfx as gfx
+            from pygfx.geometries import geometry_from_trimesh
+            import trimesh
 
             if self._mesh_obj is not None:
                 self._scene.remove(self._mesh_obj)
                 self._mesh_obj = None
 
-            meshes = gfx.load_mesh(file_path)
-            if not meshes:
-                raise ValueError("No meshes in file")
+            # Load with trimesh (same as PyVista: compute normals for smooth shading)
+            mesh_tri = trimesh.load(file_path, force='mesh')
+            if isinstance(mesh_tri, trimesh.Scene):
+                all_meshes = [g for g in mesh_tri.geometry.values() if isinstance(g, trimesh.Trimesh)]
+                if not all_meshes:
+                    raise ValueError("No meshes in file")
+                mesh_tri = trimesh.util.concatenate(all_meshes) if len(all_meshes) > 1 else all_meshes[0]
+            if not isinstance(mesh_tri, trimesh.Trimesh):
+                raise ValueError("No mesh in file")
 
-            mesh_group = gfx.Group()
-            for m in meshes:
-                m.material = gfx.MeshPhongMaterial(color="#add8e6")
-                mesh_group.add(m)
-            self._mesh_obj = mesh_group
+            # Compute vertex normals for smooth shading (PyVista: compute_normals point_normals=True)
+            try:
+                mesh_tri.fix_normals()
+            except Exception:
+                pass
+
+            # PyVista-equivalent material (lightblue, soft specular). pygfx uses color, specular, shininess.
+            material = gfx.MeshPhongMaterial(
+                color="#add8e6",
+                specular="#333333",  # Dim specular (~0.2) for softer highlights
+                shininess=20,
+            )
+            geometry = geometry_from_trimesh(mesh_tri)
+            mesh_obj = gfx.Mesh(geometry, material)
+            self._mesh_obj = mesh_obj
             self._scene.add(self._mesh_obj)
 
-            import trimesh
-            mesh_tri = trimesh.load(file_path, force='mesh')
-            # Convert to PyVista for MeshCalculator compatibility (expects .bounds, .volume, .area)
+            # Convert to PyVista for MeshCalculator compatibility
             pv_mesh = _trimesh_to_pyvista(mesh_tri)
             if pv_mesh is None:
                 raise ValueError("Could not convert mesh for dimensions/volume calculation")
@@ -189,7 +233,30 @@ class STLViewerWidget(QWidget):
             self._model_loaded = True
             self._show_overlay(False)
 
-            self._camera.show_object(self._mesh_obj)
+            # PyVista reset_camera equivalent: fit view to mesh bounds, center, isometric-like angle
+            self._fit_camera_to_mesh(mesh_tri)
+
+            # Position axes at mesh min corner (PyVista add_axes in corner)
+            if getattr(self, '_axes', None) is not None:
+                try:
+                    b = np.asarray(mesh_tri.bounds)
+                    if b.ndim == 2 and b.shape == (2, 3):
+                        mins, maxs = b[0], b[1]
+                    else:
+                        mins = np.array([b[0], b[2], b[4]])
+                        maxs = np.array([b[1], b[3], b[5]])
+                    max_dim = max(
+                        float(maxs[0] - mins[0]),
+                        float(maxs[1] - mins[1]),
+                        float(maxs[2] - mins[2]),
+                        0.01,
+                    ) * 0.15
+                    self._axes.local.scale = (max_dim, max_dim, max_dim)
+                    self._axes.local.position = (float(mins[0]), float(mins[1]), float(mins[2]))
+                    self._axes.visible = True
+                except Exception:
+                    pass
+
             if self._canvas:
                 self._canvas.update()
 
@@ -200,11 +267,50 @@ class STLViewerWidget(QWidget):
             logger.error(f"load_stl (pygfx): Error: {e}", exc_info=True)
             return False
 
+    def _fit_camera_to_mesh(self, mesh_tri):
+        """Fit camera to mesh bounds (PyVista reset_camera equivalent). Centers object, isometric-like view."""
+        b = np.asarray(mesh_tri.bounds)
+        # Trimesh returns (2, 3): [[xmin, ymin, zmin], [xmax, ymax, zmax]]
+        if b.ndim == 2 and b.shape == (2, 3):
+            mins, maxs = b[0], b[1]
+        else:
+            # PyVista-style 6-tuple (xmin, xmax, ymin, ymax, zmin, zmax)
+            mins = np.array([b[0], b[2], b[4]])
+            maxs = np.array([b[1], b[3], b[5]])
+        center = (
+            (mins[0] + maxs[0]) / 2,
+            (mins[1] + maxs[1]) / 2,
+            (mins[2] + maxs[2]) / 2,
+        )
+        max_dim = max(
+            float(maxs[0] - mins[0]),
+            float(maxs[1] - mins[1]),
+            float(maxs[2] - mins[2]),
+            0.01,
+        )
+        # Camera distance: fit object in FOV (50 deg -> tan(25°) ~ 0.47)
+        # Use ~1.4x margin so object fills ~70% of view (PyVista default)
+        fov_half_deg = getattr(self._camera, 'fov', 50) / 2
+        fov_rad = math.radians(fov_half_deg)
+        distance = max_dim * 1.4 / (2 * math.tan(fov_rad))
+        # View from above-front-right (isometric-like, matches PyVista default)
+        view_dir = np.array([1.2, -0.8, -1.0], dtype=float)
+        view_dir = view_dir / np.linalg.norm(view_dir)
+        cam_pos = np.array(center) + view_dir * distance
+        self._camera.local.position = tuple(cam_pos)
+        self._camera.look_at(center)
+        logger.info(f"_fit_camera_to_mesh: center={center}, distance={distance:.2f}")
+
     def clear_viewer(self):
         """Clear the 3D viewer."""
         if self._scene and self._mesh_obj:
             self._scene.remove(self._mesh_obj)
             self._mesh_obj = None
+        if getattr(self, '_axes', None) is not None:
+            try:
+                self._axes.visible = False
+            except Exception:
+                pass
         self.current_mesh = None
         self._model_loaded = False
         self._show_overlay(True)
