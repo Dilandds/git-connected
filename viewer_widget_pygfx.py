@@ -785,15 +785,15 @@ class STLViewerWidget(QWidget):
         """Qt event filter: when ruler_mode, handle click/move/wheel on canvas or its descendants."""
         if not self.ruler_mode or self._canvas is None:
             return super().eventFilter(obj, event)
-        # Check if obj is canvas or a descendant (for app-level filter, wheel may target child)
-        is_our_widget = obj == self._canvas
+        # Check if obj is canvas, self, viewer_container, or a descendant of any
+        is_our_widget = obj in (self._canvas, self, self.viewer_container)
         if not is_our_widget and obj is not None:
             w = obj
             while w is not None:
-                if w == self._canvas:
+                if w in (self._canvas, self, self.viewer_container):
                     is_our_widget = True
                     break
-                w = w.parent() if hasattr(w, 'parent') else None
+                w = w.parent() if hasattr(w, 'parent') and callable(w.parent) else None
         if is_our_widget:
             return self._ruler_event_filter_impl(obj, event)
         return super().eventFilter(obj, event)
@@ -1145,9 +1145,11 @@ class STLViewerWidget(QWidget):
         self.ruler_mode = True
         self.measurement_points = []
         self._clear_preview_line()
-        # Install event filter on canvas; also on app to catch wheel (may go to different target on some platforms)
+        # Install event filter on canvas, self, viewer_container, and app to catch all events
         if self._canvas and not self._ruler_event_filter_installed:
             self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
             from PyQt5.QtWidgets import QApplication
             app = QApplication.instance()
             if app is not None:
@@ -1169,6 +1171,8 @@ class STLViewerWidget(QWidget):
         self.measurement_points = []
         if self._canvas and self._ruler_event_filter_installed:
             self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
             from PyQt5.QtWidgets import QApplication
             app = QApplication.instance()
             if app is not None:
