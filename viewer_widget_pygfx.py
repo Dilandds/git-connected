@@ -820,25 +820,34 @@ class STLViewerWidget(QWidget):
             self._on_ruler_mouse_move(pos.x(), pos.y())
             return True
         elif t == QEvent.Wheel:
-            # Let wheel pass through to canvas so controller receives it via submit_event
-            return False
+            # Manually handle zoom for orthographic camera
+            self._handle_ruler_wheel(event)
+            return True
         return False
 
     def _handle_ruler_wheel(self, event):
-        """Handle wheel for zoom in ruler mode; forward to controller. Used when wheel doesn't reach canvas."""
-        if self._controller is None or self._camera is None or self._canvas is None:
+        """Handle wheel zoom in ruler mode by directly scaling OrthographicCamera width/height."""
+        if self._camera is None or self._canvas is None:
             return
         try:
             dy = event.angleDelta().y()
             if dy == 0:
                 return
-            delta = float(dy) / 120.0 * 0.02
-            try:
-                w, h = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self._canvas.width(), self._canvas.height())
-            except Exception:
-                w, h = self._canvas.width(), self._canvas.height()
-            rect = (0, 0, max(1, w), max(1, h))
-            self._controller.zoom((delta, delta), rect)
+            # Zoom factor: scroll up = zoom in (smaller width), scroll down = zoom out
+            factor = 0.9 if dy > 0 else 1.1
+            import pygfx as gfx
+            if isinstance(self._camera, gfx.OrthographicCamera):
+                self._camera.width *= factor
+                self._camera.height *= factor
+            else:
+                # Fallback for perspective camera
+                delta = float(dy) / 120.0 * 0.02
+                try:
+                    w, h = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self._canvas.width(), self._canvas.height())
+                except Exception:
+                    w, h = self._canvas.width(), self._canvas.height()
+                rect = (0, 0, max(1, w), max(1, h))
+                self._controller.zoom((delta, delta), rect)
             self._canvas.request_draw()
         except Exception as e:
             logger.warning(f"_handle_ruler_wheel: {e}")
