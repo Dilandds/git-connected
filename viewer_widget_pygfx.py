@@ -8,7 +8,7 @@ import os
 import logging
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent
 from ui.drop_zone_overlay import DropZoneOverlay
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,16 @@ class STLViewerWidget(QWidget):
         self._render_mode = 'solid'
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
+
+        # Ruler/measurement mode state (matches viewer_widget.py interface)
+        self.ruler_mode = False
+        self.measurement_points = []
+        self.measurement_actors = []  # pygfx objects for spheres, lines, arrows, labels
+        self._ruler_unit = "mm"
+        self._preview_line_obj = None
+        self._ruler_event_filter_installed = False
+        self._camera_before_ruler = None  # Store PerspectiveCamera to restore on exit
+        self._controller_before_ruler = None  # Store controller state for zoom-only
 
         _debug_print("STLViewerWidget (pygfx): Basic init complete")
 
@@ -759,6 +769,476 @@ class STLViewerWidget(QWidget):
             self.remove_grid()
         else:
             self.show_grid()
+
+    # ========== Ruler Mode (point-to-point measurement) ==========
+
+    def _screen_to_world_focal_plane(self, x, y):
+        """Convert screen (x, y) to world coordinates on the camera's focal plane.
+        Used for ruler mode so clicks map to the view plane. Returns (x,y,z) or None.
+        """
+        if self._camera is None or self._canvas is None:
+            return None
+        try:
+            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
+        except Exception:
+            return None
+        if cw <= 0 or ch <= 0:
+            return None
+        try:
+            # Qt: (0,0) top-left. NDC: x in [-1,1] left-to-right, y in [-1,1] bottom-to-top
+            ndc_x = 2.0 * float(x) / cw - 1.0
+            ndc_y = 1.0 - 2.0 * float(y) / ch
+            vm = np.array(self._camera.view_matrix)
+            ipm = np.array(self._camera.projection_matrix_inverse)
+            # Unproject near (z=0) and far (z=1) in NDC
+            ndc_near = np.array([ndc_x, ndc_y, 0, 1])
+            ndc_far = np.array([ndc_x, ndc_y, 1, 1])
+            ivm = np.linalg.inv(vm)
+            world_near = ivm @ ipm @ ndc_near
+            world_far = ivm @ ipm @ ndc_far
+            world_near = world_near[:3] / (world_near[3] + 1e-12)
+            world_far = world_far[:3] / (world_far[3] + 1e-12)
+            cam_dir = world_far - world_near
+            cam_dir_norm = np.linalg.norm(cam_dir)
+            if cam_dir_norm < 1e-12:
+                return None
+            cam_dir = cam_dir / cam_dir_norm
+            # Focal plane through mesh center
+            focal_pt = np.array(self._get_view_center_and_distance()[0])
+            offset = np.dot(focal_pt - world_near, cam_dir)
+            world_pos = world_near + cam_dir * offset
+            return tuple(float(p) for p in world_pos)
+        except Exception:
+            return None
+
+    def eventFilter(self, obj, event):
+        """Qt event filter: when ruler_mode, handle click/move/wheel on canvas or its descendants."""
+        if not self.ruler_mode or self._canvas is None:
+            return super().eventFilter(obj, event)
+        # Check if obj is canvas or a descendant (for app-level filter, wheel may target child)
+        is_our_widget = obj == self._canvas
+        if not is_our_widget and obj is not None:
+            w = obj
+            while w is not None:
+                if w == self._canvas:
+                    is_our_widget = True
+                    break
+                w = w.parent() if hasattr(w, 'parent') else None
+        if is_our_widget:
+            return self._ruler_event_filter_impl(obj, event)
+        return super().eventFilter(obj, event)
+
+    def _ruler_event_filter_impl(self, obj, event):
+        """Handle ruler mode events. Return True to consume, False to pass through."""
+        if not self.ruler_mode or self._canvas is None:
+            return False
+        t = event.type()
+        if t == QEvent.MouseButtonPress:
+            if event.button() == Qt.LeftButton:
+                pos = event.pos()
+                self._on_ruler_click(pos.x(), pos.y())
+                return True
+            if event.button() in (Qt.RightButton, Qt.MidButton):
+                return True  # Block pan
+        elif t == QEvent.MouseButtonRelease:
+            if event.button() == Qt.LeftButton:
+                return True
+            if event.button() in (Qt.RightButton, Qt.MidButton):
+                return True
+        elif t == QEvent.MouseMove:
+            pos = event.pos()
+            self._on_ruler_mouse_move(pos.x(), pos.y())
+            return True
+        elif t == QEvent.Wheel:
+            # Let wheel pass through to canvas so controller receives it via submit_event
+            return False
+        return False
+
+    def _handle_ruler_wheel(self, event):
+        """Handle wheel for zoom in ruler mode; forward to controller. Used when wheel doesn't reach canvas."""
+        if self._controller is None or self._camera is None or self._canvas is None:
+            return
+        try:
+            dy = event.angleDelta().y()
+            if dy == 0:
+                return
+            delta = float(dy) / 120.0 * 0.02
+            try:
+                w, h = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self._canvas.width(), self._canvas.height())
+            except Exception:
+                w, h = self._canvas.width(), self._canvas.height()
+            rect = (0, 0, max(1, w), max(1, h))
+            self._controller.zoom((delta, delta), rect)
+            self._canvas.request_draw()
+        except Exception as e:
+            logger.warning(f"_handle_ruler_wheel: {e}")
+
+    def _on_ruler_click(self, x, y):
+        """Handle left click in ruler mode: unproject and add point."""
+        if not self.ruler_mode:
+            return
+        world_pos = self._screen_to_world_focal_plane(x, y)
+        if world_pos is None:
+            return
+        self._on_point_picked(world_pos)
+
+    def _on_ruler_mouse_move(self, x, y):
+        """Update preview line from first point to mouse position (with snapping)."""
+        if not self.ruler_mode or len(self.measurement_points) != 1:
+            self._clear_preview_line()
+            return
+        world_pos = self._screen_to_world_focal_plane(x, y)
+        if world_pos is None:
+            return
+        nearest = self._get_nearest_mesh_point(world_pos)
+        snapped = nearest if nearest != world_pos else self._maybe_snap_to_axis(self.measurement_points[0], world_pos)
+        self._update_preview_line(self.measurement_points[0], snapped)
+
+    def _get_nearest_mesh_point(self, world_pos, max_distance_ratio=0.02):
+        """Return nearest mesh vertex to world_pos if within threshold, else world_pos."""
+        if self.current_mesh is None:
+            return world_pos
+        try:
+            pts = np.asarray(self.current_mesh.points)
+            if pts is None or len(pts) == 0:
+                return world_pos
+            p = np.array(world_pos)
+            b = self.current_mesh.bounds
+            max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+            threshold = max_dim * max_distance_ratio
+            dists = np.linalg.norm(pts - p, axis=1)
+            idx = np.argmin(dists)
+            if dists[idx] <= threshold:
+                return tuple(pts[idx])
+            return world_pos
+        except Exception:
+            return world_pos
+
+    def _get_camera_view_axes(self):
+        """Return (view_right, view_up) in world space for screen-space snapping."""
+        cam = self._camera
+        view_up = np.array(cam.local.up)
+        center = np.array(self._get_view_center_and_distance()[0])
+        pos = np.array(cam.local.position)
+        forward = center - pos
+        forward_norm = np.linalg.norm(forward)
+        if forward_norm < 1e-12:
+            forward = np.array([0, 0, -1])
+        else:
+            forward = forward / forward_norm
+        view_right = np.cross(forward, view_up)
+        view_right = view_right / (np.linalg.norm(view_right) + 1e-12)
+        view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
+        return view_right, view_up
+
+    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=15):
+        """Snap to horizontal or vertical when line is close to that axis in screen space."""
+        import math
+        try:
+            view_right, view_up = self._get_camera_view_axes()
+            p1, p2 = np.array(point1), np.array(point2)
+            delta = p2 - p1
+            dx_screen = np.dot(delta, view_right)
+            dy_screen = np.dot(delta, view_up)
+            if abs(dx_screen) < 1e-12 and abs(dy_screen) < 1e-12:
+                return point2
+            angle_deg = math.degrees(math.atan2(abs(dy_screen), abs(dx_screen)))
+            if angle_deg < threshold_deg or angle_deg > (90 - threshold_deg):
+                return self._snap_to_axis(point1, point2)
+            return point2
+        except Exception:
+            return point2
+
+    def _snap_to_axis(self, point1, point2):
+        """Snap point2 so measurement is strictly horizontal or vertical on screen."""
+        try:
+            view_right, view_up = self._get_camera_view_axes()
+            p1, p2 = np.array(point1), np.array(point2)
+            delta = p2 - p1
+            dx_screen = np.dot(delta, view_right)
+            dy_screen = np.dot(delta, view_up)
+            if abs(dx_screen) >= abs(dy_screen):
+                snapped = p1 + view_right * dx_screen
+            else:
+                snapped = p1 + view_up * dy_screen
+            return tuple(snapped)
+        except Exception:
+            return point2
+
+    def _on_point_picked(self, point):
+        """Handle point picked for measurement."""
+        if not self.ruler_mode or point is None:
+            return
+        if len(self.measurement_points) == 1:
+            point = self._maybe_snap_to_axis(self.measurement_points[0], point)
+        self.measurement_points.append(point)
+        import pygfx as gfx
+        sphere_radius = self._get_measurement_marker_size()
+        try:
+            geom = gfx.sphere_geometry(sphere_radius, 16, 12)
+            mat = gfx.MeshPhongMaterial(color="#FF69B4", depth_test=False, depth_write=False)
+            mat.render_queue = 4000  # overlay - always on top
+            sphere = gfx.Mesh(geom, mat)
+            sphere.local.position = point
+            self._scene.add(sphere)
+            self.measurement_actors.append(sphere)
+        except Exception as e:
+            logger.warning(f"_on_point_picked: Could not add marker: {e}")
+        if len(self.measurement_points) == 2:
+            self._clear_preview_line()
+            distance = self._calculate_distance(self.measurement_points[0], self.measurement_points[1])
+            self._draw_measurement_line(
+                self.measurement_points[0], self.measurement_points[1], distance
+            )
+            self.measurement_points = []
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def _get_measurement_marker_size(self):
+        if self.current_mesh is None:
+            return 1.0
+        try:
+            b = self.current_mesh.bounds
+            max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+            return max(max_dim * 0.0025, 0.03)
+        except Exception:
+            return 1.0
+
+    def _get_arrow_size(self):
+        if self.current_mesh is None:
+            return (0.2, 0.08)
+        try:
+            b = self.current_mesh.bounds
+            max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+            tip_len = max(max_dim * 0.02, 0.1)
+            tip_rad = tip_len * 0.4
+            return (tip_len, tip_rad)
+        except Exception:
+            return (0.2, 0.08)
+
+    def _get_line_tube_radius(self):
+        if self.current_mesh is None:
+            return 0.02
+        try:
+            b = self.current_mesh.bounds
+            max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+            return max(max_dim * 0.0015, 0.02)
+        except Exception:
+            return 0.02
+
+    def _calculate_distance(self, point1, point2):
+        p1, p2 = np.array(point1), np.array(point2)
+        return float(np.linalg.norm(p2 - p1))
+
+    def _draw_measurement_line(self, point1, point2, distance):
+        """Draw measurement line with arrowheads and distance label."""
+        import pygfx as gfx
+        try:
+            p1, p2 = np.array(point1), np.array(point2)
+            direction = p2 - p1
+            length = np.linalg.norm(direction)
+            if length < 1e-12:
+                return
+            dir_unit = direction / length
+            arrow_tip_length, arrow_tip_radius = self._get_arrow_size()
+            # Scale arrows to line length so they don't overlap (max 15% of line each)
+            arrow_tip_length = min(arrow_tip_length, length * 0.15)
+            arrow_tip_radius = min(arrow_tip_radius, arrow_tip_length * 0.4)
+            if arrow_tip_length < 1e-6:
+                arrow_tip_length = length * 0.05
+                arrow_tip_radius = arrow_tip_length * 0.4
+            # Main line as Line (thin segment; thickness in pixels, screen-space)
+            line_thickness = 2.5
+            positions = np.array([p1, p2], dtype=np.float32)
+            geom = gfx.Geometry(positions=positions)
+            mat = gfx.LineMaterial(color="#000000", thickness=line_thickness, depth_test=False, depth_write=False)
+            mat.render_queue = 4000
+            line_obj = gfx.Line(geom, mat)
+            self._scene.add(line_obj)
+            self.measurement_actors.append(line_obj)
+            # Cone tip is +Y in pygfx. Rotate so +Y aligns with target direction.
+            import pylinalg as la
+            def _cone_rotation_for_direction(d):
+                """Rotation to align cone +Y with direction d."""
+                up_y = np.array([0, 1, 0])
+                d = d / (np.linalg.norm(d) + 1e-12)
+                if np.abs(np.dot(d, up_y)) > 0.999:
+                    return la.quat_from_axis_angle(np.array([1, 0, 0]), np.pi if d[1] < 0 else 0)
+                axis = np.cross(up_y, d)
+                axis = axis / (np.linalg.norm(axis) + 1e-12)
+                angle = np.arccos(np.clip(np.dot(up_y, d), -1, 1))
+                return la.quat_from_axis_angle(axis, angle)
+            # Arrow at p1 (tip at p1, pointing from p2 toward p1, so cone +Y = -dir_unit)
+            cone1_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
+            cone1_mat.render_queue = 4000
+            cone1 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone1_mat)
+            cone1.local.position = p1 + dir_unit * (arrow_tip_length / 2)
+            cone1.local.rotation = _cone_rotation_for_direction(-dir_unit)
+            self._scene.add(cone1)
+            self.measurement_actors.append(cone1)
+            # Arrow at p2 (tip at p2, pointing from p1 toward p2, so cone +Y = dir_unit)
+            cone2_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
+            cone2_mat.render_queue = 4000
+            cone2 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone2_mat)
+            cone2.local.position = p2 - dir_unit * (arrow_tip_length / 2)
+            cone2.local.rotation = _cone_rotation_for_direction(dir_unit)
+            self._scene.add(cone2)
+            self.measurement_actors.append(cone2)
+            # Label at midpoint
+            midpoint = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2)
+            unit = getattr(self, '_ruler_unit', 'mm')
+            conversion = {"mm": 1.0, "cm": 0.1, "m": 0.001, "inch": 1.0 / 25.4, "ft": 1.0 / 304.8}
+            unit_labels = {"mm": "mm", "cm": "cm", "m": "m", "inch": "in", "ft": "ft"}
+            converted = distance * conversion.get(unit, 1.0)
+            suffix = unit_labels.get(unit, "mm")
+            label_text = f"{converted:.4f} {suffix}" if converted < 1 else (f"{converted:.2f} {suffix}" if converted < 100 else f"{converted:.1f} {suffix}")
+            lbl_mat = gfx.TextMaterial(color="#000000")
+            lbl_mat.depth_test = False
+            lbl_mat.depth_write = False
+            lbl_mat.render_queue = 4000
+            lbl = gfx.Text(text=label_text, material=lbl_mat, font_size=12, anchor="middle-center", screen_space=False)
+            lbl.local.position = midpoint
+            self._scene.add(lbl)
+            self.measurement_actors.append(lbl)
+        except Exception as e:
+            logger.error(f"_draw_measurement_line: {e}", exc_info=True)
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def _clear_preview_line(self):
+        """Remove the preview line from the scene."""
+        if self._preview_line_obj is not None:
+            try:
+                self._scene.remove(self._preview_line_obj)
+            except Exception:
+                pass
+            self._preview_line_obj = None
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def _update_preview_line(self, point1, point2):
+        """Draw or update the preview line from point1 to point2."""
+        if point1 is None or point2 is None:
+            self._clear_preview_line()
+            return
+        self._clear_preview_line()
+        import pygfx as gfx
+        try:
+            p1, p2 = np.array(point1), np.array(point2)
+            length = np.linalg.norm(p2 - p1)
+            if length < 1e-12:
+                return
+            line_thickness = 2.5  # pixels, screen-space
+            positions = np.array([p1, p2], dtype=np.float32)
+            geom = gfx.Geometry(positions=positions)
+            mat = gfx.LineMaterial(color="#000000", thickness=line_thickness, depth_test=False, depth_write=False)
+            mat.render_queue = 4000
+            line_obj = gfx.Line(geom, mat)
+            self._scene.add(line_obj)
+            self._preview_line_obj = line_obj
+        except Exception as e:
+            logger.debug(f"_update_preview_line: {e}")
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def clear_measurements(self):
+        """Clear all measurement visualizations."""
+        self._clear_preview_line()
+        for obj in self.measurement_actors:
+            try:
+                self._scene.remove(obj)
+            except Exception:
+                pass
+        self.measurement_actors = []
+        self.measurement_points = []
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def enable_ruler_mode(self):
+        """Enable point-to-point measurement mode with orthographic projection."""
+        if not self._initialized or self._camera is None:
+            logger.warning("enable_ruler_mode: Not initialized")
+            return False
+        if self.current_mesh is None or self._mesh_obj is None:
+            logger.warning("enable_ruler_mode: No mesh loaded")
+            return False
+        logger.info("enable_ruler_mode: Enabling ruler mode...")
+        self.ruler_mode = True
+        self.measurement_points = []
+        self._clear_preview_line()
+        # Install event filter on canvas; also on app to catch wheel (may go to different target on some platforms)
+        if self._canvas and not self._ruler_event_filter_installed:
+            self._canvas.installEventFilter(self)
+            from PyQt5.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
+            self._ruler_event_filter_installed = True
+        # Switch to orthographic camera
+        self._switch_to_orthographic_camera()
+        # Ensure canvas has focus so wheel events reach it for zoom
+        if self._canvas:
+            self._canvas.setFocus(Qt.OtherFocusReason)
+        # Restrict to zoom-only (event filter blocks rotate/pan)
+        logger.info("enable_ruler_mode: Ruler mode enabled")
+        return True
+
+    def disable_ruler_mode(self):
+        """Disable measurement mode and restore perspective projection."""
+        logger.info("disable_ruler_mode: Disabling ruler mode...")
+        self.ruler_mode = False
+        self.measurement_points = []
+        if self._canvas and self._ruler_event_filter_installed:
+            self._canvas.removeEventFilter(self)
+            from PyQt5.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                app.removeEventFilter(self)
+            self._ruler_event_filter_installed = False
+        self._clear_preview_line()
+        self.clear_measurements()
+        self._restore_perspective_camera()
+        logger.info("disable_ruler_mode: Ruler mode disabled")
+
+    def _switch_to_orthographic_camera(self):
+        """Switch to OrthographicCamera for ruler mode."""
+        import pygfx as gfx
+        if self._mesh_obj is None or self._camera is None:
+            return
+        try:
+            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
+        except Exception:
+            cw, ch = max(1, self.width()), max(1, self.height())
+        try:
+            self._camera_before_ruler = self._camera
+            center, dist = self._get_view_center_and_distance()
+            # OrthographicCamera width/height are in world units; size view to fit mesh
+            max_dim = max(
+                self.current_mesh.bounds[1] - self.current_mesh.bounds[0],
+                self.current_mesh.bounds[3] - self.current_mesh.bounds[2],
+                self.current_mesh.bounds[5] - self.current_mesh.bounds[4],
+                1.0,
+            ) * 1.2
+            aspect = cw / ch if ch > 0 else 1
+            ortho = gfx.OrthographicCamera(max_dim * aspect, max_dim)
+            ortho.maintain_aspect = True
+            ortho.show_object(self._mesh_obj, view_dir=tuple(np.array(center) - np.array(self._camera.local.position)), scale=1.8, up=(0, 1, 0))
+            self._camera = ortho
+            self._controller.camera = ortho
+            if self._canvas:
+                self._canvas.request_draw()
+            logger.info("_switch_to_orthographic_camera: Switched to orthographic")
+        except Exception as e:
+            logger.warning(f"_switch_to_orthographic_camera: {e}")
+
+    def _restore_perspective_camera(self):
+        """Restore PerspectiveCamera after ruler mode."""
+        if self._camera_before_ruler is not None:
+            self._camera = self._camera_before_ruler
+            self._controller.camera = self._camera_before_ruler
+            self._camera_before_ruler = None
+        if self._canvas:
+            self._canvas.request_draw()
 
     def _show_overlay(self, show):
         if show:
