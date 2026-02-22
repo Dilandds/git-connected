@@ -422,6 +422,14 @@ class STLViewerWindow(QMainWindow):
     
     def _toggle_grid(self):
         """Toggle the background grid."""
+        # pygfx viewer
+        if hasattr(self.viewer_widget, 'toggle_grid') and callable(getattr(self.viewer_widget, 'toggle_grid', None)):
+            try:
+                self.viewer_widget.toggle_grid()
+            except Exception as e:
+                logger.warning(f"Could not toggle grid (pygfx): {e}")
+            return
+        # PyVista viewer
         if hasattr(self.viewer_widget, 'plotter') and self.viewer_widget.plotter is not None:
             try:
                 if self.toolbar.grid_enabled:
