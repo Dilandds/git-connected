@@ -288,15 +288,15 @@ class STLViewerWidget(QWidget):
 
             # Force immediate redraw so object appears without needing a click
             if self._canvas:
-                self._canvas.update()
-                self._canvas.repaint()
+                self._canvas.request_draw()
             QApplication.processEvents()
-            # Deferred redraw in case first paint runs before WebGPU is ready
+            # Deferred redraws to ensure WebGPU pipeline is ready
             from PyQt5.QtCore import QTimer
             def _deferred_repaint():
                 if self._canvas and getattr(self, '_model_loaded', False):
-                    self._canvas.repaint()
+                    self._canvas.request_draw()
             QTimer.singleShot(50, _deferred_repaint)
+            QTimer.singleShot(200, _deferred_repaint)
 
             logger.info("load_stl (pygfx): Loaded successfully")
             return True
@@ -324,7 +324,7 @@ class STLViewerWidget(QWidget):
                 color="#add8e6", specular="#333333", shininess=20
             )
         if self._canvas:
-            self._canvas.repaint()
+            self._canvas.request_draw()
 
     def clear_viewer(self):
         """Clear the 3D viewer."""
