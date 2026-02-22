@@ -117,6 +117,7 @@ class STLViewerWidget(QWidget):
 
         # Ruler/measurement mode state (matches viewer_widget.py interface)
         self.ruler_mode = False
+        self._ruler_current_view = "front"
         self.measurement_points = []
         self.measurement_actors = []  # pygfx objects for spheres, lines, arrows, labels
         self._ruler_unit = "mm"
@@ -493,26 +494,32 @@ class STLViewerWidget(QWidget):
 
     def view_front_ortho(self):
         """Front orthographic view (ruler mode)."""
+        self._ruler_current_view = "front"
         self._set_view(view_dir=(1, 0, 0), up=(0, 1, 0))
 
     def view_top_ortho(self):
         """Top orthographic view (ruler mode)."""
+        self._ruler_current_view = "top"
         self._set_view(view_dir=(0, 0, 1), up=(0, 1, 0))
 
     def view_left_ortho(self):
         """Left orthographic view (camera from -X)."""
+        self._ruler_current_view = "left"
         self._set_view(view_dir=(-1, 0, 0), up=(0, 1, 0))
 
     def view_right_ortho(self):
         """Right orthographic view (camera from +X)."""
+        self._ruler_current_view = "right"
         self._set_view(view_dir=(1, 0, 0), up=(0, 1, 0))
 
     def view_bottom_ortho(self):
         """Bottom orthographic view (camera from -Z)."""
+        self._ruler_current_view = "bottom"
         self._set_view(view_dir=(0, 0, -1), up=(0, 1, 0))
 
     def view_rear_ortho(self):
         """Rear orthographic view (camera from -Y)."""
+        self._ruler_current_view = "rear"
         self._set_view(view_dir=(0, -1, 0), up=(0, 0, 1))
 
     def set_background_color(self, color):
@@ -910,9 +917,15 @@ class STLViewerWidget(QWidget):
         view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
         return view_right, view_up
 
-    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=15):
-        """Snap to horizontal or vertical when line is close to that axis in screen space."""
+    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=8):
+        """Snap to horizontal or vertical when line is close to that axis in screen space.
+        Only snaps in Front/Rear/Left/Right views. Top/Bottom allow free angular lines.
+        """
         import math
+        # Top and Bottom views allow angular lines - no snapping
+        current_view = getattr(self, '_ruler_current_view', 'front')
+        if current_view in ('top', 'bottom'):
+            return point2
         try:
             view_right, view_up = self._get_camera_view_axes()
             p1, p2 = np.array(point1), np.array(point2)
@@ -1047,20 +1060,24 @@ class STLViewerWidget(QWidget):
                 axis = axis / (np.linalg.norm(axis) + 1e-12)
                 angle = np.arccos(np.clip(np.dot(up_y, d), -1, 1))
                 return la.quat_from_axis_angle(axis, angle)
-            # Arrow at p1 (tip at p1, pointing from p2 toward p1, so cone +Y = -dir_unit)
+            # Arrow at p1 (tip points inward toward p2, cone tip = +Y direction)
+            # pygfx cone: base at -Y/2, tip at +Y/2. We want tip at p1, pointing inward.
+            # So cone +Y = direction from p2 toward p1 = -dir_unit, center offset by half length FROM p1
             cone1_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
             cone1_mat.render_queue = 4000
             cone1 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone1_mat)
-            cone1.local.position = p1 + dir_unit * (arrow_tip_length / 2)
-            cone1.local.rotation = _cone_rotation_for_direction(-dir_unit)
+            # Position cone center so that tip (+Y end) is at p1
+            cone1.local.position = tuple(p1 + dir_unit * (arrow_tip_length / 2))
+            cone1.local.rotation = _cone_rotation_for_direction(dir_unit)
             self._scene.add(cone1)
             self.measurement_actors.append(cone1)
-            # Arrow at p2 (tip at p2, pointing from p1 toward p2, so cone +Y = dir_unit)
+            # Arrow at p2 (tip points inward toward p1, cone +Y = -dir_unit)
             cone2_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
             cone2_mat.render_queue = 4000
             cone2 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone2_mat)
-            cone2.local.position = p2 - dir_unit * (arrow_tip_length / 2)
-            cone2.local.rotation = _cone_rotation_for_direction(dir_unit)
+            # Position cone center so that tip (+Y end) is at p2
+            cone2.local.position = tuple(p2 - dir_unit * (arrow_tip_length / 2))
+            cone2.local.rotation = _cone_rotation_for_direction(-dir_unit)
             self._scene.add(cone2)
             self.measurement_actors.append(cone2)
             # Label at midpoint, offset perpendicular to the line so it's readable
