@@ -112,6 +112,8 @@ class STLViewerWidget(QWidget):
         self._model_loaded = False
         self._initialized = False
         self._render_mode = 'solid'
+        self._grid_visible = False
+        self._grid_objects = []  # All pygfx objects making up the bounding box grid
 
         _debug_print("STLViewerWidget (pygfx): Basic init complete")
 
@@ -453,6 +455,7 @@ class STLViewerWidget(QWidget):
 
     def clear_viewer(self):
         """Clear the 3D viewer."""
+        self.remove_grid()
         if self._scene and self._mesh_obj:
             self._scene.remove(self._mesh_obj)
             self._mesh_obj = None
@@ -465,7 +468,7 @@ class STLViewerWidget(QWidget):
         self._model_loaded = False
         self._show_overlay(True)
         if self._canvas:
-            self._canvas.update()
+            self._canvas.request_draw()
         logger.info("clear_viewer (pygfx): Cleared")
 
     def _on_file_dropped(self, file_path):
@@ -476,6 +479,144 @@ class STLViewerWidget(QWidget):
 
     def _on_drop_error(self, error_msg):
         self.drop_error.emit(error_msg)
+
+    # ── Bounding-box grid with axis labels & ticks ──────────────────────
+
+    def show_grid(self):
+        """Show a 3D bounding box with axis labels and tick marks around the loaded mesh."""
+        if not self._initialized or self._scene is None or self.current_mesh is None:
+            return
+        self.remove_grid()
+        self._grid_visible = True
+
+        import pygfx as gfx
+
+        bounds = self.current_mesh.bounds  # (xmin,xmax,ymin,ymax,zmin,zmax)
+        xmin, xmax, ymin, ymax, zmin, zmax = [float(v) for v in bounds]
+
+        # ── 12 edges of the bounding box ──
+        corners = np.array([
+            [xmin, ymin, zmin], [xmax, ymin, zmin],
+            [xmax, ymax, zmin], [xmin, ymax, zmin],
+            [xmin, ymin, zmax], [xmax, ymin, zmax],
+            [xmax, ymax, zmax], [xmin, ymax, zmax],
+        ], dtype=np.float32)
+        edges = [
+            (0,1),(1,2),(2,3),(3,0),  # bottom
+            (4,5),(5,6),(6,7),(7,4),  # top
+            (0,4),(1,5),(2,6),(3,7),  # verticals
+        ]
+        for a, b in edges:
+            positions = np.array([corners[a], corners[b]], dtype=np.float32)
+            geom = gfx.Geometry(positions=positions)
+            line = gfx.Line(geom, gfx.LineMaterial(color="#888888", thickness=1.0))
+            self._scene.add(line)
+            self._grid_objects.append(line)
+
+        # ── Helper: generate nice tick values ──
+        def _nice_ticks(vmin, vmax, n=5):
+            span = vmax - vmin
+            if span <= 0:
+                return [vmin]
+            raw_step = span / n
+            mag = 10 ** np.floor(np.log10(raw_step))
+            residual = raw_step / mag
+            if residual <= 1.5:
+                nice = 1
+            elif residual <= 3:
+                nice = 2
+            elif residual <= 7:
+                nice = 5
+            else:
+                nice = 10
+            step = nice * mag
+            start = np.ceil(vmin / step) * step
+            ticks = []
+            v = start
+            while v <= vmax + step * 0.01:
+                ticks.append(round(float(v), 6))
+                v += step
+            return ticks
+
+        # ── Helper: create a text label ──
+        def _make_text(text, pos, font_size=10, anchor="middle-center"):
+            geom = gfx.TextGeometry(text=text, font_size=font_size, anchor=anchor, screen_space=True)
+            obj = gfx.Text(geom, gfx.TextMaterial(color="#333333"))
+            obj.local.position = tuple(float(p) for p in pos)
+            return obj
+
+        # ── Helper: small tick line ──
+        def _make_tick_line(p1, p2):
+            positions = np.array([p1, p2], dtype=np.float32)
+            geom = gfx.Geometry(positions=positions)
+            return gfx.Line(geom, gfx.LineMaterial(color="#888888", thickness=1.0))
+
+        tick_len_x = (ymax - ymin) * 0.02 if (ymax - ymin) > 0 else 0.1
+        tick_len_y = (xmax - xmin) * 0.02 if (xmax - xmin) > 0 else 0.1
+        tick_len_z = (xmax - xmin) * 0.02 if (xmax - xmin) > 0 else 0.1
+        label_offset = 0.08  # fraction of axis range for label placement
+
+        # ── X axis ticks & labels (along bottom-front edge at ymin, zmin) ──
+        x_ticks = _nice_ticks(xmin, xmax)
+        for v in x_ticks:
+            tick = _make_tick_line([v, ymin, zmin], [v, ymin - tick_len_x, zmin])
+            self._scene.add(tick)
+            self._grid_objects.append(tick)
+            lbl = _make_text(f"{v:.1f}", [v, ymin - tick_len_x * 3, zmin], font_size=9)
+            self._scene.add(lbl)
+            self._grid_objects.append(lbl)
+        # Axis title
+        x_title = _make_text("X Axis", [(xmin + xmax) / 2, ymin - (ymax - ymin) * label_offset * 2, zmin], font_size=12)
+        self._scene.add(x_title)
+        self._grid_objects.append(x_title)
+
+        # ── Y axis ticks & labels (along bottom-left edge at xmin, zmin) ──
+        y_ticks = _nice_ticks(ymin, ymax)
+        for v in y_ticks:
+            tick = _make_tick_line([xmin, v, zmin], [xmin - tick_len_y, v, zmin])
+            self._scene.add(tick)
+            self._grid_objects.append(tick)
+            lbl = _make_text(f"{v:.1f}", [xmin - tick_len_y * 3, v, zmin], font_size=9)
+            self._scene.add(lbl)
+            self._grid_objects.append(lbl)
+        y_title = _make_text("Y Axis", [xmin - (xmax - xmin) * label_offset * 2, (ymin + ymax) / 2, zmin], font_size=12)
+        self._scene.add(y_title)
+        self._grid_objects.append(y_title)
+
+        # ── Z axis ticks & labels (along left-front vertical edge at xmin, ymin) ──
+        z_ticks = _nice_ticks(zmin, zmax)
+        for v in z_ticks:
+            tick = _make_tick_line([xmin, ymin, v], [xmin - tick_len_z, ymin, v])
+            self._scene.add(tick)
+            self._grid_objects.append(tick)
+            lbl = _make_text(f"{v:.1f}", [xmin - tick_len_z * 3, ymin, v], font_size=9)
+            self._scene.add(lbl)
+            self._grid_objects.append(lbl)
+        z_title = _make_text("Z Axis", [xmin - (xmax - xmin) * label_offset * 2, ymin, (zmin + zmax) / 2], font_size=12)
+        self._scene.add(z_title)
+        self._grid_objects.append(z_title)
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def remove_grid(self):
+        """Remove the bounding box grid from the scene."""
+        for obj in self._grid_objects:
+            try:
+                self._scene.remove(obj)
+            except Exception:
+                pass
+        self._grid_objects.clear()
+        self._grid_visible = False
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def toggle_grid(self):
+        """Toggle the bounding box grid on/off."""
+        if self._grid_visible:
+            self.remove_grid()
+        else:
+            self.show_grid()
 
     def _show_overlay(self, show):
         if show:
