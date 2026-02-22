@@ -5,7 +5,6 @@ Settings match PyVista viewer for consistent default view and rendering.
 """
 import sys
 import os
-import math
 import logging
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout
@@ -233,8 +232,9 @@ class STLViewerWidget(QWidget):
             self._model_loaded = True
             self._show_overlay(False)
 
-            # PyVista reset_camera equivalent: fit view to mesh bounds, center, isometric-like angle
-            self._fit_camera_to_mesh(mesh_tri)
+            # Pygfx-recommended: syncs camera + controller orbit center
+            view_dir = (1.2, -0.8, -1.0)  # isometric-like, matches PyVista default
+            self._camera.show_object(self._mesh_obj, view_dir=view_dir, scale=1.2)
 
             # Position axes at mesh min corner (PyVista add_axes in corner)
             if getattr(self, '_axes', None) is not None:
@@ -266,40 +266,6 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             logger.error(f"load_stl (pygfx): Error: {e}", exc_info=True)
             return False
-
-    def _fit_camera_to_mesh(self, mesh_tri):
-        """Fit camera to mesh bounds (PyVista reset_camera equivalent). Centers object, isometric-like view."""
-        b = np.asarray(mesh_tri.bounds)
-        # Trimesh returns (2, 3): [[xmin, ymin, zmin], [xmax, ymax, zmax]]
-        if b.ndim == 2 and b.shape == (2, 3):
-            mins, maxs = b[0], b[1]
-        else:
-            # PyVista-style 6-tuple (xmin, xmax, ymin, ymax, zmin, zmax)
-            mins = np.array([b[0], b[2], b[4]])
-            maxs = np.array([b[1], b[3], b[5]])
-        center = (
-            (mins[0] + maxs[0]) / 2,
-            (mins[1] + maxs[1]) / 2,
-            (mins[2] + maxs[2]) / 2,
-        )
-        max_dim = max(
-            float(maxs[0] - mins[0]),
-            float(maxs[1] - mins[1]),
-            float(maxs[2] - mins[2]),
-            0.01,
-        )
-        # Camera distance: fit object in FOV (50 deg -> tan(25°) ~ 0.47)
-        # Use ~1.4x margin so object fills ~70% of view (PyVista default)
-        fov_half_deg = getattr(self._camera, 'fov', 50) / 2
-        fov_rad = math.radians(fov_half_deg)
-        distance = max_dim * 1.4 / (2 * math.tan(fov_rad))
-        # View from above-front-right (isometric-like, matches PyVista default)
-        view_dir = np.array([1.2, -0.8, -1.0], dtype=float)
-        view_dir = view_dir / np.linalg.norm(view_dir)
-        cam_pos = np.array(center) + view_dir * distance
-        self._camera.local.position = tuple(cam_pos)
-        self._camera.look_at(center)
-        logger.info(f"_fit_camera_to_mesh: center={center}, distance={distance:.2f}")
 
     def clear_viewer(self):
         """Clear the 3D viewer."""
