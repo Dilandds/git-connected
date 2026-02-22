@@ -1063,8 +1063,27 @@ class STLViewerWidget(QWidget):
             cone2.local.rotation = _cone_rotation_for_direction(dir_unit)
             self._scene.add(cone2)
             self.measurement_actors.append(cone2)
-            # Label at midpoint
-            midpoint = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2)
+            # Label at midpoint, offset perpendicular to the line so it's readable
+            midpoint = np.array([(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2])
+            # Compute perpendicular offset in view plane
+            try:
+                view_right, view_up = self._get_camera_view_axes()
+                # Project line direction onto screen axes to find perpendicular
+                dx_screen = np.dot(dir_unit, view_right)
+                dy_screen = np.dot(dir_unit, view_up)
+                # Perpendicular in screen space (rotate 90 deg)
+                perp_screen = -dy_screen * view_right + dx_screen * view_up
+                perp_screen = perp_screen / (np.linalg.norm(perp_screen) + 1e-12)
+                # Offset by a fraction of model size
+                b = self.current_mesh.bounds if self.current_mesh else None
+                if b:
+                    max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+                    offset_dist = max_dim * 0.03
+                else:
+                    offset_dist = length * 0.05
+                label_pos = tuple(midpoint + perp_screen * offset_dist)
+            except Exception:
+                label_pos = tuple(midpoint)
             unit = getattr(self, '_ruler_unit', 'mm')
             conversion = {"mm": 1.0, "cm": 0.1, "m": 0.001, "inch": 1.0 / 25.4, "ft": 1.0 / 304.8}
             unit_labels = {"mm": "mm", "cm": "cm", "m": "m", "inch": "in", "ft": "ft"}
@@ -1075,8 +1094,8 @@ class STLViewerWidget(QWidget):
             lbl_mat.depth_test = False
             lbl_mat.depth_write = False
             lbl_mat.render_queue = 4000
-            lbl = gfx.Text(text=label_text, material=lbl_mat, font_size=12, anchor="middle-center", screen_space=False)
-            lbl.local.position = midpoint
+            lbl = gfx.Text(text=label_text, material=lbl_mat, font_size=14, anchor="middle-center", screen_space=True)
+            lbl.local.position = label_pos
             self._scene.add(lbl)
             self.measurement_actors.append(lbl)
         except Exception as e:
