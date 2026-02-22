@@ -10,6 +10,16 @@ from PyQt5.QtWidgets import (
     QMessageBox, QSplitter, QFrame, QApplication
 )
 from PyQt5.QtCore import Qt, QEvent, QTimer
+
+# Force PyInstaller to bundle pygfx and deps (imported lazily in viewer_widget_pygfx._init_pygfx)
+try:
+    import pygfx  # noqa: F401
+    import wgpu  # noqa: F401
+    import trimesh  # noqa: F401
+    import rendercanvas  # noqa: F401
+except ImportError:
+    pass
+
 # Use pygfx by default (WebGPU, avoids Windows black screen). No env var needed for exe.
 # Fall back to PyVista if pygfx import fails.
 USE_PYGFX = False

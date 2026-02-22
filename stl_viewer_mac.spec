@@ -61,6 +61,14 @@ a = Analysis(
         'vtkmodules',
         'vtkmodules.all',
         'vtkmodules.qt.QVTKRenderWindowInteractor',
+        # Pygfx and deps (WebGPU viewer, avoids Windows black screen)
+        'pygfx',
+        'wgpu',
+        'trimesh',
+        'rendercanvas',
+        'rendercanvas.qt',
+        'scipy',
+        'viewer_widget_pygfx',
         # NumPy
         'numpy',
         'numpy.core._methods',

@@ -9,4 +9,10 @@ meshio>=5.3.5
 cadquery>=2.3.0
 rhino3dm>=8.0.0
 vtk>=9.0.0,<9.6.0
+# Pygfx viewer (WebGPU, avoids Windows black screen)
+pygfx
+wgpu
+trimesh
+rendercanvas
+scipy>=1.10.0
 # aspose-3d>=24.0.0  # Optional: PDF 3D export. Not needed for STL loading. Uncomment if required.
