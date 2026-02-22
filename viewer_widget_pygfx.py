@@ -900,9 +900,30 @@ class STLViewerWidget(QWidget):
         view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
         return view_right, view_up
 
-    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=3):
-        """No snapping - allow free angular lines in all views."""
-        return point2
+    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=5):
+        """Snap to horizontal or vertical only when line is very close to perpendicular axes."""
+        import math
+        try:
+            view_right, view_up = self._get_camera_view_axes()
+            p1, p2 = np.array(point1), np.array(point2)
+            delta = p2 - p1
+            dx_screen = np.dot(delta, view_right)
+            dy_screen = np.dot(delta, view_up)
+            if abs(dx_screen) < 1e-12 and abs(dy_screen) < 1e-12:
+                return point2
+            angle_deg = math.degrees(math.atan2(abs(dy_screen), abs(dx_screen)))
+            # Snap only when very close to 0° (horizontal) or 90° (vertical)
+            if angle_deg < threshold_deg:
+                # Near horizontal - snap to horizontal
+                snapped = p1 + view_right * dx_screen
+                return tuple(snapped)
+            elif angle_deg > (90 - threshold_deg):
+                # Near vertical - snap to vertical
+                snapped = p1 + view_up * dy_screen
+                return tuple(snapped)
+            return point2
+        except Exception:
+            return point2
 
     def _snap_to_axis(self, point1, point2):
         """Snap point2 so measurement is strictly horizontal or vertical on screen."""
