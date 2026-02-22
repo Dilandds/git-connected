@@ -917,7 +917,7 @@ class STLViewerWidget(QWidget):
         view_up = view_up / (np.linalg.norm(view_up) + 1e-12)
         return view_right, view_up
 
-    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=8):
+    def _maybe_snap_to_axis(self, point1, point2, threshold_deg=3):
         """Snap to horizontal or vertical when line is close to that axis in screen space.
         Only snaps in Front/Rear/Left/Right views. Top/Bottom allow free angular lines.
         """
@@ -1039,45 +1039,57 @@ class STLViewerWidget(QWidget):
             if arrow_tip_length < 1e-6:
                 arrow_tip_length = length * 0.05
                 arrow_tip_radius = arrow_tip_length * 0.4
-            # Main line as Line (thin segment; thickness in pixels, screen-space)
+            # Main line (slightly shortened to leave room for arrowheads)
             line_thickness = 2.5
-            positions = np.array([p1, p2], dtype=np.float32)
+            line_start = p1 + dir_unit * arrow_tip_length
+            line_end = p2 - dir_unit * arrow_tip_length
+            if np.linalg.norm(line_end - line_start) < 1e-6:
+                line_start, line_end = p1, p2
+            positions = np.array([line_start, line_end], dtype=np.float32)
             geom = gfx.Geometry(positions=positions)
             mat = gfx.LineMaterial(color="#000000", thickness=line_thickness, depth_test=False, depth_write=False)
             mat.render_queue = 4000
             line_obj = gfx.Line(geom, mat)
             self._scene.add(line_obj)
             self.measurement_actors.append(line_obj)
-            # Cone tip is +Y in pygfx. Rotate so +Y aligns with target direction.
-            import pylinalg as la
-            def _cone_rotation_for_direction(d):
-                """Rotation to align cone +Y with direction d."""
-                up_y = np.array([0, 1, 0])
-                d = d / (np.linalg.norm(d) + 1e-12)
-                if np.abs(np.dot(d, up_y)) > 0.999:
-                    return la.quat_from_axis_angle(np.array([1, 0, 0]), np.pi if d[1] < 0 else 0)
-                axis = np.cross(up_y, d)
-                axis = axis / (np.linalg.norm(axis) + 1e-12)
-                angle = np.arccos(np.clip(np.dot(up_y, d), -1, 1))
-                return la.quat_from_axis_angle(axis, angle)
-            # Arrow at p1 (tip points inward toward p2, cone tip = +Y direction)
-            # pygfx cone: base at -Y/2, tip at +Y/2. We want tip at p1, pointing inward.
-            # So cone +Y = direction from p2 toward p1 = -dir_unit, center offset by half length FROM p1
-            cone1_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
-            cone1_mat.render_queue = 4000
-            cone1 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone1_mat)
-            # Position cone center so that tip (+Y end) is at p1
-            cone1.local.position = tuple(p1 + dir_unit * (arrow_tip_length / 2))
-            cone1.local.rotation = _cone_rotation_for_direction(dir_unit)
-            self._scene.add(cone1)
-            self.measurement_actors.append(cone1)
-            # Arrow at p2 (tip points inward toward p1, cone +Y = -dir_unit)
-            cone2_mat = gfx.MeshPhongMaterial(color="#000000", depth_test=False, depth_write=False)
-            cone2_mat.render_queue = 4000
-            cone2 = gfx.Mesh(gfx.cone_geometry(arrow_tip_radius, arrow_tip_length, 12), cone2_mat)
-            # Position cone center so that tip (+Y end) is at p2
-            cone2.local.position = tuple(p2 - dir_unit * (arrow_tip_length / 2))
-            cone2.local.rotation = _cone_rotation_for_direction(-dir_unit)
+            # Create flat triangle arrowheads in the view plane
+            try:
+                view_right, view_up = self._get_camera_view_axes()
+            except Exception:
+                view_right = np.array([1, 0, 0])
+                view_up = np.array([0, 1, 0])
+            half_w = arrow_tip_radius
+            def _make_arrow_triangle(tip_pos, direction):
+                """Create a flat triangle mesh for an arrowhead pointing in `direction`."""
+                base_center = tip_pos - direction * arrow_tip_length
+                # Perpendicular in the view plane
+                dx = np.dot(direction, view_right)
+                dy = np.dot(direction, view_up)
+                perp = -dy * view_right + dx * view_up
+                perp_norm = np.linalg.norm(perp)
+                if perp_norm > 1e-12:
+                    perp = perp / perp_norm
+                else:
+                    perp = view_right
+                v0 = np.array(tip_pos, dtype=np.float32)
+                v1 = np.array(base_center + perp * half_w, dtype=np.float32)
+                v2 = np.array(base_center - perp * half_w, dtype=np.float32)
+                verts = np.array([v0, v1, v2], dtype=np.float32)
+                faces = np.array([[0, 1, 2]], dtype=np.uint32)
+                g = gfx.Geometry(positions=verts, indices=faces)
+                m = gfx.MeshBasicMaterial(color="#000000", side="both")
+                m.depth_test = False
+                m.depth_write = False
+                m.render_queue = 4000
+                return gfx.Mesh(g, m)
+            # Arrow at p1 pointing toward p2
+            arrow1 = _make_arrow_triangle(p1, dir_unit)
+            self._scene.add(arrow1)
+            self.measurement_actors.append(arrow1)
+            # Arrow at p2 pointing toward p1
+            arrow2 = _make_arrow_triangle(p2, -dir_unit)
+            self._scene.add(arrow2)
+            self.measurement_actors.append(arrow2)
             self._scene.add(cone2)
             self.measurement_actors.append(cone2)
             # Label at midpoint, offset perpendicular to the line so it's readable
