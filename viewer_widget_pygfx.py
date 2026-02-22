@@ -139,7 +139,7 @@ class STLViewerWidget(QWidget):
         if self._initialized and self._camera is not None and self._canvas is not None:
             try:
                 cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-                if cw > 0 and ch > 0:
+                if cw > 0 and ch > 0 and hasattr(self._camera, 'aspect'):
                     self._camera.aspect = cw / ch
             except Exception:
                 pass
@@ -369,7 +369,8 @@ class STLViewerWidget(QWidget):
                 cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
             except Exception:
                 cw, ch = max(1, self.width()), max(1, self.height())
-            self._camera.aspect = cw / ch
+            if hasattr(self._camera, 'aspect'):
+                self._camera.aspect = cw / ch
             view_dir = (1.2, -0.8, -1.0)  # isometric-like, matches PyVista default
             self._camera.show_object(
                 self._mesh_obj, view_dir=view_dir, scale=1.8, up=(0, 1, 0)
@@ -454,96 +455,65 @@ class STLViewerWidget(QWidget):
         """Reset to default isometric view."""
         if not self._initialized or self._camera is None or self._mesh_obj is None:
             return
-        try:
-            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-        except Exception:
-            cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
+        self._safe_set_aspect()
         view_dir = (1.2, -0.8, -1.0)
         self._camera.show_object(self._mesh_obj, view_dir=view_dir, scale=1.8, up=(0, 1, 0))
         if self._canvas:
             self._canvas.request_draw()
 
-    def view_front(self):
-        """Set camera to front view (looking along +X, Y up). PyVista view_yz equivalent."""
-        if not self._initialized or self._camera is None or self._mesh_obj is None:
-            return
+    def _safe_set_aspect(self):
+        """Set camera aspect ratio safely (PerspectiveCamera only)."""
         try:
             cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
         except Exception:
             cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
-        self._camera.show_object(self._mesh_obj, view_dir=(1, 0, 0), scale=1.8, up=(0, 1, 0))
+        if hasattr(self._camera, 'aspect'):
+            self._camera.aspect = cw / ch
+
+    def _set_view(self, view_dir, up=(0, 1, 0)):
+        """Set camera to a specific view direction."""
+        if not self._initialized or self._camera is None or self._mesh_obj is None:
+            return
+        self._safe_set_aspect()
+        self._camera.show_object(self._mesh_obj, view_dir=view_dir, scale=1.8, up=up)
         if self._canvas:
             self._canvas.request_draw()
+
+    def view_front(self):
+        """Set camera to front view (looking along +X, Y up). PyVista view_yz equivalent."""
+        self._set_view(view_dir=(1, 0, 0), up=(0, 1, 0))
 
     def view_side(self):
         """Set camera to side view (looking along +Y, Z up). PyVista view_xz equivalent."""
-        if not self._initialized or self._camera is None or self._mesh_obj is None:
-            return
-        try:
-            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-        except Exception:
-            cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
-        self._camera.show_object(self._mesh_obj, view_dir=(0, 1, 0), scale=1.8, up=(0, 0, 1))
-        if self._canvas:
-            self._canvas.request_draw()
+        self._set_view(view_dir=(0, 1, 0), up=(0, 0, 1))
 
     def view_top(self):
         """Set camera to top view (looking along +Z, Y up). PyVista view_xy equivalent."""
-        if not self._initialized or self._camera is None or self._mesh_obj is None:
-            return
-        try:
-            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-        except Exception:
-            cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
-        self._camera.show_object(self._mesh_obj, view_dir=(0, 0, 1), scale=1.8, up=(0, 1, 0))
-        if self._canvas:
-            self._canvas.request_draw()
+        self._set_view(view_dir=(0, 0, 1), up=(0, 1, 0))
 
     def view_front_ortho(self):
-        """Front orthographic view (ruler mode). Same as view_front."""
-        self.view_front()
+        """Front orthographic view (ruler mode)."""
+        self._set_view(view_dir=(1, 0, 0), up=(0, 1, 0))
 
     def view_top_ortho(self):
-        """Top orthographic view (ruler mode). Same as view_top."""
-        self.view_top()
+        """Top orthographic view (ruler mode)."""
+        self._set_view(view_dir=(0, 0, 1), up=(0, 1, 0))
 
     def view_left_ortho(self):
         """Left orthographic view (camera from -X)."""
-        if not self._initialized or self._camera is None or self._mesh_obj is None:
-            return
-        try:
-            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-        except Exception:
-            cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
-        self._camera.show_object(self._mesh_obj, view_dir=(-1, 0, 0), scale=1.8, up=(0, 1, 0))
-        if self._canvas:
-            self._canvas.request_draw()
+        self._set_view(view_dir=(-1, 0, 0), up=(0, 1, 0))
 
     def view_right_ortho(self):
-        """Right orthographic view (camera from +X). Same as view_front."""
-        self.view_front()
+        """Right orthographic view (camera from +X)."""
+        self._set_view(view_dir=(1, 0, 0), up=(0, 1, 0))
 
     def view_bottom_ortho(self):
         """Bottom orthographic view (camera from -Z)."""
-        if not self._initialized or self._camera is None or self._mesh_obj is None:
-            return
-        try:
-            cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.width(), self.height())
-        except Exception:
-            cw, ch = max(1, self.width()), max(1, self.height())
-        self._camera.aspect = cw / ch
-        self._camera.show_object(self._mesh_obj, view_dir=(0, 0, -1), scale=1.8, up=(0, 1, 0))
-        if self._canvas:
-            self._canvas.request_draw()
+        self._set_view(view_dir=(0, 0, -1), up=(0, 1, 0))
 
     def view_rear_ortho(self):
-        """Rear orthographic view (camera from -X)."""
-        self.view_left_ortho()
+        """Rear orthographic view (camera from -Y)."""
+        self._set_view(view_dir=(0, -1, 0), up=(0, 0, 1))
 
     def set_background_color(self, color):
         """Set 3D viewer background color (e.g. '#ffffff' light, '#1a1a2e' dark)."""
