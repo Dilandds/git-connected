@@ -1261,8 +1261,10 @@ class STLViewerWidget(QWidget):
                 view_up = np.array([0, 1, 0])
             b = self.current_mesh.bounds if self.current_mesh else None
             max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4]) if b else length
-            bg_w = max_dim * 0.08
-            bg_h = max_dim * 0.03
+            # Scale background width based on text length for full coverage
+            char_count = len(label_text)
+            bg_w = max_dim * (0.012 * char_count + 0.02)
+            bg_h = max_dim * 0.04
             normal = np.cross(view_right, view_up)
             n = np.linalg.norm(normal)
             if n > 1e-12:
