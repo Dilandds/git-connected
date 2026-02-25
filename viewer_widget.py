@@ -539,12 +539,11 @@ class STLViewerWidget(QWidget):
                 logger.warning(f"load_stl: Could not triangulate mesh: {e}, using original mesh")
                 render_mesh = mesh  # Fallback to original mesh
             
-            # Try to compute normals for proper smooth shading (optional enhancement)
-            # This is critical for Windows rendering to show detail correctly
-            logger.info("load_stl: Computing mesh normals...")
+            # Compute cell/face normals for flat shading (sharp edges, accurate flat surfaces)
+            logger.info("load_stl: Computing mesh normals (flat shading)...")
             try:
-                render_mesh.compute_normals(inplace=True, point_normals=True, cell_normals=False)
-                logger.info("load_stl: Mesh normals computed successfully")
+                render_mesh.compute_normals(inplace=True, point_normals=False, cell_normals=True)
+                logger.info("load_stl: Mesh normals computed (flat) successfully")
             except Exception as e:
                 logger.warning(f"load_stl: Could not compute normals: {e}, continuing anyway")
             
@@ -559,7 +558,7 @@ class STLViewerWidget(QWidget):
                 render_mesh,
                 color='lightblue',
                 show_edges=False,
-                smooth_shading=True,  # Gouraud/Phong interpolation for smoother curved surfaces
+                smooth_shading=False,  # Flat shading for sharp edges and accurate flat surfaces
                 ambient=0.7,  # Increased for less shadowing
                 diffuse=0.4,  # Reduced to balance with higher ambient
                 specular=0.2,  # Reduced for less harsh highlights
@@ -1990,8 +1989,8 @@ class STLViewerWidget(QWidget):
                 offset = sphere_radius * 1.5
                 label_pos = (point[0], point[1] + offset, point[2])
                 label_points = pv.PolyData([list(label_pos)])
-                # Text white on dark backgrounds (blue), black on light (grey)
-                text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+                # Text green for validated (blue), white on other dark backgrounds, black on light
+                text_color = '#22C55E' if (color and color.lower().lstrip('#') == '1821b4') else ('#FFFFFF' if self._is_dark_hex_color(color) else '#000000')
                 label_actor = self.plotter.add_point_labels(
                     label_points,
                     [display_date],
@@ -2001,7 +2000,7 @@ class STLViewerWidget(QWidget):
                     font_family='arial',
                     bold=True,
                     show_points=False,
-                    always_visible=True,
+                    always_visible=False,  # Respect depth - occluded when object covers annotation
                     name=f'annotation_label_{annotation_id}',
                     reset_camera=False  # Preserve user's zoom/pan
                 )
@@ -2010,7 +2009,6 @@ class STLViewerWidget(QWidget):
                         label_actor.SetPickable(False)  # Don't pick labels
                     except Exception:
                         pass
-                    self._set_actor_always_on_top(label_actor)
             except Exception as e:
                 logger.debug(f"add_annotation_marker: Could not add date label: {e}")
             
@@ -2227,7 +2225,7 @@ class STLViewerWidget(QWidget):
             offset = sphere_radius * 1.5
             label_pos = (point[0], point[1] + offset, point[2])
             label_points = pv.PolyData([list(label_pos)])
-            text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+            text_color = '#22C55E' if (color and color.lower().lstrip('#') == '1821b4') else ('#FFFFFF' if self._is_dark_hex_color(color) else '#000000')
             new_label = self.plotter.add_point_labels(
                 label_points,
                 [display_date],
@@ -2237,13 +2235,12 @@ class STLViewerWidget(QWidget):
                 font_family='arial',
                 bold=True,
                 show_points=False,
-                always_visible=True,
+                always_visible=False,  # Respect depth - occluded when object covers annotation
                 name=f"annotation_label_{ann['id']}",
                 reset_camera=False
             )
             if new_label:
                 new_label.SetPickable(False)
-                self._set_actor_always_on_top(new_label)
             ann['label_actor'] = new_label
             if new_label and new_label not in self.annotation_actors:
                 self.annotation_actors.append(new_label)

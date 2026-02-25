@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTextEdit, QFileDialog, QScrollArea, QFrame, QWidget, QSizePolicy, QLineEdit
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QPixmap
 from ui.styles import default_theme
 
@@ -41,12 +41,14 @@ class ImageThumbnail(QFrame):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(0)
         
-        # Image label - expands to fill
+        # Image label - expands to fill, click to zoom
         self.img_label = QLabel()
         self.img_label.setAlignment(Qt.AlignCenter)
         self.img_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.img_label.setStyleSheet("border: none;")
+        self.img_label.setStyleSheet("border: none; cursor: pointer;")
         self.img_label.setScaledContents(False)
+        self.img_label.setCursor(Qt.PointingHandCursor)
+        self.img_label.installEventFilter(self)
         
         # Load image
         self._pixmap = None
@@ -78,6 +80,7 @@ class ImageThumbnail(QFrame):
             }}
         """)
         remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.image_path))
+        self.img_label.setToolTip("Click to zoom")
         
         # Position remove button at top-right
         remove_btn.setParent(self)
@@ -97,6 +100,19 @@ class ImageThumbnail(QFrame):
         # Reposition remove button
         self._remove_btn.move(self.width() - 24, 4)
 
+    def eventFilter(self, obj, event):
+        """Open zoom viewer when image is clicked."""
+        if obj == self.img_label and event.type() == QEvent.MouseButtonPress:
+            self._open_zoom_viewer()
+            return True
+        return super().eventFilter(obj, event)
+
+    def _open_zoom_viewer(self):
+        """Open zoomable image viewer dialog."""
+        from ui.annotation_viewer_popup import ImageViewerDialog
+        dialog = ImageViewerDialog(self.image_path, self)
+        dialog.exec_()
+
 
 class AnnotationPopup(QDialog):
     """Popup dialog for editing an annotation."""
@@ -109,6 +125,7 @@ class AnnotationPopup(QDialog):
                  image_paths: Optional[List[str]] = None, label: str = "Point",
                  created_at=None, display_number: int = None, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)  # Remove ? help button on Windows
         self.annotation_id = annotation_id
         self.point = point
         self.text = text
@@ -185,7 +202,7 @@ class AnnotationPopup(QDialog):
         from ui.annotation_panel import _format_annotation_date
         date_text = _format_annotation_date(self.created_at, include_time=True) if self.created_at and hasattr(self.created_at, 'month') else str(self.annotation_id)
         date_label = QLabel(date_text)
-        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px;")
         header_layout.addWidget(date_label)
         
         main_layout.addLayout(header_layout)

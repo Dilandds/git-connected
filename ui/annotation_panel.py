@@ -249,7 +249,7 @@ class AnnotationCard(QFrame):
             date_time_text = str(self.annotation.id)
         self.coord_label = QLabel(date_time_text)
         self.coord_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.coord_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 13px; background-color: transparent;")
+        self.coord_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 15px; background-color: transparent;")
         layout.addWidget(self.coord_label)
         
         # Delete button (cross)
@@ -495,7 +495,7 @@ class AnnotationPanel(QWidget):
         header_layout.addLayout(title_row)
         
         # Instructions / Reader Mode indicator
-        self.instructions_label = QLabel("Click on the 3D model to add annotation points")
+        self.instructions_label = QLabel("Please add the first annotation by clicking on the 3D object")
         self.instructions_label.setWordWrap(True)
         self.instructions_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
         header_layout.addWidget(self.instructions_label)
@@ -540,7 +540,7 @@ class AnnotationPanel(QWidget):
         self.content_layout.setAlignment(Qt.AlignTop)
         
         # Empty state
-        self.empty_label = QLabel("No annotations yet.\nClick on the model to add one.")
+        self.empty_label = QLabel("No annotations yet")
         self.empty_label.setAlignment(Qt.AlignCenter)
         self.empty_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; padding: 20px;")
         self.content_layout.addWidget(self.empty_label)

@@ -121,6 +121,23 @@ def _trimesh_to_pyvista(tm):
     return pv.PolyData(vertices, cells)
 
 
+def _trimesh_to_flat_shaded(tm):
+    """Convert trimesh to flat-shaded version (duplicated vertices, one per face).
+    Each triangle gets 3 unique vertices with face normal, so edges render sharp.
+    Returns a new trimesh suitable for geometry_from_trimesh.
+    """
+    import trimesh
+    verts = np.asarray(tm.vertices, dtype=np.float64)
+    faces = np.asarray(tm.faces, dtype=np.int32)
+    tris = verts[faces]  # (N, 3, 3)
+    # Explode: 3 vertices per face, no sharing
+    flat_verts = tris.reshape(-1, 3)
+    flat_faces = np.arange(len(tris) * 3, dtype=np.int32).reshape(-1, 3)
+    flat_tm = trimesh.Trimesh(vertices=flat_verts, faces=flat_faces, process=False)
+    flat_tm.fix_normals()  # With unique verts per face, this gives face normals
+    return flat_tm
+
+
 def _pyvista_to_trimesh(pv_mesh):
     """Convert PyVista PolyData to trimesh.Trimesh for pygfx rendering."""
     import trimesh
@@ -147,6 +164,8 @@ def _pyvista_to_trimesh(pv_mesh):
             idx += n
         faces = np.array(faces_list, dtype=np.int32) if faces_list else np.zeros((0, 3), dtype=np.int32)
     return trimesh.Trimesh(vertices=verts, faces=faces)
+
+
 
 
 def _debug_print(msg):
@@ -201,6 +220,7 @@ class STLViewerWidget(QWidget):
         self._render_mode = 'solid'
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
+        self._axes_labels = []  # X, Y, Z text labels on the corner axes
 
         # Ruler/measurement mode state (matches viewer_widget.py interface)
         self.ruler_mode = False
@@ -363,7 +383,6 @@ class STLViewerWidget(QWidget):
 
         try:
             import pygfx as gfx
-            from pygfx.geometries import geometry_from_trimesh
             import trimesh
             import pyvista as pv
 
@@ -451,11 +470,8 @@ class STLViewerWidget(QWidget):
             if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
                 raise ValueError("No mesh in file")
 
-            # Compute vertex normals for smooth shading
-            try:
-                mesh_tri.fix_normals()
-            except Exception:
-                pass
+            # Use flat-shaded mesh for sharp edges (original geometry has sharp edges)
+            mesh_tri = _trimesh_to_flat_shaded(mesh_tri)
 
             # Ensure PyVista for MeshCalculator
             if pv_mesh is None:
@@ -469,6 +485,7 @@ class STLViewerWidget(QWidget):
                 specular="#333333",
                 shininess=20,
             )
+            from pygfx.geometries import geometry_from_trimesh
             geometry = geometry_from_trimesh(mesh_tri)
             mesh_obj = gfx.Mesh(geometry, material)
             self._mesh_obj = mesh_obj
@@ -517,6 +534,28 @@ class STLViewerWidget(QWidget):
                     self._axes.local.scale = (max_dim, max_dim, max_dim)
                     self._axes.local.position = (float(mins[0]), float(mins[1]), float(mins[2]))
                     self._axes.visible = True
+                    # Add X, Y, Z labels at axis tips (match AxesHelper colors: X=red, Y=green, Z=blue)
+                    offset = max_dim * 0.12
+                    x0, y0, z0 = float(mins[0]), float(mins[1]), float(mins[2])
+                    for lbl in self._axes_labels:
+                        try:
+                            self._scene.remove(lbl)
+                        except Exception:
+                            pass
+                    self._axes_labels.clear()
+                    ax_lbls = [
+                        ("X", (x0 + max_dim + offset, y0, z0), "#CC3333"),
+                        ("Y", (x0, y0 + max_dim + offset, z0), "#33AA33"),
+                        ("Z", (x0, y0, z0 + max_dim + offset), "#3366CC"),
+                    ]
+                    for txt, pos, color in ax_lbls:
+                        m = gfx.TextMaterial(color=color)
+                        m.depth_test = False
+                        m.depth_write = False
+                        lbl = gfx.Text(text=txt, material=m, font_size=11, anchor="middle-center", screen_space=True)
+                        lbl.local.position = pos
+                        self._scene.add(lbl)
+                        self._axes_labels.append(lbl)
                 except Exception:
                     pass
 
@@ -715,6 +754,13 @@ class STLViewerWidget(QWidget):
                 self._axes.visible = False
             except Exception:
                 pass
+        for lbl in getattr(self, '_axes_labels', []):
+            try:
+                if self._scene:
+                    self._scene.remove(lbl)
+            except Exception:
+                pass
+        self._axes_labels.clear()
         self.current_mesh = None
         self._annotation_trimesh = None
         self._model_loaded = False
@@ -1200,7 +1246,7 @@ class STLViewerWidget(QWidget):
             positions = np.array([line_start, line_end], dtype=np.float32)
             geom = gfx.Geometry(positions=positions)
             mat = gfx.LineMaterial(color="#000000", thickness=line_thickness, depth_test=False, depth_write=False)
-            mat.render_queue = 4000
+            mat.render_queue = 3000  # Lines render behind labels
             line_obj = gfx.Line(geom, mat)
             self._scene.add(line_obj)
             self.measurement_actors.append(line_obj)
@@ -1232,7 +1278,7 @@ class STLViewerWidget(QWidget):
                 m = gfx.MeshBasicMaterial(color="#000000", side="both")
                 m.depth_test = False
                 m.depth_write = False
-                m.render_queue = 4000
+                m.render_queue = 3000  # Arrows render behind labels
                 return gfx.Mesh(g, m)
             # Arrow at p1 pointing outward (away from p2)
             arrow1 = _make_arrow_triangle(p1, -dir_unit)
@@ -1242,25 +1288,32 @@ class STLViewerWidget(QWidget):
             arrow2 = _make_arrow_triangle(p2, dir_unit)
             self._scene.add(arrow2)
             self.measurement_actors.append(arrow2)
-            # Label at midpoint, offset perpendicular to the line so it's readable
+            # Label at midpoint, offset in view plane to avoid overlapping other labels
             midpoint = np.array([(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2])
-            # Compute perpendicular offset in view plane
+            measurement_index = len(self.measurement_actors) // 5  # 5 actors per measurement: line, 2 arrows, bg, lbl
             try:
                 view_right, view_up = self._get_camera_view_axes()
-                # Project line direction onto screen axes to find perpendicular
                 dx_screen = np.dot(dir_unit, view_right)
                 dy_screen = np.dot(dir_unit, view_up)
-                # Perpendicular in screen space (rotate 90 deg)
                 perp_screen = -dy_screen * view_right + dx_screen * view_up
                 perp_screen = perp_screen / (np.linalg.norm(perp_screen) + 1e-12)
-                # Offset by a fraction of model size
-                b = self.current_mesh.bounds if self.current_mesh else None
-                if b:
-                    max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4])
-                    offset_dist = max_dim * 0.03
+                # Gentle radial spread: small angle steps, modest distance to avoid overlap without jumping far
+                angle_deg = (measurement_index % 4) * 90.0  # 4 positions: perp, along, opposite perp, opposite along
+                angle_rad = np.deg2rad(angle_deg)
+                cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
+                along_screen = dx_screen * view_right + dy_screen * view_up
+                along_norm = np.linalg.norm(along_screen)
+                if along_norm < 1e-8:
+                    along_screen = view_right
                 else:
-                    offset_dist = length * 0.05
-                label_pos = tuple(midpoint + perp_screen * offset_dist)
+                    along_screen = along_screen / along_norm
+                offset_dir = perp_screen * cos_a + along_screen * sin_a
+                offset_dir = offset_dir / (np.linalg.norm(offset_dir) + 1e-12)
+                b = self.current_mesh.bounds if self.current_mesh else None
+                max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4]) if b else length
+                # Compact distance: 5–10% of model, cycle so labels don't jump far
+                offset_dist = max_dim * (0.048 + 0.015 * (measurement_index % 5))
+                label_pos = tuple(midpoint + offset_dir * offset_dist)
             except Exception:
                 label_pos = tuple(midpoint)
             unit = getattr(self, '_ruler_unit', 'mm')
@@ -1277,10 +1330,10 @@ class STLViewerWidget(QWidget):
                 view_up = np.array([0, 1, 0])
             b = self.current_mesh.bounds if self.current_mesh else None
             max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4]) if b else length
-            # Scale background width based on text length - use generous padding so label is fully covered
+            # Scale background - compact size, still covers text
             char_count = len(label_text)
-            bg_w = max_dim * (0.022 * char_count + 0.06)  # Wider: covers "43.68 mm" etc. with padding
-            bg_h = max_dim * 0.045  # Slightly taller for bold text
+            bg_w = max_dim * (0.014 * char_count + 0.04)  # Reduced: compact grey box
+            bg_h = max_dim * 0.032  # Reduced height
             normal = np.cross(view_right, view_up)
             n = np.linalg.norm(normal)
             if n > 1e-12:
@@ -1296,7 +1349,7 @@ class STLViewerWidget(QWidget):
             bg_mat = gfx.MeshBasicMaterial(color="#666666", side="both")
             bg_mat.depth_test = False
             bg_mat.depth_write = False
-            bg_mat.render_queue = 3999
+            bg_mat.render_queue = 4000  # Labels render on top of lines
             bg_plane = gfx.Mesh(bg_geom, bg_mat)
             bg_plane.local.matrix = m
             self._scene.add(bg_plane)
@@ -1307,8 +1360,8 @@ class STLViewerWidget(QWidget):
                 lbl_mat = gfx.TextMaterial(color="#000000")
             lbl_mat.depth_test = False
             lbl_mat.depth_write = False
-            lbl_mat.render_queue = 4000
-            lbl = gfx.Text(text=label_text, material=lbl_mat, font_size=14, anchor="middle-center", screen_space=True)
+            lbl_mat.render_queue = 4100  # Text renders on top of background and lines
+            lbl = gfx.Text(text=label_text, material=lbl_mat, font_size=12, anchor="middle-center", screen_space=True)
             lbl.local.position = label_pos
             self._scene.add(lbl)
             self.measurement_actors.append(lbl)
@@ -1344,7 +1397,7 @@ class STLViewerWidget(QWidget):
             positions = np.array([p1, p2], dtype=np.float32)
             geom = gfx.Geometry(positions=positions)
             mat = gfx.LineMaterial(color="#000000", thickness=line_thickness, depth_test=False, depth_write=False)
-            mat.render_queue = 4000
+            mat.render_queue = 3000  # Preview line renders behind labels
             line_obj = gfx.Line(geom, mat)
             self._scene.add(line_obj)
             self._preview_line_obj = line_obj
@@ -1540,25 +1593,30 @@ class STLViewerWidget(QWidget):
         logger.info("disable_annotation_mode (pygfx): Annotation mode disabled")
 
     def _annotation_event_filter_impl(self, obj, event):
-        """Handle annotation mode events. Only intercept left clicks for picking."""
+        """Handle annotation mode events. Only intercept left clicks that hit the mesh.
+        Clicks on empty space pass through so user can rotate by dragging.
+        """
         if not self.annotation_mode or self._canvas is None:
             return False
         t = event.type()
         if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
             pos = event.pos()
-            self._on_annotation_click(pos.x(), pos.y())
-            return True  # Consume click so it doesn't rotate
-        return False  # Let other events (wheel zoom, right-click rotate) pass through
+            picked = self._on_annotation_click(pos.x(), pos.y())
+            # Only consume when we picked a point (mesh hit); otherwise let TrackballController rotate
+            return picked
+        return False  # Let other events (wheel zoom, right-click, drag in empty space) pass through
 
     def _on_annotation_click(self, x, y):
-        """Handle left click in annotation mode: raycast against mesh to pick surface point."""
+        """Handle left click in annotation mode: raycast against mesh to pick surface point.
+        Returns True if a point was picked (annotation added), False otherwise (e.g. clicked empty space).
+        """
         if not self.annotation_mode or self._annotation_trimesh is None:
-            return
+            return False
 
         # Build ray from screen coords
         ray_origin, ray_direction = self._screen_to_ray(x, y)
         if ray_origin is None:
-            return
+            return False
 
         try:
             import trimesh
@@ -1568,8 +1626,8 @@ class STLViewerWidget(QWidget):
                 ray_directions=[ray_direction],
             )
             if len(locations) == 0:
-                logger.info(f"_on_annotation_click: No hit at ({x}, {y})")
-                return
+                logger.debug(f"_on_annotation_click: No hit at ({x}, {y}) - pass through for rotate")
+                return False
 
             # Pick closest intersection to camera
             cam_pos = np.array(self._camera.local.position)
@@ -1581,9 +1639,11 @@ class STLViewerWidget(QWidget):
 
             if self._annotation_callback is not None:
                 self._annotation_callback(point_tuple)
+            return True
 
         except Exception as e:
             logger.error(f"_on_annotation_click: Raycasting failed: {e}", exc_info=True)
+            return False
 
     def _screen_to_ray(self, x, y):
         """Convert screen (x, y) to a world-space ray (origin, direction). Returns (origin, direction) or (None, None)."""
@@ -1646,17 +1706,16 @@ class STLViewerWidget(QWidget):
             max_dim = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 0.01)
             sphere_radius = max_dim * 0.012
 
-            # Create sphere marker (always on top via depth_test=False)
+            # Create sphere marker - depth_test=True so it is occluded by object when behind
             geom = gfx.sphere_geometry(sphere_radius, 24, 16)
             r, g, b = self._hex_to_rgb_normalized(color)
             mat = gfx.MeshPhongMaterial(
                 color=(r, g, b),
                 specular=(0.6, 0.6, 0.6),
                 shininess=50,
-                depth_test=False,
-                depth_write=False,
+                depth_test=True,
+                depth_write=True,
             )
-            mat.render_queue = 4000  # Always on top
             marker = gfx.Mesh(geom, mat)
             marker.local.position = point
             self._scene.add(marker)
@@ -1664,13 +1723,12 @@ class STLViewerWidget(QWidget):
             # Create numbered label above sphere
             label_offset = sphere_radius * 1.8
             label_pos = (point[0], point[1] + label_offset, point[2])
-            text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+            text_color = self._get_label_color_for_badge(color)
             tr, tg, tb = self._hex_to_rgb_normalized(text_color)
 
             lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
-            lbl_mat.depth_test = False
-            lbl_mat.depth_write = False
-            lbl_mat.render_queue = 4001
+            lbl_mat.depth_test = True
+            lbl_mat.depth_write = True
             label = gfx.Text(
                 text=display_date,
                 material=lbl_mat,
@@ -1801,12 +1859,11 @@ class STLViewerWidget(QWidget):
                         label_offset = sphere_radius * 1.8
                         point = ann['point']
                         label_pos = (point[0], point[1] + label_offset, point[2])
-                        text_color = '#FFFFFF' if self._is_dark_hex_color(color) else '#000000'
+                        text_color = self._get_label_color_for_badge(color)
                         tr, tg, tb = self._hex_to_rgb_normalized(text_color)
                         lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
-                        lbl_mat.depth_test = False
-                        lbl_mat.depth_write = False
-                        lbl_mat.render_queue = 4001
+                        lbl_mat.depth_test = True
+                        lbl_mat.depth_write = True
                         new_label = gfx.Text(text=new_display, material=lbl_mat, font_size=16,
                                              anchor="middle-center", screen_space=True)
                         new_label.local.position = label_pos
@@ -1874,10 +1931,16 @@ class STLViewerWidget(QWidget):
                     logger.warning(f"focus_on_annotation (pygfx): Failed: {e}")
                 break
 
+    def _get_label_color_for_badge(self, badge_color: str) -> str:
+        """Return label text color for contrast. Validated (blue) uses green; other dark badges use white."""
+        if badge_color and badge_color.lower().lstrip('#') == '1821b4':
+            return '#22C55E'  # Green for validated
+        return '#FFFFFF' if self._is_dark_hex_color(badge_color) else '#000000'
+
     def _update_label_color(self, ann: dict, badge_color: str):
         """Update label text color for contrast against badge color."""
         try:
-            text_color = '#FFFFFF' if self._is_dark_hex_color(badge_color) else '#000000'
+            text_color = self._get_label_color_for_badge(badge_color)
             r, g, b = self._hex_to_rgb_normalized(text_color)
             ann['label'].material.color = (r, g, b)
         except Exception:

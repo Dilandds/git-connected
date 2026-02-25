@@ -1,6 +1,21 @@
 """
 Centralized styling and theme definitions for the ECTOFORM application.
 """
+import sys
+from pathlib import Path
+
+
+def _get_assets_dir():
+    """Return path to assets directory (works for dev and PyInstaller)."""
+    if getattr(sys, 'frozen', False):
+        return Path(sys._MEIPASS) / 'assets'
+    return Path(__file__).resolve().parent.parent / 'assets'
+
+
+def _dropdown_arrow_url():
+    """Return file URL for dropdown arrow image (Qt stylesheet image: url())."""
+    p = _get_assets_dir() / 'dropdown_arrow.png'
+    return str(p).replace('\\', '/')
 
 
 class Theme:
@@ -182,11 +197,6 @@ def get_global_stylesheet(theme=None):
             border: 1px solid {theme.border_highlight};
             border-radius: 8px;
         }}
-        QFrame#weightFooter {{
-            background-color: {theme.footer_warning_bg};
-            border: 1px solid {theme.footer_warning_border};
-            border-radius: 6px;
-        }}
         QLabel#weightLabel {{
             color: {theme.text_secondary};
         }}
@@ -206,14 +216,13 @@ def get_global_stylesheet(theme=None):
         }}
         QComboBox#materialCombo::drop-down {{
             border: none;
-            width: 30px;
+            border-left: 1px solid {theme.input_border};
+            width: 32px;
         }}
         QComboBox#materialCombo::down-arrow {{
-            image: none;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid {theme.combobox_arrow};
-            margin-right: 10px;
+            image: url({_dropdown_arrow_url()});
+            width: 14px;
+            height: 14px;
         }}
         QComboBox#materialCombo QAbstractItemView {{
             background-color: {theme.input_bg};

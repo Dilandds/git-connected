@@ -8,24 +8,28 @@ import logging
 from typing import List, Optional
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QScrollArea, QFrame, QWidget, QTextEdit, QFileDialog, QMenu
+    QScrollArea, QFrame, QWidget, QTextEdit, QFileDialog, QMenu,
+    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap, QCursor
+from PyQt5.QtCore import Qt, pyqtSignal, QRectF
+from PyQt5.QtGui import QFont, QPixmap, QCursor, QPainter
 from ui.styles import default_theme
 
 logger = logging.getLogger(__name__)
 
 
 class ImageViewerDialog(QDialog):
-    """Full-size image viewer dialog with download option."""
+    """Zoomable image viewer dialog with mouse wheel zoom, drag to pan, and download option."""
     
     def __init__(self, image_path: str, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)  # Remove ? help button on Windows
         self.image_path = image_path
-        self.setWindowTitle("View Image")
+        self.setWindowTitle("View Image - Scroll to zoom, drag to pan")
         self.setModal(True)
         self.setMinimumSize(600, 500)
+        self._zoom_factor = 1.0
+        self._base_pixmap = None
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
         if not icon.isNull():
@@ -44,44 +48,66 @@ class ImageViewerDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
         
-        # Image container with scroll
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
+        # Zoom controls
+        zoom_layout = QHBoxLayout()
+        zoom_in_btn = QPushButton("➕ Zoom In")
+        zoom_out_btn = QPushButton("➖ Zoom Out")
+        zoom_reset_btn = QPushButton("⟲ Reset")
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px;")
+        for btn in (zoom_in_btn, zoom_out_btn, zoom_reset_btn):
+            btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {default_theme.row_bg_standard};
+                    border: 1px solid {default_theme.border_light};
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    color: {default_theme.text_primary};
+                }}
+                QPushButton:hover {{ background-color: {default_theme.row_bg_hover}; }}
+            """)
+        zoom_in_btn.clicked.connect(lambda: self._zoom(1.25))
+        zoom_out_btn.clicked.connect(lambda: self._zoom(0.8))
+        zoom_reset_btn.clicked.connect(self._reset_zoom)
+        zoom_layout.addWidget(zoom_in_btn)
+        zoom_layout.addWidget(zoom_out_btn)
+        zoom_layout.addWidget(zoom_reset_btn)
+        zoom_layout.addWidget(self.zoom_label)
+        zoom_layout.addStretch()
+        layout.addLayout(zoom_layout)
         
-        # Image label
-        self.img_label = QLabel()
-        self.img_label.setAlignment(Qt.AlignCenter)
-        self.img_label.setStyleSheet("background: transparent;")
+        # Graphics view for zoom/pan
+        self.graphics_view = QGraphicsView()
+        self.graphics_view.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.graphics_view.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.graphics_view.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.graphics_view.setStyleSheet("background: #2a2a2a; border-radius: 4px;")
+        self.scene = QGraphicsScene(self)
+        self.graphics_view.setScene(self.scene)
         
-        # Load image at full size (limited to dialog size)
         if os.path.exists(self.image_path):
-            pixmap = QPixmap(self.image_path)
-            if not pixmap.isNull():
-                # Scale to fit while maintaining aspect ratio
-                max_size = 800
-                if pixmap.width() > max_size or pixmap.height() > max_size:
-                    scaled = pixmap.scaled(
-                        max_size, max_size,
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    )
-                    self.img_label.setPixmap(scaled)
-                else:
-                    self.img_label.setPixmap(pixmap)
-                
-                # Resize dialog to fit image
-                img_width = min(pixmap.width() + 40, 900)
-                img_height = min(pixmap.height() + 100, 700)
-                self.resize(img_width, img_height)
+            self._base_pixmap = QPixmap(self.image_path)
+            if not self._base_pixmap.isNull():
+                self.pixmap_item = QGraphicsPixmapItem(self._base_pixmap)
+                self.scene.addItem(self.pixmap_item)
+                self.scene.setSceneRect(QRectF(self._base_pixmap.rect()))
+                self.graphics_view.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
+                self._zoom_factor = 1.0
+                self.resize(min(self._base_pixmap.width() + 80, 900), min(self._base_pixmap.height() + 140, 750))
             else:
-                self.img_label.setText("❌ Failed to load image")
+                from PyQt5.QtWidgets import QGraphicsTextItem
+                err = QGraphicsTextItem("❌ Failed to load image")
+                self.scene.addItem(err)
         else:
-            self.img_label.setText("❌ Image not found")
+            from PyQt5.QtWidgets import QGraphicsTextItem
+            err = QGraphicsTextItem("❌ Image not found")
+            self.scene.addItem(err)
         
-        scroll.setWidget(self.img_label)
-        layout.addWidget(scroll, 1)
+        layout.addWidget(self.graphics_view, 1)
         
         # File path label
         filename = os.path.basename(self.image_path)
@@ -138,6 +164,39 @@ class ImageViewerDialog(QDialog):
         btn_layout.addWidget(close_btn)
         
         layout.addLayout(btn_layout)
+        
+        if hasattr(self, 'pixmap_item'):
+            self.graphics_view.installEventFilter(self)
+    
+    def eventFilter(self, obj, event):
+        """Handle mouse wheel zoom on graphics view."""
+        from PyQt5.QtCore import QEvent
+        if obj == self.graphics_view and event.type() == QEvent.Wheel and hasattr(self, 'pixmap_item'):
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self._zoom(1.15)
+            else:
+                self._zoom(0.87)
+            return True
+        return super().eventFilter(obj, event)
+    
+    def _zoom(self, factor: float):
+        """Zoom in/out by factor."""
+        if not hasattr(self, 'pixmap_item'):
+            return
+        self._zoom_factor *= factor
+        self._zoom_factor = max(0.25, min(10.0, self._zoom_factor))
+        self.graphics_view.scale(factor, factor)
+        self.zoom_label.setText(f"{int(self._zoom_factor * 100)}%")
+    
+    def _reset_zoom(self):
+        """Reset to fit-in-view."""
+        if not hasattr(self, 'pixmap_item'):
+            return
+        self.graphics_view.resetTransform()
+        self.graphics_view.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
+        self._zoom_factor = 1.0
+        self.zoom_label.setText("100%")
     
     def _download_image(self):
         """Save the image to user-selected location."""
@@ -289,6 +348,7 @@ class AnnotationViewerPopup(QDialog):
                  image_paths: Optional[List[str]] = None, label: str = "Point",
                  created_at=None, display_number: int = None, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)  # Remove ? help button on Windows
         self.annotation_id = annotation_id
         self.point = point
         self.text = text
@@ -367,7 +427,7 @@ class AnnotationViewerPopup(QDialog):
         from ui.annotation_panel import _format_annotation_date
         date_text = _format_annotation_date(self.created_at, include_time=True) if self.created_at and hasattr(self.created_at, 'month') else str(self.annotation_id)
         date_label = QLabel(f"📅 {date_text}")
-        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px;")
         main_layout.addWidget(date_label)
         
         # Comment section

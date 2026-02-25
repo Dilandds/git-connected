@@ -36,6 +36,7 @@ class LicenseDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)  # Remove ? help button on Windows
         self.license_key = None
         self.validation_thread = None
         self.init_ui()

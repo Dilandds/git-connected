@@ -337,33 +337,6 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.weight_density_row)
         card_layout.addWidget(self.weight_result_row)
         
-        # Information footer
-        footer_frame = QFrame()
-        footer_frame.setObjectName("weightFooter")
-        footer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        footer_frame.setMinimumHeight(40)
-        
-        footer_layout = QHBoxLayout(footer_frame)
-        footer_layout.setContentsMargins(10, 8, 10, 8)
-        footer_layout.setSpacing(8)
-        
-        info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet(f"color: {default_theme.icon_warning}; font-size: 12px;")
-        info_icon.setFixedWidth(20)
-        info_icon.setAlignment(Qt.AlignTop)
-        
-        disclaimer = QLabel("Actual Volume Calculated: Weight is estimated by multiplying volume (mm³ → cm³) by material density. Results may vary based on mesh accuracy and material purity.")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
-        disclaimer.setFont(disclaimer_font)
-        disclaimer.setStyleSheet(f"color: {default_theme.icon_warning};")
-        disclaimer.setWordWrap(True)
-        
-        footer_layout.addWidget(info_icon)
-        footer_layout.addWidget(disclaimer)
-        
-        card_layout.addWidget(footer_frame)
-        
         # Add shadow effect
         self._add_card_shadow(card)
         

@@ -213,8 +213,11 @@ class ViewControlsToolbar(QWidget):
     render_mode_changed = pyqtSignal(str)  # 'solid', 'wireframe', 'shaded'
     reset_rotation = pyqtSignal()
     view_front = pyqtSignal()
-    view_side = pyqtSignal()
+    view_rear = pyqtSignal()
+    view_left = pyqtSignal()
+    view_right = pyqtSignal()
     view_top = pyqtSignal()
+    view_bottom = pyqtSignal()
     toggle_fullscreen = pyqtSignal()
     toggle_ruler = pyqtSignal()
     toggle_annotation = pyqtSignal()
@@ -295,15 +298,30 @@ class ViewControlsToolbar(QWidget):
         self.front_btn.setEnabled(False)
         content_layout.addWidget(self.front_btn)
         
-        self.side_btn = ToolbarButton("⊏", "Side", "")
-        self.side_btn.clicked.connect(self._on_side_clicked)
-        self.side_btn.setEnabled(False)
-        content_layout.addWidget(self.side_btn)
+        self.rear_btn = ToolbarButton("⬛", "Rear", "")
+        self.rear_btn.clicked.connect(self._on_rear_clicked)
+        self.rear_btn.setEnabled(False)
+        content_layout.addWidget(self.rear_btn)
+        
+        self.left_btn = ToolbarButton("⊏", "Left", "")
+        self.left_btn.clicked.connect(self._on_left_clicked)
+        self.left_btn.setEnabled(False)
+        content_layout.addWidget(self.left_btn)
+        
+        self.right_btn = ToolbarButton("⊐", "Right", "")
+        self.right_btn.clicked.connect(self._on_right_clicked)
+        self.right_btn.setEnabled(False)
+        content_layout.addWidget(self.right_btn)
         
         self.top_btn = ToolbarButton("⊤", "Top", "")
         self.top_btn.clicked.connect(self._on_top_clicked)
         self.top_btn.setEnabled(False)
         content_layout.addWidget(self.top_btn)
+        
+        self.bottom_btn = ToolbarButton("⊥", "Bottom", "")
+        self.bottom_btn.clicked.connect(self._on_bottom_clicked)
+        self.bottom_btn.setEnabled(False)
+        content_layout.addWidget(self.bottom_btn)
         
         # Spacer between groups
         content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
@@ -396,8 +414,11 @@ class ViewControlsToolbar(QWidget):
         self.stl_loaded = loaded
         self.reset_btn.setEnabled(loaded)
         self.front_btn.setEnabled(loaded)
-        self.side_btn.setEnabled(loaded)
+        self.rear_btn.setEnabled(loaded)
+        self.left_btn.setEnabled(loaded)
+        self.right_btn.setEnabled(loaded)
         self.top_btn.setEnabled(loaded)
+        self.bottom_btn.setEnabled(loaded)
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
@@ -477,13 +498,25 @@ class ViewControlsToolbar(QWidget):
         """Handle front view."""
         self.view_front.emit()
     
-    def _on_side_clicked(self):
-        """Handle side view."""
-        self.view_side.emit()
+    def _on_rear_clicked(self):
+        """Handle rear view."""
+        self.view_rear.emit()
+    
+    def _on_left_clicked(self):
+        """Handle left view."""
+        self.view_left.emit()
+    
+    def _on_right_clicked(self):
+        """Handle right view."""
+        self.view_right.emit()
     
     def _on_top_clicked(self):
         """Handle top view."""
         self.view_top.emit()
+    
+    def _on_bottom_clicked(self):
+        """Handle bottom view."""
+        self.view_bottom.emit()
     
     def _on_ruler_clicked(self):
         """Handle ruler toggle."""

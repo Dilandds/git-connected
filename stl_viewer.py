@@ -258,8 +258,11 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.render_mode_changed.connect(self._set_render_mode)
         self.toolbar.reset_rotation.connect(self._reset_rotation)
         self.toolbar.view_front.connect(self._view_front)
-        self.toolbar.view_side.connect(self._view_side)
+        self.toolbar.view_rear.connect(self._view_rear)
+        self.toolbar.view_left.connect(self._view_left)
+        self.toolbar.view_right.connect(self._view_right)
         self.toolbar.view_top.connect(self._view_top)
+        self.toolbar.view_bottom.connect(self._view_bottom)
         self.toolbar.toggle_fullscreen.connect(self._toggle_fullscreen)
         self.toolbar.toggle_ruler.connect(self._toggle_ruler_mode)
         self.toolbar.toggle_annotation.connect(self._toggle_annotation_mode)
@@ -476,7 +479,7 @@ class STLViewerWindow(QMainWindow):
                     # Shaded: silvery metallic look, no wires, shiny silver grey and black
                     prop.SetRepresentationToSurface()
                     prop.EdgeVisibilityOff()  # No wireframe edges
-                    prop.SetInterpolationToGouraud()  # Smooth shading across faces
+                    prop.SetInterpolationToFlat()  # Flat shading for sharp edges
                     prop.SetColor(0.72, 0.72, 0.76)  # Silver grey
                     prop.SetAmbient(0.25)   # Darker ambient for pronounced shadows
                     prop.SetDiffuse(0.55)   # Moderate diffuse
@@ -485,7 +488,7 @@ class STLViewerWindow(QMainWindow):
                 else:  # solid - unchanged from default
                     prop.SetRepresentationToSurface()
                     prop.EdgeVisibilityOff()
-                    prop.SetInterpolationToGouraud()  # Smooth shading across faces
+                    prop.SetInterpolationToFlat()  # Flat shading for sharp edges
                     prop.SetColor(0.68, 0.85, 0.90)  # Restore lightblue
                     prop.SetAmbient(0.7)
                     prop.SetDiffuse(0.4)
@@ -510,13 +513,28 @@ class STLViewerWindow(QMainWindow):
             except Exception as e:
                 logger.warning(f"Could not reset rotation: {e}")
     
+    def _sync_ruler_toolbar_view(self, view_name):
+        """Sync ruler toolbar active button when view changes from main toolbar."""
+        if self.toolbar.ruler_mode_enabled and self.ruler_toolbar.isVisible():
+            self.ruler_toolbar._update_view_buttons(view_name)
+
+    def _ensure_ruler_mode_for_view(self):
+        """If not in ruler mode, enable it so 6 views use orthographic projection."""
+        if not self.toolbar.ruler_mode_enabled and hasattr(self.viewer_widget, 'enable_ruler_mode'):
+            success = self.viewer_widget.enable_ruler_mode()
+            if success:
+                self.toolbar.ruler_mode_enabled = True
+                self.toolbar.ruler_btn.set_active(True)
+                self.toolbar.ruler_btn.set_icon("📐")
+                self.toolbar.ruler_btn.set_label("Ruler")
+                self.ruler_toolbar.show()
+
     def _view_front(self):
-        """Set camera to front view."""
-        if hasattr(self.viewer_widget, 'view_front'):
-            try:
-                self.viewer_widget.view_front()
-            except Exception as e:
-                logger.warning(f"Could not set front view (pygfx): {e}")
+        """Set camera to front orthographic view."""
+        if hasattr(self.viewer_widget, 'view_front_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_front_ortho()
+            self._sync_ruler_toolbar_view("front")
             return
         if hasattr(self.viewer_widget, 'plotter') and self.viewer_widget.plotter is not None:
             try:
@@ -524,33 +542,46 @@ class STLViewerWindow(QMainWindow):
             except Exception as e:
                 logger.warning(f"Could not set front view: {e}")
     
-    def _view_side(self):
-        """Set camera to side view."""
-        if hasattr(self.viewer_widget, 'view_side'):
-            try:
-                self.viewer_widget.view_side()
-            except Exception as e:
-                logger.warning(f"Could not set side view (pygfx): {e}")
-            return
-        if hasattr(self.viewer_widget, 'plotter') and self.viewer_widget.plotter is not None:
-            try:
-                self.viewer_widget.plotter.view_xz()
-            except Exception as e:
-                logger.warning(f"Could not set side view: {e}")
+    def _view_rear(self):
+        """Set camera to rear orthographic view."""
+        if hasattr(self.viewer_widget, 'view_rear_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_rear_ortho()
+            self._sync_ruler_toolbar_view("rear")
+    
+    def _view_left(self):
+        """Set camera to left orthographic view."""
+        if hasattr(self.viewer_widget, 'view_left_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_left_ortho()
+            self._sync_ruler_toolbar_view("left")
+    
+    def _view_right(self):
+        """Set camera to right orthographic view."""
+        if hasattr(self.viewer_widget, 'view_right_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_right_ortho()
+            self._sync_ruler_toolbar_view("right")
     
     def _view_top(self):
-        """Set camera to top view."""
-        if hasattr(self.viewer_widget, 'view_top'):
-            try:
-                self.viewer_widget.view_top()
-            except Exception as e:
-                logger.warning(f"Could not set top view (pygfx): {e}")
+        """Set camera to top orthographic view."""
+        if hasattr(self.viewer_widget, 'view_top_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_top_ortho()
+            self._sync_ruler_toolbar_view("top")
             return
         if hasattr(self.viewer_widget, 'plotter') and self.viewer_widget.plotter is not None:
             try:
                 self.viewer_widget.plotter.view_xy()
             except Exception as e:
                 logger.warning(f"Could not set top view: {e}")
+    
+    def _view_bottom(self):
+        """Set camera to bottom orthographic view."""
+        if hasattr(self.viewer_widget, 'view_bottom_ortho'):
+            self._ensure_ruler_mode_for_view()
+            self.viewer_widget.view_bottom_ortho()
+            self._sync_ruler_toolbar_view("bottom")
     
     # ========== Ruler Mode Methods ==========
     
