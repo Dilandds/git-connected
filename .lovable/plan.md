@@ -1,124 +1,77 @@
 
-
-# Custom ECTOFORM File Format (.ecto)
+# Multi-Tab Support for ECTOFORM
 
 ## Overview
+Add a tab bar to the main window so users can open multiple 3D files simultaneously, each in its own tab with independent viewer, sidebar data, and annotations.
 
-This plan introduces a new **`.ecto`** file format - a single, self-contained file that bundles the 3D model, annotations, and attached images. Only ECTOFORM can open this format, making it the perfect solution for sharing annotated 3D models.
-
-## The Solution: `.ecto` Format
-
-The `.ecto` format is essentially a **renamed ZIP archive** with a specific internal structure. This approach is:
-
-- **Simple to implement** - Uses Python's built-in `zipfile` module
-- **Self-contained** - One file contains everything
-- **Reliable** - ZIP is a battle-tested format
-- **Transparent to users** - They just see a single `.ecto` file
+## Architecture
 
 ```text
-MyModel.ecto (internally a ZIP archive)
-├── manifest.json          # Metadata + format version
-├── model.stl              # The 3D geometry (or .obj, etc.)
-├── annotations.json       # Annotation data with reader_mode flag
-└── images/                # Folder with attached photos
-    ├── annotation_1_photo_1.jpg
-    └── annotation_2_photo_1.png
++----------------------------------------------------------+
+| ECTOFORM - Tab Bar                                        |
+| [Model1.stl  x] [Model2.step  x] [+]                    |
++----------------------------------------------------------+
+| Sidebar  |  Toolbar                                       |
+|          |  Ruler Toolbar (if active)                     |
+|          +-----------------------------------------------+
+|          |  3D Viewer + Annotation Panel                  |
+|          |  (per-tab content)                             |
++----------------------------------------------------------+
 ```
 
-## Workflow
+## Implementation Plan
 
-```text
-+---------------------------+     +---------------------------+
-|  User A: Create & Export  |     |  User B: Open .ecto File  |
-+---------------------------+     +---------------------------+
-           |                                   |
-           v                                   v
-  Load 3D file (any format)       Double-click or File > Open
-           |                                   |
-           v                                   v
-  Add annotations + photos        ECTOFORM extracts to temp
-           |                                   |
-           v                                   v
-  Click "Export as .ecto"         Loads model + annotations
-           |                                   |
-           v                                   v
-  Single MyModel.ecto file        Auto-enables Reader Mode
-  ready to share!                 (view-only annotations)
-+---------------------------+     +---------------------------+
-```
+### 1. Create a Tab Data class to hold per-tab state
+- Create a dataclass or simple class (`TabState`) that stores:
+  - `file_path` -- the loaded file
+  - `viewer_widget` -- its own `STLViewerWidget` instance
+  - `annotation_panel` -- its own `AnnotationPanel` instance
+  - `sidebar_data` -- cached mesh data / dimensions for restoring sidebar
+  - `annotations` -- list of annotations
+  - `ruler_active` / `annotation_mode_active` -- mode flags
+  - `mesh` reference
 
-## What You'll Get
+### 2. Add QTabBar to the right container
+- Insert a `QTabBar` above the toolbar in the right panel layout
+- Style it to match the dark ECTOFORM theme
+- Each tab shows the filename with a close button
+- A "+" button at the end to open a new file
+- When no files are loaded, show a single "Untitled" tab with the drop zone
 
-1. **Single file sharing** - No more ZIP + unzip workflow
-2. **All data bundled** - Model, annotations, and photos in one file
-3. **Auto Reader Mode** - Recipients see annotations but can't edit
-4. **Native OS integration** - Can register `.ecto` extension on Windows/macOS
-5. **Any source format** - Works with STL, STEP, OBJ, IGES, 3DM inputs
+### 3. Refactor STLViewerWindow to manage multiple tabs
+- Replace the single `self.viewer_widget` with a `QStackedWidget` that holds one viewer per tab
+- Maintain a list of `TabState` objects (`self.tabs`)
+- Track `self.current_tab_index`
+- When switching tabs:
+  - Save current tab's mode states (ruler, annotation)
+  - Hide current viewer, show new tab's viewer
+  - Update sidebar panel with the new tab's mesh data
+  - Update toolbar state (loaded filename, enabled controls)
+  - Restore ruler/annotation mode if it was active on that tab
+
+### 4. Modify file loading to create new tabs
+- `upload_stl_file()` and `_load_dropped_file()`: instead of replacing the current model, create a new tab with a fresh `STLViewerWidget` and load the file into it
+- If the current tab is empty (no file loaded), reuse it instead of creating a new tab
+- Connect all signals (drag-drop, click-to-upload, etc.) for each new viewer widget
+
+### 5. Add tab close functionality
+- Close button on each tab removes the tab, destroys its viewer widget, and cleans up state
+- If the last tab is closed, create a new empty tab with the drop zone
+- Prompt to save unsaved annotations before closing a tab
+
+### 6. Update sidebar to reflect active tab
+- When switching tabs, call `self.sidebar_panel.update_dimensions()` with the active tab's cached mesh data
+- Clear sidebar if switching to an empty tab
 
 ## Technical Details
 
-### 1. ECTO Format Handler
+### Files to modify:
+- **`stl_viewer.py`** -- Major refactor: add `QTabBar`, `QStackedWidget`, `TabState` management, modify all file-loading and mode-toggling methods to be tab-aware
+- **`ui/styles.py`** -- Add tab bar styling to match the ECTOFORM theme
 
-File: `core/ecto_format.py`:
-
-```text
-class EctoFormat:
-    @staticmethod
-    def export(mesh, annotations, output_path, source_format='stl'):
-        """
-        Create .ecto bundle:
-        1. Create temp directory
-        2. Save mesh as model.{format}
-        3. Create annotations.json with reader_mode=True
-        4. Copy all attached images to images/
-        5. Create manifest.json with metadata
-        6. ZIP everything into output_path
-        7. Cleanup temp directory
-        """
-    
-    @staticmethod
-    def import_ecto(ecto_path):
-        """
-        Open .ecto bundle:
-        1. Extract to temp directory
-        2. Read manifest.json for format info
-        3. Return (model_path, annotations, reader_mode)
-        """
-    
-    @staticmethod
-    def is_ecto_file(file_path):
-        """Check if file is a valid .ecto format"""
-```
-
-### 2. Manifest Structure
-
-```text
-{
-    "format_version": "1.0",
-    "created_by": "ECTOFORM",
-    "created_at": "2025-02-08T12:00:00Z",
-    "model_file": "model.stl",
-    "model_format": "stl",
-    "reader_mode": true,
-    "annotation_count": 5,
-    "has_images": true
-}
-```
-
-## Implementation Status: ✅ COMPLETE
-
-| File | Status |
-|------|--------|
-| `core/ecto_format.py` | ✅ Created |
-| `stl_viewer.py` | ✅ Updated - .efm support in file dialogs and loading |
-| `ui/sidebar_panel.py` | ✅ Updated - Export as .efm button |
-
-## Advantages Over Alternatives
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **ZIP bundle** | Standard format | Requires manual unzip |
-| **glTF/GLB extras** | Industry standard | Complex, limited metadata |
-| **Custom binary** | Compact | Hard to debug, version issues |
-| **`.efm` (ZIP-based)** | Single file, easy to implement, debuggable | ECTOFORM-only (which is the goal!) |
-
+### Key considerations:
+- Each tab gets its own `STLViewerWidget` instance (pygfx context), which may use significant GPU memory -- this is acceptable for a desktop app but worth noting
+- Annotation state is per-tab, so switching tabs must save/restore annotations
+- Ruler mode measurements are per-tab
+- The sidebar panel is shared but updates its content based on the active tab
+- Window title updates to show the active tab's filename
