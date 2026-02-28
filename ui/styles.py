@@ -393,6 +393,47 @@ def get_global_stylesheet(theme=None):
             background-color: {theme.button_primary};
             color: {theme.text_white};
         }}
+        /* ---- Tab Bar Styling ---- */
+        QTabBar#ectoTabBar {{
+            background: {theme.background};
+            border: none;
+            border-bottom: 1px solid {theme.border_standard};
+        }}
+        QTabBar#ectoTabBar::tab {{
+            background: {theme.button_default_bg};
+            color: {theme.text_secondary};
+            border: 1px solid {theme.border_standard};
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            padding: 6px 18px;
+            margin-right: 2px;
+            font-size: 12px;
+            font-family: {FONTS['family']};
+            min-width: 80px;
+        }}
+        QTabBar#ectoTabBar::tab:selected {{
+            background: {theme.card_background};
+            color: {theme.text_primary};
+            font-weight: bold;
+            border-bottom: 2px solid {theme.button_primary};
+        }}
+        QTabBar#ectoTabBar::tab:hover:!selected {{
+            background: {theme.row_bg_hover};
+        }}
+        QTabBar#ectoTabBar::tab:last {{
+            /* "+" tab styling */
+            min-width: 32px;
+            padding: 6px 10px;
+            font-weight: bold;
+            font-size: 16px;
+            color: {theme.text_secondary};
+        }}
+        QTabBar#ectoTabBar::close-button {{
+            image: none;
+            subcontrol-position: right;
+            padding: 2px;
+        }}
     """
 
 
