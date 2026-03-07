@@ -16,89 +16,7 @@ from ui.drop_zone_overlay import DropZoneOverlay
 logger = logging.getLogger(__name__)
 
 
-def _get_xyz_gizmo_path():
-    """Return path to xyz_gizmo.png (handles PyInstaller frozen bundle)."""
-    if getattr(sys, 'frozen', False):
-        base = Path(sys._MEIPASS)
-    else:
-        base = Path(__file__).resolve().parent
-    return base / 'assets' / 'xyz_gizmo.png'
-
-
-class OrientationGizmoWidget(QWidget):
-    """Interactive XYZ axes gizmo for rotating the 3D view in annotation mode.
-    Click and drag to rotate the camera. Uses XYZ axes image or draws fallback.
-    """
-    rotation_delta = pyqtSignal(float, float)  # dx, dy in pixels
-
-    SIZE = 72
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(self.SIZE, self.SIZE)
-        self.setCursor(Qt.OpenHandCursor)
-        self.setToolTip("Drag to rotate view")
-        self._drag_start = None
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        path = _get_xyz_gizmo_path()
-        self._gizmo_pixmap = QPixmap(str(path)) if path.exists() else None
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_start = event.pos()
-            self.setCursor(Qt.ClosedHandCursor)
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._drag_start is not None and event.buttons() & Qt.LeftButton:
-            delta = event.pos() - self._drag_start
-            self.rotation_delta.emit(float(delta.x()), float(delta.y()))
-            self._drag_start = event.pos()
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_start = None
-            self.setCursor(Qt.OpenHandCursor)
-        super().mouseReleaseEvent(event)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        w, h = self.width(), self.height()
-        if self._gizmo_pixmap and not self._gizmo_pixmap.isNull():
-            scaled = self._gizmo_pixmap.scaled(
-                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            x = (w - scaled.width()) // 2
-            y = (h - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
-        else:
-            self._paint_xyz_fallback(painter, w, h)
-        painter.end()
-
-    def _paint_xyz_fallback(self, painter, w, h):
-        """Draw XYZ axes when image is not available."""
-        cx, cy = w / 2, h / 2
-        s = min(w, h) * 0.32
-        def pt(x, y):
-            return QPointF(x, y)
-        # X axis - red, left
-        painter.setPen(QPen(QColor("#E53935"), 2.5))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawLine(pt(cx, cy), pt(cx - s, cy + s * 0.3))
-        # Y axis - green, down-right
-        painter.setPen(QPen(QColor("#43A047"), 2.5))
-        painter.drawLine(pt(cx, cy), pt(cx + s * 0.5, cy + s * 0.7))
-        # Z axis - blue, up
-        painter.setPen(QPen(QColor("#1E88E5"), 2.5))
-        painter.drawLine(pt(cx, cy), pt(cx, cy - s))
-        # Center circle (orange)
-        painter.setBrush(QBrush(QColor("#FF9800")))
-        painter.setPen(QPen(QColor("#FFFFFF"), 1.5))
-        painter.drawEllipse(QRectF(cx - 4, cy - 4, 8, 8))
+from ui.orientation_gizmo import OrientationGizmoWidget
 
 
 def _trimesh_to_pyvista(tm):
@@ -347,6 +265,7 @@ class STLViewerWidget(QWidget):
 
             def animate():
                 if self._renderer and self._scene and self._camera:
+                    self._update_annotation_label_visibility()
                     self._renderer.render(self._scene, self._camera)
 
             self._canvas.request_draw(animate)
@@ -1556,13 +1475,14 @@ class STLViewerWidget(QWidget):
         return True
 
     def _on_gizmo_rotate(self, dx: float, dy: float):
-        """Handle drag on orientation gizmo - rotate the camera."""
+        """Handle drag on orientation gizmo - rotate the camera (matches main canvas drag direction)."""
         if self._controller is None or self._canvas is None:
             return
         try:
             # Convert pixel delta to radians (match TrackballController sensitivity)
+            # Use (dx, dy) so gizmo drag direction matches main canvas rotation
             scale = 0.005
-            delta = (-dx * scale, -dy * scale)
+            delta = (dx * scale, dy * scale)
             try:
                 w, h = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self._canvas.width(), self._canvas.height())
             except Exception:
@@ -1644,6 +1564,43 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             logger.error(f"_on_annotation_click: Raycasting failed: {e}", exc_info=True)
             return False
+
+    def _is_dot_visible(self, point) -> bool:
+        """Return True if the annotation point is not occluded by the mesh (ray from camera to dot)."""
+        if self._annotation_trimesh is None or self._camera is None:
+            return True
+        try:
+            cam_pos = np.array(self._camera.local.position)
+            pt = np.array(point, dtype=np.float64)
+            direction = pt - cam_pos
+            dist_to_dot = np.linalg.norm(direction)
+            if dist_to_dot < 1e-9:
+                return True
+            direction = direction / dist_to_dot
+            locations, _, _ = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[cam_pos],
+                ray_directions=[direction],
+            )
+            if len(locations) == 0:
+                return True
+            dists = np.linalg.norm(np.asarray(locations) - cam_pos, axis=1)
+            closest = float(np.min(dists))
+            if closest < dist_to_dot - 1e-6:
+                return False
+            return True
+        except Exception:
+            return True
+
+    def _update_annotation_label_visibility(self):
+        """Update each annotation label's visibility: hide when dot is occluded by mesh."""
+        if not self.annotations or self._annotation_trimesh is None:
+            return
+        for ann in self.annotations:
+            try:
+                visible = self._is_dot_visible(ann['point'])
+                ann['label'].visible = visible
+            except Exception:
+                pass
 
     def _screen_to_ray(self, x, y):
         """Convert screen (x, y) to a world-space ray (origin, direction). Returns (origin, direction) or (None, None)."""
@@ -1727,8 +1684,9 @@ class STLViewerWidget(QWidget):
             tr, tg, tb = self._hex_to_rgb_normalized(text_color)
 
             lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
-            lbl_mat.depth_test = True
-            lbl_mat.depth_write = True
+            lbl_mat.depth_test = False
+            lbl_mat.depth_write = False
+            lbl_mat.render_queue = 4000  # Always on top - numbers never covered by geometry
             label = gfx.Text(
                 text=display_date,
                 material=lbl_mat,
@@ -1862,8 +1820,9 @@ class STLViewerWidget(QWidget):
                         text_color = self._get_label_color_for_badge(color)
                         tr, tg, tb = self._hex_to_rgb_normalized(text_color)
                         lbl_mat = gfx.TextMaterial(color=(tr, tg, tb))
-                        lbl_mat.depth_test = True
-                        lbl_mat.depth_write = True
+                        lbl_mat.depth_test = False
+                        lbl_mat.depth_write = False
+                        lbl_mat.render_queue = 4000  # Always on top - numbers never covered by geometry
                         new_label = gfx.Text(text=new_display, material=lbl_mat, font_size=16,
                                              anchor="middle-center", screen_space=True)
                         new_label.local.position = label_pos

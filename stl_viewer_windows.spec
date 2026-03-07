@@ -116,6 +116,11 @@ a = Analysis(
         'ui.license_dialog',
         'core.mesh_calculator',
         'core.license_validator',
+        'core.image_utils',
+        # HEIC (iPhone) to JPEG conversion in annotation mode
+        'PIL',
+        'PIL.Image',
+        'pillow_heif',
         # Standard library modules that might be missed
         'logging',
         'pathlib',

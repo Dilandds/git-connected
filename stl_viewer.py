@@ -189,10 +189,10 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.setMovable(False)
         self.tab_bar.setExpanding(False)
         self.tab_bar.setDrawBase(False)
-        self.tab_bar.currentChanged.connect(self._on_tab_changed)
         self.tab_bar.tabCloseRequested.connect(self._on_tab_close_requested)
-        # Add "+" button as the last tab
+        # Add "+" button as the last tab (before connecting currentChanged so signal doesn't fire before _plus_tab_index exists)
         self._plus_tab_index = self.tab_bar.addTab("+")
+        self.tab_bar.currentChanged.connect(self._on_tab_changed)
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.RightSide, None)
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.LeftSide, None)
         self.right_layout.addWidget(self.tab_bar)

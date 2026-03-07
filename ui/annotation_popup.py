@@ -330,17 +330,22 @@ class AnnotationPopup(QDialog):
         main_layout.addLayout(btn_layout)
     
     def _add_photo(self):
-        """Open file dialog to add a photo."""
+        """Open file dialog to add a photo. HEIC (iPhone) files are auto-converted to JPEG."""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Photos",
             "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif);;All Files (*)"
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.heic *.heif);;All Files (*)"
         )
         
+        from core.image_utils import ensure_image_readable
         for path in file_paths:
-            if path and path not in self.image_paths:
-                self.image_paths.append(path)
+            if not path:
+                continue
+            # Convert HEIC to JPEG if needed
+            usable_path = ensure_image_readable(path)
+            if usable_path and usable_path not in self.image_paths:
+                self.image_paths.append(usable_path)
         
         self._refresh_thumbnails()
     

@@ -10,6 +10,7 @@ from pyvistaqt import QtInteractor
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout, QGridLayout, QFrame
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.drop_zone_overlay import DropZoneOverlay
+from ui.orientation_gizmo import OrientationGizmoWidget
 
 # Set PyVista environment variables for macOS compatibility
 os.environ.setdefault('PYVISTA_OFF_SCREEN', 'false')
@@ -69,20 +70,27 @@ class STLViewerWidget(QWidget):
         self.drop_overlay.error_occurred.connect(self._on_drop_error)
         self.layout.addWidget(self.drop_overlay)
         
-        # Object control label overlay (shown above gizmo in annotation mode)
+        # Object control overlay (gizmo + label, shown in annotation mode)
         self._object_control_overlay = QFrame()
-        self._object_control_overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self._object_control_overlay.setStyleSheet("background: transparent;")
+        self._object_control_overlay.setStyleSheet(
+            "background-color: rgba(255,255,255,0.85); border-radius: 6px; border: 1px solid #ddd;"
+        )
         overlay_layout = QVBoxLayout(self._object_control_overlay)
-        overlay_layout.setContentsMargins(0, 0, 24, 85)  # Right, bottom (above gizmo, no overlap)
-        overlay_layout.setAlignment(Qt.AlignRight | Qt.AlignBottom)
+        overlay_layout.setContentsMargins(6, 6, 6, 6)
+        overlay_layout.setSpacing(4)
         self._object_control_label = QLabel("3D control")
         self._object_control_label.setStyleSheet(
             "color: #000000; font-size: 10px; font-weight: 500; background: transparent;"
         )
-        overlay_layout.addWidget(self._object_control_label, 0, Qt.AlignRight)
+        overlay_layout.addWidget(self._object_control_label, 0, Qt.AlignCenter)
+        self._orientation_gizmo = OrientationGizmoWidget(self._object_control_overlay)
+        overlay_layout.addWidget(self._orientation_gizmo, 0, Qt.AlignCenter)
+        self._object_control_overlay.setFixedSize(
+            OrientationGizmoWidget.SIZE + 20,
+            OrientationGizmoWidget.SIZE + 36
+        )
+        self._orientation_gizmo.rotation_delta.connect(self._on_gizmo_rotate)
         self._object_control_overlay.hide()
-        self.layout.addWidget(self._object_control_overlay)
         
         # Show overlay on top initially
         self.layout.setCurrentWidget(self.drop_overlay)
@@ -114,6 +122,10 @@ class STLViewerWidget(QWidget):
         self._annotation_click_observer_id = None
         self._annotation_picker = None
         self._annotation_callback = None  # Callback when point is picked for annotation
+        self._annotation_visibility_timer = QTimer(self)
+        self._annotation_visibility_timer.setInterval(250)  # Throttled to avoid slowdown during rotation
+        self._annotation_visibility_timer.timeout.connect(self._update_annotation_label_visibility)
+        self._last_visibility_cam_hash = None  # Skip update if camera unchanged
 
         debug_print("STLViewerWidget: Basic initialization complete, QtInteractor will be created after window is shown")
         logger.info("STLViewerWidget: Basic initialization complete, QtInteractor will be created after window is shown")
@@ -205,6 +217,11 @@ class STLViewerWidget(QWidget):
             
             # Add plotter to viewer container layout
             self.viewer_layout.addWidget(self.plotter.interactor, 0, 0)
+            # Add 3D control overlay in bottom-right (on top of plotter)
+            self.viewer_layout.addWidget(
+                self._object_control_overlay, 0, 0, 1, 1,
+                Qt.AlignRight | Qt.AlignBottom
+            )
             QApplication.processEvents()
             
             # Windows: WA_PaintOnScreen=False can reduce black screen during resize/maximize
@@ -1711,60 +1728,25 @@ class STLViewerWidget(QWidget):
         logger.info("disable_annotation_mode: Annotation mode disabled")
     
     def _add_orientation_gizmo(self):
-        """Add camera orientation gizmo - click/drag to rotate the 3D view (gizmo stays fixed)."""
+        """Show custom orientation gizmo overlay (no-op; overlay shown in enable_annotation_mode)."""
+        pass
+
+    def _on_gizmo_rotate(self, dx: float, dy: float):
+        """Handle drag on orientation gizmo - rotate the camera (matches main canvas drag direction)."""
         if self.plotter is None:
             return
         try:
-            if self._orientation_widget is not None:
-                # Re-show if we had hidden it
-                if hasattr(self._orientation_widget, 'SetEnabled'):
-                    self._orientation_widget.SetEnabled(1)
-                return
-            # add_camera_orientation_widget: click on handles to rotate CAMERA (not the gizmo)
-            # vtkOrientationMarkerWidget with interactive=True moves the gizmo - wrong
-            # vtkCameraOrientationWidget rotates the view when you interact - correct
-            self._orientation_widget = self.plotter.add_camera_orientation_widget(animate=True)
-            # Position in bottom-right (VTK representation)
-            rep = self._orientation_widget.GetRepresentation() if hasattr(self._orientation_widget, 'GetRepresentation') else None
-            if rep is not None:
-                if hasattr(rep, 'AnchorToLowerRight'):
-                    rep.AnchorToLowerRight()
-                # Custom colors: red, bright yellow, medium blue (VTK uses RGB 0-1)
-                try:
-                    if hasattr(rep, 'SetXAxisColor'):
-                        rep.SetXAxisColor(1.0, 0.0, 0.0)  # Red #FF0000
-                    if hasattr(rep, 'SetYAxisColor'):
-                        rep.SetYAxisColor(1.0, 1.0, 0.0)  # Bright yellow #FFFF00
-                    if hasattr(rep, 'SetZAxisColor'):
-                        rep.SetZAxisColor(0.0, 0.0, 0.8)  # Medium blue #0000CD (brighter for visibility)
-                    if hasattr(rep, 'SetAxisColor'):
-                        rep.SetAxisColor(0, 1.0, 0.0, 0.0)  # X = red
-                        rep.SetAxisColor(1, 1.0, 1.0, 0.0)  # Y = yellow
-                        rep.SetAxisColor(2, 0.0, 0.0, 0.8)  # Z = blue
-                    if hasattr(rep, 'BuildRepresentation'):
-                        rep.BuildRepresentation()
-                    if hasattr(rep, 'Modified'):
-                        rep.Modified()
-                except Exception as ce:
-                    logger.debug(f"_add_orientation_gizmo: Color customization: {ce}")
-                try:
-                    self.plotter.render()
-                except Exception:
-                    pass
-            logger.info("_add_orientation_gizmo: Camera orientation widget added")
+            scale = 0.5  # degrees per pixel
+            cam = self.plotter.renderer.GetActiveCamera()
+            cam.Azimuth(dx * scale)
+            cam.Elevation(-dy * scale)
+            self.plotter.render()
         except Exception as e:
-            logger.warning(f"_add_orientation_gizmo: Could not add: {e}")
-            self._orientation_widget = None
+            logger.debug(f"_on_gizmo_rotate: {e}")
 
     def _remove_orientation_gizmo(self):
-        """Hide the orientation gizmo (keeps widget for reuse)."""
-        if self._orientation_widget is None:
-            return
-        try:
-            if hasattr(self._orientation_widget, 'SetEnabled'):
-                self._orientation_widget.SetEnabled(0)
-        except Exception as e:
-            logger.debug(f"_remove_orientation_gizmo: {e}")
+        """Hide the orientation gizmo overlay (no-op; overlay hidden in disable_annotation_mode)."""
+        pass
 
     def _install_annotation_click_picking(self) -> bool:
         """Install VTK observer for annotation point picking."""
@@ -2000,7 +1982,7 @@ class STLViewerWidget(QWidget):
                     font_family='arial',
                     bold=True,
                     show_points=False,
-                    always_visible=False,  # Respect depth - occluded when object covers annotation
+                    always_visible=True,  # On top when visible; we hide via SetVisibility when dot occluded
                     name=f'annotation_label_{annotation_id}',
                     reset_camera=False  # Preserve user's zoom/pan
                 )
@@ -2009,6 +1991,7 @@ class STLViewerWidget(QWidget):
                         label_actor.SetPickable(False)  # Don't pick labels
                     except Exception:
                         pass
+                    self._set_actor_always_on_top(label_actor)
             except Exception as e:
                 logger.debug(f"add_annotation_marker: Could not add date label: {e}")
             
@@ -2023,6 +2006,9 @@ class STLViewerWidget(QWidget):
             self.annotation_actors.append(actor)
             if label_actor:
                 self.annotation_actors.append(label_actor)
+            
+            if not self._annotation_visibility_timer.isActive():
+                self._annotation_visibility_timer.start()
             
             self.plotter.render()
             logger.info(f"add_annotation_marker: Added marker id={annotation_id} at {point} with color {color}, date={display_date}")
@@ -2112,6 +2098,8 @@ class STLViewerWidget(QWidget):
                 except Exception as e:
                     logger.debug(f"remove_annotation_marker: Could not remove actor: {e}")
                 self.annotations.pop(i)
+                if not self.annotations:
+                    self._annotation_visibility_timer.stop()
                 self.plotter.render()
                 logger.info(f"remove_annotation_marker: Removed id={annotation_id}")
                 break
@@ -2170,6 +2158,7 @@ class STLViewerWidget(QWidget):
         
         self.annotations = []
         self.annotation_actors = []
+        self._annotation_visibility_timer.stop()
         
         # Keep gizmo visible - user is still in annotation mode and may add more
         try:
@@ -2194,6 +2183,65 @@ class STLViewerWidget(QWidget):
                     logger.warning(f"focus_on_annotation: Failed: {e}")
                 break
     
+    def _is_dot_visible_pyvista(self, point) -> bool:
+        """Return True if the annotation point is not occluded by the mesh."""
+        if self.current_mesh is None or self.plotter is None:
+            return True
+        try:
+            cam_pos = np.array(self.plotter.camera.position)
+            pt = np.array(point, dtype=np.float64)
+            direction = pt - cam_pos
+            dist_to_dot = np.linalg.norm(direction)
+            if dist_to_dot < 1e-9:
+                return True
+            direction = direction / dist_to_dot
+            max_dist = dist_to_dot * 1.1
+            end_pt = cam_pos + direction * max_dist
+            try:
+                points, _ = self.current_mesh.ray_trace(cam_pos, end_pt)
+            except Exception:
+                return True
+            if points is None or points.n_points == 0:
+                return True
+            dists = np.linalg.norm(np.asarray(points.points) - cam_pos, axis=1)
+            closest = float(np.min(dists))
+            if closest < dist_to_dot - 1e-6:
+                return False
+            return True
+        except Exception:
+            return True
+
+    def _update_annotation_label_visibility(self):
+        """Update each annotation label visibility: hide when dot is occluded by mesh."""
+        if not self.annotations or self.plotter is None:
+            return
+        try:
+            cam = self.plotter.camera
+            cam_hash = (tuple(cam.position), tuple(cam.focal_point))
+            if cam_hash == self._last_visibility_cam_hash:
+                return
+            self._last_visibility_cam_hash = cam_hash
+        except Exception:
+            pass
+        changed = False
+        for ann in self.annotations:
+            try:
+                label_actor = ann.get('label_actor')
+                if label_actor is None:
+                    continue
+                visible = self._is_dot_visible_pyvista(ann['point'])
+                new_vis = 1 if visible else 0
+                if label_actor.GetVisibility() != new_vis:
+                    label_actor.SetVisibility(new_vis)
+                    changed = True
+            except Exception:
+                pass
+        if changed:
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
+
     def _replace_annotation_label(self, ann: dict, color: str):
         """Replace the annotation label with one using the given badge color."""
         label_actor = ann.get('label_actor')
@@ -2235,12 +2283,13 @@ class STLViewerWidget(QWidget):
                 font_family='arial',
                 bold=True,
                 show_points=False,
-                always_visible=False,  # Respect depth - occluded when object covers annotation
+                always_visible=True,  # On top when visible; we hide via SetVisibility when dot occluded
                 name=f"annotation_label_{ann['id']}",
                 reset_camera=False
             )
             if new_label:
                 new_label.SetPickable(False)
+                self._set_actor_always_on_top(new_label)
             ann['label_actor'] = new_label
             if new_label and new_label not in self.annotation_actors:
                 self.annotation_actors.append(new_label)
