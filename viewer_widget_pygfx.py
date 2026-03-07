@@ -1976,6 +1976,11 @@ class STLViewerWidget(QWidget):
         self._screenshot_overlay.raise_()
         self._screenshot_overlay.show()
         self.screenshot_mode = True
+        # Show zoom controls (bottom-left) and rotation gizmo (bottom-right)
+        self._zoom_controls_overlay.show()
+        self._zoom_controls_overlay.raise_()
+        self._object_control_overlay.show()
+        self._object_control_overlay.raise_()
         return True
 
     def disable_screenshot_mode(self):
@@ -1983,6 +1988,28 @@ class STLViewerWidget(QWidget):
         self.screenshot_mode = False
         if self._screenshot_overlay is not None:
             self._screenshot_overlay.hide()
+        self._zoom_controls_overlay.hide()
+        # Only hide gizmo if annotation mode is not active
+        if not self.annotation_mode:
+            self._object_control_overlay.hide()
+
+    def _screenshot_zoom(self, factor):
+        """Zoom the camera by the given factor (>1 = zoom in, <1 = zoom out)."""
+        if self._controller is None or self._canvas is None:
+            return
+        try:
+            import pygfx as gfx
+            try:
+                w, h = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self._canvas.width(), self._canvas.height())
+            except Exception:
+                w, h = self._canvas.width(), self._canvas.height()
+            rect = (0, 0, max(1, w), max(1, h))
+            # Use zoom method: positive delta = zoom in
+            delta = factor - 1.0
+            self._controller.zoom((delta, delta), rect)
+            self._canvas.request_draw()
+        except Exception as e:
+            logger.warning(f"_screenshot_zoom: {e}")
 
     def _on_screenshot_region_selected(self, rect):
         """Capture the selected region from the canvas."""
