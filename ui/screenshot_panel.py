@@ -117,14 +117,99 @@ class ScreenshotCard(QFrame):
         layout.addWidget(self.actions_widget)
 
     def _update_thumbnail(self):
-        scaled = self.pixmap.scaled(240, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # Scale to fit the full card width while showing entire image
+        card_width = max(self.width() - 20, 220)
+        scaled = self.pixmap.scaled(card_width, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.thumb_label.setPixmap(scaled)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_thumbnail()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._expanded = not self._expanded
-            self.actions_widget.setVisible(self._expanded)
+            # Check if click is on the thumbnail area → show preview
+            thumb_pos = self.thumb_label.mapFrom(self, event.pos())
+            if self.thumb_label.rect().contains(thumb_pos):
+                self._show_preview()
+            else:
+                self._expanded = not self._expanded
+                self.actions_widget.setVisible(self._expanded)
         super().mousePressEvent(event)
+
+    def _show_preview(self):
+        """Show a full-size preview dialog of the screenshot."""
+        dialog = QDialog(self.window())
+        dialog.setWindowTitle(f"Screenshot {self.index + 1}")
+        dialog.setStyleSheet(f"background-color: {default_theme.card_background};")
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        img_label = QLabel()
+        img_label.setAlignment(Qt.AlignCenter)
+
+        # Scale to fit screen while keeping aspect ratio
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_size = screen.availableGeometry()
+            max_w = int(screen_size.width() * 0.8)
+            max_h = int(screen_size.height() * 0.8)
+        else:
+            max_w, max_h = 1200, 800
+
+        scaled = self.pixmap.scaled(max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        img_label.setPixmap(scaled)
+        layout.addWidget(img_label)
+
+        # Action buttons
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        save_btn = QPushButton("💾  Save")
+        save_btn.setCursor(Qt.PointingHandCursor)
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #D1FAE5; color: #059669;
+                border: 1px solid #A7F3D0; border-radius: 6px;
+                padding: 8px 20px; font-size: 12px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #6EE7B7; }}
+        """)
+        save_btn.clicked.connect(lambda: (self.save_requested.emit(self.index), dialog.accept()))
+        btn_row.addWidget(save_btn)
+
+        delete_btn = QPushButton("🗑  Delete")
+        delete_btn.setCursor(Qt.PointingHandCursor)
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #FEE2E2; color: #DC2626;
+                border: 1px solid #FECACA; border-radius: 6px;
+                padding: 8px 20px; font-size: 12px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #FCA5A5; }}
+        """)
+        delete_btn.clicked.connect(lambda: (dialog.accept(), self.delete_requested.emit(self.index)))
+        btn_row.addWidget(delete_btn)
+
+        close_btn = QPushButton("✕  Close")
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {default_theme.button_default_bg}; color: {default_theme.text_secondary};
+                border: 1px solid {default_theme.button_default_border}; border-radius: 6px;
+                padding: 8px 20px; font-size: 12px;
+            }}
+            QPushButton:hover {{ background-color: {default_theme.row_bg_hover}; }}
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        dialog.resize(scaled.width() + 20, scaled.height() + 60)
+        dialog.exec_()
 
     def update_index(self, new_index: int):
         self.index = new_index
