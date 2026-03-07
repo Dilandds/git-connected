@@ -1927,3 +1927,42 @@ class STLViewerWidget(QWidget):
         g = int(hex_color[2:4], 16) / 255.0
         b = int(hex_color[4:6], 16) / 255.0
         return 0.299 * r + 0.587 * g + 0.114 * b < 0.5
+
+    # ========== Screenshot Mode ==========
+
+    def enable_screenshot_mode(self):
+        """Enable screenshot mode: show overlay for rubber-band selection."""
+        if not self._model_loaded:
+            return False
+        from ui.screenshot_overlay import ScreenshotOverlay
+        if self._screenshot_overlay is None:
+            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container)
+            self._screenshot_overlay.region_selected.connect(self._on_screenshot_region_selected)
+        self._screenshot_overlay.setGeometry(self.viewer_container.rect())
+        self._screenshot_overlay.raise_()
+        self._screenshot_overlay.show()
+        self.screenshot_mode = True
+        return True
+
+    def disable_screenshot_mode(self):
+        """Disable screenshot mode: hide overlay."""
+        self.screenshot_mode = False
+        if self._screenshot_overlay is not None:
+            self._screenshot_overlay.hide()
+
+    def _on_screenshot_region_selected(self, rect):
+        """Capture the selected region from the canvas."""
+        from PyQt5.QtGui import QPixmap
+        # Grab the viewer container (which contains the rendered canvas)
+        full_pixmap = self.viewer_container.grab()
+        cropped = full_pixmap.copy(rect)
+        if self._screenshot_captured_callback:
+            self._screenshot_captured_callback(cropped)
+
+    @property
+    def _screenshot_captured_callback(self):
+        return getattr(self, '_screenshot_cb', None)
+
+    @_screenshot_captured_callback.setter
+    def _screenshot_captured_callback(self, cb):
+        self._screenshot_cb = cb
