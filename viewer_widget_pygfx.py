@@ -159,6 +159,11 @@ class STLViewerWidget(QWidget):
         self._annotation_event_filter_installed = False
         self._annotation_trimesh = None  # trimesh.Trimesh for raycasting
 
+        # Screenshot mode state
+        self.screenshot_mode = False
+        self._screenshot_overlay = None
+        self.screenshot_taken = None  # will be set as pyqtSignal-like callback
+
         # Object control overlay (gizmo + label, shown in annotation mode)
         self._object_control_overlay = QFrame(self.viewer_container)
         self._object_control_overlay.setStyleSheet(
