@@ -615,6 +615,11 @@ class ViewControlsToolbar(QWidget):
         self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(False)
     
+    def reset_screenshot_state(self):
+        """Reset screenshot button state (called when exiting screenshot mode externally)."""
+        self.screenshot_mode_enabled = False
+        self.screenshot_btn.set_active(False)
+    
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (disables annotation button)."""
         if enabled:
