@@ -201,6 +201,9 @@ class STLViewerWidget(QWidget):
             from PyQt5.QtCore import QTimer
             # Defer reframe so layout has settled (fixes object shrinking when viewport changes)
             QTimer.singleShot(50, self.reframe_for_viewport)
+        # Keep screenshot overlay sized to viewer
+        if self._screenshot_overlay is not None and self._screenshot_overlay.isVisible():
+            self._screenshot_overlay.setGeometry(self.viewer_container.rect())
 
     def _init_pygfx(self):
         if self._initialized:
