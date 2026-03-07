@@ -5,7 +5,8 @@ import logging
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFrame, QMessageBox, QFileDialog, QSizePolicy
+    QScrollArea, QFrame, QMessageBox, QFileDialog, QSizePolicy,
+    QDialog, QApplication
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QFont
