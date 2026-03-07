@@ -428,6 +428,7 @@ class ViewControlsToolbar(QWidget):
         self.bottom_btn.setEnabled(loaded)
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
+        self.screenshot_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
     
     def _on_grid_clicked(self):
