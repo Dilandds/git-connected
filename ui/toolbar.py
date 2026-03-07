@@ -343,6 +343,11 @@ class ViewControlsToolbar(QWidget):
         self.annotation_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.annotation_btn)
         
+        self.screenshot_btn = ToolbarButton("📷", "Screenshot", "Capture a region of the 3D view")
+        self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
+        self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.screenshot_btn)
+        
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
