@@ -164,6 +164,32 @@ class STLViewerWidget(QWidget):
         self._screenshot_overlay = None
         self.screenshot_taken = None  # will be set as pyqtSignal-like callback
 
+        # Zoom buttons overlay (shown in screenshot mode) - bottom-left
+        from PyQt5.QtWidgets import QPushButton, QHBoxLayout
+        self._zoom_controls_overlay = QFrame(self.viewer_container)
+        self._zoom_controls_overlay.setStyleSheet(
+            "background-color: rgba(255,255,255,0.85); border-radius: 6px; border: 1px solid #ddd;"
+        )
+        zoom_layout = QHBoxLayout(self._zoom_controls_overlay)
+        zoom_layout.setContentsMargins(4, 4, 4, 4)
+        zoom_layout.setSpacing(4)
+        self._zoom_in_btn = QPushButton("+")
+        self._zoom_out_btn = QPushButton("−")
+        for btn in (self._zoom_in_btn, self._zoom_out_btn):
+            btn.setFixedSize(32, 32)
+            btn.setStyleSheet(
+                "QPushButton { background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; "
+                "font-size: 18px; font-weight: bold; color: #333; }"
+                "QPushButton:hover { background: #e0e0e0; }"
+                "QPushButton:pressed { background: #d0d0d0; }"
+            )
+        zoom_layout.addWidget(self._zoom_out_btn)
+        zoom_layout.addWidget(self._zoom_in_btn)
+        self._zoom_controls_overlay.setFixedSize(80, 40)
+        self._zoom_controls_overlay.hide()
+        self._zoom_in_btn.clicked.connect(lambda: self._screenshot_zoom(1.15))
+        self._zoom_out_btn.clicked.connect(lambda: self._screenshot_zoom(0.85))
+
         # Object control overlay (gizmo + label, shown in annotation mode)
         self._object_control_overlay = QFrame(self.viewer_container)
         self._object_control_overlay.setStyleSheet(
