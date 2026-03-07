@@ -55,10 +55,13 @@ class ScreenshotCard(QFrame):
         header.addWidget(ts_label)
         layout.addLayout(header)
 
-        # Thumbnail
+        # Thumbnail — fit entire image within the card width
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
-        self.thumb_label.setStyleSheet("background: transparent;")
+        self.thumb_label.setStyleSheet("background: transparent; cursor: pointer;")
+        self.thumb_label.setCursor(Qt.PointingHandCursor)
+        self.thumb_label.setMinimumHeight(80)
+        self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._update_thumbnail()
         layout.addWidget(self.thumb_label)
 
