@@ -254,6 +254,11 @@ class STLViewerWidget(QWidget):
                 self._object_control_overlay, 0, 0, 1, 1,
                 Qt.AlignRight | Qt.AlignBottom
             )
+            # Overlay for zoom controls (screenshot mode) - bottom-left corner
+            self.viewer_layout.addWidget(
+                self._zoom_controls_overlay, 0, 0, 1, 1,
+                Qt.AlignLeft | Qt.AlignBottom
+            )
 
             self._renderer = gfx.WgpuRenderer(self._canvas)
             # SSAA for sharp edges (PyVista uses FXAA/SSAA)
