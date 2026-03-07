@@ -44,6 +44,7 @@ from ui.ruler_toolbar import RulerToolbar
 from ui.annotation_panel import AnnotationPanel
 from ui.styles import get_global_stylesheet, default_theme
 from core.mesh_calculator import MeshCalculator
+from ui.screenshot_panel import ScreenshotPanel
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class TabState:
     mesh: Any = None  # current_mesh reference
     ruler_active: bool = False
     annotation_mode_active: bool = False
+    screenshot_mode_active: bool = False
     annotations_exported: bool = False
     ecto_temp_dir: Optional[str] = None
     filename: Optional[str] = None  # display name for tab
@@ -212,15 +214,23 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.addWidget(self.ruler_toolbar)
         logger.info("init_ui: Ruler toolbar created")
         
-        # ---- Stacked widgets for viewers and annotation panels ----
+        # ---- Stacked widgets for viewers and annotation/screenshot panels ----
         self.viewer_stack = QStackedWidget()
         self.annotation_stack = QStackedWidget()
+        self.screenshot_stack = QStackedWidget()
+        self.screenshot_stack.hide()
+        
+        # Shared screenshot panel (one per window, not per tab)
+        self.screenshot_panel = ScreenshotPanel()
+        self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
+        self.screenshot_stack.addWidget(self.screenshot_panel)
         
         viewer_h_layout = QHBoxLayout()
         viewer_h_layout.setContentsMargins(0, 0, 0, 0)
         viewer_h_layout.setSpacing(0)
         viewer_h_layout.addWidget(self.viewer_stack, 1)
         viewer_h_layout.addWidget(self.annotation_stack)
+        viewer_h_layout.addWidget(self.screenshot_stack)
         
         viewer_container = QWidget()
         viewer_container.setLayout(viewer_h_layout)
@@ -369,6 +379,16 @@ class STLViewerWindow(QMainWindow):
             if self.toolbar.annotation_mode_enabled:
                 self.toolbar.reset_annotation_state()
         
+        # Restore screenshot mode
+        if tab.screenshot_mode_active:
+            self.toolbar.screenshot_mode_enabled = True
+            self.toolbar.screenshot_btn.set_active(True)
+            self.screenshot_stack.show()
+            self.screenshot_panel.show()
+        else:
+            if self.toolbar.screenshot_mode_enabled:
+                self._exit_screenshot_mode()
+        
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
     
     def _save_current_tab_state(self):
@@ -378,6 +398,7 @@ class STLViewerWindow(QMainWindow):
             return
         tab.ruler_active = self.toolbar.ruler_mode_enabled
         tab.annotation_mode_active = self.toolbar.annotation_mode_enabled
+        tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
     
     def _on_tab_close_requested(self, index: int):
         """Handle tab close button click."""
@@ -545,6 +566,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.view_bottom.connect(self._view_bottom)
         self.toolbar.toggle_fullscreen.connect(self._toggle_fullscreen)
         self.toolbar.toggle_ruler.connect(self._toggle_ruler_mode)
+        self.toolbar.toggle_screenshot.connect(self._toggle_screenshot_mode)
         self.toolbar.toggle_annotation.connect(self._toggle_annotation_mode)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
@@ -620,6 +642,10 @@ class STLViewerWindow(QMainWindow):
         # Hide annotation panel if visible
         if self.annotation_panel.isVisible():
             self._exit_annotation_mode()
+        
+        # Exit screenshot mode if active
+        if self.toolbar.screenshot_mode_enabled:
+            self._exit_screenshot_mode()
         
         # Reset sidebar panel dimensions and calculations
         self.sidebar_panel.reset_all_data()
@@ -1024,6 +1050,50 @@ class STLViewerWindow(QMainWindow):
             QTimer.singleShot(50, vw.reframe_for_viewport)
         self.toolbar.reset_annotation_state()
         logger.info("_exit_annotation_mode: Annotation mode disabled, annotations kept")
+    
+    # ========== Screenshot Mode Methods ==========
+    
+    def _toggle_screenshot_mode(self):
+        """Toggle screenshot capture mode."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        if self.toolbar.screenshot_mode_enabled:
+            if hasattr(vw, 'enable_screenshot_mode'):
+                success = vw.enable_screenshot_mode()
+                if success:
+                    vw._screenshot_captured_callback = self._on_screenshot_captured
+                    if self.toolbar.ruler_mode_enabled:
+                        self._exit_ruler_mode()
+                    if self.toolbar.annotation_mode_enabled:
+                        self._exit_annotation_mode()
+                    self.screenshot_stack.show()
+                    self.screenshot_panel.show()
+                    if hasattr(vw, 'reframe_for_viewport'):
+                        QTimer.singleShot(50, vw.reframe_for_viewport)
+                    logger.info("_toggle_screenshot_mode: Screenshot mode enabled")
+                else:
+                    self.toolbar.reset_screenshot_state()
+        else:
+            self._exit_screenshot_mode()
+    
+    def _exit_screenshot_mode(self):
+        """Exit screenshot mode."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'disable_screenshot_mode'):
+            vw.disable_screenshot_mode()
+            vw._screenshot_captured_callback = None
+        self.screenshot_panel.hide()
+        self.screenshot_stack.hide()
+        if vw and hasattr(vw, 'reframe_for_viewport'):
+            QTimer.singleShot(50, vw.reframe_for_viewport)
+        self.toolbar.reset_screenshot_state()
+        logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+    
+    def _on_screenshot_captured(self, pixmap):
+        """Handle a captured screenshot from the viewer overlay."""
+        self.screenshot_panel.add_screenshot(pixmap)
+        logger.info("_on_screenshot_captured: Screenshot added to panel")
     
     def _on_annotation_point_picked(self, point: tuple):
         """Handle point picked for annotation - creates gray dot."""
