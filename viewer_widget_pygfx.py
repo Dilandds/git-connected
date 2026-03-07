@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent, QPoint, QPointF, QRectF
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent, QPoint, QPointF, QRectF, QSize
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QPixmap
 from ui.drop_zone_overlay import DropZoneOverlay
 
@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 from ui.orientation_gizmo import OrientationGizmoWidget
+
+
+def _get_zoom_icon_path(filename: str) -> Path:
+    """Return path to zoom icon (handles PyInstaller frozen bundle)."""
+    if getattr(sys, 'frozen', False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parent
+    return base / 'assets' / filename
 
 
 def _trimesh_to_pyvista(tm):
@@ -165,27 +174,42 @@ class STLViewerWidget(QWidget):
         self.screenshot_taken = None  # will be set as pyqtSignal-like callback
 
         # Zoom buttons overlay (shown in screenshot mode) - bottom-left
-        from PyQt5.QtWidgets import QPushButton, QHBoxLayout
+        from PyQt5.QtWidgets import QPushButton, QVBoxLayout, QLabel
+        from PyQt5.QtGui import QIcon
         self._zoom_controls_overlay = QFrame(self.viewer_container)
         self._zoom_controls_overlay.setStyleSheet(
             "background-color: rgba(255,255,255,0.85); border-radius: 6px; border: 1px solid #ddd;"
         )
-        zoom_layout = QHBoxLayout(self._zoom_controls_overlay)
-        zoom_layout.setContentsMargins(4, 4, 4, 4)
+        zoom_layout = QVBoxLayout(self._zoom_controls_overlay)
+        zoom_layout.setContentsMargins(6, 6, 6, 6)
         zoom_layout.setSpacing(4)
-        self._zoom_in_btn = QPushButton("+")
-        self._zoom_out_btn = QPushButton("−")
+        zoom_label = QLabel("Zoom")
+        zoom_label.setStyleSheet("color: #333; font-size: 10px; font-weight: 500; background: transparent;")
+        zoom_layout.addWidget(zoom_label, 0, Qt.AlignCenter)
+        zoom_plus_path = _get_zoom_icon_path("zoom_plus.png")
+        zoom_minus_path = _get_zoom_icon_path("zoom_minus.png")
+        self._zoom_in_btn = QPushButton()
+        self._zoom_out_btn = QPushButton()
+        if zoom_plus_path and zoom_plus_path.exists():
+            self._zoom_in_btn.setIcon(QIcon(str(zoom_plus_path)))
+        else:
+            self._zoom_in_btn.setText("+")
+        if zoom_minus_path and zoom_minus_path.exists():
+            self._zoom_out_btn.setIcon(QIcon(str(zoom_minus_path)))
+        else:
+            self._zoom_out_btn.setText("−")
         for btn in (self._zoom_in_btn, self._zoom_out_btn):
-            btn.setFixedSize(32, 32)
+            btn.setFixedSize(36, 28)
+            btn.setIconSize(QSize(18, 18))
             btn.setStyleSheet(
                 "QPushButton { background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; "
-                "font-size: 18px; font-weight: bold; color: #333; }"
+                "font-size: 16px; font-weight: bold; color: #333; }"
                 "QPushButton:hover { background: #e0e0e0; }"
                 "QPushButton:pressed { background: #d0d0d0; }"
             )
-        zoom_layout.addWidget(self._zoom_out_btn)
         zoom_layout.addWidget(self._zoom_in_btn)
-        self._zoom_controls_overlay.setFixedSize(80, 40)
+        zoom_layout.addWidget(self._zoom_out_btn)
+        self._zoom_controls_overlay.setFixedSize(52, 90)
         self._zoom_controls_overlay.hide()
         self._zoom_in_btn.clicked.connect(lambda: self._screenshot_zoom(1.15))
         self._zoom_out_btn.clicked.connect(lambda: self._screenshot_zoom(0.85))
@@ -2013,10 +2037,20 @@ class STLViewerWidget(QWidget):
 
     def _on_screenshot_region_selected(self, rect):
         """Capture the selected region from the canvas."""
-        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtCore import QRect
         # Grab the viewer container (which contains the rendered canvas)
         full_pixmap = self.viewer_container.grab()
-        cropped = full_pixmap.copy(rect)
+        # Rect from overlay is in logical pixels; pixmap may have device pixel ratio
+        dpr = full_pixmap.devicePixelRatio() if hasattr(full_pixmap, 'devicePixelRatio') else 1.0
+        if dpr > 1.0:
+            device_rect = QRect(
+                int(rect.x() * dpr), int(rect.y() * dpr),
+                int(rect.width() * dpr), int(rect.height() * dpr)
+            )
+            cropped = full_pixmap.copy(device_rect)
+            cropped.setDevicePixelRatio(dpr)
+        else:
+            cropped = full_pixmap.copy(rect)
         if self._screenshot_captured_callback:
             self._screenshot_captured_callback(cropped)
 

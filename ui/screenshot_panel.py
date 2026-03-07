@@ -135,7 +135,8 @@ class ScreenshotPanel(QWidget):
         super().__init__(parent)
         self.screenshots = []  # list of (QPixmap, timestamp_str)
         self.cards = []        # list of ScreenshotCard widgets
-        self.setFixedWidth(280)
+        self.setMinimumWidth(280)
+        self.setMaximumWidth(350)  # Match annotation panel width
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
         self._init_ui()
 
@@ -173,7 +174,9 @@ class ScreenshotPanel(QWidget):
         layout.addLayout(header)
 
         # Instruction
-        self.instruction = QLabel("Draw a rectangle on the 3D view to capture a screenshot.")
+        self.instruction = QLabel(
+            "Draw a rectangle to capture. Use the zoom buttons to zoom."
+        )
         self.instruction.setWordWrap(True)
         self.instruction.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px; background: transparent;")
         layout.addWidget(self.instruction)

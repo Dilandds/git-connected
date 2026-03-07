@@ -218,19 +218,27 @@ class STLViewerWindow(QMainWindow):
         self.viewer_stack = QStackedWidget()
         self.annotation_stack = QStackedWidget()
         self.screenshot_stack = QStackedWidget()
-        self.screenshot_stack.hide()
         
         # Shared screenshot panel (one per window, not per tab)
         self.screenshot_panel = ScreenshotPanel()
         self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
         self.screenshot_stack.addWidget(self.screenshot_panel)
         
+        # Single right panel: only annotation OR screenshot visible at a time (same width)
+        self.right_panel_stack = QStackedWidget()
+        self._right_panel_placeholder = QWidget()
+        self._right_panel_placeholder.setFixedWidth(0)  # No space when neither mode active
+        self.right_panel_stack.addWidget(self._right_panel_placeholder)
+        self.right_panel_stack.addWidget(self.annotation_stack)
+        self.right_panel_stack.addWidget(self.screenshot_stack)
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()  # No blank space when neither mode active
+        
         viewer_h_layout = QHBoxLayout()
         viewer_h_layout.setContentsMargins(0, 0, 0, 0)
         viewer_h_layout.setSpacing(0)
         viewer_h_layout.addWidget(self.viewer_stack, 1)
-        viewer_h_layout.addWidget(self.annotation_stack)
-        viewer_h_layout.addWidget(self.screenshot_stack)
+        viewer_h_layout.addWidget(self.right_panel_stack)
         
         viewer_container = QWidget()
         viewer_container.setLayout(viewer_h_layout)
@@ -333,12 +341,13 @@ class STLViewerWindow(QMainWindow):
         # Update annotation panel visibility
         if tab.annotation_mode_active:
             tab.annotation_panel.show()
-            self.annotation_stack.show()
+            self.right_panel_stack.setCurrentWidget(self.annotation_stack)
+            self.right_panel_stack.show()
         else:
             tab.annotation_panel.hide()
-            # Only hide stack if no annotations visible
-            if not tab.annotation_panel.isVisible():
-                pass  # annotation_stack stays but panel is hidden
+            if not tab.screenshot_mode_active:
+                self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+                self.right_panel_stack.hide()
         
         # Update sidebar with this tab's data
         if tab.sidebar_data and tab.file_path:
@@ -383,11 +392,15 @@ class STLViewerWindow(QMainWindow):
         if tab.screenshot_mode_active:
             self.toolbar.screenshot_mode_enabled = True
             self.toolbar.screenshot_btn.set_active(True)
-            self.screenshot_stack.show()
+            self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
+            self.right_panel_stack.show()
             self.screenshot_panel.show()
         else:
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
+            elif not tab.annotation_mode_active:
+                self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+                self.right_panel_stack.hide()
         
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
     
@@ -1027,7 +1040,11 @@ class STLViewerWindow(QMainWindow):
                     callback=self._on_annotation_point_picked
                 )
                 if success:
+                    if self.toolbar.screenshot_mode_enabled:
+                        self._exit_screenshot_mode()
                     self.annotation_panel.show()
+                    self.right_panel_stack.setCurrentWidget(self.annotation_stack)
+                    self.right_panel_stack.show()
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
                     if hasattr(vw, 'reframe_for_viewport'):
@@ -1046,6 +1063,12 @@ class STLViewerWindow(QMainWindow):
             vw.disable_annotation_mode()
         if self.annotation_panel:
             self.annotation_panel.hide()
+        if self.toolbar.screenshot_mode_enabled:
+            self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
+            self.right_panel_stack.show()
+        else:
+            self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+            self.right_panel_stack.hide()
         if vw and hasattr(vw, 'reframe_for_viewport'):
             QTimer.singleShot(50, vw.reframe_for_viewport)
         self.toolbar.reset_annotation_state()
@@ -1067,7 +1090,8 @@ class STLViewerWindow(QMainWindow):
                         self._exit_ruler_mode()
                     if self.toolbar.annotation_mode_enabled:
                         self._exit_annotation_mode()
-                    self.screenshot_stack.show()
+                    self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
+                    self.right_panel_stack.show()
                     self.screenshot_panel.show()
                     if hasattr(vw, 'reframe_for_viewport'):
                         QTimer.singleShot(50, vw.reframe_for_viewport)
@@ -1084,17 +1108,23 @@ class STLViewerWindow(QMainWindow):
             vw.disable_screenshot_mode()
             vw._screenshot_captured_callback = None
         self.screenshot_panel.hide()
-        self.screenshot_stack.hide()
+        if self.toolbar.annotation_mode_enabled:
+            self.right_panel_stack.setCurrentWidget(self.annotation_stack)
+            self.right_panel_stack.show()
+        else:
+            self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+            self.right_panel_stack.hide()
         if vw and hasattr(vw, 'reframe_for_viewport'):
             QTimer.singleShot(50, vw.reframe_for_viewport)
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+
     
     def _on_screenshot_captured(self, pixmap):
         """Handle a captured screenshot from the viewer overlay."""
         self.screenshot_panel.add_screenshot(pixmap)
         logger.info("_on_screenshot_captured: Screenshot added to panel")
-    
+
     def _on_annotation_point_picked(self, point: tuple):
         """Handle point picked for annotation - creates gray dot."""
         logger.info(f"_on_annotation_point_picked: Point picked at {point}")
