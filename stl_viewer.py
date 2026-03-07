@@ -1036,6 +1036,50 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.reset_annotation_state()
         logger.info("_exit_annotation_mode: Annotation mode disabled, annotations kept")
     
+    # ========== Screenshot Mode Methods ==========
+    
+    def _toggle_screenshot_mode(self):
+        """Toggle screenshot capture mode."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        if self.toolbar.screenshot_mode_enabled:
+            if hasattr(vw, 'enable_screenshot_mode'):
+                success = vw.enable_screenshot_mode()
+                if success:
+                    vw._screenshot_captured_callback = self._on_screenshot_captured
+                    if self.toolbar.ruler_mode_enabled:
+                        self._exit_ruler_mode()
+                    if self.toolbar.annotation_mode_enabled:
+                        self._exit_annotation_mode()
+                    self.screenshot_stack.show()
+                    self.screenshot_panel.show()
+                    if hasattr(vw, 'reframe_for_viewport'):
+                        QTimer.singleShot(50, vw.reframe_for_viewport)
+                    logger.info("_toggle_screenshot_mode: Screenshot mode enabled")
+                else:
+                    self.toolbar.reset_screenshot_state()
+        else:
+            self._exit_screenshot_mode()
+    
+    def _exit_screenshot_mode(self):
+        """Exit screenshot mode."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'disable_screenshot_mode'):
+            vw.disable_screenshot_mode()
+            vw._screenshot_captured_callback = None
+        self.screenshot_panel.hide()
+        self.screenshot_stack.hide()
+        if vw and hasattr(vw, 'reframe_for_viewport'):
+            QTimer.singleShot(50, vw.reframe_for_viewport)
+        self.toolbar.reset_screenshot_state()
+        logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+    
+    def _on_screenshot_captured(self, pixmap):
+        """Handle a captured screenshot from the viewer overlay."""
+        self.screenshot_panel.add_screenshot(pixmap)
+        logger.info("_on_screenshot_captured: Screenshot added to panel")
+    
     def _on_annotation_point_picked(self, point: tuple):
         """Handle point picked for annotation - creates gray dot."""
         logger.info(f"_on_annotation_point_picked: Point picked at {point}")
