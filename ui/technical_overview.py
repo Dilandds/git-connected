@@ -65,6 +65,9 @@ class ImageCanvas(QWidget):
         self._annotation_mode = False
         self._selected_id: Optional[int] = None
         self._hover_id: Optional[int] = None
+        # Two-click annotation state
+        self._pending_target: Optional[Tuple[float, float]] = None  # first click (arrow tip)
+        self._mouse_pos: Optional[QPointF] = None  # for live preview line
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
