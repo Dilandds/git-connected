@@ -375,8 +375,18 @@ class STLViewerWindow(QMainWindow):
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
     def _tech_upload_image(self):
-        """Handle upload request from technical sidebar."""
-        self.technical_overview.upload_image()
+        """Handle upload request from technical sidebar — supports images, PDFs, and .ecto files."""
+        from PyQt5.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Image, PDF, or .ecto File", "",
+            "Supported Files (*.png *.jpg *.jpeg *.bmp *.pdf *.ecto);;Images & PDFs (*.png *.jpg *.jpeg *.bmp *.pdf);;ECTO Files (*.ecto);;All Files (*)"
+        )
+        if not path:
+            return
+        if path.lower().endswith('.ecto'):
+            self._load_technical_ecto(path)
+        else:
+            self.technical_overview.load_image_from_path(path)
     
     def _tech_toggle_annotation(self, enabled: bool):
         """Toggle annotation mode on the technical overview."""
