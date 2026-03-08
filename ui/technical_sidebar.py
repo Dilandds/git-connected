@@ -47,6 +47,7 @@ class TechnicalSidebar(QWidget):
     upload_requested = pyqtSignal()
     export_requested = pyqtSignal()  # Export .ecto
     export_pdf_requested = pyqtSignal()  # Export PDF report
+    reset_requested = pyqtSignal()  # Reset workspace
 
     def __init__(self, parent=None):
         super().__init__(parent)
