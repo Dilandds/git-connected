@@ -385,6 +385,46 @@ class STLViewerWindow(QMainWindow):
         else:
             self.technical_overview.exit_annotation_mode()
 
+    def _tech_export_ecto(self):
+        """Export technical overview as a passcode-protected .ecto file."""
+        doc_path = self.technical_overview.get_document_path()
+        if not doc_path:
+            QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
+            return
+
+        # Ask for passcode
+        from ui.passcode_dialog import PasscodeDialog
+        dlg = PasscodeDialog(mode='set', parent=self)
+        if dlg.exec() != PasscodeDialog.Accepted:
+            return
+        passcode_hash = dlg.get_passcode_hash()
+
+        # Pick save location
+        default_name = Path(doc_path).stem + '.ecto'
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Technical Overview .ecto", default_name,
+            "ECTO Files (*.ecto);;All Files (*)"
+        )
+        if not save_path:
+            return
+
+        from core.ecto_format import EctoFormat
+        annotations = self.technical_overview.get_annotations_data()
+        metadata = self.technical_sidebar.get_metadata()
+
+        success, msg = EctoFormat.export_technical(
+            document_path=doc_path,
+            annotations=annotations,
+            metadata=metadata,
+            output_path=save_path,
+            passcode_hash=passcode_hash,
+        )
+        if success:
+            QMessageBox.information(self, "Export Successful",
+                                    f"Technical overview exported to:\n{msg}")
+        else:
+            QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
+
     # ======================== Tab Management ========================
     
     def _create_new_tab(self, file_path: str = None) -> int:
