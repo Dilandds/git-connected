@@ -78,7 +78,7 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(header)
 
         # Upload button
-        self.upload_btn = QPushButton("📄 Upload Image / PDF")
+        self.upload_btn = QPushButton("📄 Upload Image / PDF / .ecto")
         self.upload_btn.setFixedHeight(34)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(f"""
