@@ -210,6 +210,24 @@ class TechnicalSidebar(QWidget):
         self.annotate_btn.clicked.connect(self._on_annotate_toggled)
         layout.addWidget(self.annotate_btn)
 
+        # Export .ecto button
+        self.export_btn = QPushButton("📦 Export .ecto")
+        self.export_btn.setFixedHeight(34)
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #10B981;
+                border: none; border-radius: 6px;
+                padding: 6px 12px; font-size: 11px; font-weight: bold;
+                color: white;
+            }}
+            QPushButton:hover {{
+                background-color: #059669;
+            }}
+        """)
+        self.export_btn.clicked.connect(lambda: self.export_requested.emit())
+        layout.addWidget(self.export_btn)
+
         layout.addStretch()
 
         scroll.setWidget(container)
