@@ -268,16 +268,11 @@ class TechnicalPDFExporter:
                 img_rect.y() + ann.target_y * img_rect.height(),
             )
 
-            # Origin on the margin side
-            side = getattr(ann, "margin_side", "left")
-            if side == "left":
-                origin = QPointF(img_rect.left() - margin_gap, target.y())
-            elif side == "right":
-                origin = QPointF(img_rect.right() + margin_gap, target.y())
-            elif side == "top":
-                origin = QPointF(target.x(), img_rect.top() - margin_gap)
-            else:
-                origin = QPointF(target.x(), img_rect.bottom() + margin_gap)
+            # Use stored origin coordinates
+            origin = QPointF(
+                img_rect.x() + ann.origin_x * img_rect.width(),
+                img_rect.y() + ann.origin_y * img_rect.height(),
+            )
 
             arrow_color = QColor(getattr(ann, "color", "#5294E2") or "#5294E2")
 
