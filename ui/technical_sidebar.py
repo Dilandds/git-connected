@@ -45,6 +45,7 @@ class TechnicalSidebar(QWidget):
 
     annotate_toggled = pyqtSignal(bool)  # True = enter annotation mode
     upload_requested = pyqtSignal()
+    export_requested = pyqtSignal()  # Export .ecto
 
     def __init__(self, parent=None):
         super().__init__(parent)
