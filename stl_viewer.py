@@ -1784,6 +1784,43 @@ class STLViewerWindow(QMainWindow):
                 f"Failed to open .ecto file:\n{str(e)}"
             )
     
+    def _load_technical_ecto(self, ecto_path: str):
+        """Load a technical-overview .ecto file into the Technical Overview workspace."""
+        from core.ecto_format import EctoFormat
+
+        doc_path, annotations, metadata, passcode_hash, temp_dir = EctoFormat.import_technical(ecto_path)
+        if doc_path is None:
+            QMessageBox.critical(self, "Error", f"Failed to open technical .ecto:\n{temp_dir}")
+            return
+
+        # Switch to technical mode
+        self._switch_mode("technical")
+
+        # Load document + annotations
+        self.technical_overview.load_from_ecto(doc_path, annotations or [], passcode_hash)
+
+        # Load metadata into sidebar
+        if metadata:
+            self.technical_sidebar.set_metadata(metadata)
+
+        # If passcode protected, prompt for passcode to unlock editing
+        if passcode_hash:
+            from ui.passcode_dialog import PasscodeDialog
+            dlg = PasscodeDialog(mode='enter', stored_hash=passcode_hash, parent=self)
+            if dlg.exec() == PasscodeDialog.Accepted:
+                logger.info("Technical .ecto: passcode verified, edit mode enabled")
+            else:
+                # Lock editing: disable sidebar fields and annotation mode
+                self.technical_sidebar.setEnabled(False)
+                QMessageBox.information(self, "View Only",
+                                        "You can view this file but editing is locked.\n"
+                                        "Enter the correct passcode to edit.")
+
+        self.setWindowTitle(f"ECTOFORM - {Path(ecto_path).name}")
+        # Store temp dir for cleanup
+        self._tech_ecto_temp_dir = temp_dir
+        logger.info(f"_load_technical_ecto: Loaded {ecto_path}")
+
     def closeEvent(self, event):
         """Handle window close - prompt for unsaved annotations across all tabs, then cleanup."""
         # Check all tabs for unsaved annotations
