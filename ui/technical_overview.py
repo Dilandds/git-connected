@@ -733,11 +733,14 @@ class TechnicalOverviewWidget(QWidget):
 
     def _on_color_changed(self, ann_id: int, color: str):
         """Update an annotation's arrow color."""
+        logger.info(f"Color changed for annotation {ann_id}: {color}")
         for ann in self._annotations:
             if ann.id == ann_id:
                 ann.color = color
+                logger.info(f"Annotation {ann_id} color set to {color}")
                 break
-        self.canvas.set_annotations(self._annotations)
+        self.canvas.set_annotations(list(self._annotations))
+        self.canvas.repaint()
         self.annotation_panel.refresh(self._annotations)
 
     def _on_open_popup(self, ann_id: int):
