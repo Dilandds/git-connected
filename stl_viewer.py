@@ -46,6 +46,8 @@ from ui.styles import get_global_stylesheet, default_theme
 from core.mesh_calculator import MeshCalculator
 from ui.screenshot_panel import ScreenshotPanel
 from ui.components import confirm_dialog
+from ui.technical_overview import TechnicalOverviewWidget
+from ui.technical_sidebar import TechnicalSidebar
 
 logger = logging.getLogger(__name__)
 
@@ -159,8 +161,49 @@ class STLViewerWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         
         logger.info("init_ui: Creating main layout...")
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 10, 10, 10)  # Left-aligned: no left margin so content starts at toolbar edge
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        
+        # ---- Mode Switcher Bar ----
+        mode_bar = QWidget()
+        mode_bar.setFixedHeight(36)
+        mode_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {default_theme.card_background};
+                border-bottom: 1px solid {default_theme.border_standard};
+            }}
+        """)
+        mode_bar_layout = QHBoxLayout(mode_bar)
+        mode_bar_layout.setContentsMargins(12, 4, 12, 4)
+        mode_bar_layout.setSpacing(4)
+        
+        self._mode_3d_btn = QPushButton("🔲 3D Viewer")
+        self._mode_tech_btn = QPushButton("📋 Technical Overview")
+        for btn in (self._mode_3d_btn, self._mode_tech_btn):
+            btn.setFixedHeight(26)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setCheckable(True)
+        self._mode_3d_btn.setChecked(True)
+        self._current_mode = "3d"
+        
+        self._update_mode_btn_styles()
+        self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
+        self._mode_tech_btn.clicked.connect(lambda: self._switch_mode("technical"))
+        
+        mode_bar_layout.addWidget(self._mode_3d_btn)
+        mode_bar_layout.addWidget(self._mode_tech_btn)
+        mode_bar_layout.addStretch()
+        root_layout.addWidget(mode_bar)
+        
+        # ---- Workspace stack (3D vs Technical) ----
+        self._workspace_stack = QStackedWidget()
+        root_layout.addWidget(self._workspace_stack, 1)
+        
+        # ==== 3D Viewer Workspace ====
+        viewer_workspace = QWidget()
+        main_layout = QHBoxLayout(viewer_workspace)
+        main_layout.setContentsMargins(0, 10, 10, 10)
         main_layout.setSpacing(10)
         
         logger.info("init_ui: Creating splitter...")
@@ -257,6 +300,25 @@ class STLViewerWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         
+        self._workspace_stack.addWidget(viewer_workspace)
+        
+        # ==== Technical Overview Workspace ====
+        tech_workspace = QWidget()
+        tech_layout = QHBoxLayout(tech_workspace)
+        tech_layout.setContentsMargins(0, 10, 10, 10)
+        tech_layout.setSpacing(10)
+        
+        self.technical_sidebar = TechnicalSidebar()
+        self.technical_sidebar.upload_requested.connect(self._tech_upload_image)
+        self.technical_sidebar.annotate_toggled.connect(self._tech_toggle_annotation)
+        tech_layout.addWidget(self.technical_sidebar)
+        
+        self.technical_overview = TechnicalOverviewWidget()
+        tech_layout.addWidget(self.technical_overview, 1)
+        
+        self._workspace_stack.addWidget(tech_workspace)
+        self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
+        
         logger.info("init_ui: Applying styling...")
         self.apply_styling()
         
@@ -265,6 +327,62 @@ class STLViewerWindow(QMainWindow):
         
         logger.info("init_ui: UI initialization complete")
     
+    # ======================== Mode Switching ========================
+    
+    def _update_mode_btn_styles(self):
+        """Update mode switcher button styles based on current mode."""
+        active_style = f"""
+            QPushButton {{
+                background-color: {default_theme.button_primary};
+                border: none; border-radius: 4px;
+                padding: 4px 14px; font-size: 11px; font-weight: bold;
+                color: white;
+            }}
+        """
+        inactive_style = f"""
+            QPushButton {{
+                background-color: transparent;
+                border: 1px solid {default_theme.border_light};
+                border-radius: 4px;
+                padding: 4px 14px; font-size: 11px;
+                color: {default_theme.text_secondary};
+            }}
+            QPushButton:hover {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+        """
+        self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
+        self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
+    
+    def _switch_mode(self, mode: str):
+        """Switch between '3d' and 'technical' workspace modes."""
+        if mode == self._current_mode:
+            return
+        self._current_mode = mode
+        self._mode_3d_btn.setChecked(mode == "3d")
+        self._mode_tech_btn.setChecked(mode == "technical")
+        self._update_mode_btn_styles()
+        
+        if mode == "3d":
+            self._workspace_stack.setCurrentIndex(0)
+            self.setWindowTitle(f"ECTOFORM - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "ECTOFORM")
+        else:
+            self._workspace_stack.setCurrentIndex(1)
+            self.setWindowTitle("ECTOFORM - Technical Overview")
+        
+        logger.info(f"_switch_mode: Switched to {mode} mode")
+    
+    def _tech_upload_image(self):
+        """Handle upload request from technical sidebar."""
+        self.technical_overview.upload_image()
+    
+    def _tech_toggle_annotation(self, enabled: bool):
+        """Toggle annotation mode on the technical overview."""
+        if enabled:
+            self.technical_overview.enter_annotation_mode()
+        else:
+            self.technical_overview.exit_annotation_mode()
+
     # ======================== Tab Management ========================
     
     def _create_new_tab(self, file_path: str = None) -> int:
