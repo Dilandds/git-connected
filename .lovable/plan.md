@@ -1,54 +1,77 @@
 
-
-# Plan: Save Technical Overview in .ecto Format with Passcode Protection
+# Multi-Tab Support for ECTOFORM
 
 ## Overview
+Add a tab bar to the main window so users can open multiple 3D files simultaneously, each in its own tab with independent viewer, sidebar data, and annotations.
 
-Extend the `.ecto` format to support Technical Overview data (metadata + 2D annotations + uploaded image) and add passcode-based edit protection. The passcode hash is stored **inside the .ecto file itself** (in `manifest.json`), so anyone with the file can view it, but only someone who knows the passcode can edit.
+## Architecture
 
-## Where Passcodes Are Stored
+```text
++----------------------------------------------------------+
+| ECTOFORM - Tab Bar                                        |
+| [Model1.stl  x] [Model2.step  x] [+]                    |
++----------------------------------------------------------+
+| Sidebar  |  Toolbar                                       |
+|          |  Ruler Toolbar (if active)                     |
+|          +-----------------------------------------------+
+|          |  3D Viewer + Annotation Panel                  |
+|          |  (per-tab content)                             |
++----------------------------------------------------------+
+```
 
-The passcode is **not stored in plain text anywhere**. Instead:
-- A SHA-256 hash of the passcode is saved inside the `.ecto` file's `manifest.json` under `"passcode_hash"`.
-- When someone opens the `.ecto` file and tries to edit, they are prompted for the passcode. The app hashes their input and compares it to the stored hash.
-- No external server or database is needed — the hash travels with the file.
+## Implementation Plan
 
-## Changes
+### 1. Create a Tab Data class to hold per-tab state
+- Create a dataclass or simple class (`TabState`) that stores:
+  - `file_path` -- the loaded file
+  - `viewer_widget` -- its own `STLViewerWidget` instance
+  - `annotation_panel` -- its own `AnnotationPanel` instance
+  - `sidebar_data` -- cached mesh data / dimensions for restoring sidebar
+  - `annotations` -- list of annotations
+  - `ruler_active` / `annotation_mode_active` -- mode flags
+  - `mesh` reference
 
-### 1. Extend `core/ecto_format.py`
+### 2. Add QTabBar to the right container
+- Insert a `QTabBar` above the toolbar in the right panel layout
+- Style it to match the dark ECTOFORM theme
+- Each tab shows the filename with a close button
+- A "+" button at the end to open a new file
+- When no files are loaded, show a single "Untitled" tab with the drop zone
 
-Add a new static method `export_technical` that bundles:
-- `manifest.json` — includes `type: "technical_overview"`, `passcode_hash` (SHA-256), format version, metadata
-- `document.{png|jpg|pdf}` — the uploaded image/PDF
-- `annotations.json` — arrow annotations (id, target_x/y, color, text, label, image_paths)
-- `metadata.json` — sidebar fields (property, title, manufacturers, dates, comments)
-- `images/` — annotation-attached photos
+### 3. Refactor STLViewerWindow to manage multiple tabs
+- Replace the single `self.viewer_widget` with a `QStackedWidget` that holds one viewer per tab
+- Maintain a list of `TabState` objects (`self.tabs`)
+- Track `self.current_tab_index`
+- When switching tabs:
+  - Save current tab's mode states (ruler, annotation)
+  - Hide current viewer, show new tab's viewer
+  - Update sidebar panel with the new tab's mesh data
+  - Update toolbar state (loaded filename, enabled controls)
+  - Restore ruler/annotation mode if it was active on that tab
 
-Add `import_technical` method to extract and return all data, plus a `verify_passcode` check.
+### 4. Modify file loading to create new tabs
+- `upload_stl_file()` and `_load_dropped_file()`: instead of replacing the current model, create a new tab with a fresh `STLViewerWidget` and load the file into it
+- If the current tab is empty (no file loaded), reuse it instead of creating a new tab
+- Connect all signals (drag-drop, click-to-upload, etc.) for each new viewer widget
 
-### 2. Add passcode dialog `ui/passcode_dialog.py` (new file)
+### 5. Add tab close functionality
+- Close button on each tab removes the tab, destroys its viewer widget, and cleans up state
+- If the last tab is closed, create a new empty tab with the drop zone
+- Prompt to save unsaved annotations before closing a tab
 
-- A small `QDialog` with a password field and OK/Cancel buttons.
-- Two modes: **Set Passcode** (on export, with confirm field) and **Enter Passcode** (on edit attempt).
-- Uses `hashlib.sha256` to hash input.
+### 6. Update sidebar to reflect active tab
+- When switching tabs, call `self.sidebar_panel.update_dimensions()` with the active tab's cached mesh data
+- Clear sidebar if switching to an empty tab
 
-### 3. Update `ui/technical_sidebar.py`
+## Technical Details
 
-- Add an **"Export .ecto"** button to the sidebar.
-- On click: prompt for passcode via the dialog, gather `get_metadata()`, then call `EctoFormat.export_technical(...)`.
+### Files to modify:
+- **`stl_viewer.py`** -- Major refactor: add `QTabBar`, `QStackedWidget`, `TabState` management, modify all file-loading and mode-toggling methods to be tab-aware
+- **`ui/styles.py`** -- Add tab bar styling to match the ECTOFORM theme
 
-### 4. Update `ui/technical_overview.py`
-
-- Add a `get_annotations_data()` method to serialize arrow annotations to dicts.
-- Add a `load_from_ecto(metadata, annotations, image_path, passcode_hash)` method to restore state.
-- When loaded from .ecto with a passcode hash, annotation mode and metadata editing are locked until the user enters the correct passcode.
-
-### 5. Update `stl_viewer.py`
-
-- In the file-open flow, detect `.ecto` files with `type: "technical_overview"` and route them to the Technical Overview workspace instead of the 3D viewer.
-- Wire the export button signal from the technical sidebar.
-
-## Security Note
-
-SHA-256 hashing without a salt is sufficient for this use case (local file protection, not server authentication). The passcode prevents casual editing but is not meant to be cryptographically unbreakable — the file contents are still accessible in the ZIP.
-
+### Key considerations:
+- Each tab gets its own `STLViewerWidget` instance (pygfx context), which may use significant GPU memory -- this is acceptable for a desktop app but worth noting
+- Annotation state is per-tab, so switching tabs must save/restore annotations
+- Ruler mode measurements are per-tab
+- The sidebar panel is shared but updates its content based on the active tab
+- Window title updates to show the active tab's filename

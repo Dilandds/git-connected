@@ -323,14 +323,7 @@ class EctoFormat:
     
     @staticmethod
     def cleanup_temp_dir(temp_dir: str) -> bool:
-        """Clean up a temporary directory created during import.
-        
-        Args:
-            temp_dir: Path to the temporary directory
-            
-        Returns:
-            True if cleanup was successful
-        """
+        """Clean up a temporary directory created during import."""
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
@@ -340,3 +333,175 @@ class EctoFormat:
                 logger.warning(f"cleanup_temp_dir: Failed to remove {temp_dir}: {e}")
                 return False
         return True
+
+    # ======================== Technical Overview ========================
+
+    @staticmethod
+    def export_technical(
+        document_path: str,
+        annotations: List[dict],
+        metadata: dict,
+        output_path: str,
+        passcode_hash: str = None,
+    ) -> Tuple[bool, str]:
+        """Create a technical-overview .ecto bundle.
+
+        Args:
+            document_path: Path to the uploaded image/PDF.
+            annotations: List of annotation dicts (serialised ArrowAnnotation).
+            metadata: Sidebar metadata dict.
+            output_path: Destination .ecto path.
+            passcode_hash: Optional SHA-256 hash of the edit passcode.
+
+        Returns:
+            (success, message_or_path)
+        """
+        if not document_path or not os.path.exists(document_path):
+            return False, "No document file provided"
+
+        if not output_path.lower().endswith('.ecto'):
+            output_path += '.ecto'
+
+        temp_dir = None
+        try:
+            temp_dir = tempfile.mkdtemp(prefix='ecto_tech_export_')
+
+            # Copy document
+            _, doc_ext = os.path.splitext(document_path)
+            doc_filename = f"document{doc_ext}"
+            doc_dest = os.path.join(temp_dir, doc_filename)
+            shutil.copy2(document_path, doc_dest)
+
+            # Process annotation images
+            images_dir = os.path.join(temp_dir, 'images')
+            has_images = False
+            processed = []
+            for ann in annotations:
+                ac = dict(ann)
+                new_paths = []
+                for i, img_path in enumerate(ac.get('image_paths', [])):
+                    if os.path.exists(img_path):
+                        if not os.path.exists(images_dir):
+                            os.makedirs(images_dir)
+                            has_images = True
+                        _, ext = os.path.splitext(img_path)
+                        fname = f"ann_{ac.get('id', 0)}_img_{i}{ext}"
+                        shutil.copy2(img_path, os.path.join(images_dir, fname))
+                        new_paths.append(f"images/{fname}")
+                    else:
+                        new_paths.append(img_path)
+                ac['image_paths'] = new_paths
+                processed.append(ac)
+
+            # annotations.json
+            ann_path = os.path.join(temp_dir, 'annotations.json')
+            with open(ann_path, 'w', encoding='utf-8') as f:
+                json.dump({'version': '1.0', 'annotations': processed}, f, indent=2, ensure_ascii=False)
+
+            # metadata.json
+            meta_path = os.path.join(temp_dir, 'metadata.json')
+            with open(meta_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+            # manifest.json
+            manifest = {
+                'format_version': ECTO_FORMAT_VERSION,
+                'type': 'technical_overview',
+                'created_by': 'ECTOFORM',
+                'created_at': datetime.now().isoformat(),
+                'document_file': doc_filename,
+                'annotation_count': len(processed),
+                'has_images': has_images,
+            }
+            if passcode_hash:
+                manifest['passcode_hash'] = passcode_hash
+            manifest_path = os.path.join(temp_dir, 'manifest.json')
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, indent=2)
+
+            # ZIP
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                zf.write(manifest_path, 'manifest.json')
+                zf.write(doc_dest, doc_filename)
+                zf.write(ann_path, 'annotations.json')
+                zf.write(meta_path, 'metadata.json')
+                if has_images and os.path.exists(images_dir):
+                    for img in os.listdir(images_dir):
+                        zf.write(os.path.join(images_dir, img), f'images/{img}')
+
+            logger.info(f"export_technical: Created {output_path}")
+            return True, output_path
+
+        except Exception as e:
+            logger.error(f"export_technical: {e}", exc_info=True)
+            return False, str(e)
+        finally:
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @staticmethod
+    def import_technical(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], Optional[dict], Optional[str], str]:
+        """Import a technical-overview .ecto bundle.
+
+        Returns:
+            (document_path, annotations, metadata, passcode_hash, temp_dir_or_error)
+            On failure the first three are None and last is error string.
+        """
+        if not os.path.exists(ecto_path):
+            return None, None, None, None, f"File not found: {ecto_path}"
+
+        temp_dir = None
+        try:
+            temp_dir = tempfile.mkdtemp(prefix='ecto_tech_import_')
+            with zipfile.ZipFile(ecto_path, 'r') as zf:
+                zf.extractall(temp_dir)
+
+            manifest = json.loads(Path(os.path.join(temp_dir, 'manifest.json')).read_text('utf-8'))
+            if manifest.get('type') != 'technical_overview':
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return None, None, None, None, "Not a technical overview .ecto file"
+
+            doc_file = manifest.get('document_file', '')
+            doc_path = os.path.join(temp_dir, doc_file)
+            if not os.path.exists(doc_path):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return None, None, None, None, "Document file missing from bundle"
+
+            passcode_hash = manifest.get('passcode_hash')
+
+            # Annotations
+            annotations = []
+            ann_file = os.path.join(temp_dir, 'annotations.json')
+            if os.path.exists(ann_file):
+                data = json.loads(Path(ann_file).read_text('utf-8'))
+                annotations = data.get('annotations', [])
+                # resolve relative image paths
+                for ann in annotations:
+                    resolved = []
+                    for p in ann.get('image_paths', []):
+                        if not os.path.isabs(p):
+                            full = os.path.join(temp_dir, p)
+                            resolved.append(full if os.path.exists(full) else p)
+                        else:
+                            resolved.append(p)
+                    ann['image_paths'] = resolved
+
+            # Metadata
+            metadata = {}
+            meta_file = os.path.join(temp_dir, 'metadata.json')
+            if os.path.exists(meta_file):
+                metadata = json.loads(Path(meta_file).read_text('utf-8'))
+
+            return doc_path, annotations, metadata, passcode_hash, temp_dir
+
+        except Exception as e:
+            logger.error(f"import_technical: {e}", exc_info=True)
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            return None, None, None, None, str(e)
+
+    @staticmethod
+    def is_technical_ecto(ecto_path: str) -> bool:
+        """Check if an .ecto file is a technical overview type (without full extraction)."""
+        manifest = EctoFormat.get_manifest(ecto_path)
+        return manifest is not None and manifest.get('type') == 'technical_overview'

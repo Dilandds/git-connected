@@ -312,6 +312,7 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar = TechnicalSidebar()
         self.technical_sidebar.upload_requested.connect(self._tech_upload_image)
         self.technical_sidebar.annotate_toggled.connect(self._tech_toggle_annotation)
+        self.technical_sidebar.export_requested.connect(self._tech_export_ecto)
         tech_layout.addWidget(self.technical_sidebar)
         
         self.technical_overview = TechnicalOverviewWidget()
@@ -383,6 +384,46 @@ class STLViewerWindow(QMainWindow):
             self.technical_overview.enter_annotation_mode()
         else:
             self.technical_overview.exit_annotation_mode()
+
+    def _tech_export_ecto(self):
+        """Export technical overview as a passcode-protected .ecto file."""
+        doc_path = self.technical_overview.get_document_path()
+        if not doc_path:
+            QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
+            return
+
+        # Ask for passcode
+        from ui.passcode_dialog import PasscodeDialog
+        dlg = PasscodeDialog(mode='set', parent=self)
+        if dlg.exec() != PasscodeDialog.Accepted:
+            return
+        passcode_hash = dlg.get_passcode_hash()
+
+        # Pick save location
+        default_name = Path(doc_path).stem + '.ecto'
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Technical Overview .ecto", default_name,
+            "ECTO Files (*.ecto);;All Files (*)"
+        )
+        if not save_path:
+            return
+
+        from core.ecto_format import EctoFormat
+        annotations = self.technical_overview.get_annotations_data()
+        metadata = self.technical_sidebar.get_metadata()
+
+        success, msg = EctoFormat.export_technical(
+            document_path=doc_path,
+            annotations=annotations,
+            metadata=metadata,
+            output_path=save_path,
+            passcode_hash=passcode_hash,
+        )
+        if success:
+            QMessageBox.information(self, "Export Successful",
+                                    f"Technical overview exported to:\n{msg}")
+        else:
+            QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
 
     # ======================== Tab Management ========================
     
@@ -1643,6 +1684,11 @@ class STLViewerWindow(QMainWindow):
         
         try:
             from core.ecto_format import EctoFormat
+
+            # Check if this is a technical overview .ecto
+            if EctoFormat.is_technical_ecto(ecto_path):
+                self._load_technical_ecto(ecto_path)
+                return
             
             model_path, annotations, reader_mode, temp_dir = EctoFormat.import_ecto(ecto_path)
             
@@ -1738,6 +1784,43 @@ class STLViewerWindow(QMainWindow):
                 f"Failed to open .ecto file:\n{str(e)}"
             )
     
+    def _load_technical_ecto(self, ecto_path: str):
+        """Load a technical-overview .ecto file into the Technical Overview workspace."""
+        from core.ecto_format import EctoFormat
+
+        doc_path, annotations, metadata, passcode_hash, temp_dir = EctoFormat.import_technical(ecto_path)
+        if doc_path is None:
+            QMessageBox.critical(self, "Error", f"Failed to open technical .ecto:\n{temp_dir}")
+            return
+
+        # Switch to technical mode
+        self._switch_mode("technical")
+
+        # Load document + annotations
+        self.technical_overview.load_from_ecto(doc_path, annotations or [], passcode_hash)
+
+        # Load metadata into sidebar
+        if metadata:
+            self.technical_sidebar.set_metadata(metadata)
+
+        # If passcode protected, prompt for passcode to unlock editing
+        if passcode_hash:
+            from ui.passcode_dialog import PasscodeDialog
+            dlg = PasscodeDialog(mode='enter', stored_hash=passcode_hash, parent=self)
+            if dlg.exec() == PasscodeDialog.Accepted:
+                logger.info("Technical .ecto: passcode verified, edit mode enabled")
+            else:
+                # Lock editing: disable sidebar fields and annotation mode
+                self.technical_sidebar.setEnabled(False)
+                QMessageBox.information(self, "View Only",
+                                        "You can view this file but editing is locked.\n"
+                                        "Enter the correct passcode to edit.")
+
+        self.setWindowTitle(f"ECTOFORM - {Path(ecto_path).name}")
+        # Store temp dir for cleanup
+        self._tech_ecto_temp_dir = temp_dir
+        logger.info(f"_load_technical_ecto: Loaded {ecto_path}")
+
     def closeEvent(self, event):
         """Handle window close - prompt for unsaved annotations across all tabs, then cleanup."""
         # Check all tabs for unsaved annotations
@@ -1784,6 +1867,13 @@ class STLViewerWindow(QMainWindow):
                     EctoFormat.cleanup_temp_dir(tab.ecto_temp_dir)
                 except Exception:
                     pass
+        # Cleanup technical overview temp dir
+        if hasattr(self, '_tech_ecto_temp_dir') and self._tech_ecto_temp_dir:
+            try:
+                from core.ecto_format import EctoFormat
+                EctoFormat.cleanup_temp_dir(self._tech_ecto_temp_dir)
+            except Exception:
+                pass
         super().closeEvent(event)
 
 
