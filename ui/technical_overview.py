@@ -232,21 +232,13 @@ class ImageCanvas(QWidget):
         painter.drawText(helper_rect, Qt.AlignCenter, "JPEG · PNG · PDF")
 
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):
-        """Draw a callout arrow from the margin to the annotation target."""
+        """Draw a callout arrow from the origin (badge) to the annotation target (tip)."""
         target = self._normalised_to_widget(ann.target_x, ann.target_y)
         is_selected = ann.id == self._selected_id
         is_hovered = ann.id == self._hover_id
 
-        # Determine origin point on margin
-        margin_gap = 35  # px outside image edge
-        if ann.margin_side == "left":
-            origin = QPointF(img_rect.left() - margin_gap, target.y())
-        elif ann.margin_side == "right":
-            origin = QPointF(img_rect.right() + margin_gap, target.y())
-        elif ann.margin_side == "top":
-            origin = QPointF(target.x(), img_rect.top() - margin_gap)
-        else:  # bottom
-            origin = QPointF(target.x(), img_rect.bottom() + margin_gap)
+        # Use stored origin coordinates
+        origin = self._normalised_to_widget(ann.origin_x, ann.origin_y)
 
         # Use per-annotation color
         base_color = QColor(ann.color if ann.color else ARROW_COLOR)
@@ -265,7 +257,7 @@ class ImageCanvas(QWidget):
         painter.setPen(pen)
         painter.drawLine(origin, target)
 
-        # Rounded cap at target = clean bullet that scales with line width (no blocky triangle)
+        # Rounded cap at target = clean bullet that scales with line width
         self._draw_arrow_end(painter, target, color, line_width)
 
         # Draw numbered badge at origin
