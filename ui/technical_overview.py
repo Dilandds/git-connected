@@ -297,15 +297,17 @@ class ImageCanvas(QWidget):
                 return
 
             if self._annotation_mode:
-                norm = self._widget_to_normalised(QPointF(event.pos()))
-                if norm:
-                    if self._pending_target is None:
-                        # First click: set target (arrow tip)
+                if self._pending_target is None:
+                    # First click: target (arrow tip) — must be inside image
+                    norm = self._widget_to_normalised(QPointF(event.pos()))
+                    if norm:
                         self._pending_target = norm
                         self._mouse_pos = QPointF(event.pos())
                         self.update()
-                    else:
-                        # Second click: set origin (badge position)
+                else:
+                    # Second click: origin (badge) — allowed outside image
+                    norm = self._widget_to_normalised_unclamped(QPointF(event.pos()))
+                    if norm:
                         self.annotation_placed.emit(
                             self._pending_target[0], self._pending_target[1],
                             norm[0], norm[1]
