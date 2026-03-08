@@ -346,27 +346,42 @@ class ImageCanvas(QWidget):
             self.update()
 
     def _hit_test(self, pos) -> Optional[int]:
-        """Check if pos hits an annotation badge. Returns annotation id or None."""
+        """Check if pos hits an annotation badge or arrow line. Returns annotation id or None."""
         if not self._pixmap:
             return None
         img_rect = self._image_rect()
         margin_gap = 35
+        p = QPointF(pos.x(), pos.y())
         for ann in self._annotations:
+            target = self._normalised_to_widget(ann.target_x, ann.target_y)
             if ann.margin_side == "left":
-                origin = QPointF(img_rect.left() - margin_gap,
-                                 self._normalised_to_widget(ann.target_x, ann.target_y).y())
+                origin = QPointF(img_rect.left() - margin_gap, target.y())
             elif ann.margin_side == "right":
-                origin = QPointF(img_rect.right() + margin_gap,
-                                 self._normalised_to_widget(ann.target_x, ann.target_y).y())
+                origin = QPointF(img_rect.right() + margin_gap, target.y())
             elif ann.margin_side == "top":
-                origin = QPointF(self._normalised_to_widget(ann.target_x, ann.target_y).x(),
-                                 img_rect.top() - margin_gap)
+                origin = QPointF(target.x(), img_rect.top() - margin_gap)
             else:
-                origin = QPointF(self._normalised_to_widget(ann.target_x, ann.target_y).x(),
-                                 img_rect.bottom() + margin_gap)
-            if (QPointF(pos.x(), pos.y()) - origin).manhattanLength() < 16:
+                origin = QPointF(target.x(), img_rect.bottom() + margin_gap)
+            # Hit badge
+            if (p - origin).manhattanLength() < 16:
+                return ann.id
+            # Hit line (distance from point to line segment)
+            if self._point_line_distance(p, origin, target) < 6:
                 return ann.id
         return None
+
+    @staticmethod
+    def _point_line_distance(p: QPointF, a: QPointF, b: QPointF) -> float:
+        """Distance from point p to line segment a-b."""
+        import math
+        dx, dy = b.x() - a.x(), b.y() - a.y()
+        len_sq = dx * dx + dy * dy
+        if len_sq == 0:
+            return math.hypot(p.x() - a.x(), p.y() - a.y())
+        t = max(0, min(1, ((p.x() - a.x()) * dx + (p.y() - a.y()) * dy) / len_sq))
+        proj_x = a.x() + t * dx
+        proj_y = a.y() + t * dy
+        return math.hypot(p.x() - proj_x, p.y() - proj_y)
 
     # ---- drag-drop ----
 
