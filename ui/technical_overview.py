@@ -753,6 +753,8 @@ class TechnicalOverviewWidget(QWidget):
                 id=ad['id'],
                 target_x=ad['target_x'],
                 target_y=ad['target_y'],
+                origin_x=ad.get('origin_x', 0.0),
+                origin_y=ad.get('origin_y', 0.0),
                 text=ad.get('text', ''),
                 margin_side=ad.get('margin_side', 'left'),
                 color=ad.get('color', ARROW_COLOR),
