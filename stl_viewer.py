@@ -9,7 +9,8 @@ from typing import Optional, List, Any
 from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFileDialog,
-    QMessageBox, QSplitter, QFrame, QApplication, QStackedWidget, QTabBar
+    QMessageBox, QSplitter, QFrame, QApplication, QStackedWidget, QTabBar,
+    QPushButton
 )
 from PyQt5.QtCore import Qt, QEvent, QTimer
 

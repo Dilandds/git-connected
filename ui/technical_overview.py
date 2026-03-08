@@ -171,17 +171,36 @@ class ImageCanvas(QWidget):
         painter.end()
 
     def _draw_drop_zone(self, painter: QPainter):
-        """Draw upload prompt when no image is loaded."""
+        """Draw upload prompt when no image is loaded. Match 3D viewer drop zone styles."""
         painter.setPen(QPen(QColor(default_theme.border_light), 2, Qt.DashLine))
         margin = 40
         r = self.rect().adjusted(margin, margin, -margin, -margin)
         painter.drawRoundedRect(r, 12, 12)
 
-        painter.setPen(QColor(default_theme.text_secondary))
-        font = QFont()
-        font.setPointSize(14)
-        painter.setFont(font)
-        painter.drawText(r, Qt.AlignCenter, "Click or drag to upload\nJPEG · PNG · PDF")
+        # Primary text: same as 3D viewer (18px, weight 600, #1a1a2e)
+        font_primary = QFont()
+        font_primary.setPixelSize(18)
+        font_primary.setWeight(600)
+        painter.setFont(font_primary)
+        painter.setPen(QColor("#1a1a2e"))
+        primary_height = painter.fontMetrics().height()
+        # Helper text: same as 3D viewer (11px, weight 400, #a0aec0)
+        font_helper = QFont()
+        font_helper.setPixelSize(11)
+        font_helper.setWeight(400)
+        painter.setFont(font_helper)
+        helper_height = painter.fontMetrics().height()
+        spacing = 12
+        block_height = primary_height + spacing + helper_height
+        start_y = r.top() + (r.height() - block_height) // 2
+        primary_rect = QRectF(r.left(), start_y, r.width(), primary_height)
+        helper_rect = QRectF(r.left(), start_y + primary_height + spacing, r.width(), helper_height)
+        painter.setFont(font_primary)
+        painter.setPen(QColor("#1a1a2e"))
+        painter.drawText(primary_rect, Qt.AlignCenter, "Click or drag to upload")
+        painter.setFont(font_helper)
+        painter.setPen(QColor("#a0aec0"))
+        painter.drawText(helper_rect, Qt.AlignCenter, "JPEG · PNG · PDF")
 
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):
         """Draw a callout arrow from the margin to the annotation target."""
