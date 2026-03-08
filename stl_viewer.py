@@ -45,6 +45,7 @@ from ui.annotation_panel import AnnotationPanel
 from ui.styles import get_global_stylesheet, default_theme
 from core.mesh_calculator import MeshCalculator
 from ui.screenshot_panel import ScreenshotPanel
+from ui.components import confirm_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +149,9 @@ class STLViewerWindow(QMainWindow):
             self.setWindowIcon(icon)
         self.resize(min_w, min_h)
         
-        # Center window on screen
-        screen = QApplication.primaryScreen().geometry()
-        window_geometry = self.frameGeometry()
-        window_geometry.moveCenter(screen.center())
-        self.move(window_geometry.topLeft())
+        # Position window on left side of screen (align with toolbar/content)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.move(screen.left(), screen.top() + max(0, (screen.height() - min_h) // 2))
         
         logger.info("init_ui: Creating central widget...")
         central_widget = QWidget()
@@ -161,7 +160,7 @@ class STLViewerWindow(QMainWindow):
         
         logger.info("init_ui: Creating main layout...")
         main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(0, 10, 10, 10)  # Left-aligned: no left margin so content starts at toolbar edge
         main_layout.setSpacing(10)
         
         logger.info("init_ui: Creating splitter...")
@@ -184,7 +183,7 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.setContentsMargins(0, 0, 0, 0)
         self.right_layout.setSpacing(0)
         
-        # ---- Tab Bar ----
+        # ---- Tab Bar (left-aligned so "Untitled" starts at left edge) ----
         self.tab_bar = QTabBar()
         self.tab_bar.setObjectName("ectoTabBar")
         self.tab_bar.setTabsClosable(True)
@@ -197,7 +196,13 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.currentChanged.connect(self._on_tab_changed)
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.RightSide, None)
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.LeftSide, None)
-        self.right_layout.addWidget(self.tab_bar)
+        tab_bar_container = QWidget()
+        tab_bar_layout = QHBoxLayout(tab_bar_container)
+        tab_bar_layout.setContentsMargins(0, 0, 0, 0)
+        tab_bar_layout.setSpacing(0)
+        tab_bar_layout.addWidget(self.tab_bar, 0, Qt.AlignLeft)
+        tab_bar_layout.addStretch(1)
+        self.right_layout.addWidget(tab_bar_container)
         
         # Create toolbar
         logger.info("init_ui: Creating toolbar...")
@@ -634,6 +639,13 @@ class STLViewerWindow(QMainWindow):
                     if reply == QMessageBox.No:
                         return
         
+        # Screenshot warning (second warning, after annotation)
+        if not skip_confirmation and len(self.screenshot_panel.screenshots) > 0:
+            n = len(self.screenshot_panel.screenshots)
+            msg = f"You have {n} screenshot(s) that have not been saved. They will be removed. Continue?"
+            if not confirm_dialog(self, "Unsaved Screenshots", msg):
+                return
+        
         # Clear the viewer
         if hasattr(self.viewer_widget, 'clear_viewer'):
             self.viewer_widget.clear_viewer()
@@ -656,9 +668,10 @@ class STLViewerWindow(QMainWindow):
         if self.annotation_panel.isVisible():
             self._exit_annotation_mode()
         
-        # Exit screenshot mode if active
+        # Exit screenshot mode if active and clear all screenshots
         if self.toolbar.screenshot_mode_enabled:
             self._exit_screenshot_mode()
+        self.screenshot_panel.clear_all()
         
         # Reset sidebar panel dimensions and calculations
         self.sidebar_panel.reset_all_data()
@@ -1040,8 +1053,9 @@ class STLViewerWindow(QMainWindow):
                     callback=self._on_annotation_point_picked
                 )
                 if success:
-                    if self.toolbar.screenshot_mode_enabled:
-                        self._exit_screenshot_mode()
+                    # Always exit screenshot mode - toolbar clears screenshot_mode_enabled before we run,
+                    # so we must call _exit_screenshot_mode to hide zoom/overlay on the viewer
+                    self._exit_screenshot_mode()
                     self.annotation_panel.show()
                     self.right_panel_stack.setCurrentWidget(self.annotation_stack)
                     self.right_panel_stack.show()
@@ -1316,6 +1330,11 @@ class STLViewerWindow(QMainWindow):
                 )
                 if reply == QMessageBox.No:
                     return
+        # Screenshot warning (second, after annotation)
+        if len(self.screenshot_panel.screenshots) > 0:
+            n = len(self.screenshot_panel.screenshots)
+            if not confirm_dialog(self, "Unsaved Screenshots", f"You have {n} screenshot(s) that have not been saved. They will be removed. Continue?"):
+                return
         self._clear_current_model(skip_confirmation=True)
 
     def _clear_all_annotations(self):
@@ -1629,6 +1648,14 @@ class STLViewerWindow(QMainWindow):
                 if reply == QMessageBox.Cancel:
                     event.ignore()
                     return
+        
+        # Screenshot warning (second warning, after annotations)
+        if len(self.screenshot_panel.screenshots) > 0:
+            n = len(self.screenshot_panel.screenshots)
+            msg = f"You have {n} screenshot(s) that have not been saved. They will be lost. Continue?"
+            if not confirm_dialog(self, "Unsaved Screenshots", msg):
+                event.ignore()
+                return
         
         # Cleanup all ecto temp directories
         for tab in self.tabs:

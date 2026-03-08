@@ -5,9 +5,10 @@ import logging
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFrame, QMessageBox, QFileDialog, QSizePolicy,
-    QDialog, QApplication
+    QScrollArea, QFrame, QFileDialog, QSizePolicy,
+    QDialog, QApplication, QLineEdit
 )
+from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QFont
 from ui.styles import default_theme, FONTS
@@ -25,7 +26,6 @@ class ScreenshotCard(QFrame):
         super().__init__(parent)
         self.index = index
         self.pixmap = pixmap
-        self._expanded = False
         self.setObjectName("screenshotCard")
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(f"""
@@ -43,16 +43,56 @@ class ScreenshotCard(QFrame):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Header row: number + timestamp
+        # Header row: camera icon + editable name + timestamp + close button
         header = QHBoxLayout()
         header.setSpacing(6)
-        num_label = QLabel(f"📷  Screenshot {index + 1}")
-        num_label.setStyleSheet(f"color: {default_theme.text_primary}; font-weight: bold; font-size: 12px; background: transparent;")
-        header.addWidget(num_label)
+        cam_label = QLabel("📷 ")
+        cam_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 12px; background: transparent;")
+        header.addWidget(cam_label)
+        self.name_edit = QLineEdit(f"Screenshot {index + 1}")
+        self.name_edit.setStyleSheet(f"""
+            QLineEdit {{
+                color: {default_theme.text_primary};
+                font-weight: bold;
+                font-size: 12px;
+                background: transparent;
+                border: none;
+                padding: 2px 4px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {default_theme.border_medium};
+                border-radius: 4px;
+                background: white;
+            }}
+        """)
+        self.name_edit.setPlaceholderText("Name")
+        self.name_edit.setCursor(Qt.IBeamCursor)
+        self.name_edit.setMinimumWidth(80)
+        self.name_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        header.addWidget(self.name_edit)
         header.addStretch()
         ts_label = QLabel(timestamp)
         ts_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; background: transparent;")
         header.addWidget(ts_label)
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(22, 22)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setToolTip("Remove screenshot")
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {default_theme.text_secondary};
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {default_theme.row_bg_hover};
+                color: {default_theme.text_primary};
+            }}
+        """)
+        close_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
+        header.addWidget(close_btn)
         layout.addLayout(header)
 
         # Thumbnail — fit entire image within the card width
@@ -65,7 +105,7 @@ class ScreenshotCard(QFrame):
         self._update_thumbnail()
         layout.addWidget(self.thumb_label)
 
-        # Action buttons (hidden by default, shown on click)
+        # Action buttons (always visible)
         self.actions_widget = QWidget()
         self.actions_widget.setStyleSheet("background: transparent;")
         actions_layout = QHBoxLayout(self.actions_widget)
@@ -112,8 +152,9 @@ class ScreenshotCard(QFrame):
         self.save_btn.clicked.connect(lambda: self.save_requested.emit(self.index))
         actions_layout.addWidget(self.save_btn)
 
-        actions_layout.addStretch()
-        self.actions_widget.hide()
+        # Center the buttons as a group
+        actions_layout.insertStretch(0, 1)
+        actions_layout.addStretch(1)
         layout.addWidget(self.actions_widget)
 
     def _update_thumbnail(self):
@@ -128,19 +169,16 @@ class ScreenshotCard(QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            # Check if click is on the thumbnail area → show preview
+            # Click on thumbnail → show preview
             thumb_pos = self.thumb_label.mapFrom(self, event.pos())
             if self.thumb_label.rect().contains(thumb_pos):
                 self._show_preview()
-            else:
-                self._expanded = not self._expanded
-                self.actions_widget.setVisible(self._expanded)
         super().mousePressEvent(event)
 
     def _show_preview(self):
         """Show a full-size preview dialog of the screenshot."""
         dialog = QDialog(self.window())
-        dialog.setWindowTitle(f"Screenshot {self.index + 1}")
+        dialog.setWindowTitle(self.name_edit.text().strip() or f"Screenshot {self.index + 1}")
         dialog.setStyleSheet(f"background-color: {default_theme.card_background};")
 
         layout = QVBoxLayout(dialog)
@@ -338,14 +376,7 @@ class ScreenshotPanel(QWidget):
     # ---- private slots ----
 
     def _on_delete(self, index: int):
-        reply = QMessageBox.question(
-            self,
-            "Delete Screenshot",
-            "Are you sure to delete the photo?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply != QMessageBox.Yes:
+        if not confirm_dialog(self, "Delete Screenshot", "Are you sure to delete the photo?"):
             return
 
         if 0 <= index < len(self.cards):
@@ -364,10 +395,16 @@ class ScreenshotPanel(QWidget):
         if index < 0 or index >= len(self.screenshots):
             return
         pixmap, _ = self.screenshots[index]
+        # Use card's name as suggested filename (sanitize for filesystem)
+        if index < len(self.cards):
+            raw = self.cards[index].name_edit.text().strip()
+            suggested = "".join(c for c in raw if c not in r'\/:*?"<>|') if raw else f"Screenshot {index + 1}"
+        else:
+            suggested = f"Screenshot {index + 1}"
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Screenshot",
-            f"screenshot_{index + 1}.png",
+            f"{suggested}.png",
             "PNG (*.png);;JPEG (*.jpg);;All Files (*)"
         )
         if path:
@@ -375,12 +412,5 @@ class ScreenshotPanel(QWidget):
             logger.info(f"Screenshot saved to {path}")
 
     def _on_clear_all(self):
-        reply = QMessageBox.question(
-            self,
-            "Clear All Screenshots",
-            "Are you sure you want to delete all screenshots?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
+        if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):
             self.clear_all()

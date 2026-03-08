@@ -295,35 +295,12 @@ class ViewControlsToolbar(QWidget):
         self.reset_btn.setEnabled(False)
         content_layout.addWidget(self.reset_btn)
         
-        self.front_btn = ToolbarButton("⬚", "Front", "")
-        self.front_btn.clicked.connect(self._on_front_clicked)
-        self.front_btn.setEnabled(False)
-        content_layout.addWidget(self.front_btn)
-        
-        self.rear_btn = ToolbarButton("⬛", "Rear", "")
-        self.rear_btn.clicked.connect(self._on_rear_clicked)
-        self.rear_btn.setEnabled(False)
-        content_layout.addWidget(self.rear_btn)
-        
-        self.left_btn = ToolbarButton("⊏", "Left", "")
-        self.left_btn.clicked.connect(self._on_left_clicked)
-        self.left_btn.setEnabled(False)
-        content_layout.addWidget(self.left_btn)
-        
-        self.right_btn = ToolbarButton("⊐", "Right", "")
-        self.right_btn.clicked.connect(self._on_right_clicked)
-        self.right_btn.setEnabled(False)
-        content_layout.addWidget(self.right_btn)
-        
-        self.top_btn = ToolbarButton("⊤", "Top", "")
-        self.top_btn.clicked.connect(self._on_top_clicked)
-        self.top_btn.setEnabled(False)
-        content_layout.addWidget(self.top_btn)
-        
-        self.bottom_btn = ToolbarButton("⊥", "Bottom", "")
-        self.bottom_btn.clicked.connect(self._on_bottom_clicked)
-        self.bottom_btn.setEnabled(False)
-        content_layout.addWidget(self.bottom_btn)
+        # View dropdown (Front, Rear, Left, Right, Top, Bottom)
+        self._current_view = "front"
+        self.view_btn = ToolbarButton("⬚", "Front ▼", "Orthographic view presets")
+        self.view_btn.clicked.connect(self._show_view_menu)
+        self.view_btn.setEnabled(False)
+        content_layout.addWidget(self.view_btn)
         
         # Spacer between groups
         content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
@@ -420,12 +397,7 @@ class ViewControlsToolbar(QWidget):
         """Enable/disable view controls based on STL loaded state."""
         self.stl_loaded = loaded
         self.reset_btn.setEnabled(loaded)
-        self.front_btn.setEnabled(loaded)
-        self.rear_btn.setEnabled(loaded)
-        self.left_btn.setEnabled(loaded)
-        self.right_btn.setEnabled(loaded)
-        self.top_btn.setEnabled(loaded)
-        self.bottom_btn.setEnabled(loaded)
+        self.view_btn.setEnabled(loaded)
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
@@ -488,6 +460,63 @@ class ViewControlsToolbar(QWidget):
             self.render_mode_btn.rect().bottomLeft()
         ))
 
+    def _show_view_menu(self):
+        """Show dropdown menu for view preset selection."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 6px;
+                padding: 4px 0;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                color: {default_theme.text_primary};
+                font-size: 11px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+            QMenu::item:checked {{
+                font-weight: bold;
+            }}
+        """)
+        views = [
+            ("front", "⬚", "Front"),
+            ("rear", "⬛", "Rear"),
+            ("left", "⊏", "Left"),
+            ("right", "⊐", "Right"),
+            ("top", "⊤", "Top"),
+            ("bottom", "⊥", "Bottom"),
+        ]
+        for view_id, icon, label in views:
+            action = menu.addAction(f"{icon}  {label}")
+            action.setCheckable(True)
+            action.setChecked(self._current_view == view_id)
+            action.triggered.connect(lambda checked, v=view_id: self._set_view(v))
+        menu.exec_(self.view_btn.mapToGlobal(self.view_btn.rect().bottomLeft()))
+
+    def _set_view(self, view_id):
+        """Set view preset and emit signal."""
+        self._current_view = view_id
+        icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
+        labels = {"front": "Front", "rear": "Rear", "left": "Left", "right": "Right", "top": "Top", "bottom": "Bottom"}
+        self.view_btn.set_icon(icons[view_id])
+        self.view_btn.set_label(f"{labels[view_id]} ▼")
+        if view_id == "front":
+            self.view_front.emit()
+        elif view_id == "rear":
+            self.view_rear.emit()
+        elif view_id == "left":
+            self.view_left.emit()
+        elif view_id == "right":
+            self.view_right.emit()
+        elif view_id == "top":
+            self.view_top.emit()
+        elif view_id == "bottom":
+            self.view_bottom.emit()
+
     def _set_render_mode(self, mode):
         """Set the render mode and update button appearance."""
         self.render_mode = mode
@@ -501,30 +530,6 @@ class ViewControlsToolbar(QWidget):
     def _on_reset_clicked(self):
         """Handle reset rotation."""
         self.reset_rotation.emit()
-    
-    def _on_front_clicked(self):
-        """Handle front view."""
-        self.view_front.emit()
-    
-    def _on_rear_clicked(self):
-        """Handle rear view."""
-        self.view_rear.emit()
-    
-    def _on_left_clicked(self):
-        """Handle left view."""
-        self.view_left.emit()
-    
-    def _on_right_clicked(self):
-        """Handle right view."""
-        self.view_right.emit()
-    
-    def _on_top_clicked(self):
-        """Handle top view."""
-        self.view_top.emit()
-    
-    def _on_bottom_clicked(self):
-        """Handle bottom view."""
-        self.view_bottom.emit()
     
     def _on_ruler_clicked(self):
         """Handle ruler toggle."""

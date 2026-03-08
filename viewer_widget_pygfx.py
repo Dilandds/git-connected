@@ -2008,10 +2008,12 @@ class STLViewerWidget(QWidget):
         return True
 
     def disable_screenshot_mode(self):
-        """Disable screenshot mode: hide overlay."""
+        """Disable screenshot mode: hide overlay and reset cursor."""
         self.screenshot_mode = False
         if self._screenshot_overlay is not None:
             self._screenshot_overlay.hide()
+            # Reset cursor - CrossCursor from overlay can persist after hide on some platforms
+            self.viewer_container.setCursor(Qt.ArrowCursor)
         self._zoom_controls_overlay.hide()
         # Only hide gizmo if annotation mode is not active
         if not self.annotation_mode:

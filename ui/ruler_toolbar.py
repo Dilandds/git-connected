@@ -155,30 +155,50 @@ class RulerToolbar(QWidget):
         """)
         layout.addWidget(view_label)
         
-        self.front_btn = RulerViewButton("Front")
-        self.front_btn.set_active(True)  # Default view
-        self.front_btn.clicked.connect(self._on_front_clicked)
-        layout.addWidget(self.front_btn)
-        
-        self.rear_btn = RulerViewButton("Rear")
-        self.rear_btn.clicked.connect(self._on_rear_clicked)
-        layout.addWidget(self.rear_btn)
-        
-        self.left_btn = RulerViewButton("Left")
-        self.left_btn.clicked.connect(self._on_left_clicked)
-        layout.addWidget(self.left_btn)
-        
-        self.right_btn = RulerViewButton("Right")
-        self.right_btn.clicked.connect(self._on_right_clicked)
-        layout.addWidget(self.right_btn)
-        
-        self.top_btn = RulerViewButton("Top")
-        self.top_btn.clicked.connect(self._on_top_clicked)
-        layout.addWidget(self.top_btn)
-        
-        self.bottom_btn = RulerViewButton("Bottom")
-        self.bottom_btn.clicked.connect(self._on_bottom_clicked)
-        layout.addWidget(self.bottom_btn)
+        self.view_combo = QComboBox()
+        self.view_combo.addItems(["Front", "Rear", "Left", "Right", "Top", "Bottom"])
+        self.view_combo.setCurrentIndex(0)
+        self.view_combo.setFixedHeight(26)
+        self.view_combo.setMinimumWidth(90)
+        self.view_combo.setCursor(Qt.PointingHandCursor)
+        self.view_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {default_theme.row_bg_standard};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_light};
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 500;
+            }}
+            QComboBox:hover {{
+                background-color: {default_theme.row_bg_hover};
+                border: 1px solid {default_theme.border_medium};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 18px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid {default_theme.text_secondary};
+                margin-right: 6px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {default_theme.row_bg_standard};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_medium};
+                border-radius: 4px;
+                selection-background-color: {default_theme.button_primary};
+                selection-color: {default_theme.text_white};
+                padding: 2px;
+                outline: none;
+            }}
+        """)
+        self.view_combo.currentIndexChanged.connect(self._on_view_combo_changed)
+        layout.addWidget(self.view_combo)
         
         # Separator before units
         sep_units = QFrame()
@@ -280,44 +300,32 @@ class RulerToolbar(QWidget):
         self.setFixedHeight(38)
     
     def _update_view_buttons(self, active_view):
-        """Update view button active states."""
-        self._current_view = active_view
-        self.front_btn.set_active(active_view == "front")
-        self.rear_btn.set_active(active_view == "rear")
-        self.left_btn.set_active(active_view == "left")
-        self.right_btn.set_active(active_view == "right")
-        self.top_btn.set_active(active_view == "top")
-        self.bottom_btn.set_active(active_view == "bottom")
+        """Update view dropdown selection (kept for reset_to_front compatibility)."""
+        view_order = ["front", "rear", "left", "right", "top", "bottom"]
+        if active_view in view_order:
+            idx = view_order.index(active_view)
+            self.view_combo.blockSignals(True)
+            self.view_combo.setCurrentIndex(idx)
+            self.view_combo.blockSignals(False)
+            self._current_view = active_view
     
-    def _on_front_clicked(self):
-        """Handle front view button click."""
-        self._update_view_buttons("front")
-        self.view_front.emit()
-    
-    def _on_left_clicked(self):
-        """Handle left view button click."""
-        self._update_view_buttons("left")
-        self.view_left.emit()
-    
-    def _on_right_clicked(self):
-        """Handle right view button click."""
-        self._update_view_buttons("right")
-        self.view_right.emit()
-    
-    def _on_top_clicked(self):
-        """Handle top view button click."""
-        self._update_view_buttons("top")
-        self.view_top.emit()
-    
-    def _on_bottom_clicked(self):
-        """Handle bottom view button click."""
-        self._update_view_buttons("bottom")
-        self.view_bottom.emit()
-    
-    def _on_rear_clicked(self):
-        """Handle rear view button click."""
-        self._update_view_buttons("rear")
-        self.view_rear.emit()
+    def _on_view_combo_changed(self, index):
+        """Handle view dropdown change."""
+        view_order = ["front", "rear", "left", "right", "top", "bottom"]
+        view_id = view_order[index]
+        self._current_view = view_id
+        if view_id == "front":
+            self.view_front.emit()
+        elif view_id == "rear":
+            self.view_rear.emit()
+        elif view_id == "left":
+            self.view_left.emit()
+        elif view_id == "right":
+            self.view_right.emit()
+        elif view_id == "top":
+            self.view_top.emit()
+        elif view_id == "bottom":
+            self.view_bottom.emit()
     
     def _on_clear_clicked(self):
         """Handle clear measurements button click."""

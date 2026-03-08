@@ -3,7 +3,7 @@ Transparent overlay widget for rubber-band rectangle selection (screenshot captu
 """
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPoint
-from PyQt5.QtGui import QPainter, QColor, QPen, QBrush
+from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QCursor
 
 
 class ScreenshotOverlay(QWidget):
@@ -68,3 +68,15 @@ class ScreenshotOverlay(QWidget):
         if event.key() == Qt.Key_Escape:
             self._drawing = False
             self.update()
+
+    def hideEvent(self, event):
+        """Reset cursor when overlay is hidden - CrossCursor can persist on some platforms."""
+        super().hideEvent(event)
+        self.setCursor(Qt.ArrowCursor)  # Clear CrossCursor before hide completes
+        parent = self.parent()
+        if parent and isinstance(parent, QWidget):
+            parent.setCursor(Qt.ArrowCursor)
+        # Force Qt to refresh cursor (workaround for stuck cursor)
+        pos = QCursor.pos()
+        QCursor.setPos(pos.x() + 1, pos.y())
+        QCursor.setPos(pos.x(), pos.y())
