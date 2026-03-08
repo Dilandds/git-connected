@@ -46,6 +46,8 @@ from ui.styles import get_global_stylesheet, default_theme
 from core.mesh_calculator import MeshCalculator
 from ui.screenshot_panel import ScreenshotPanel
 from ui.components import confirm_dialog
+from ui.technical_overview import TechnicalOverviewWidget
+from ui.technical_sidebar import TechnicalSidebar
 
 logger = logging.getLogger(__name__)
 
