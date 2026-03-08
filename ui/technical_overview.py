@@ -33,10 +33,12 @@ ARROW_BADGE_TEXT = "#FFFFFF"
 class ArrowAnnotation:
     """A single arrow annotation on the 2D image."""
     id: int
-    target_x: float  # 0-1 normalised position on image
+    target_x: float  # 0-1 normalised position on image (arrow tip)
     target_y: float
+    origin_x: float = 0.0  # 0-1 normalised position for the numbered badge
+    origin_y: float = 0.0
     text: str = ""
-    margin_side: str = "left"  # which margin the arrow originates from
+    margin_side: str = "left"  # kept for backward compat with old .ecto files
     color: str = ARROW_COLOR  # per-annotation color
     image_paths: list = field(default_factory=list)
     label: str = "Point"
