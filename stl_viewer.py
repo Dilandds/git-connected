@@ -472,6 +472,30 @@ class STLViewerWindow(QMainWindow):
         else:
             QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
 
+    def _tech_reset(self):
+        """Reset the technical overview workspace with unsaved-changes warning."""
+        has_content = (
+            self.technical_overview.get_annotations()
+            or self.technical_overview.get_document_path()
+        )
+
+        if has_content and not self._tech_ecto_exported:
+            reply = QMessageBox.warning(
+                self, "Unsaved Changes",
+                "You have not exported this workspace as an .ecto file.\n\n"
+                "All annotations, metadata, and the loaded document will be lost.\n\n"
+                "Do you want to reset anyway?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        # Reset everything
+        self.technical_overview.clear_all()
+        self.technical_overview.canvas.clear_image()
+        self.technical_sidebar.reset()
+        self._tech_ecto_exported = False
+
     # ======================== Tab Management ========================
     
     def _create_new_tab(self, file_path: str = None) -> int:
