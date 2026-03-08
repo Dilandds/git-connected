@@ -313,6 +313,7 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar.upload_requested.connect(self._tech_upload_image)
         self.technical_sidebar.annotate_toggled.connect(self._tech_toggle_annotation)
         self.technical_sidebar.export_requested.connect(self._tech_export_ecto)
+        self.technical_sidebar.export_pdf_requested.connect(self._tech_export_pdf)
         tech_layout.addWidget(self.technical_sidebar)
         
         self.technical_overview = TechnicalOverviewWidget()
@@ -432,6 +433,39 @@ class STLViewerWindow(QMainWindow):
         if success:
             QMessageBox.information(self, "Export Successful",
                                     f"Technical overview exported to:\n{msg}")
+        else:
+            QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
+
+    def _tech_export_pdf(self):
+        """Export technical overview as a PDF report with annotated image and table."""
+        pixmap = self.technical_overview.canvas._pixmap
+        if pixmap is None or pixmap.isNull():
+            QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
+            return
+
+        metadata = self.technical_sidebar.get_metadata()
+        default_name = "Technical_Overview_Report.pdf"
+        doc_path = self.technical_overview.get_document_path()
+        if doc_path:
+            default_name = Path(doc_path).stem + "_report.pdf"
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "Export PDF Report", default_name,
+            "PDF Files (*.pdf);;All Files (*)"
+        )
+        if not save_path:
+            return
+
+        from core.technical_pdf_exporter import TechnicalPDFExporter
+        annotations = self.technical_overview.get_annotations()
+        success, msg = TechnicalPDFExporter.export(
+            document_pixmap=pixmap,
+            annotations=annotations,
+            metadata=metadata,
+            output_path=save_path,
+        )
+        if success:
+            QMessageBox.information(self, "PDF Exported", f"Report saved to:\n{msg}")
         else:
             QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
 
