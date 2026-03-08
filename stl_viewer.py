@@ -433,6 +433,7 @@ class STLViewerWindow(QMainWindow):
             passcode_hash=passcode_hash,
         )
         if success:
+            self._tech_ecto_exported = True
             QMessageBox.information(self, "Export Successful",
                                     f"Technical overview exported to:\n{msg}")
         else:
