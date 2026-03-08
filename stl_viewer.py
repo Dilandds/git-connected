@@ -312,6 +312,7 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar = TechnicalSidebar()
         self.technical_sidebar.upload_requested.connect(self._tech_upload_image)
         self.technical_sidebar.annotate_toggled.connect(self._tech_toggle_annotation)
+        self.technical_sidebar.export_requested.connect(self._tech_export_ecto)
         tech_layout.addWidget(self.technical_sidebar)
         
         self.technical_overview = TechnicalOverviewWidget()
