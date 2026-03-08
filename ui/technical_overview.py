@@ -699,6 +699,58 @@ class TechnicalOverviewWidget(QWidget):
     def get_annotations(self) -> List[ArrowAnnotation]:
         return list(self._annotations)
 
+    def get_annotations_data(self) -> List[dict]:
+        """Serialize annotations to plain dicts for .ecto export."""
+        result = []
+        for ann in self._annotations:
+            result.append({
+                'id': ann.id,
+                'target_x': ann.target_x,
+                'target_y': ann.target_y,
+                'text': ann.text,
+                'margin_side': ann.margin_side,
+                'color': ann.color,
+                'image_paths': list(ann.image_paths),
+                'label': ann.label,
+                'created_at': ann.created_at.isoformat() if ann.created_at else None,
+            })
+        return result
+
+    def load_from_ecto(self, doc_path: str, annotations_data: List[dict],
+                       passcode_hash: str = None):
+        """Restore state from an imported .ecto technical overview bundle."""
+        self.load_image_from_path(doc_path)
+        self._annotations.clear()
+        self._next_id = 1
+        for ad in annotations_data:
+            created = None
+            if ad.get('created_at'):
+                try:
+                    created = datetime.fromisoformat(ad['created_at'])
+                except Exception:
+                    pass
+            ann = ArrowAnnotation(
+                id=ad['id'],
+                target_x=ad['target_x'],
+                target_y=ad['target_y'],
+                text=ad.get('text', ''),
+                margin_side=ad.get('margin_side', 'left'),
+                color=ad.get('color', ARROW_COLOR),
+                image_paths=ad.get('image_paths', []),
+                label=ad.get('label', 'Point'),
+                created_at=created,
+            )
+            self._annotations.append(ann)
+            self._next_id = max(self._next_id, ann.id + 1)
+        self.canvas.set_annotations(self._annotations)
+        self.annotation_panel.refresh(self._annotations)
+        self._passcode_hash = passcode_hash
+        self._reader_mode = bool(passcode_hash)
+
+    def get_document_path(self) -> Optional[str]:
+        """Return the file path of the currently loaded document image, if available."""
+        return getattr(self, '_document_path', None)
+
     def clear_all(self):
         self._annotations.clear()
         self._next_id = 1
