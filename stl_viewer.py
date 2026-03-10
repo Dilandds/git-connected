@@ -81,6 +81,7 @@ class TabState:
     ruler_active: bool = False
     annotation_mode_active: bool = False
     screenshot_mode_active: bool = False
+    draw_mode_active: bool = False
     annotations_exported: bool = False
     ecto_temp_dir: Optional[str] = None
     filename: Optional[str] = None  # display name for tab
