@@ -817,6 +817,8 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.toggle_ruler.connect(self._toggle_ruler_mode)
         self.toolbar.toggle_screenshot.connect(self._toggle_screenshot_mode)
         self.toolbar.toggle_annotation.connect(self._toggle_annotation_mode)
+        self.toolbar.toggle_draw.connect(self._toggle_draw_mode)
+        self.toolbar.draw_color_changed.connect(self._on_draw_color_changed)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
     
