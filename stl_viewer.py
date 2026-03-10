@@ -1340,6 +1340,8 @@ class STLViewerWindow(QMainWindow):
                         self._exit_ruler_mode()
                     if self.toolbar.annotation_mode_enabled:
                         self._exit_annotation_mode()
+                    if self.toolbar.draw_mode_enabled:
+                        self._exit_draw_mode()
                     self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
                     self.right_panel_stack.show()
                     self.screenshot_panel.show()
