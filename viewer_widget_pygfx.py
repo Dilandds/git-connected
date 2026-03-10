@@ -2074,3 +2074,243 @@ class STLViewerWidget(QWidget):
     @_screenshot_captured_callback.setter
     def _screenshot_captured_callback(self, cb):
         self._screenshot_cb = cb
+
+    # ========== Draw Mode (freehand drawing on mesh surface) ==========
+
+    def enable_draw_mode(self):
+        """Enable freehand draw mode. Clicks on mesh surface start strokes."""
+        if not self._initialized or self._scene is None:
+            logger.warning("enable_draw_mode: Not initialized")
+            return False
+        if self.current_mesh is None or self._mesh_obj is None:
+            logger.warning("enable_draw_mode: No mesh loaded")
+            return False
+        if self._annotation_trimesh is None:
+            # Build trimesh for raycasting (same as annotation mode)
+            try:
+                import trimesh
+                if hasattr(self, '_pv_mesh') and self._pv_mesh is not None:
+                    self._annotation_trimesh = _pyvista_to_trimesh(self._pv_mesh)
+                elif self.current_mesh is not None:
+                    self._annotation_trimesh = _pyvista_to_trimesh(self.current_mesh)
+            except Exception as e:
+                logger.warning(f"enable_draw_mode: Could not build trimesh: {e}")
+                return False
+
+        self.draw_mode = True
+        self._drawing_active = False
+
+        # Disable other modes
+        if self.ruler_mode:
+            self.disable_ruler_mode()
+        if self.annotation_mode:
+            self.disable_annotation_mode()
+
+        # Install event filter
+        if not self._draw_event_filter_installed and self._canvas is not None:
+            self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
+            self._draw_event_filter_installed = True
+
+        # Show gizmo overlay for camera control
+        if self._object_control_overlay is not None:
+            self._object_control_overlay.show()
+            self._object_control_overlay.raise_()
+
+        logger.info("enable_draw_mode: Draw mode enabled")
+        return True
+
+    def disable_draw_mode(self):
+        """Disable draw mode."""
+        self.draw_mode = False
+        self._drawing_active = False
+        self._current_stroke_points = []
+        self._remove_current_stroke_line()
+
+        if self._draw_event_filter_installed and self._canvas is not None:
+            self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
+            self._draw_event_filter_installed = False
+
+        if self._object_control_overlay is not None:
+            self._object_control_overlay.hide()
+
+        logger.info("disable_draw_mode: Draw mode disabled")
+
+    def set_draw_color(self, color: str):
+        """Set the pen color for drawing."""
+        self._draw_color = color
+
+    def clear_drawings(self):
+        """Remove all drawn strokes from the scene."""
+        for stroke in self._draw_strokes:
+            try:
+                self._scene.remove(stroke)
+            except Exception:
+                pass
+        self._draw_strokes.clear()
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def undo_last_stroke(self):
+        """Remove the most recently drawn stroke."""
+        if self._draw_strokes:
+            stroke = self._draw_strokes.pop()
+            try:
+                self._scene.remove(stroke)
+            except Exception:
+                pass
+            if self._canvas:
+                self._canvas.request_draw()
+
+    def _draw_event_filter_impl(self, obj, event):
+        """Handle draw mode mouse events."""
+        if not self.draw_mode or self._canvas is None:
+            return False
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.pos()
+            hit = self._draw_start_stroke(pos.x(), pos.y())
+            return hit
+        elif t == QEvent.MouseMove and self._drawing_active:
+            pos = event.pos()
+            self._draw_continue_stroke(pos.x(), pos.y())
+            return True
+        elif t == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and self._drawing_active:
+            self._draw_finish_stroke()
+            return True
+        return False
+
+    def _draw_start_stroke(self, x, y):
+        """Start a new stroke if the click hits the mesh surface."""
+        if self._annotation_trimesh is None:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+        try:
+            locations, _, index_tri = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin], ray_directions=[ray_direction]
+            )
+            if len(locations) == 0:
+                return False
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            closest_idx = np.argmin(dists)
+            hit_point = locations[closest_idx]
+            # Offset along face normal to prevent z-fighting
+            normal = self._annotation_trimesh.face_normals[index_tri[closest_idx]]
+            offset = self._get_draw_normal_offset()
+            hit_point = hit_point + normal * offset
+            self._current_stroke_points = [hit_point.astype(np.float32)]
+            self._drawing_active = True
+            return True
+        except Exception as e:
+            logger.debug(f"_draw_start_stroke: {e}")
+            return False
+
+    def _draw_continue_stroke(self, x, y):
+        """Continue the current stroke with a new point from raycasting."""
+        if self._annotation_trimesh is None or not self._drawing_active:
+            return
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return
+        try:
+            locations, _, index_tri = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin], ray_directions=[ray_direction]
+            )
+            if len(locations) == 0:
+                return
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            closest_idx = np.argmin(dists)
+            hit_point = locations[closest_idx]
+            normal = self._annotation_trimesh.face_normals[index_tri[closest_idx]]
+            offset = self._get_draw_normal_offset()
+            hit_point = hit_point + normal * offset
+            self._current_stroke_points.append(hit_point.astype(np.float32))
+            self._update_current_stroke_line()
+        except Exception as e:
+            logger.debug(f"_draw_continue_stroke: {e}")
+
+    def _draw_finish_stroke(self):
+        """Finalize the current stroke and add it permanently to the scene."""
+        self._drawing_active = False
+        if len(self._current_stroke_points) < 2:
+            self._current_stroke_points = []
+            self._remove_current_stroke_line()
+            return
+        # Remove preview line and create final stroke
+        self._remove_current_stroke_line()
+        import pygfx as gfx
+        try:
+            positions = np.array(self._current_stroke_points, dtype=np.float32)
+            # Create line segments: pairs of consecutive points
+            segments = []
+            for i in range(len(positions) - 1):
+                segments.append(positions[i])
+                segments.append(positions[i + 1])
+            seg_positions = np.array(segments, dtype=np.float32)
+            geom = gfx.Geometry(positions=seg_positions)
+            mat = gfx.LineSegmentMaterial(
+                color=self._draw_color, thickness=3.0,
+                depth_test=True, depth_write=True
+            )
+            line_obj = gfx.Line(geom, mat)
+            self._scene.add(line_obj)
+            self._draw_strokes.append(line_obj)
+        except Exception as e:
+            logger.warning(f"_draw_finish_stroke: {e}")
+        self._current_stroke_points = []
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def _update_current_stroke_line(self):
+        """Update the live preview line for the current stroke being drawn."""
+        self._remove_current_stroke_line()
+        if len(self._current_stroke_points) < 2:
+            return
+        import pygfx as gfx
+        try:
+            positions = np.array(self._current_stroke_points, dtype=np.float32)
+            segments = []
+            for i in range(len(positions) - 1):
+                segments.append(positions[i])
+                segments.append(positions[i + 1])
+            seg_positions = np.array(segments, dtype=np.float32)
+            geom = gfx.Geometry(positions=seg_positions)
+            mat = gfx.LineSegmentMaterial(
+                color=self._draw_color, thickness=3.0,
+                depth_test=True, depth_write=True
+            )
+            self._current_stroke_line = gfx.Line(geom, mat)
+            self._scene.add(self._current_stroke_line)
+        except Exception as e:
+            logger.debug(f"_update_current_stroke_line: {e}")
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def _remove_current_stroke_line(self):
+        """Remove the live preview stroke line from the scene."""
+        if self._current_stroke_line is not None:
+            try:
+                self._scene.remove(self._current_stroke_line)
+            except Exception:
+                pass
+            self._current_stroke_line = None
+
+    def _get_draw_normal_offset(self):
+        """Get a small offset along surface normal to prevent z-fighting."""
+        if self.current_mesh is None:
+            return 0.1
+        try:
+            b = self.current_mesh.bounds
+            diag = np.sqrt(
+                (b[1] - b[0]) ** 2 + (b[3] - b[2]) ** 2 + (b[5] - b[4]) ** 2
+            )
+            return max(diag * 0.001, 0.01)
+        except Exception:
+            return 0.1
