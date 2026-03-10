@@ -1294,6 +1294,8 @@ class STLViewerWindow(QMainWindow):
                     self.right_panel_stack.show()
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
+                    if self.toolbar.draw_mode_enabled:
+                        self._exit_draw_mode()
                     if hasattr(vw, 'reframe_for_viewport'):
                         QTimer.singleShot(50, vw.reframe_for_viewport)
                     logger.info("_toggle_annotation_mode: Annotation mode enabled")
