@@ -222,6 +222,8 @@ class ViewControlsToolbar(QWidget):
     toggle_ruler = pyqtSignal()
     toggle_annotation = pyqtSignal()
     toggle_screenshot = pyqtSignal()
+    toggle_draw = pyqtSignal()
+    draw_color_changed = pyqtSignal(str)  # hex color
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
     
@@ -236,6 +238,8 @@ class ViewControlsToolbar(QWidget):
         self.ruler_mode_enabled = False
         self.annotation_mode_enabled = False
         self.screenshot_mode_enabled = False
+        self.draw_mode_enabled = False
+        self._draw_color = '#FF0000'
         self.stl_loaded = False
         
         # Load saved state
@@ -325,6 +329,11 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.screenshot_btn)
         
+        self.draw_btn = ToolbarButton("🖊", "Draw ▼", "Freehand draw on model surface")
+        self.draw_btn.clicked.connect(self._on_draw_clicked)
+        self.draw_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.draw_btn)
+        
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
@@ -401,6 +410,7 @@ class ViewControlsToolbar(QWidget):
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
+        self.draw_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
     
     def _on_grid_clicked(self):
@@ -537,11 +547,14 @@ class ViewControlsToolbar(QWidget):
         if self.ruler_mode_enabled:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📐")
-            # Disable annotation mode if active
             if self.annotation_mode_enabled:
                 self.annotation_mode_enabled = False
                 self.annotation_btn.set_active(False)
                 self.annotation_btn.set_icon("📝")
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
         else:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📏")
@@ -554,15 +567,17 @@ class ViewControlsToolbar(QWidget):
         if self.annotation_mode_enabled:
             self.annotation_btn.set_label("Annotate")
             self.annotation_btn.set_icon("✏️")
-            # Disable ruler mode if active
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
                 self.ruler_btn.set_icon("📏")
-            # Disable screenshot mode if active
             if self.screenshot_mode_enabled:
                 self.screenshot_mode_enabled = False
                 self.screenshot_btn.set_active(False)
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
         else:
             self.annotation_btn.set_label("Annotate")
             self.annotation_btn.set_icon("📝")
@@ -573,18 +588,61 @@ class ViewControlsToolbar(QWidget):
         """Handle screenshot mode toggle."""
         self.screenshot_mode_enabled = not self.screenshot_mode_enabled
         if self.screenshot_mode_enabled:
-            # Disable ruler mode if active
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
                 self.ruler_btn.set_icon("📏")
-            # Disable annotation mode if active
             if self.annotation_mode_enabled:
                 self.annotation_mode_enabled = False
                 self.annotation_btn.set_active(False)
                 self.annotation_btn.set_icon("📝")
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
+    
+    def _on_draw_clicked(self):
+        """Handle draw mode toggle. Right-click or long-press shows color picker."""
+        self.draw_mode_enabled = not self.draw_mode_enabled
+        if self.draw_mode_enabled:
+            self.draw_btn.set_label("Drawing")
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.annotation_mode_enabled:
+                self.annotation_mode_enabled = False
+                self.annotation_btn.set_active(False)
+                self.annotation_btn.set_icon("📝")
+            if self.screenshot_mode_enabled:
+                self.screenshot_mode_enabled = False
+        self.screenshot_btn.set_active(False)
+    
+    def reset_draw_state(self):
+        """Reset draw button state (called when exiting draw mode externally)."""
+        self.draw_mode_enabled = False
+        self.draw_btn.set_label("Draw ▼")
+        self.draw_btn.set_active(False)
+        else:
+            self.draw_btn.set_label("Draw ▼")
+        self.draw_btn.set_active(self.draw_mode_enabled)
+        self.toggle_draw.emit()
+    
+    def show_draw_color_picker(self):
+        """Show the color picker popup below the draw button."""
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(self._on_draw_color_selected)
+        pos = self.draw_btn.mapToGlobal(self.draw_btn.rect().bottomLeft())
+        picker.move(pos)
+        picker.show()
+    
+    def _on_draw_color_selected(self, color: str):
+        """Handle color selected from draw color picker."""
+        self._draw_color = color
+        self.draw_color_changed.emit(color)
     
     def _on_fullscreen_clicked(self):
         """Handle fullscreen toggle."""

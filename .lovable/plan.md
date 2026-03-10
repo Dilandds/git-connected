@@ -1,72 +1,77 @@
 
-
-# Plan: Freehand Drawing on 3D Object Surface
+# Multi-Tab Support for ECTOFORM
 
 ## Overview
-
-Add a **Draw Mode** to the 3D viewer that lets users draw freehand lines directly on the surface of a 3D model using the mouse. A color picker lets users choose the pen color before or during drawing. Strokes are projected onto the mesh surface via raycasting as the mouse moves.
+Add a tab bar to the main window so users can open multiple 3D files simultaneously, each in its own tab with independent viewer, sidebar data, and annotations.
 
 ## Architecture
 
 ```text
-Toolbar: [...existing buttons...] [🖊 Draw ▼]
-                                      ↓ (color picker popup)
-                                   [Color swatches + custom]
-
-Draw Mode active:
-  - Mouse down on mesh → start new stroke
-  - Mouse drag → raycast each move, collect surface points → draw polyline
-  - Mouse up → finalize stroke
-  - Strokes rendered as pygfx.Line objects on the scene
++----------------------------------------------------------+
+| ECTOFORM - Tab Bar                                        |
+| [Model1.stl  x] [Model2.step  x] [+]                    |
++----------------------------------------------------------+
+| Sidebar  |  Toolbar                                       |
+|          |  Ruler Toolbar (if active)                     |
+|          +-----------------------------------------------+
+|          |  3D Viewer + Annotation Panel                  |
+|          |  (per-tab content)                             |
++----------------------------------------------------------+
 ```
 
-## Implementation
+## Implementation Plan
 
-### 1. Add Draw button + color picker to toolbar (`ui/toolbar.py`)
+### 1. Create a Tab Data class to hold per-tab state
+- Create a dataclass or simple class (`TabState`) that stores:
+  - `file_path` -- the loaded file
+  - `viewer_widget` -- its own `STLViewerWidget` instance
+  - `annotation_panel` -- its own `AnnotationPanel` instance
+  - `sidebar_data` -- cached mesh data / dimensions for restoring sidebar
+  - `annotations` -- list of annotations
+  - `ruler_active` / `annotation_mode_active` -- mode flags
+  - `mesh` reference
 
-- Add a new `ToolbarButton` "Draw" with a `🖊` icon and a `toggle_draw` signal.
-- Add mutual exclusivity with ruler, annotation, and screenshot modes.
-- On long-press or dropdown arrow, show a small color picker popup (grid of preset color swatches + a QColorDialog "Custom" option). Store selected color, default `#FF0000` (red).
-- Emit `draw_color_changed(str)` signal when color changes.
+### 2. Add QTabBar to the right container
+- Insert a `QTabBar` above the toolbar in the right panel layout
+- Style it to match the dark ECTOFORM theme
+- Each tab shows the filename with a close button
+- A "+" button at the end to open a new file
+- When no files are loaded, show a single "Untitled" tab with the drop zone
 
-### 2. Add draw mode to viewer widget (`viewer_widget_pygfx.py`)
+### 3. Refactor STLViewerWindow to manage multiple tabs
+- Replace the single `self.viewer_widget` with a `QStackedWidget` that holds one viewer per tab
+- Maintain a list of `TabState` objects (`self.tabs`)
+- Track `self.current_tab_index`
+- When switching tabs:
+  - Save current tab's mode states (ruler, annotation)
+  - Hide current viewer, show new tab's viewer
+  - Update sidebar panel with the new tab's mesh data
+  - Update toolbar state (loaded filename, enabled controls)
+  - Restore ruler/annotation mode if it was active on that tab
 
-- New state: `self.draw_mode = False`, `self._draw_color = '#FF0000'`, `self._draw_strokes = []` (list of pygfx.Line objects), `self._current_stroke_points = []`.
-- `enable_draw_mode()` / `disable_draw_mode()`: toggle mode, install/remove event filter (same pattern as annotation mode), disable rotation during draw, show gizmo overlay for camera control.
-- `set_draw_color(color: str)`: update pen color.
-- Event filter logic:
-  - **MouseButtonPress** (left): raycast to mesh surface; if hit, start stroke (`_current_stroke_points = [hit_point]`).
-  - **MouseMove** (while button held): raycast each move; if hit, append point to `_current_stroke_points`, update live polyline in scene.
-  - **MouseButtonRelease**: finalize stroke, store in `_draw_strokes`.
-- Rendering: Use `pygfx.Line` with `pygfx.LineSegmentMaterial` or `pygfx.LineMaterial` (thick line, ~2-3px) with chosen color. Offset points slightly along surface normal to prevent z-fighting.
-- `clear_drawings()`: remove all stroke Line objects from scene.
-- `undo_last_stroke()`: remove the most recent stroke.
+### 4. Modify file loading to create new tabs
+- `upload_stl_file()` and `_load_dropped_file()`: instead of replacing the current model, create a new tab with a fresh `STLViewerWidget` and load the file into it
+- If the current tab is empty (no file loaded), reuse it instead of creating a new tab
+- Connect all signals (drag-drop, click-to-upload, etc.) for each new viewer widget
 
-### 3. Wire draw mode in main window (`stl_viewer.py`)
+### 5. Add tab close functionality
+- Close button on each tab removes the tab, destroys its viewer widget, and cleans up state
+- If the last tab is closed, create a new empty tab with the drop zone
+- Prompt to save unsaved annotations before closing a tab
 
-- Connect toolbar `toggle_draw` signal to `_on_toggle_draw()`.
-- Connect `draw_color_changed` to `viewer_widget.set_draw_color()`.
-- Disable draw mode when switching to ruler/annotation/screenshot.
-
-### 4. Add color picker popup (`ui/draw_color_picker.py` — new file)
-
-- Small `QWidget` popup with a grid of ~12 preset colors (red, blue, green, yellow, orange, purple, white, black, cyan, magenta, pink, brown).
-- A "Custom..." button that opens `QColorDialog`.
-- Emits `color_selected(str)` signal.
-- Styled to match the dark ECTOFORM theme.
+### 6. Update sidebar to reflect active tab
+- When switching tabs, call `self.sidebar_panel.update_dimensions()` with the active tab's cached mesh data
+- Clear sidebar if switching to an empty tab
 
 ## Technical Details
 
-- Raycasting reuses the existing `_screen_to_ray()` and trimesh intersection logic from annotation mode.
-- Surface normal offset (~0.1% of model bounding box diagonal) prevents drawn lines from clipping into the mesh.
-- Each stroke is a separate `pygfx.Line` object added to the scene, making undo straightforward (remove last Line from scene and list).
-- Drawing state is per-viewer (per-tab ready).
-
-### Files to create:
-- `ui/draw_color_picker.py`
-
 ### Files to modify:
-- `ui/toolbar.py` — add Draw button, color picker trigger, signals
-- `viewer_widget_pygfx.py` — draw mode logic, stroke rendering, event handling
-- `stl_viewer.py` — wire toolbar signals to viewer methods
+- **`stl_viewer.py`** -- Major refactor: add `QTabBar`, `QStackedWidget`, `TabState` management, modify all file-loading and mode-toggling methods to be tab-aware
+- **`ui/styles.py`** -- Add tab bar styling to match the ECTOFORM theme
 
+### Key considerations:
+- Each tab gets its own `STLViewerWidget` instance (pygfx context), which may use significant GPU memory -- this is acceptable for a desktop app but worth noting
+- Annotation state is per-tab, so switching tabs must save/restore annotations
+- Ruler mode measurements are per-tab
+- The sidebar panel is shared but updates its content based on the active tab
+- Window title updates to show the active tab's filename
