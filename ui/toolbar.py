@@ -618,17 +618,17 @@ class ViewControlsToolbar(QWidget):
                 self.annotation_btn.set_icon("📝")
             if self.screenshot_mode_enabled:
                 self.screenshot_mode_enabled = False
-        self.screenshot_btn.set_active(False)
-    
+                self.screenshot_btn.set_active(False)
+        else:
+            self.draw_btn.set_label("Draw ▼")
+        self.draw_btn.set_active(self.draw_mode_enabled)
+        self.toggle_draw.emit()
+
     def reset_draw_state(self):
         """Reset draw button state (called when exiting draw mode externally)."""
         self.draw_mode_enabled = False
         self.draw_btn.set_label("Draw ▼")
         self.draw_btn.set_active(False)
-        else:
-            self.draw_btn.set_label("Draw ▼")
-        self.draw_btn.set_active(self.draw_mode_enabled)
-        self.toggle_draw.emit()
     
     def show_draw_color_picker(self):
         """Show the color picker popup below the draw button."""
