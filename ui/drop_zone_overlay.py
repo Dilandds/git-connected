@@ -66,7 +66,7 @@ class DropZoneOverlay(QWidget):
         """)
         
         # Helper text
-        self.helper_label = QLabel("STL, STEP, 3DM, OBJ, IGES & ECTO files")
+        self.helper_label = QLabel("STL, STEP, 3DM, OBJ, IGES, DXF & ECTO files")
         self.helper_label.setAlignment(Qt.AlignCenter)
         self.helper_label.setStyleSheet("""
             QLabel {
