@@ -1670,7 +1670,7 @@ class STLViewerWindow(QMainWindow):
                 return
             
             file_ext = file_path.lower()
-            if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs')):
+            if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
                 logger.warning(f"upload_stl_file: Invalid file extension: {file_path}")
                 QMessageBox.warning(
                     self,
