@@ -1327,6 +1327,41 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.reset_annotation_state()
         logger.info("_exit_annotation_mode: Annotation mode disabled, annotations kept")
     
+    # ========== Arrow Mode Methods ==========
+
+    def _toggle_arrow_mode(self):
+        """Toggle 3D arrow placement mode."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        if self.toolbar.arrow_mode_enabled:
+            if hasattr(vw, 'enable_arrow_mode'):
+                success = vw.enable_arrow_mode()
+                if success:
+                    # Exit other modes
+                    if self.toolbar.annotation_mode_enabled:
+                        self._exit_annotation_mode()
+                    if self.toolbar.ruler_mode_enabled:
+                        self._exit_ruler_mode()
+                    if self.toolbar.screenshot_mode_enabled:
+                        self._exit_screenshot_mode()
+                    if self.toolbar.draw_mode_enabled:
+                        self._exit_draw_mode()
+                    logger.info("_toggle_arrow_mode: Arrow mode enabled")
+                else:
+                    self.toolbar.reset_arrow_state()
+                    logger.warning("_toggle_arrow_mode: Failed to enable arrow mode")
+        else:
+            self._exit_arrow_mode()
+
+    def _exit_arrow_mode(self):
+        """Exit arrow mode; arrows remain visible."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'disable_arrow_mode'):
+            vw.disable_arrow_mode()
+        self.toolbar.reset_arrow_state()
+        logger.info("_exit_arrow_mode: Arrow mode disabled")
+
     # ========== Screenshot Mode Methods ==========
     
     def _toggle_screenshot_mode(self):
