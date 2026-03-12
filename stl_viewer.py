@@ -80,6 +80,7 @@ class TabState:
     mesh: Any = None  # current_mesh reference
     ruler_active: bool = False
     annotation_mode_active: bool = False
+    arrow_mode_active: bool = False
     screenshot_mode_active: bool = False
     draw_mode_active: bool = False
     annotations_exported: bool = False
