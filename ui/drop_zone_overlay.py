@@ -142,8 +142,8 @@ class DropZoneOverlay(QWidget):
                 
                 # Validate file extension
                 file_ext = file_path.lower()
-                if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.ecto')):
-                    self.error_occurred.emit("Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, or .ECTO files only.")
+                if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.ecto') or file_ext.endswith('.dxf')):
+                    self.error_occurred.emit("Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF, or .ECTO files only.")
                     return
                 
                 event.acceptProposedAction()

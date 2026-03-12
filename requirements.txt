@@ -15,6 +15,7 @@ wgpu
 trimesh
 rtree  # Required for trimesh ray casting (annotation mode picking)
 rendercanvas
+ezdxf>=0.18.0  # DXF file format support
 scipy>=1.10.0
 Pillow>=10.0.0
 pillow-heif>=0.13.0  # HEIC (iPhone) to JPEG conversion in annotation mode

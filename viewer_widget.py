@@ -515,6 +515,15 @@ class STLViewerWidget(QWidget):
                 except Exception as e:
                     logger.error(f"load_stl: Failed to load IGES file: {e}", exc_info=True)
                     raise
+            elif file_ext.endswith('.dxf'):
+                logger.info("load_stl: Detected DXF file, loading with DxfLoader...")
+                from core.dxf_loader import DxfLoader
+                try:
+                    mesh = DxfLoader.load_dxf(file_path)
+                    logger.info(f"load_stl: DXF file loaded successfully. Mesh info: {mesh}")
+                except Exception as e:
+                    logger.error(f"load_stl: Failed to load DXF file: {e}", exc_info=True)
+                    raise
             else:
                 logger.info("load_stl: Reading STL file with PyVista...")
                 # Read STL file using PyVista

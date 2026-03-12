@@ -1675,7 +1675,7 @@ class STLViewerWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Invalid File",
-                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .ecto extension)."
+                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
                 )
                 return
             

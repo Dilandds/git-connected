@@ -408,6 +408,14 @@ class STLViewerWidget(QWidget):
                 if pv_mesh is None or pv_mesh.n_points == 0:
                     raise ValueError("IGES loader returned empty mesh")
                 mesh_tri = _pyvista_to_trimesh(pv_mesh)
+            # DXF
+            elif file_ext.endswith('.dxf'):
+                logger.info("load_stl (pygfx): Loading DXF with DxfLoader...")
+                from core.dxf_loader import DxfLoader
+                pv_mesh = DxfLoader.load_dxf(file_path)
+                if pv_mesh is None or pv_mesh.n_points == 0:
+                    raise ValueError("DXF loader returned empty mesh")
+                mesh_tri = _pyvista_to_trimesh(pv_mesh)
             # OBJ: try trimesh first, fallback to PyVista/meshio/ObjLoader
             elif file_ext.endswith('.obj'):
                 mesh_tri = None
