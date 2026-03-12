@@ -563,11 +563,53 @@ class ViewControlsToolbar(QWidget):
         self.ruler_btn.set_active(self.ruler_mode_enabled)
         self.toggle_ruler.emit()
     
-    def _on_annotation_clicked(self):
-        """Handle annotation toggle."""
+    def _show_annotate_menu(self):
+        """Show dropdown menu with Annotate and 3D Arrow options."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 6px;
+                padding: 4px 0;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                color: {default_theme.text_primary};
+                font-size: 11px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+            QMenu::item:checked {{
+                font-weight: bold;
+            }}
+        """)
+
+        annotate_action = menu.addAction("📝  Annotate")
+        annotate_action.setCheckable(True)
+        annotate_action.setChecked(self.annotation_mode_enabled)
+        annotate_action.triggered.connect(self._on_annotation_selected)
+
+        arrow_action = menu.addAction("➤  3D Arrow")
+        arrow_action.setCheckable(True)
+        arrow_action.setChecked(self.arrow_mode_enabled)
+        arrow_action.triggered.connect(self._on_arrow_selected)
+
+        menu.exec_(self.annotation_btn.mapToGlobal(
+            self.annotation_btn.rect().bottomLeft()
+        ))
+
+    def _on_annotation_selected(self):
+        """Handle annotation mode selection from dropdown."""
+        # If arrow mode is active, exit it first
+        if self.arrow_mode_enabled:
+            self.arrow_mode_enabled = False
+            self.toggle_arrow.emit()
+
         self.annotation_mode_enabled = not self.annotation_mode_enabled
         if self.annotation_mode_enabled:
-            self.annotation_btn.set_label("Annotate")
+            self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("✏️")
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
@@ -581,10 +623,39 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
         else:
-            self.annotation_btn.set_label("Annotate")
+            self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(self.annotation_mode_enabled)
         self.toggle_annotation.emit()
+
+    def _on_arrow_selected(self):
+        """Handle 3D arrow mode selection from dropdown."""
+        # If annotation mode is active, exit it first
+        if self.annotation_mode_enabled:
+            self.annotation_mode_enabled = False
+            self.annotation_btn.set_active(False)
+            self.toggle_annotation.emit()
+
+        self.arrow_mode_enabled = not self.arrow_mode_enabled
+        if self.arrow_mode_enabled:
+            self.annotation_btn.set_label("Arrow ▼")
+            self.annotation_btn.set_icon("➤")
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.screenshot_mode_enabled:
+                self.screenshot_mode_enabled = False
+                self.screenshot_btn.set_active(False)
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
+        else:
+            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_icon("📝")
+        self.annotation_btn.set_active(self.arrow_mode_enabled)
+        self.toggle_arrow.emit()
     
     def _on_screenshot_clicked(self):
         """Handle screenshot mode toggle."""
