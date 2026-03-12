@@ -2330,3 +2330,278 @@ class STLViewerWidget(QWidget):
             return max(diag * 0.001, 0.01)
         except Exception:
             return 0.1
+
+    # ========== 3D Arrow Mode Methods ==========
+
+    def enable_arrow_mode(self):
+        """Enable 3D arrow placement mode. Click on mesh to place arrows, drag to orient."""
+        if not self._initialized or self._scene is None:
+            logger.warning("enable_arrow_mode: Not initialized")
+            return False
+        if self.current_mesh is None or self._mesh_obj is None:
+            logger.warning("enable_arrow_mode: No mesh loaded")
+            return False
+
+        logger.info("enable_arrow_mode: Enabling...")
+        self.arrow_mode = True
+
+        # Ensure we have a trimesh for raycasting
+        if self._annotation_trimesh is None:
+            self._build_arrow_trimesh()
+
+        # Install event filter
+        if not self._arrow_event_filter_installed and self._canvas is not None:
+            self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
+            self._arrow_event_filter_installed = True
+
+        logger.info("enable_arrow_mode: Arrow mode enabled")
+        return True
+
+    def disable_arrow_mode(self):
+        """Disable arrow mode. Arrows remain visible."""
+        logger.info("disable_arrow_mode: Disabling...")
+        self.arrow_mode = False
+        self._arrow_dragging = None
+        self._arrow_drag_start = None
+
+        if self._arrow_event_filter_installed and self._canvas is not None:
+            self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
+            self._arrow_event_filter_installed = False
+
+        logger.info("disable_arrow_mode: Arrow mode disabled")
+
+    def _build_arrow_trimesh(self):
+        """Build trimesh for raycasting if not already built."""
+        if self._annotation_trimesh is not None:
+            return
+        try:
+            import trimesh
+            if hasattr(self.current_mesh, 'points') and hasattr(self.current_mesh, 'faces'):
+                faces_raw = self.current_mesh.faces
+                if faces_raw is not None and len(faces_raw) > 0:
+                    if faces_raw.ndim == 1:
+                        n_cols = faces_raw[0] + 1
+                        faces_2d = faces_raw.reshape(-1, n_cols)[:, 1:]
+                    else:
+                        faces_2d = faces_raw
+                    self._annotation_trimesh = trimesh.Trimesh(
+                        vertices=np.asarray(self.current_mesh.points, dtype=np.float64),
+                        faces=np.asarray(faces_2d, dtype=np.int32),
+                    )
+        except Exception as e:
+            logger.warning(f"_build_arrow_trimesh: {e}")
+
+    def _arrow_event_filter_impl(self, obj, event):
+        """Handle arrow mode events: click to place, drag to orient."""
+        if not self.arrow_mode or self._canvas is None:
+            return False
+        t = event.type()
+
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.pos()
+            ray_origin, ray_direction = self._screen_to_ray(pos.x(), pos.y())
+            if ray_origin is None:
+                return False
+
+            if self._annotation_trimesh is None:
+                return False
+
+            try:
+                locations, _, index_tri = self._annotation_trimesh.ray.intersects_location(
+                    ray_origins=[ray_origin],
+                    ray_directions=[ray_direction],
+                )
+                if len(locations) == 0:
+                    return False  # No hit - pass through for rotate
+
+                cam_pos = np.array(self._camera.local.position)
+                dists = np.linalg.norm(locations - cam_pos, axis=1)
+                closest_idx = np.argmin(dists)
+                hit_point = tuple(float(c) for c in locations[closest_idx])
+
+                # Get surface normal at hit point
+                tri_idx = index_tri[closest_idx]
+                normal = self._annotation_trimesh.face_normals[tri_idx]
+                normal = normal / (np.linalg.norm(normal) + 1e-12)
+
+                arrow_id = self._add_arrow(hit_point, tuple(float(c) for c in normal))
+                self._arrow_dragging = arrow_id
+                self._arrow_drag_start = (pos.x(), pos.y())
+                return True
+
+            except Exception as e:
+                logger.error(f"_arrow_event_filter_impl: {e}", exc_info=True)
+                return False
+
+        elif t == QEvent.MouseMove and self._arrow_dragging is not None:
+            pos = event.pos()
+            if self._arrow_drag_start is not None:
+                dx = pos.x() - self._arrow_drag_start[0]
+                dy = pos.y() - self._arrow_drag_start[1]
+                self._rotate_arrow(self._arrow_dragging, dx, dy)
+                self._arrow_drag_start = (pos.x(), pos.y())
+            return True
+
+        elif t == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            if self._arrow_dragging is not None:
+                self._arrow_dragging = None
+                self._arrow_drag_start = None
+                return True
+
+        return False
+
+    def _add_arrow(self, point, direction, color='#E53935', length_factor=0.08):
+        """Add a 3D arrow (cone + shaft) at point with direction."""
+        import pygfx as gfx
+
+        bounds = self.current_mesh.bounds
+        diag = np.sqrt(
+            (bounds[1] - bounds[0]) ** 2 +
+            (bounds[3] - bounds[2]) ** 2 +
+            (bounds[5] - bounds[4]) ** 2
+        )
+        arrow_length = diag * length_factor
+        cone_length = arrow_length * 0.35
+        shaft_length = arrow_length * 0.65
+        cone_radius = arrow_length * 0.06
+        shaft_radius = cone_radius * 0.4
+
+        r, g, b = self._hex_to_rgb_normalized(color)
+
+        group = gfx.Group()
+
+        # Shaft cylinder
+        shaft_geom = gfx.cylinder_geometry(
+            radius_bottom=shaft_radius, radius_top=shaft_radius,
+            height=shaft_length, radial_segments=12
+        )
+        shaft_mat = gfx.MeshPhongMaterial(color=(r, g, b), shininess=60)
+        shaft = gfx.Mesh(shaft_geom, shaft_mat)
+        shaft.local.position = (0, shaft_length / 2, 0)
+        group.add(shaft)
+
+        # Cone head
+        cone_geom = gfx.cone_geometry(radius=cone_radius, height=cone_length, radial_segments=16)
+        cone_mat = gfx.MeshPhongMaterial(color=(r, g, b), shininess=60)
+        cone = gfx.Mesh(cone_geom, cone_mat)
+        cone.local.position = (0, shaft_length + cone_length / 2, 0)
+        group.add(cone)
+
+        # Orient along direction
+        dir_arr = np.array(direction, dtype=np.float64)
+        dir_arr = dir_arr / (np.linalg.norm(dir_arr) + 1e-12)
+
+        offset = diag * 0.002
+        placed_point = (
+            point[0] + dir_arr[0] * offset,
+            point[1] + dir_arr[1] * offset,
+            point[2] + dir_arr[2] * offset,
+        )
+
+        group.local.position = placed_point
+        self._apply_arrow_rotation(group, dir_arr)
+
+        self._scene.add(group)
+
+        arrow_id = self._arrow_next_id
+        self._arrow_next_id += 1
+        self._arrow_objects.append({
+            'id': arrow_id,
+            'group': group,
+            'point': placed_point,
+            'direction': dir_arr.tolist(),
+        })
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+        logger.info(f"_add_arrow: Added arrow {arrow_id} at {point}")
+        return arrow_id
+
+    def _apply_arrow_rotation(self, group, direction):
+        """Rotate group so local +Y aligns with direction vector."""
+        up = np.array([0, 1, 0], dtype=np.float64)
+        dir_arr = np.array(direction, dtype=np.float64)
+        dir_arr = dir_arr / (np.linalg.norm(dir_arr) + 1e-12)
+
+        try:
+            from pylinalg import quat_from_vecs
+            q = quat_from_vecs(up, dir_arr)
+            group.local.rotation = q
+        except Exception:
+            cross = np.cross(up, dir_arr)
+            dot = np.dot(up, dir_arr)
+            if np.linalg.norm(cross) < 1e-8:
+                if dot > 0:
+                    group.local.rotation = (0, 0, 0, 1)
+                else:
+                    group.local.rotation = (1, 0, 0, 0)
+            else:
+                w = 1.0 + dot
+                q = np.array([cross[0], cross[1], cross[2], w], dtype=np.float64)
+                q = q / (np.linalg.norm(q) + 1e-12)
+                group.local.rotation = tuple(q)
+
+    def _rotate_arrow(self, arrow_id, dx, dy):
+        """Rotate an arrow based on mouse drag delta."""
+        arrow = None
+        for a in self._arrow_objects:
+            if a['id'] == arrow_id:
+                arrow = a
+                break
+        if arrow is None:
+            return
+
+        scale = 0.01
+        dir_arr = np.array(arrow['direction'], dtype=np.float64)
+
+        try:
+            cam_mat = np.array(self._camera.local.world_transform, dtype=np.float64).reshape(4, 4)
+            cam_right = cam_mat[:3, 0]
+            cam_up = cam_mat[:3, 1]
+        except Exception:
+            cam_right = np.array([1, 0, 0])
+            cam_up = np.array([0, 1, 0])
+
+        rotation = cam_right * (-dy * scale) + cam_up * (dx * scale)
+        new_dir = dir_arr + rotation
+        new_dir = new_dir / (np.linalg.norm(new_dir) + 1e-12)
+
+        arrow['direction'] = new_dir.tolist()
+        self._apply_arrow_rotation(arrow['group'], new_dir)
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def remove_arrow(self, arrow_id):
+        """Remove a specific arrow by ID."""
+        for i, a in enumerate(self._arrow_objects):
+            if a['id'] == arrow_id:
+                try:
+                    self._scene.remove(a['group'])
+                except Exception:
+                    pass
+                self._arrow_objects.pop(i)
+                if self._canvas:
+                    self._canvas.request_draw()
+                break
+
+    def clear_all_arrows(self):
+        """Remove all 3D arrows from the scene."""
+        for a in self._arrow_objects:
+            try:
+                self._scene.remove(a['group'])
+            except Exception:
+                pass
+        self._arrow_objects.clear()
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def undo_last_arrow(self):
+        """Remove the most recently added arrow."""
+        if self._arrow_objects:
+            self.remove_arrow(self._arrow_objects[-1]['id'])
