@@ -1298,9 +1298,9 @@ class SidebarPanel(QWidget):
         self._converter_select_btn.setCursor(Qt.PointingHandCursor)
         self._converter_select_btn.setStyleSheet(f"""
             QPushButton#converterSelectBtn {{
-                background-color: {default_theme.button_bg};
+                background-color: {default_theme.button_default_bg};
                 color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border};
+                border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
                 padding: 10px 16px;
                 font-size: 13px;
@@ -1308,8 +1308,11 @@ class SidebarPanel(QWidget):
                 text-align: left;
             }}
             QPushButton#converterSelectBtn:hover {{
-                background-color: {default_theme.button_hover};
-                border-color: {default_theme.accent};
+                background-color: {default_theme.row_bg_hover};
+                border-color: {default_theme.border_highlight};
+            }}
+            QPushButton#converterSelectBtn:pressed {{
+                background-color: {default_theme.row_bg_standard};
             }}
         """)
         self._converter_select_btn.clicked.connect(self._select_converter_source)
@@ -1337,7 +1340,7 @@ class SidebarPanel(QWidget):
         self._converter_run_btn.setCursor(Qt.PointingHandCursor)
         self._converter_run_btn.setStyleSheet(f"""
             QPushButton#converterRunBtn {{
-                background-color: {default_theme.accent};
+                background-color: {default_theme.button_primary};
                 color: #ffffff;
                 border: none;
                 border-radius: 6px;
@@ -1346,7 +1349,7 @@ class SidebarPanel(QWidget):
                 font-weight: 700;
             }}
             QPushButton#converterRunBtn:hover {{
-                background-color: {default_theme.button_hover};
+                background-color: {default_theme.button_primary_hover};
             }}
             QPushButton#converterRunBtn:disabled {{
                 background-color: {default_theme.border};
