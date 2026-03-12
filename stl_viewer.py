@@ -1659,7 +1659,7 @@ class STLViewerWindow(QMainWindow):
             self,
             "Select 3D File",
             "",
-            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;All Files (*)"
+            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;DXF Files (*.dxf);;All Files (*)"
         )
         
         if file_path:
@@ -1670,12 +1670,12 @@ class STLViewerWindow(QMainWindow):
                 return
             
             file_ext = file_path.lower()
-            if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs')):
+            if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
                 logger.warning(f"upload_stl_file: Invalid file extension: {file_path}")
                 QMessageBox.warning(
                     self,
                     "Invalid File",
-                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .ecto extension)."
+                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
                 )
                 return
             

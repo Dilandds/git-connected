@@ -367,7 +367,7 @@ class STLViewerWidget(QWidget):
                 return False
 
         file_ext = file_path.lower()
-        supported = ('.stl', '.obj', '.ply', '.step', '.stp', '.3dm', '.iges', '.igs')
+        supported = ('.stl', '.obj', '.ply', '.step', '.stp', '.3dm', '.iges', '.igs', '.dxf')
         if not any(file_ext.endswith(ext) for ext in supported):
             logger.warning(f"load_stl (pygfx): Unsupported format, got {file_ext}")
             return False
@@ -407,6 +407,14 @@ class STLViewerWidget(QWidget):
                 pv_mesh = IgesLoader.load_iges(file_path)
                 if pv_mesh is None or pv_mesh.n_points == 0:
                     raise ValueError("IGES loader returned empty mesh")
+                mesh_tri = _pyvista_to_trimesh(pv_mesh)
+            # DXF
+            elif file_ext.endswith('.dxf'):
+                logger.info("load_stl (pygfx): Loading DXF with DxfLoader...")
+                from core.dxf_loader import DxfLoader
+                pv_mesh = DxfLoader.load_dxf(file_path)
+                if pv_mesh is None or pv_mesh.n_points == 0:
+                    raise ValueError("DXF loader returned empty mesh")
                 mesh_tri = _pyvista_to_trimesh(pv_mesh)
             # OBJ: try trimesh first, fallback to PyVista/meshio/ObjLoader
             elif file_ext.endswith('.obj'):
