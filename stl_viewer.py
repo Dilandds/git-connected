@@ -1659,7 +1659,7 @@ class STLViewerWindow(QMainWindow):
             self,
             "Select 3D File",
             "",
-            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;All Files (*)"
+            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;DXF Files (*.dxf);;All Files (*)"
         )
         
         if file_path:
