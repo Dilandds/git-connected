@@ -2398,7 +2398,7 @@ class STLViewerWidget(QWidget):
             logger.warning(f"_build_arrow_trimesh: {e}")
 
     def _arrow_event_filter_impl(self, obj, event):
-        """Handle arrow mode events: click to place, drag to orient."""
+        """Handle arrow mode events: click on surface to place arrow (no drag)."""
         if not self.arrow_mode or self._canvas is None:
             return False
         t = event.type()
@@ -2418,7 +2418,7 @@ class STLViewerWidget(QWidget):
                     ray_directions=[ray_direction],
                 )
                 if len(locations) == 0:
-                    return False  # No hit - pass through for rotate
+                    return False  # No hit - pass through for camera orbit
 
                 cam_pos = np.array(self._camera.local.position)
                 dists = np.linalg.norm(locations - cam_pos, axis=1)
@@ -2431,28 +2431,14 @@ class STLViewerWidget(QWidget):
                 normal = normal / (np.linalg.norm(normal) + 1e-12)
 
                 arrow_id = self._add_arrow(hit_point, tuple(float(c) for c in normal))
-                self._arrow_dragging = arrow_id
-                self._arrow_drag_start = (pos.x(), pos.y())
+                # Notify callback (ArrowPanel) about the new arrow
+                if hasattr(self, '_arrow_added_callback') and self._arrow_added_callback:
+                    self._arrow_added_callback(arrow_id)
                 return True
 
             except Exception as e:
                 logger.error(f"_arrow_event_filter_impl: {e}", exc_info=True)
                 return False
-
-        elif t == QEvent.MouseMove and self._arrow_dragging is not None:
-            pos = event.pos()
-            if self._arrow_drag_start is not None:
-                dx = pos.x() - self._arrow_drag_start[0]
-                dy = pos.y() - self._arrow_drag_start[1]
-                self._rotate_arrow(self._arrow_dragging, dx, dy)
-                self._arrow_drag_start = (pos.x(), pos.y())
-            return True
-
-        elif t == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
-            if self._arrow_dragging is not None:
-                self._arrow_dragging = None
-                self._arrow_drag_start = None
-                return True
 
         return False
 
