@@ -2555,29 +2555,33 @@ class STLViewerWidget(QWidget):
                 q = q / (np.linalg.norm(q) + 1e-12)
                 group.local.rotation = tuple(q)
 
-    def _rotate_arrow(self, arrow_id, dx, dy):
-        """Rotate an arrow based on mouse drag delta."""
-        arrow = None
+    def _find_arrow(self, arrow_id):
+        """Find arrow dict by ID."""
         for a in self._arrow_objects:
             if a['id'] == arrow_id:
-                arrow = a
-                break
+                return a
+        return None
+
+    def rotate_arrow(self, arrow_id, axis, angle_deg):
+        """Rotate an arrow by angle_deg around the given world axis ('x', 'y', 'z')."""
+        arrow = self._find_arrow(arrow_id)
         if arrow is None:
             return
 
-        scale = 0.01
+        angle_rad = np.radians(angle_deg)
+        cos_a = np.cos(angle_rad)
+        sin_a = np.sin(angle_rad)
+
         dir_arr = np.array(arrow['direction'], dtype=np.float64)
 
-        try:
-            cam_mat = np.array(self._camera.local.world_transform, dtype=np.float64).reshape(4, 4)
-            cam_right = cam_mat[:3, 0]
-            cam_up = cam_mat[:3, 1]
-        except Exception:
-            cam_right = np.array([1, 0, 0])
-            cam_up = np.array([0, 1, 0])
+        if axis == 'x':
+            rot = np.array([[1, 0, 0], [0, cos_a, -sin_a], [0, sin_a, cos_a]])
+        elif axis == 'y':
+            rot = np.array([[cos_a, 0, sin_a], [0, 1, 0], [-sin_a, 0, cos_a]])
+        else:  # z
+            rot = np.array([[cos_a, -sin_a, 0], [sin_a, cos_a, 0], [0, 0, 1]])
 
-        rotation = cam_right * (-dy * scale) + cam_up * (dx * scale)
-        new_dir = dir_arr + rotation
+        new_dir = rot @ dir_arr
         new_dir = new_dir / (np.linalg.norm(new_dir) + 1e-12)
 
         arrow['direction'] = new_dir.tolist()
@@ -2585,6 +2589,88 @@ class STLViewerWidget(QWidget):
 
         if self._canvas:
             self._canvas.request_draw()
+
+    def scale_arrow(self, arrow_id, factor):
+        """Scale an arrow's length by factor (e.g. 1.15 to grow, 0.85 to shrink)."""
+        arrow = self._find_arrow(arrow_id)
+        if arrow is None:
+            return
+
+        old_factor = arrow.get('length_factor', 0.08)
+        new_factor = old_factor * factor
+        new_factor = max(0.02, min(0.5, new_factor))  # clamp
+
+        # Remove old arrow group and re-create
+        point = arrow['point']
+        direction = arrow['direction']
+        color = arrow.get('color', '#E53935')
+
+        try:
+            self._scene.remove(arrow['group'])
+        except Exception:
+            pass
+
+        # Remove from list
+        self._arrow_objects = [a for a in self._arrow_objects if a['id'] != arrow_id]
+
+        # Re-add with new size, preserving ID
+        old_next = self._arrow_next_id
+        self._arrow_next_id = arrow_id
+        self._add_arrow(point, direction, color=color, length_factor=new_factor)
+        self._arrow_next_id = old_next if old_next > arrow_id else arrow_id + 1
+
+    def move_arrow(self, arrow_id, dx, dy, dz):
+        """Move an arrow by (dx, dy, dz) scaled relative to model size."""
+        arrow = self._find_arrow(arrow_id)
+        if arrow is None:
+            return
+
+        diag = self._get_model_diag()
+        step = diag * 0.02  # 2% of model size per click
+
+        pos = np.array(arrow['point'], dtype=np.float64)
+        pos[0] += dx * step
+        pos[1] += dy * step
+        pos[2] += dz * step
+
+        arrow['point'] = tuple(float(c) for c in pos)
+        arrow['group'].local.position = np.array(pos, dtype=np.float32)
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def set_arrow_color(self, arrow_id, color):
+        """Change the color of an existing arrow."""
+        arrow = self._find_arrow(arrow_id)
+        if arrow is None:
+            return
+
+        r, g, b = self._hex_to_rgb_normalized(color)
+        emissive = (r * 0.15, g * 0.15, b * 0.15)
+        arrow['color'] = color
+
+        # Update materials on children (shaft + cone)
+        for child in arrow['group'].children:
+            if hasattr(child, 'material'):
+                child.material.color = (r, g, b)
+                if hasattr(child.material, 'emissive'):
+                    child.material.emissive = emissive
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def get_arrow_list(self):
+        """Return list of arrow dicts with id, point, direction, length_factor, color."""
+        return [
+            {
+                'id': a['id'],
+                'point': a['point'],
+                'direction': a['direction'],
+                'length_factor': a.get('length_factor', 0.08),
+                'color': a.get('color', '#E53935'),
+            }
+            for a in self._arrow_objects
+        ]
 
     def remove_arrow(self, arrow_id):
         """Remove a specific arrow by ID."""
