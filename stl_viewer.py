@@ -687,6 +687,7 @@ class STLViewerWindow(QMainWindow):
         tab.ruler_active = self.toolbar.ruler_mode_enabled
         tab.annotation_mode_active = self.toolbar.annotation_mode_enabled
         tab.arrow_mode_active = self.toolbar.arrow_mode_enabled
+        tab.parts_mode_active = getattr(self.toolbar, 'parts_mode_enabled', False)
         tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
     
