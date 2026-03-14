@@ -1337,17 +1337,17 @@ class STLViewerWindow(QMainWindow):
             return
         if self.toolbar.arrow_mode_enabled:
             if hasattr(vw, 'enable_arrow_mode'):
+                # Exit other modes FIRST so ruler/annotation don't steal clicks
+                if self.toolbar.annotation_mode_enabled:
+                    self._exit_annotation_mode()
+                if self.toolbar.ruler_mode_enabled:
+                    self._exit_ruler_mode()
+                if self.toolbar.screenshot_mode_enabled:
+                    self._exit_screenshot_mode()
+                if self.toolbar.draw_mode_enabled:
+                    self._exit_draw_mode()
                 success = vw.enable_arrow_mode()
                 if success:
-                    # Exit other modes
-                    if self.toolbar.annotation_mode_enabled:
-                        self._exit_annotation_mode()
-                    if self.toolbar.ruler_mode_enabled:
-                        self._exit_ruler_mode()
-                    if self.toolbar.screenshot_mode_enabled:
-                        self._exit_screenshot_mode()
-                    if self.toolbar.draw_mode_enabled:
-                        self._exit_draw_mode()
                     logger.info("_toggle_arrow_mode: Arrow mode enabled")
                 else:
                     self.toolbar.reset_arrow_state()

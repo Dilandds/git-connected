@@ -2467,31 +2467,44 @@ class STLViewerWidget(QWidget):
             (bounds[5] - bounds[4]) ** 2
         )
         arrow_length = diag * length_factor
-        cone_length = arrow_length * 0.30
-        shaft_length = arrow_length * 0.70
-        cone_radius = arrow_length * 0.12
-        shaft_radius = arrow_length * 0.04
+        cone_length = arrow_length * 0.35
+        shaft_length = arrow_length * 0.65
+        cone_radius = arrow_length * 0.10
+        shaft_radius = arrow_length * 0.05
 
         r, g, b = self._hex_to_rgb_normalized(color)
+        emissive = (r * 0.15, g * 0.15, b * 0.15)
 
         group = gfx.Group()
 
-        # Shaft cylinder - centered at origin, so offset by half height
+        # pygfx cylinder extends along Z; we need Y. Rotate +90° around X so +Z → +Y.
+        rot_x_90 = (0.7071068, 0, 0, 0.7071068)  # quat for +90° around X
+
+        # Shaft cylinder - extends along Z locally; after rot, along Y from 0 to shaft_length
         shaft_geom = gfx.cylinder_geometry(
             radius_bottom=shaft_radius, radius_top=shaft_radius,
-            height=shaft_length, radial_segments=12
+            height=shaft_length, radial_segments=24
         )
-        shaft_mat = gfx.MeshPhongMaterial(color=(r, g, b), shininess=60)
+        shaft_mat = gfx.MeshPhongMaterial(
+            color=(r, g, b), emissive=emissive, shininess=80
+        )
         shaft = gfx.Mesh(shaft_geom, shaft_mat)
-        # Place shaft so its base is at y=0, center at y=shaft_length/2
+        shaft.local.rotation = rot_x_90
         shaft.local.position = np.array([0, shaft_length / 2, 0], dtype=np.float32)
         group.add(shaft)
 
-        # Cone head - place so its base touches the top of the shaft
-        cone_geom = gfx.cone_geometry(radius=cone_radius, height=cone_length, radial_segments=16)
-        cone_mat = gfx.MeshPhongMaterial(color=(r, g, b), shininess=60)
+        # Cone head - cylinder radius_top=0 (base at -h/2, tip at +h/2 along Z)
+        # Use -90° around X so base meets shaft and tip points away (opposite of shaft)
+        rot_x_neg90 = (-0.7071068, 0, 0, 0.7071068)
+        cone_geom = gfx.cylinder_geometry(
+            radius_bottom=cone_radius, radius_top=0,
+            height=cone_length, radial_segments=32
+        )
+        cone_mat = gfx.MeshPhongMaterial(
+            color=(r, g, b), emissive=emissive, shininess=80
+        )
         cone = gfx.Mesh(cone_geom, cone_mat)
-        # Cone is centered at origin; move so base aligns with shaft top
+        cone.local.rotation = rot_x_neg90
         cone.local.position = np.array([0, shaft_length + cone_length / 2, 0], dtype=np.float32)
         group.add(cone)
 
