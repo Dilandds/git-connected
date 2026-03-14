@@ -44,11 +44,11 @@ class ArrowCard(QFrame):
         self.label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 12px; border: none; background: transparent;")
         layout.addWidget(self.label, 1)
 
-        del_btn = QPushButton("✕")
+        del_btn = QPushButton("\u00D7")  # × - cleaner close icon
         del_btn.setFixedSize(22, 22)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; color: {default_theme.text_secondary}; border: none; font-size: 13px; border-radius: 4px; }}
+            QPushButton {{ background: transparent; color: {default_theme.text_secondary}; border: none; font-size: 14px; font-weight: 500; border-radius: 4px; padding: 2px; min-width: 22px; min-height: 22px; }}
             QPushButton:hover {{ background: #FEE2E2; color: #DC2626; }}
         """)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.arrow_id))
@@ -84,23 +84,27 @@ class ArrowCard(QFrame):
 
 
 def _control_button(text: str, tooltip: str = "") -> QPushButton:
-    """Create a small square control button."""
+    """Create a small square control button with icon-blue symbol."""
     btn = QPushButton(text)
-    btn.setFixedSize(36, 32)
+    btn.setFixedSize(40, 36)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setToolTip(tooltip)
     btn.setStyleSheet(f"""
         QPushButton {{
             background-color: {default_theme.row_bg_standard};
-            color: {default_theme.text_primary};
+            color: {default_theme.icon_blue};
             border: 1px solid {default_theme.border_standard};
             border-radius: 6px;
-            font-size: 13px;
-            font-weight: bold;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 4px 6px;
+            min-width: 40px;
+            min-height: 36px;
         }}
         QPushButton:hover {{
             background-color: {default_theme.row_bg_hover};
             border-color: {default_theme.button_primary};
+            color: {default_theme.button_primary};
         }}
         QPushButton:pressed {{
             background-color: {default_theme.button_primary};
@@ -148,15 +152,20 @@ class ArrowPanel(QWidget):
 
         # Header
         header = QHBoxLayout()
-        title = QLabel("🏹 Arrows")
+        icon_lbl = QLabel("\u2192")  # Right arrow (→)
+        icon_lbl.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px; font-weight: bold; border: none; background: transparent; padding: 0 2px;")
+        icon_lbl.setFixedSize(26, 24)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        header.addWidget(icon_lbl)
+        title = QLabel("Arrows")
         title.setStyleSheet(f"color: {default_theme.text_title}; font-size: 14px; font-weight: bold; border: none; background: transparent;")
         header.addWidget(title)
         header.addStretch()
-        exit_btn = QPushButton("✕")
+        exit_btn = QPushButton("\u00D7")  # Multiplication sign (×) - renders cleaner than ✕
         exit_btn.setFixedSize(24, 24)
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; color: {default_theme.text_secondary}; border: none; font-size: 14px; border-radius: 4px; }}
+            QPushButton {{ background: transparent; color: {default_theme.text_secondary}; border: none; font-size: 16px; font-weight: 500; border-radius: 4px; padding: 2px; min-width: 24px; min-height: 24px; }}
             QPushButton:hover {{ background: #FEE2E2; color: #DC2626; }}
         """)
         exit_btn.clicked.connect(self.exit_arrow_mode.emit)
@@ -201,10 +210,10 @@ class ArrowPanel(QWidget):
 
         row1 = QHBoxLayout()
         row1.setSpacing(3)
-        self._rot_left = _control_button("⟲", "Rotate Left (Y-axis)")
-        self._rot_right = _control_button("⟳", "Rotate Right (Y-axis)")
-        self._rot_up = _control_button("↑", "Rotate Up (X-axis)")
-        self._rot_down = _control_button("↓", "Rotate Down (X-axis)")
+        self._rot_left = _control_button("\u2190", "Rotate Left (Y-axis)")   # ←
+        self._rot_right = _control_button("\u2192", "Rotate Right (Y-axis)")  # →
+        self._rot_up = _control_button("\u2191", "Rotate Up (X-axis)")    # ↑
+        self._rot_down = _control_button("\u2193", "Rotate Down (X-axis)")  # ↓
         row1.addWidget(self._rot_left)
         row1.addWidget(self._rot_right)
         row1.addWidget(self._rot_up)
@@ -213,8 +222,8 @@ class ArrowPanel(QWidget):
 
         row2 = QHBoxLayout()
         row2.setSpacing(3)
-        self._rot_cw = _control_button("↻", "Tilt Clockwise (Z-axis)")
-        self._rot_ccw = _control_button("↺", "Tilt Counter-Clockwise (Z-axis)")
+        self._rot_cw = _control_button("\u21BB", "Tilt Clockwise (Z-axis)")   # ↻
+        self._rot_ccw = _control_button("\u21BA", "Tilt Counter-Clockwise (Z-axis)")  # ↺
         row2.addWidget(self._rot_cw)
         row2.addWidget(self._rot_ccw)
         row2.addStretch()
@@ -234,7 +243,7 @@ class ArrowPanel(QWidget):
         size_row = QHBoxLayout()
         size_row.setSpacing(3)
         self._size_plus = _control_button("+", "Lengthen arrow")
-        self._size_minus = _control_button("−", "Shorten arrow")
+        self._size_minus = _control_button("\u2212", "Shorten arrow")  # − (minus sign)
         size_row.addWidget(self._size_plus)
         size_row.addWidget(self._size_minus)
         size_row.addStretch()
@@ -251,9 +260,9 @@ class ArrowPanel(QWidget):
         mrow1 = QHBoxLayout()
         mrow1.setSpacing(3)
         self._move_xp = _control_button("X+", "Move along X+")
-        self._move_xn = _control_button("X−", "Move along X-")
+        self._move_xn = _control_button("X-", "Move along X-")
         self._move_yp = _control_button("Y+", "Move along Y+")
-        self._move_yn = _control_button("Y−", "Move along Y-")
+        self._move_yn = _control_button("Y-", "Move along Y-")
         mrow1.addWidget(self._move_xp)
         mrow1.addWidget(self._move_xn)
         mrow1.addWidget(self._move_yp)
@@ -263,7 +272,7 @@ class ArrowPanel(QWidget):
         mrow2 = QHBoxLayout()
         mrow2.setSpacing(3)
         self._move_zp = _control_button("Z+", "Move along Z+")
-        self._move_zn = _control_button("Z−", "Move along Z-")
+        self._move_zn = _control_button("Z-", "Move along Z-")
         mrow2.addWidget(self._move_zp)
         mrow2.addWidget(self._move_zn)
         mrow2.addStretch()
