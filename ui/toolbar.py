@@ -240,6 +240,7 @@ class ViewControlsToolbar(QWidget):
         self.ruler_mode_enabled = False
         self.annotation_mode_enabled = False
         self.arrow_mode_enabled = False
+        self.parts_mode_enabled = False
         self.screenshot_mode_enabled = False
         self.draw_mode_enabled = False
         self._draw_color = '#FF0000'
