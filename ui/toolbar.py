@@ -766,6 +766,14 @@ class ViewControlsToolbar(QWidget):
             self.fullscreen_btn.set_icon("⛶")
         self.fullscreen_btn.set_active(self.is_fullscreen)
         self.toggle_fullscreen.emit()
+
+    def reset_parts_state(self):
+        """Reset parts button state (called when exiting parts mode externally)."""
+        self.parts_mode_enabled = False
+        if not self.annotation_mode_enabled and not self.arrow_mode_enabled:
+            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_icon("📝")
+            self.annotation_btn.set_active(False)
     
     def _on_load_clicked(self):
         """Handle load file."""
