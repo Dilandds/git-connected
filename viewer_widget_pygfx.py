@@ -543,14 +543,7 @@ class STLViewerWidget(QWidget):
 
                 exploded_parts = []
                 for part_name, source_mesh in named_meshes:
-                    try:
-                        components = list(source_mesh.split(only_watertight=False))
-                    except Exception:
-                        components = [source_mesh]
-                    components = [
-                        c for c in components
-                        if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
-                    ]
+                    components = _split_reasonable_components(source_mesh)
 
                     if len(components) <= 1:
                         exploded_parts.append((part_name, source_mesh))
@@ -562,14 +555,7 @@ class STLViewerWidget(QWidget):
 
             elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
                 fname = Path(file_path).stem if file_path else "Part"
-                try:
-                    components = list(mesh_tri.split(only_watertight=False))
-                except Exception:
-                    components = [mesh_tri]
-                components = [
-                    c for c in components
-                    if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
-                ]
+                components = _split_reasonable_components(mesh_tri)
 
                 if len(components) > 1:
                     sub_meshes = [(f"{fname} #{i + 1}", comp) for i, comp in enumerate(components)]
