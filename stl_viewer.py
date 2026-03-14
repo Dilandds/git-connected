@@ -1504,6 +1504,107 @@ class STLViewerWindow(QMainWindow):
             if tab and tab.arrow_panel:
                 tab.arrow_panel.remove_arrow(last_id)
 
+    # ========== Parts Mode Methods ==========
+
+    def _toggle_parts_mode(self):
+        """Toggle parts visibility panel."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        tab = self._current_tab
+        if tab is None:
+            return
+        if self.toolbar.parts_mode_enabled:
+            # Exit other modes
+            if self.toolbar.annotation_mode_enabled:
+                self._exit_annotation_mode()
+            if self.toolbar.arrow_mode_enabled:
+                self._exit_arrow_mode()
+            if self.toolbar.ruler_mode_enabled:
+                self._exit_ruler_mode()
+            if self.toolbar.screenshot_mode_enabled:
+                self._exit_screenshot_mode()
+            if self.toolbar.draw_mode_enabled:
+                self._exit_draw_mode()
+            # Populate parts list from viewer
+            parts = vw.get_parts_list() if hasattr(vw, 'get_parts_list') else []
+            tab.parts_panel.set_parts(parts)
+            tab.parts_panel.show()
+            self.parts_stack.setCurrentWidget(tab.parts_panel)
+            self.right_panel_stack.setCurrentWidget(self.parts_stack)
+            self.right_panel_stack.show()
+            if hasattr(vw, 'reframe_for_viewport'):
+                QTimer.singleShot(50, vw.reframe_for_viewport)
+            logger.info("_toggle_parts_mode: Parts mode enabled")
+        else:
+            self._exit_parts_mode()
+
+    def _exit_parts_mode(self):
+        """Exit parts mode."""
+        tab = self._current_tab
+        vw = self.viewer_widget
+        if tab and tab.parts_panel:
+            tab.parts_panel.hide()
+        # Restore all parts visible
+        if vw and hasattr(vw, 'show_all_parts'):
+            vw.show_all_parts()
+        if vw and hasattr(vw, 'unhighlight_parts'):
+            vw.unhighlight_parts()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        if vw and hasattr(vw, 'reframe_for_viewport'):
+            QTimer.singleShot(50, vw.reframe_for_viewport)
+        self.toolbar.reset_parts_state()
+        logger.info("_exit_parts_mode: Parts mode disabled")
+
+    def _exit_parts_mode_from_panel(self):
+        """Exit parts mode triggered from the panel close button."""
+        if self.toolbar.parts_mode_enabled:
+            self.toolbar.parts_mode_enabled = False
+            self.toolbar.reset_parts_state()
+        self._exit_parts_mode()
+
+    def _connect_parts_panel_signals_for(self, tab: TabState):
+        """Connect parts panel signals for a specific tab."""
+        panel = tab.parts_panel
+        panel.part_visibility_changed.connect(lambda pid, vis: self._part_set_visible(pid, vis))
+        panel.part_selected.connect(lambda pid: self._part_select(pid))
+        panel.show_all_requested.connect(self._parts_show_all)
+        panel.hide_all_requested.connect(self._parts_hide_all)
+        panel.invert_visibility_requested.connect(self._parts_invert)
+        panel.isolate_selected_requested.connect(lambda pid: self._part_isolate(pid))
+        panel.exit_parts_mode.connect(self._exit_parts_mode_from_panel)
+
+    def _part_set_visible(self, part_id, visible):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_part_visible'):
+            vw.set_part_visible(part_id, visible)
+
+    def _part_select(self, part_id):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'highlight_part'):
+            vw.highlight_part(part_id)
+
+    def _parts_show_all(self):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'show_all_parts'):
+            vw.show_all_parts()
+
+    def _parts_hide_all(self):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'hide_all_parts'):
+            vw.hide_all_parts()
+
+    def _parts_invert(self):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'invert_parts_visibility'):
+            vw.invert_parts_visibility()
+
+    def _part_isolate(self, part_id):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'isolate_part'):
+            vw.isolate_part(part_id)
+
     # ========== Screenshot Mode Methods ==========
     
     def _toggle_screenshot_mode(self):
