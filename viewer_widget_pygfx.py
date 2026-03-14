@@ -394,6 +394,37 @@ class STLViewerWidget(QWidget):
             mesh_tri = None
             pv_mesh = None
 
+            def _scene_has_geometry(candidate):
+                if not isinstance(candidate, trimesh.Scene):
+                    return False
+                for g in candidate.geometry.values():
+                    if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0:
+                        return True
+                return False
+
+            def _split_reasonable_components(source_mesh):
+                """Split mesh into connected components, with guardrails against triangle-explosion meshes."""
+                try:
+                    components = list(source_mesh.split(only_watertight=False))
+                except Exception:
+                    return [source_mesh]
+
+                components = [
+                    c for c in components
+                    if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
+                ]
+                if len(components) <= 1:
+                    return components if components else [source_mesh]
+
+                # Some CAD conversions duplicate vertices per face; splitting then creates one-part-per-triangle.
+                # In those cases, keep the mesh as a single part to avoid unusable UI.
+                if len(components) > 400:
+                    return [source_mesh]
+                if len(components) > max(50, int(len(source_mesh.faces) * 0.15)):
+                    return [source_mesh]
+
+                return components
+
             # STEP
             if file_ext.endswith('.step') or file_ext.endswith('.stp'):
                 logger.info("load_stl (pygfx): Loading STEP with StepLoader...")
@@ -426,14 +457,22 @@ class STLViewerWidget(QWidget):
                 if pv_mesh is None or pv_mesh.n_points == 0:
                     raise ValueError("DXF loader returned empty mesh")
                 mesh_tri = _pyvista_to_trimesh(pv_mesh)
-            # OBJ: try trimesh first, fallback to PyVista/meshio/ObjLoader
+            # OBJ: prefer Scene (preserves object groups), then fallback chain
             elif file_ext.endswith('.obj'):
                 mesh_tri = None
                 try:
-                    mesh_tri = trimesh.load(file_path, force='mesh')
+                    mesh_tri = trimesh.load(file_path, force='scene', process=False)
                 except Exception:
-                    pass
-                if mesh_tri is None or (isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0):
+                    try:
+                        mesh_tri = trimesh.load(file_path, force='mesh', process=False)
+                    except Exception:
+                        mesh_tri = None
+
+                if mesh_tri is None or (
+                    isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
+                ) or (
+                    isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
+                ):
                     try:
                         pv_mesh = pv.read(file_path)
                     except Exception:
@@ -459,10 +498,13 @@ class STLViewerWidget(QWidget):
                             pv_mesh = ObjLoader.load_obj(file_path)
                     if pv_mesh is not None and pv_mesh.n_points > 0:
                         mesh_tri = _pyvista_to_trimesh(pv_mesh)
-                if mesh_tri is None or (isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0):
+
+                if mesh_tri is None or (
+                    isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
+                ) or (
+                    isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
+                ):
                     raise ValueError("OBJ file could not be loaded")
-                if pv_mesh is None:
-                    pv_mesh = _trimesh_to_pyvista(mesh_tri)
             # STL, PLY: trimesh
             else:
                 mesh_tri = trimesh.load(file_path, force='mesh')
@@ -470,20 +512,64 @@ class STLViewerWidget(QWidget):
                     raise ValueError("No mesh in file")
                 pv_mesh = _trimesh_to_pyvista(mesh_tri)
 
-            # Normalize mesh_tri: preserve sub-meshes as separate parts
+            # Normalize mesh_tri: preserve sub-meshes as separate parts.
+            # If we only have one mesh, split by disconnected components so assemblies
+            # can still be isolated in the Parts panel.
             sub_meshes = []  # list of (name, trimesh.Trimesh)
             if isinstance(mesh_tri, trimesh.Scene):
-                all_meshes = [(name, g) for name, g in mesh_tri.geometry.items() if isinstance(g, trimesh.Trimesh)]
-                if not all_meshes:
+                named_meshes = []
+
+                # Prefer transformed meshes from scene graph dump
+                try:
+                    dumped = mesh_tri.dump(concatenate=False)
+                    dumped_meshes = [
+                        g for g in dumped
+                        if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
+                    ]
+                    if dumped_meshes:
+                        named_meshes = [(f"Part {i + 1}", g) for i, g in enumerate(dumped_meshes)]
+                except Exception:
+                    named_meshes = []
+
+                # Fallback: raw scene geometry map
+                if not named_meshes:
+                    named_meshes = [
+                        (str(name), g) for name, g in mesh_tri.geometry.items()
+                        if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
+                    ]
+
+                if not named_meshes:
                     raise ValueError("No meshes in file")
-                sub_meshes = all_meshes
-                # Combined mesh for raycasting/MeshCalculator
-                mesh_tri = trimesh.util.concatenate([g for _, g in all_meshes]) if len(all_meshes) > 1 else all_meshes[0][1]
+
+                exploded_parts = []
+                for part_name, source_mesh in named_meshes:
+                    components = _split_reasonable_components(source_mesh)
+
+                    if len(components) <= 1:
+                        exploded_parts.append((part_name, source_mesh))
+                    else:
+                        for comp_idx, comp in enumerate(components, 1):
+                            exploded_parts.append((f"{part_name} #{comp_idx}", comp))
+
+                sub_meshes = exploded_parts
+
             elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
                 fname = Path(file_path).stem if file_path else "Part"
-                sub_meshes = [(fname, mesh_tri)]
+                components = _split_reasonable_components(mesh_tri)
+
+                if len(components) > 1:
+                    sub_meshes = [(f"{fname} #{i + 1}", comp) for i, comp in enumerate(components)]
+                else:
+                    sub_meshes = [(fname, mesh_tri)]
             else:
                 raise ValueError("No mesh in file")
+
+            if not sub_meshes:
+                raise ValueError("No mesh in file")
+
+            # Combined mesh for raycasting/MeshCalculator
+            mesh_tri = trimesh.util.concatenate([g for _, g in sub_meshes]) if len(sub_meshes) > 1 else sub_meshes[0][1]
+            logger.info(f"load_stl (pygfx): Built {len(sub_meshes)} part(s) for panel")
 
             if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
                 raise ValueError("No mesh in file")
