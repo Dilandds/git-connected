@@ -184,11 +184,12 @@ class STLViewerWidget(QWidget):
 
         # Arrow mode state
         self.arrow_mode = False
-        self._arrow_objects = []  # list of {'id', 'group', 'cone', 'shaft', 'point', 'direction'}
+        self._arrow_objects = []  # list of {'id', 'group', 'point', 'direction', 'length_factor', 'color'}
         self._arrow_next_id = 1
         self._arrow_event_filter_installed = False
         self._arrow_dragging = None  # arrow id being manipulated
         self._arrow_drag_start = None  # (x, y) screen start
+        self._arrow_added_callback = None  # called with arrow_id when a new arrow is placed
 
         # Zoom buttons overlay (shown in screenshot mode) - bottom-left
         from PyQt5.QtWidgets import QPushButton, QVBoxLayout, QLabel
