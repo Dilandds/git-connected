@@ -2521,6 +2521,8 @@ class STLViewerWidget(QWidget):
             'group': group,
             'point': placed_point,
             'direction': dir_arr.tolist(),
+            'length_factor': length_factor,
+            'color': color,
         })
 
         if self._canvas:
