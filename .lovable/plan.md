@@ -1,77 +1,77 @@
 
-# Multi-Tab Support for ECTOFORM
+
+# Plan: 3D Object Part Selection and Hide/Show
 
 ## Overview
-Add a tab bar to the main window so users can open multiple 3D files simultaneously, each in its own tab with independent viewer, sidebar data, and annotations.
+
+Add the ability to select individual parts of a loaded 3D model and hide/show them, allowing users to isolate interior components by hiding exterior parts. This requires preserving sub-meshes as separate pygfx objects instead of merging them into one.
+
+## Current Problem
+
+The viewer currently concatenates all sub-meshes (from STEP scenes, OBJ files, etc.) into a single `trimesh.Trimesh` at line 477 of `viewer_widget_pygfx.py`. This destroys part boundaries. We need to keep them separate.
 
 ## Architecture
 
 ```text
-+----------------------------------------------------------+
-| ECTOFORM - Tab Bar                                        |
-| [Model1.stl  x] [Model2.step  x] [+]                    |
-+----------------------------------------------------------+
-| Sidebar  |  Toolbar                                       |
-|          |  Ruler Toolbar (if active)                     |
-|          +-----------------------------------------------+
-|          |  3D Viewer + Annotation Panel                  |
-|          |  (per-tab content)                             |
-+----------------------------------------------------------+
+Scene
+ └── _mesh_group (gfx.Group)    ← replaces single _mesh_obj
+      ├── Part 0: gfx.Mesh  (visible=True)
+      ├── Part 1: gfx.Mesh  (visible=False)  ← hidden by user
+      └── Part 2: gfx.Mesh  (visible=True)
 ```
 
-## Implementation Plan
+For single-body files (STL, PLY), there will be just one part in the group.
 
-### 1. Create a Tab Data class to hold per-tab state
-- Create a dataclass or simple class (`TabState`) that stores:
-  - `file_path` -- the loaded file
-  - `viewer_widget` -- its own `STLViewerWidget` instance
-  - `annotation_panel` -- its own `AnnotationPanel` instance
-  - `sidebar_data` -- cached mesh data / dimensions for restoring sidebar
-  - `annotations` -- list of annotations
-  - `ruler_active` / `annotation_mode_active` -- mode flags
-  - `mesh` reference
+## Implementation
 
-### 2. Add QTabBar to the right container
-- Insert a `QTabBar` above the toolbar in the right panel layout
-- Style it to match the dark ECTOFORM theme
-- Each tab shows the filename with a close button
-- A "+" button at the end to open a new file
-- When no files are loaded, show a single "Untitled" tab with the drop zone
+### 1. Modify mesh loading in `viewer_widget_pygfx.py`
 
-### 3. Refactor STLViewerWindow to manage multiple tabs
-- Replace the single `self.viewer_widget` with a `QStackedWidget` that holds one viewer per tab
-- Maintain a list of `TabState` objects (`self.tabs`)
-- Track `self.current_tab_index`
-- When switching tabs:
-  - Save current tab's mode states (ruler, annotation)
-  - Hide current viewer, show new tab's viewer
-  - Update sidebar panel with the new tab's mesh data
-  - Update toolbar state (loaded filename, enabled controls)
-  - Restore ruler/annotation mode if it was active on that tab
+- Instead of concatenating `trimesh.Scene` geometry into one mesh, keep each sub-mesh as a separate `gfx.Mesh` inside a `gfx.Group`.
+- Store a list `self._mesh_parts` with metadata: `[{id, name, mesh_obj, trimesh, visible}, ...]`.
+- For single-mesh files, create one part named after the filename.
+- `self._mesh_obj` becomes `self._mesh_group` (a `gfx.Group`) for backward compatibility with scene add/remove.
+- The combined `pv_mesh` and `_annotation_trimesh` are still built from all parts for MeshCalculator and raycasting.
 
-### 4. Modify file loading to create new tabs
-- `upload_stl_file()` and `_load_dropped_file()`: instead of replacing the current model, create a new tab with a fresh `STLViewerWidget` and load the file into it
-- If the current tab is empty (no file loaded), reuse it instead of creating a new tab
-- Connect all signals (drag-drop, click-to-upload, etc.) for each new viewer widget
+### 2. Add part picking via click
 
-### 5. Add tab close functionality
-- Close button on each tab removes the tab, destroys its viewer widget, and cleans up state
-- If the last tab is closed, create a new empty tab with the drop zone
-- Prompt to save unsaved annotations before closing a tab
+- In a new "select mode" or always-on: when user clicks on the model, use raycasting to determine which sub-mesh was hit.
+- Highlight the selected part with a different color or outline.
 
-### 6. Update sidebar to reflect active tab
-- When switching tabs, call `self.sidebar_panel.update_dimensions()` with the active tab's cached mesh data
-- Clear sidebar if switching to an empty tab
+### 3. Create `ui/parts_panel.py` — Parts List Panel
 
-## Technical Details
+A right-side panel (similar to `ArrowPanel` / `AnnotationPanel`) containing:
 
-### Files to modify:
-- **`stl_viewer.py`** -- Major refactor: add `QTabBar`, `QStackedWidget`, `TabState` management, modify all file-loading and mode-toggling methods to be tab-aware
-- **`ui/styles.py`** -- Add tab bar styling to match the ECTOFORM theme
+- **Parts list**: Scrollable list showing each part name with:
+  - Eye icon toggle button (visible/hidden)
+  - Color indicator
+  - Click to select/highlight in viewer
+- **Bulk actions**: "Show All" / "Hide All" / "Invert Visibility" buttons
+- **Selected part info**: Name and face count
 
-### Key considerations:
-- Each tab gets its own `STLViewerWidget` instance (pygfx context), which may use significant GPU memory -- this is acceptable for a desktop app but worth noting
-- Annotation state is per-tab, so switching tabs must save/restore annotations
-- Ruler mode measurements are per-tab
-- The sidebar panel is shared but updates its content based on the active tab
-- Window title updates to show the active tab's filename
+### 4. Add toolbar access
+
+- Add a "Parts" option inside the existing Annotate dropdown menu, or add a dedicated "Parts" button if space allows. Given the dropdown pattern already established, adding it to a new "Object" dropdown or the existing Annotate dropdown makes sense.
+
+### 5. Wire into `stl_viewer.py`
+
+- Add `parts_panel` to `TabState`.
+- Show/hide the parts panel when toggled.
+- Wire visibility toggle signals from the panel to `viewer.set_part_visible(part_id, bool)`.
+
+## Files
+
+| Action | File | Description |
+|--------|------|-------------|
+| Create | `ui/parts_panel.py` | Parts list panel with visibility toggles |
+| Modify | `viewer_widget_pygfx.py` | Preserve sub-meshes as separate parts in a Group; add `set_part_visible()`, `select_part()`, `get_parts_list()` |
+| Modify | `stl_viewer.py` | Wire parts panel into tab system |
+| Modify | `ui/toolbar.py` | Add "Parts" menu option to access parts mode |
+
+## Key Considerations
+
+- **Single-body files** (most STLs): Will show one part in the list. Still useful for completeness.
+- **STEP/OBJ with multiple bodies**: Each body becomes a separate selectable/hideable part.
+- **Performance**: Each part is a separate draw call. For models with hundreds of parts this is fine on desktop GPUs.
+- **Render mode**: `set_render_mode()` must iterate all parts to update materials.
+- **MeshCalculator**: Still uses the combined PyVista mesh for dimensions/volume — unaffected by visibility toggles.
+
