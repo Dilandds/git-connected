@@ -593,10 +593,11 @@ class STLViewerWindow(QMainWindow):
         self.current_tab_index = index
         tab = self.tabs[index]
         
-        # Show correct viewer, annotation panel, and arrow panel
+        # Show correct viewer, annotation panel, arrow panel, and parts panel
         self.viewer_stack.setCurrentWidget(tab.viewer_widget)
         self.annotation_stack.setCurrentWidget(tab.annotation_panel)
         self.arrow_stack.setCurrentWidget(tab.arrow_panel)
+        self.parts_stack.setCurrentWidget(tab.parts_panel)
         
         # Determine which right panel to show
         if tab.arrow_mode_active:
