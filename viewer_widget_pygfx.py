@@ -470,36 +470,57 @@ class STLViewerWidget(QWidget):
                     raise ValueError("No mesh in file")
                 pv_mesh = _trimesh_to_pyvista(mesh_tri)
 
-            # Normalize mesh_tri (Scene -> single Trimesh)
+            # Normalize mesh_tri: preserve sub-meshes as separate parts
+            sub_meshes = []  # list of (name, trimesh.Trimesh)
             if isinstance(mesh_tri, trimesh.Scene):
-                all_meshes = [g for g in mesh_tri.geometry.values() if isinstance(g, trimesh.Trimesh)]
+                all_meshes = [(name, g) for name, g in mesh_tri.geometry.items() if isinstance(g, trimesh.Trimesh)]
                 if not all_meshes:
                     raise ValueError("No meshes in file")
-                mesh_tri = trimesh.util.concatenate(all_meshes) if len(all_meshes) > 1 else all_meshes[0]
+                sub_meshes = all_meshes
+                # Combined mesh for raycasting/MeshCalculator
+                mesh_tri = trimesh.util.concatenate([g for _, g in all_meshes]) if len(all_meshes) > 1 else all_meshes[0][1]
+            elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
+                fname = Path(file_path).stem if file_path else "Part"
+                sub_meshes = [(fname, mesh_tri)]
+            else:
+                raise ValueError("No mesh in file")
+
             if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
                 raise ValueError("No mesh in file")
 
-            # Use flat-shaded mesh for sharp edges (original geometry has sharp edges)
-            mesh_tri = _trimesh_to_flat_shaded(mesh_tri)
-
-            # Ensure PyVista for MeshCalculator
+            # Ensure PyVista for MeshCalculator (before flat-shading)
             if pv_mesh is None:
                 pv_mesh = _trimesh_to_pyvista(mesh_tri)
             if pv_mesh is None:
                 raise ValueError("Could not convert mesh for dimensions/volume calculation")
 
-            # PyVista-equivalent material (light blue per spec: RGB 0.68, 0.85, 0.90 = #ADD9E6)
-            material = gfx.MeshPhongMaterial(
-                color="#ADD9E6",
-                specular="#333333",
-                shininess=20,
-            )
+            # Build separate gfx.Mesh per sub-mesh inside a Group
             from pygfx.geometries import geometry_from_trimesh
-            geometry = geometry_from_trimesh(mesh_tri)
-            mesh_obj = gfx.Mesh(geometry, material)
-            self._mesh_obj = mesh_obj
+            mesh_group = gfx.Group()
+            self._mesh_parts = []
+            for part_idx, (part_name, part_tri) in enumerate(sub_meshes):
+                flat_tri = _trimesh_to_flat_shaded(part_tri)
+                material = gfx.MeshPhongMaterial(
+                    color="#ADD9E6", specular="#333333", shininess=20,
+                )
+                geometry = geometry_from_trimesh(flat_tri)
+                part_mesh = gfx.Mesh(geometry, material)
+                mesh_group.add(part_mesh)
+                self._mesh_parts.append({
+                    'id': part_idx,
+                    'name': part_name,
+                    'mesh_obj': part_mesh,
+                    'trimesh': part_tri,
+                    'visible': True,
+                    'face_count': len(part_tri.faces),
+                })
+
+            self._mesh_obj = mesh_group
             self._scene.add(self._mesh_obj)
             self.set_render_mode(self._render_mode)
+
+            # Keep combined flat-shaded trimesh for annotation raycasting
+            mesh_tri = _trimesh_to_flat_shaded(mesh_tri)
 
             self.current_mesh = pv_mesh
             self._annotation_trimesh = mesh_tri  # Keep trimesh for raycasting in annotation mode
