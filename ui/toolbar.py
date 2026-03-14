@@ -222,6 +222,7 @@ class ViewControlsToolbar(QWidget):
     toggle_ruler = pyqtSignal()
     toggle_annotation = pyqtSignal()
     toggle_arrow = pyqtSignal()
+    toggle_parts = pyqtSignal()
     toggle_screenshot = pyqtSignal()
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
