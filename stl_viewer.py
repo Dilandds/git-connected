@@ -79,6 +79,7 @@ class TabState:
     viewer_widget: Any = None  # STLViewerWidget instance
     annotation_panel: Any = None  # AnnotationPanel instance
     arrow_panel: Any = None  # ArrowPanel instance
+    parts_panel: Any = None  # PartsPanel instance
     sidebar_data: Optional[dict] = None  # cached mesh_data dict for sidebar
     mesh: Any = None  # current_mesh reference
     ruler_active: bool = False
