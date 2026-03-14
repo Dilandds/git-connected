@@ -2727,3 +2727,86 @@ class STLViewerWidget(QWidget):
         """Remove the most recently added arrow."""
         if self._arrow_objects:
             self.remove_arrow(self._arrow_objects[-1]['id'])
+
+    # ========== Part Visibility Methods ==========
+
+    def get_parts_list(self):
+        """Return list of part metadata for the PartsPanel."""
+        return [
+            {
+                'id': p['id'],
+                'name': p['name'],
+                'face_count': p.get('face_count', 0),
+                'visible': p.get('visible', True),
+            }
+            for p in self._mesh_parts
+        ]
+
+    def set_part_visible(self, part_id, visible):
+        """Show or hide a specific part by ID."""
+        for p in self._mesh_parts:
+            if p['id'] == part_id:
+                p['visible'] = visible
+                p['mesh_obj'].visible = visible
+                break
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def show_all_parts(self):
+        """Make all parts visible."""
+        for p in self._mesh_parts:
+            p['visible'] = True
+            p['mesh_obj'].visible = True
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def hide_all_parts(self):
+        """Hide all parts."""
+        for p in self._mesh_parts:
+            p['visible'] = False
+            p['mesh_obj'].visible = False
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def invert_parts_visibility(self):
+        """Invert visibility of all parts."""
+        for p in self._mesh_parts:
+            p['visible'] = not p['visible']
+            p['mesh_obj'].visible = p['visible']
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def isolate_part(self, part_id):
+        """Show only the specified part, hide all others."""
+        for p in self._mesh_parts:
+            vis = (p['id'] == part_id)
+            p['visible'] = vis
+            p['mesh_obj'].visible = vis
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def highlight_part(self, part_id):
+        """Briefly highlight a selected part (make others semi-transparent)."""
+        import pygfx as gfx
+        for p in self._mesh_parts:
+            if not p['visible']:
+                continue
+            if p['id'] == part_id:
+                # Restore full opacity
+                if self._render_mode == 'wireframe':
+                    p['mesh_obj'].material = gfx.MeshBasicMaterial(wireframe=True, color="#333333", wireframe_thickness=1)
+                elif self._render_mode == 'shaded':
+                    p['mesh_obj'].material = gfx.MeshPhongMaterial(color="#b8b8c0", specular="#a0a0a0", shininess=90)
+                else:
+                    p['mesh_obj'].material = gfx.MeshPhongMaterial(color="#ADD9E6", specular="#333333", shininess=20)
+            else:
+                # Semi-transparent
+                p['mesh_obj'].material = gfx.MeshPhongMaterial(
+                    color="#ADD9E6", specular="#333333", shininess=20, opacity=0.25
+                )
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def unhighlight_parts(self):
+        """Restore normal materials on all parts."""
+        self.set_render_mode(self._render_mode)
