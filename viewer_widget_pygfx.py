@@ -614,18 +614,21 @@ class STLViewerWidget(QWidget):
             return
         self._render_mode = mode
         import pygfx as gfx
-        if mode == 'wireframe':
-            self._mesh_obj.material = gfx.MeshBasicMaterial(
-                wireframe=True, color="#333333", wireframe_thickness=1
-            )
-        elif mode == 'shaded':
-            self._mesh_obj.material = gfx.MeshPhongMaterial(
-                color="#b8b8c0", specular="#a0a0a0", shininess=90
-            )
-        else:  # solid
-            self._mesh_obj.material = gfx.MeshPhongMaterial(
-                color="#ADD9E6", specular="#333333", shininess=20
-            )
+        # Build material based on mode
+        def _make_material():
+            if mode == 'wireframe':
+                return gfx.MeshBasicMaterial(wireframe=True, color="#333333", wireframe_thickness=1)
+            elif mode == 'shaded':
+                return gfx.MeshPhongMaterial(color="#b8b8c0", specular="#a0a0a0", shininess=90)
+            else:
+                return gfx.MeshPhongMaterial(color="#ADD9E6", specular="#333333", shininess=20)
+
+        # Apply to all parts in the group
+        if self._mesh_parts:
+            for part in self._mesh_parts:
+                part['mesh_obj'].material = _make_material()
+        elif hasattr(self._mesh_obj, 'material'):
+            self._mesh_obj.material = _make_material()
         if self._canvas:
             self._canvas.request_draw()
 
