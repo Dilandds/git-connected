@@ -2467,10 +2467,10 @@ class STLViewerWidget(QWidget):
             (bounds[5] - bounds[4]) ** 2
         )
         arrow_length = diag * length_factor
-        cone_length = arrow_length * 0.35
-        shaft_length = arrow_length * 0.65
-        cone_radius = arrow_length * 0.06
-        shaft_radius = cone_radius * 0.4
+        cone_length = arrow_length * 0.30
+        shaft_length = arrow_length * 0.70
+        cone_radius = arrow_length * 0.12
+        shaft_radius = arrow_length * 0.04
 
         r, g, b = self._hex_to_rgb_normalized(color)
 
