@@ -1619,6 +1619,7 @@ class STLViewerWindow(QMainWindow):
         panel.hide_all_requested.connect(self._parts_hide_all)
         panel.invert_visibility_requested.connect(self._parts_invert)
         panel.isolate_selected_requested.connect(lambda pid: self._part_isolate(pid))
+        panel.isolate_group_requested.connect(lambda pids: self._group_isolate(pids))
         panel.exit_parts_mode.connect(self._exit_parts_mode_from_panel)
 
     def _part_set_visible(self, part_id, visible):
@@ -1656,6 +1657,19 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'isolate_part'):
             vw.isolate_part(part_id)
+
+    def _group_isolate(self, part_ids):
+        """Isolate a group — show only its child parts."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'isolate_parts'):
+            vw.isolate_parts(part_ids)
+        elif vw:
+            # Fallback: hide all, then show group parts
+            if hasattr(vw, 'hide_all_parts'):
+                vw.hide_all_parts()
+            if hasattr(vw, 'set_part_visible'):
+                for pid in part_ids:
+                    vw.set_part_visible(pid, True)
 
     # ========== Screenshot Mode Methods ==========
     

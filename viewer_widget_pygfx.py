@@ -3021,15 +3021,107 @@ class STLViewerWidget(QWidget):
         return parts
 
     def get_parts_hierarchy(self):
-        """Return flat list of parts sorted largest-to-smallest by face count.
+        """Return grouped parts sorted largest-to-smallest.
         
-        No sub-grouping — each segmented part is a standalone selectable entry.
+        Large parts are standalone entries. Small nearby parts are clustered
+        into groups. Each group is a single selectable item with internal
+        child_ids for visibility/highlighting control.
+        
+        Returns list of dicts:
+          Standalone: {'id': int, 'name': str, 'face_count': int, 'visible': bool}
+          Group:      {'id': int, 'name': str, 'face_count': int, 'visible': bool, 'child_ids': [int, ...]}
         """
+        from scipy.cluster.hierarchy import linkage, fcluster
+        from scipy.spatial.distance import pdist
+
         flat_parts = self.get_parts_list()
+        if len(flat_parts) <= 1:
+            return flat_parts
+
+        # Compute face count threshold — parts above this are standalone
+        face_counts = [p['face_count'] for p in flat_parts]
+        threshold_faces = max(500, int(np.percentile(face_counts, 80))) if len(face_counts) > 5 else 500
+
+        large_parts = []
+        small_parts = []
+        for p in flat_parts:
+            if p['face_count'] >= threshold_faces:
+                large_parts.append(p)
+            else:
+                small_parts.append(p)
+
+        result = []
+
+        # Large parts go as standalone entries
+        for p in large_parts:
+            result.append(p)
+
+        # Cluster small parts by spatial proximity
+        if len(small_parts) > 1:
+            # Get centroids of small parts from mesh_parts data
+            centroids = []
+            for sp in small_parts:
+                mp = next((m for m in self._mesh_parts if m['id'] == sp['id']), None)
+                if mp and 'trimesh' in mp and mp['trimesh'] is not None:
+                    centroids.append(mp['trimesh'].centroid)
+                elif mp and hasattr(mp.get('mesh_obj'), 'geometry') and mp['mesh_obj'].geometry is not None:
+                    positions = mp['mesh_obj'].geometry.positions
+                    if positions is not None:
+                        centroids.append(np.mean(positions.data, axis=0))
+                    else:
+                        centroids.append(np.array([0.0, 0.0, 0.0]))
+                else:
+                    centroids.append(np.array([0.0, 0.0, 0.0]))
+
+            centroids = np.array(centroids)
+
+            # Distance threshold based on bounding box
+            bbox_min = centroids.min(axis=0)
+            bbox_max = centroids.max(axis=0)
+            bbox_diag = np.linalg.norm(bbox_max - bbox_min)
+            dist_threshold = bbox_diag * 0.08 if bbox_diag > 0 else 1.0
+
+            if len(small_parts) >= 2:
+                try:
+                    dists = pdist(centroids)
+                    Z = linkage(dists, method='average')
+                    labels = fcluster(Z, t=dist_threshold, criterion='distance')
+                except Exception:
+                    labels = list(range(len(small_parts)))
+            else:
+                labels = [0]
+
+            # Group small parts by cluster label
+            clusters = {}
+            for i, label in enumerate(labels):
+                clusters.setdefault(label, []).append(small_parts[i])
+
+            # Use negative IDs for groups to avoid collision with real part IDs
+            group_counter = -1
+            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p['face_count'] for p in c)):
+                if len(cluster_parts) == 1:
+                    # Single-part cluster — just add as standalone
+                    result.append(cluster_parts[0])
+                else:
+                    total_faces = sum(p['face_count'] for p in cluster_parts)
+                    child_ids = [p['id'] for p in cluster_parts]
+                    group_entry = {
+                        'id': group_counter,
+                        'name': f"Group {abs(group_counter)}",
+                        'face_count': total_faces,
+                        'visible': all(p.get('visible', True) for p in cluster_parts),
+                        'child_ids': child_ids,
+                    }
+                    result.append(group_entry)
+                    group_counter -= 1
+        elif len(small_parts) == 1:
+            result.append(small_parts[0])
+
         # Sort by face count descending
-        flat_parts.sort(key=lambda x: -x.get('face_count', 0))
-        logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(flat_parts)} parts (sorted by size)")
-        return flat_parts
+        result.sort(key=lambda x: -x.get('face_count', 0))
+        logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(result)} entries "
+                     f"({len(large_parts)} standalone, {len(result) - len(large_parts)} groups/small)")
+        return result
 
     def set_part_visible(self, part_id, visible):
         """Show or hide a specific part by ID."""
@@ -3069,6 +3161,16 @@ class STLViewerWidget(QWidget):
         """Show only the specified part, hide all others."""
         for p in self._mesh_parts:
             vis = (p['id'] == part_id)
+            p['visible'] = vis
+            p['mesh_obj'].visible = vis
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def isolate_parts(self, part_ids):
+        """Show only the specified parts, hide all others."""
+        id_set = set(part_ids)
+        for p in self._mesh_parts:
+            vis = p['id'] in id_set
             p['visible'] = vis
             p['mesh_obj'].visible = vis
         if self._canvas:

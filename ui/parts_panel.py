@@ -1,7 +1,6 @@
 """
 Parts List Panel for hiding/showing individual sub-meshes of a 3D model.
-Supports hierarchical grouping: large parts are standalone, small parts
-are clustered into expandable groups.
+Groups are displayed as single selectable items (no sub-part expansion).
 """
 import logging
 from PyQt5.QtWidgets import (
@@ -15,26 +14,29 @@ logger = logging.getLogger(__name__)
 
 
 class PartCard(QFrame):
-    """A single part entry in the list."""
+    """A single part or group entry in the list."""
     selected = pyqtSignal(int)
     visibility_toggled = pyqtSignal(int, bool)  # part_id, visible
 
-    def __init__(self, part_id: int, name: str, face_count: int = 0, indent: bool = False, parent=None):
+    def __init__(self, part_id: int, name: str, face_count: int = 0, child_ids: list = None, parent=None):
         super().__init__(parent)
         self.part_id = part_id
+        self.child_ids = child_ids or []  # empty for standalone parts
         self._is_selected = False
         self._is_visible = True
         self.face_count = face_count
-        self._indent = indent
-        self.setFixedHeight(40 if indent else 52)
+        self.setFixedHeight(52)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(name)
         self._update_style()
 
+    @property
+    def is_group(self):
+        return len(self.child_ids) > 0
+
     def _build_ui(self, name: str):
         layout = QHBoxLayout(self)
-        left_margin = 20 if self._indent else 8
-        layout.setContentsMargins(left_margin, 3, 8, 3)
+        layout.setContentsMargins(8, 3, 8, 3)
         layout.setSpacing(6)
 
         # Eye toggle button
@@ -55,14 +57,18 @@ class PartCard(QFrame):
         info_layout.setSpacing(0)
 
         self.name_label = QLabel(name)
-        font_size = "11px" if self._indent else "13px"
-        self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: {font_size}; font-weight: 500; border: none; background: transparent;")
+        self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 13px; font-weight: 500; border: none; background: transparent;")
         info_layout.addWidget(self.name_label)
 
+        meta_parts = []
         if self.face_count > 0:
-            face_label = QLabel(f"{self.face_count:,} faces")
-            face_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 9px; border: none; background: transparent;")
-            info_layout.addWidget(face_label)
+            meta_parts.append(f"{self.face_count:,} faces")
+        if self.is_group:
+            meta_parts.append(f"{len(self.child_ids)} parts")
+        if meta_parts:
+            meta_label = QLabel(" · ".join(meta_parts))
+            meta_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 9px; border: none; background: transparent;")
+            info_layout.addWidget(meta_label)
 
         layout.addLayout(info_layout, 1)
 
@@ -82,8 +88,9 @@ class PartCard(QFrame):
                 QFrame {{ background-color: {default_theme.background}; border: 1px solid {default_theme.border_standard}; border-radius: 6px; opacity: 0.5; }}
             """)
         else:
+            border_color = f"{default_theme.button_primary}40" if self.is_group else default_theme.border_standard
             self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.row_bg_standard}; border: 1px solid {default_theme.border_standard}; border-radius: 6px; }}
+                QFrame {{ background-color: {default_theme.row_bg_standard}; border: 1px solid {border_color}; border-radius: 6px; }}
                 QFrame:hover {{ background-color: {default_theme.row_bg_hover}; }}
             """)
 
@@ -102,138 +109,6 @@ class PartCard(QFrame):
         super().mousePressEvent(event)
 
 
-class PartGroupCard(QFrame):
-    """An expandable group header that contains child PartCards."""
-    visibility_toggled = pyqtSignal(int, bool)   # group_id, visible
-    selected = pyqtSignal(int)                    # group_id (emitted on click for selection)
-    child_visibility_toggled = pyqtSignal(int, bool)  # child part_id, visible
-
-    def __init__(self, group_id: int, name: str, face_count: int, children_data: list, parent=None):
-        super().__init__(parent)
-        self.group_id = group_id
-        self._is_expanded = False
-        self._is_visible = True
-        self._is_selected = False
-        self._children_data = children_data
-        self._child_cards = []
-        self.face_count = face_count
-        self.setFixedHeight(44)
-        self.setCursor(Qt.PointingHandCursor)
-        self._build_ui(name)
-        self._update_style()
-
-    def _build_ui(self, name: str):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
-
-        # Expand/collapse arrow
-        self.arrow_btn = QPushButton("▸")
-        self.arrow_btn.setFixedSize(20, 20)
-        self.arrow_btn.setCursor(Qt.PointingHandCursor)
-        self.arrow_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; border: none; color: {default_theme.text_secondary}; font-size: 11px; padding: 0; min-width: 20px; min-height: 20px; }}
-            QPushButton:hover {{ color: {default_theme.text_primary}; }}
-        """)
-        self.arrow_btn.clicked.connect(self._toggle_expand)
-        layout.addWidget(self.arrow_btn)
-
-        # Eye toggle
-        self.eye_btn = QPushButton("👁")
-        self.eye_btn.setFixedSize(24, 24)
-        self.eye_btn.setCursor(Qt.PointingHandCursor)
-        self.eye_btn.setToolTip("Toggle group visibility")
-        self.eye_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; border: none; font-size: 12px; padding: 2px; min-width: 24px; min-height: 24px; border-radius: 4px; }}
-            QPushButton:hover {{ background: {default_theme.row_bg_hover}; }}
-        """)
-        self.eye_btn.clicked.connect(self._toggle_visibility)
-        layout.addWidget(self.eye_btn)
-
-        # Group info
-        info_layout = QVBoxLayout()
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(0)
-
-        self.name_label = QLabel(name)
-        self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px; font-weight: 600; border: none; background: transparent;")
-        info_layout.addWidget(self.name_label)
-
-        meta = f"{self.face_count:,} faces · {len(self._children_data)} parts"
-        meta_label = QLabel(meta)
-        meta_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 9px; border: none; background: transparent;")
-        info_layout.addWidget(meta_label)
-
-        layout.addLayout(info_layout, 1)
-
-    def _toggle_expand(self):
-        self._is_expanded = not self._is_expanded
-        self.arrow_btn.setText("▾" if self._is_expanded else "▸")
-        for card in self._child_cards:
-            card.setVisible(self._is_expanded)
-
-    def _toggle_visibility(self):
-        self._is_visible = not self._is_visible
-        self.eye_btn.setText("👁" if self._is_visible else "👁‍🗨")
-        self._update_style()
-        # Propagate to all children
-        for card in self._child_cards:
-            card.set_visible_state(self._is_visible)
-            self.child_visibility_toggled.emit(card.part_id, self._is_visible)
-        self.visibility_toggled.emit(self.group_id, self._is_visible)
-
-    def _update_style(self):
-        if self._is_selected:
-            self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.row_bg_hover}; border: 2px solid {default_theme.button_primary}; border-radius: 6px; }}
-            """)
-        elif not self._is_visible:
-            self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.background}; border: 1px solid {default_theme.border_standard}; border-radius: 6px; opacity: 0.5; }}
-            """)
-        else:
-            self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.row_bg_standard}; border: 1px solid {default_theme.button_primary}40; border-radius: 6px; }}
-                QFrame:hover {{ background-color: {default_theme.row_bg_hover}; }}
-            """)
-
-    def set_selected(self, selected: bool):
-        self._is_selected = selected
-        self._update_style()
-
-    def set_all_visible(self, visible: bool):
-        """Set group + children visibility without emitting signals."""
-        self._is_visible = visible
-        self.eye_btn.setText("👁" if visible else "👁‍🗨")
-        self._update_style()
-        for card in self._child_cards:
-            card.set_visible_state(visible)
-
-    def update_eye_from_children(self):
-        """Update group eye icon based on children visibility state."""
-        any_visible = any(c._is_visible for c in self._child_cards)
-        all_visible = all(c._is_visible for c in self._child_cards)
-        if all_visible:
-            self._is_visible = True
-            self.eye_btn.setText("👁")
-        elif any_visible:
-            self._is_visible = True
-            self.eye_btn.setText("◑")  # partial indicator
-        else:
-            self._is_visible = False
-            self.eye_btn.setText("👁‍🗨")
-        self._update_style()
-
-    def get_child_ids(self):
-        return [c.part_id for c in self._child_cards]
-
-    def mousePressEvent(self, event):
-        # Emit selection signal, then toggle expand
-        self.selected.emit(self.group_id)
-        self._toggle_expand()
-        super().mousePressEvent(event)
-
-
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px; font-weight: bold; border: none; background: transparent; letter-spacing: 0.5px;")
@@ -241,25 +116,24 @@ def _section_label(text: str) -> QLabel:
 
 
 class PartsPanel(QWidget):
-    """Right-side panel for managing 3D model part visibility with hierarchy support."""
+    """Right-side panel for managing 3D model part visibility."""
 
     # Signals to viewer
     part_visibility_changed = pyqtSignal(int, bool)   # part_id, visible
-    part_selected = pyqtSignal(int)                    # part_id
-    group_selected = pyqtSignal(list)                  # list of child part_ids
+    part_selected = pyqtSignal(int)                    # part_id (standalone)
+    group_selected = pyqtSignal(list)                  # list of child part_ids (group)
     show_all_requested = pyqtSignal()
     hide_all_requested = pyqtSignal()
     invert_visibility_requested = pyqtSignal()
     isolate_selected_requested = pyqtSignal(int)       # part_id
+    isolate_group_requested = pyqtSignal(list)         # list of child part_ids
     exit_parts_mode = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedWidth(240)
-        self._selected_part_id = None
-        self._selected_group_id = None
-        self._part_cards = {}      # part_id -> PartCard
-        self._group_cards = {}     # group_id -> PartGroupCard
+        self._selected_card_id = None
+        self._cards = {}      # card_id -> PartCard
         self._build_ui()
 
     def _build_ui(self):
@@ -279,7 +153,6 @@ class PartsPanel(QWidget):
         header.addWidget(title)
         header.addStretch()
 
-        # Part count badge
         self._count_label = QLabel("0 parts")
         self._count_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; border: none; background: transparent;")
         header.addWidget(self._count_label)
@@ -296,7 +169,7 @@ class PartsPanel(QWidget):
         layout.addLayout(header)
 
         # Info
-        info = QLabel("Toggle visibility of individual parts.\nExpand groups to see sub-parts.")
+        info = QLabel("Toggle visibility of parts and groups.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; border: none; background: transparent;")
         layout.addWidget(info)
@@ -367,151 +240,96 @@ class PartsPanel(QWidget):
     # ---- Public API ----
 
     def set_parts(self, parts_list: list):
-        """Set the parts list. Accepts flat or hierarchical data.
+        """Set the parts list.
         
-        Flat item: {'id': int, 'name': str, 'face_count': int, 'visible': bool}
-        Group item: same + 'children': [flat items]
+        Each item: {'id': int, 'name': str, 'face_count': int, 'visible': bool}
+        Groups also have: 'child_ids': [int, ...]
         """
         self.clear_all()
-        total_parts = 0
 
         for item in parts_list:
-            children = item.get('children')
-            if children:
-                # It's a group — create PartGroupCard + child PartCards
-                group_card = PartGroupCard(
-                    item['id'], item['name'], item.get('face_count', 0), children
-                )
-                group_card.child_visibility_toggled.connect(self._on_child_visibility_from_group)
-                group_card.selected.connect(self._on_group_selected)
-                self._group_cards[item['id']] = group_card
-                self._list_layout.insertWidget(self._list_layout.count() - 1, group_card)
+            child_ids = item.get('child_ids', [])
+            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids)
+            card.set_visible_state(item.get('visible', True))
+            card.selected.connect(self._on_card_selected)
+            card.visibility_toggled.connect(self._on_visibility_toggled)
+            self._cards[item['id']] = card
+            self._list_layout.insertWidget(self._list_layout.count() - 1, card)
 
-                for child in children:
-                    child_card = PartCard(child['id'], child['name'], child.get('face_count', 0), indent=True)
-                    child_card.set_visible_state(child.get('visible', True))
-                    child_card.setVisible(False)  # collapsed by default
-                    child_card.selected.connect(self._on_part_selected)
-                    child_card.visibility_toggled.connect(lambda pid, vis, gid=item['id']: self._on_child_toggled(pid, vis, gid))
-                    self._part_cards[child['id']] = child_card
-                    group_card._child_cards.append(child_card)
-                    self._list_layout.insertWidget(self._list_layout.count() - 1, child_card)
-                    total_parts += 1
-            else:
-                # Standalone part
-                card = PartCard(item['id'], item['name'], item.get('face_count', 0))
-                card.set_visible_state(item.get('visible', True))
-                card.selected.connect(self._on_part_selected)
-                card.visibility_toggled.connect(self._on_visibility_toggled)
-                self._part_cards[item['id']] = card
-                self._list_layout.insertWidget(self._list_layout.count() - 1, card)
-                total_parts += 1
-
-        if self._part_cards or self._group_cards:
+        if self._cards:
             self._no_parts_label.hide()
 
-        groups_text = f", {len(self._group_cards)} groups" if self._group_cards else ""
-        self._count_label.setText(f"{total_parts} part{'s' if total_parts != 1 else ''}{groups_text}")
+        self._count_label.setText(f"{len(self._cards)} part{'s' if len(self._cards) != 1 else ''}")
 
     def clear_all(self):
-        """Remove all part and group cards."""
-        for card in list(self._part_cards.values()):
+        for card in list(self._cards.values()):
             self._list_layout.removeWidget(card)
             card.deleteLater()
-        for card in list(self._group_cards.values()):
-            self._list_layout.removeWidget(card)
-            card.deleteLater()
-        self._part_cards.clear()
-        self._group_cards.clear()
-        self._selected_part_id = None
+        self._cards.clear()
+        self._selected_card_id = None
         self._isolate_btn.setEnabled(False)
         self._no_parts_label.show()
         self._count_label.setText("0 parts")
 
     def get_selected_part_id(self):
-        return self._selected_part_id
+        return self._selected_card_id
 
     # ---- Internal ----
 
-    def _on_part_selected(self, part_id: int):
-        self._selected_part_id = part_id
-        self._selected_group_id = None
+    def _on_card_selected(self, card_id: int):
+        self._selected_card_id = card_id
         self._isolate_btn.setEnabled(True)
-        for pid, card in self._part_cards.items():
-            card.set_selected(pid == part_id)
-        for gid, gcard in self._group_cards.items():
-            gcard.set_selected(False)
-        self.part_selected.emit(part_id)
+        for cid, card in self._cards.items():
+            card.set_selected(cid == card_id)
+        
+        # Emit appropriate signal
+        card = self._cards.get(card_id)
+        if card and card.is_group:
+            self.group_selected.emit(card.child_ids)
+        else:
+            self.part_selected.emit(card_id)
 
-    def _on_group_selected(self, group_id: int):
-        """Handle group click — select all children for highlighting."""
-        self._selected_group_id = group_id
-        self._selected_part_id = None
-        self._isolate_btn.setEnabled(True)
-        # Deselect all individual part cards
-        for card in self._part_cards.values():
-            card.set_selected(False)
-        # Select the clicked group, deselect others
-        for gid, gcard in self._group_cards.items():
-            gcard.set_selected(gid == group_id)
-        # Emit group_selected with child IDs for highlighting
-        group_card = self._group_cards.get(group_id)
-        if group_card:
-            child_ids = group_card.get_child_ids()
-            self.group_selected.emit(child_ids)
-
-    def _on_visibility_toggled(self, part_id: int, visible: bool):
-        self.part_visibility_changed.emit(part_id, visible)
-
-    def _on_child_visibility_from_group(self, part_id: int, visible: bool):
-        """A group toggled one of its children's visibility."""
-        self.part_visibility_changed.emit(part_id, visible)
-
-    def _on_child_toggled(self, part_id: int, visible: bool, group_id: int):
-        """An individual child was toggled — update group icon and emit."""
-        self.part_visibility_changed.emit(part_id, visible)
-        # Update parent group's eye state
-        if group_id in self._group_cards:
-            self._group_cards[group_id].update_eye_from_children()
+    def _on_visibility_toggled(self, card_id: int, visible: bool):
+        card = self._cards.get(card_id)
+        if card and card.is_group:
+            # Toggle all children
+            for child_id in card.child_ids:
+                self.part_visibility_changed.emit(child_id, visible)
+        else:
+            self.part_visibility_changed.emit(card_id, visible)
 
     def _on_show_all(self):
-        for card in self._part_cards.values():
+        for card in self._cards.values():
             card.set_visible_state(True)
-        for group in self._group_cards.values():
-            group.set_all_visible(True)
         self.show_all_requested.emit()
 
     def _on_hide_all(self):
-        for card in self._part_cards.values():
+        for card in self._cards.values():
             card.set_visible_state(False)
-        for group in self._group_cards.values():
-            group.set_all_visible(False)
         self.hide_all_requested.emit()
 
     def _on_invert(self):
-        for card in self._part_cards.values():
+        for card in self._cards.values():
             card.set_visible_state(not card._is_visible)
-        for group in self._group_cards.values():
-            group.update_eye_from_children()
         self.invert_visibility_requested.emit()
 
     def _on_isolate(self):
-        if self._selected_part_id is not None:
-            # Isolate single part
-            for pid, card in self._part_cards.items():
-                card.set_visible_state(pid == self._selected_part_id)
-            for group in self._group_cards.values():
-                group.update_eye_from_children()
-            self.isolate_selected_requested.emit(self._selected_part_id)
-        elif self._selected_group_id is not None:
-            # Isolate group — show only its children
-            group_card = self._group_cards.get(self._selected_group_id)
-            if group_card:
-                child_ids = set(group_card.get_child_ids())
-                for pid, card in self._part_cards.items():
-                    card.set_visible_state(pid in child_ids)
-                for group in self._group_cards.values():
-                    group.update_eye_from_children()
-                # Emit isolate for first child to trigger viewer update
-                if child_ids:
-                    self.isolate_selected_requested.emit(next(iter(child_ids)))
+        if self._selected_card_id is None:
+            return
+        card = self._cards.get(self._selected_card_id)
+        if not card:
+            return
+
+        if card.is_group:
+            # Show only this group's children, hide everything else
+            group_child_set = set(card.child_ids)
+            for cid, c in self._cards.items():
+                if c.is_group:
+                    c.set_visible_state(cid == self._selected_card_id)
+                else:
+                    c.set_visible_state(cid in group_child_set)
+            self.isolate_group_requested.emit(card.child_ids)
+        else:
+            for cid, c in self._cards.items():
+                c.set_visible_state(cid == self._selected_card_id)
+            self.isolate_selected_requested.emit(self._selected_card_id)
