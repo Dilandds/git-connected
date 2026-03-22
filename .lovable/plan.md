@@ -1,77 +1,60 @@
 
 
-# Hierarchical Parts Panel Enhancement
+# Mesh Segmentation for Connected Parts
 
 ## Problem
-Currently, `trimesh.split(only_watertight=False)` produces hundreds of tiny disconnected components (e.g. 950 parts) which are unusable — many are too small to visually locate when clicked, and the flat list is overwhelming.
+Currently, parts are only separated when they are **topologically disconnected** (no shared edges/vertices). For a model like the pipe with a flange, the entire object is one connected mesh — so it appears as a single part. The user wants to isolate semantically distinct regions (e.g. the flat flange vs. the curved pipe) even when they share edges.
 
-## Solution: Two-Level Hierarchical Grouping
+## Solution: Dihedral Angle-Based Segmentation (Faceting)
 
-Instead of showing all 950 raw components in a flat list, we cluster nearby small parts into logical groups, then let the user expand a group to see (and toggle) its sub-parts.
+Trimesh already has `trimesh.graph.facets()` and face adjacency data that can segment a connected mesh by **sharp edges** — where the angle between two adjacent face normals exceeds a threshold. This is exactly how CAD models naturally divide: a flat plate meets a curved pipe at a sharp crease.
+
+### How It Works
 
 ```text
-Parts Panel
-├── ▸ Group 1 (Front Assembly)    👁  [312 faces]
-│     ├── Sub-part 1              👁  [45 faces]
-│     ├── Sub-part 2              👁  [120 faces]
-│     └── ...
-├── ▸ Group 2 (Rear Section)      👁  [580 faces]
-└── ▸ Group 3 (Body)              👁  [2400 faces]  ← large single part, no children
+Before (connectivity-only split):
+  Entire pipe+flange = 1 part
+
+After (dihedral angle segmentation):
+  Part 1: Flat flange plate     [sharp edge boundary]
+  Part 2: Curved pipe body      [sharp edge boundary]  
+  Part 3: Bolt holes (cylinders)
 ```
 
-## Implementation Plan
+The algorithm:
+1. For each connected component, compute **face adjacency** and **dihedral angles** between adjacent faces
+2. Faces sharing an edge with dihedral angle < threshold (~30°) are grouped together (smooth region)
+3. Each smooth region becomes a separate sub-part
+4. Very tiny regions (< 4 faces) are merged into their largest neighbor to avoid noise
 
-### 1. Smart Grouping Algorithm (viewer_widget_pygfx.py)
+### Implementation Plan
 
-Add a `_build_part_hierarchy()` method that runs after splitting:
+**File: `viewer_widget_pygfx.py`**
 
-- **Large parts** (face count above a threshold, e.g. top 80th percentile or >500 faces) stay as standalone top-level entries
-- **Small parts** are clustered by spatial proximity using their centroids — parts whose centroids are within a distance threshold get grouped together
-- Use `scipy.spatial.KDTree` (already available via trimesh/scipy) or simple agglomerative clustering on centroids with a distance cutoff derived from the model's bounding box (e.g. 5-10% of bbox diagonal)
-- Each group gets a name like "Group 1", "Group 2", etc., and stores references to its child part IDs
-- Return a tree structure: `[{id, name, face_count, children: [{id, name, face_count}]}]`
+1. Add `_segment_by_angle(trimesh_mesh, angle_threshold=30)` method:
+   - Use `trimesh_mesh.face_adjacency` and `trimesh_mesh.face_adjacency_angles`
+   - Build a graph where faces are nodes; edges connect faces whose dihedral angle is below the threshold (i.e. smooth continuation)
+   - Find connected components of this graph → each component = one "segment"
+   - Extract sub-meshes using `trimesh_mesh.submesh()` for each face group
+   - Merge tiny segments (< 4 faces) into their nearest larger neighbor
+   - Return list of `(name, trimesh)` tuples
 
-### 2. Hierarchical Data in `get_parts_list()` (viewer_widget_pygfx.py)
+2. Update `_split_reasonable_components()`:
+   - After splitting by connectivity, apply `_segment_by_angle()` to each connected component that has enough faces (e.g. > 50 faces)
+   - Small connected components skip angle segmentation (already isolated)
 
-- Add a new method `get_parts_hierarchy()` that returns the grouped tree structure
-- Keep `get_parts_list()` for backward compatibility (flat list)
-- The hierarchy data includes `children` arrays for expandable groups
+3. The existing hierarchy grouping (`get_parts_hierarchy()`) will then cluster these finer segments into meaningful groups automatically
 
-### 3. Expandable Group Cards in Parts Panel (ui/parts_panel.py)
+**No changes needed to `ui/parts_panel.py` or `stl_viewer.py`** — the panel already handles the hierarchical data structure.
 
-- Create a new `PartGroupCard(QFrame)` widget with:
-  - Expand/collapse arrow (▸/▾)
-  - Group name + total face count
-  - Eye icon that toggles all children at once
-  - Click to expand shows child `PartCard` items indented below
-- Modify `PartsPanel.set_parts()` to accept hierarchical data
-- Single-part groups (large standalone parts) render as regular `PartCard` without expand arrow
-- "Isolate Selected" works on both groups (shows all children) and individual sub-parts
+### Technical Details
 
-### 4. Visibility Propagation
+- **trimesh API**: `mesh.face_adjacency` returns pairs of adjacent face indices; `mesh.face_adjacency_angles` returns the dihedral angle for each pair — both are built-in and fast
+- **Graph library**: `networkx` (already a dependency for `trimesh.split()`) for connected components on the face adjacency graph
+- **Angle threshold**: Default 30° (0.52 rad) — flat-to-curved transitions are typically 45-90°, so 30° captures most meaningful boundaries. Could be made adjustable later.
+- **Safety**: If segmentation produces > 200 sub-parts from a single component, fall back to the unsegmented component (prevents over-fragmentation on organic meshes)
+- **Performance**: Face adjacency is O(n_faces) via trimesh's half-edge structure; graph connected components is O(n_faces + n_edges)
 
-- Toggling a group's eye icon → shows/hides all its child parts in the viewer
-- Toggling an individual sub-part updates the group's icon state (full eye, partial indicator, or hidden)
-- "Show All" / "Hide All" / "Invert" bulk actions work through groups
-
-### 5. Improved Split Guard (viewer_widget_pygfx.py)
-
-- Raise the component limit from 2000 to allow more splits (since we now group them)
-- Remove the `median_faces < 10` early-return that currently collapses everything into one part — instead, let the grouping algorithm handle tiny fragments
-- Keep the limit as a safety valve (e.g. 5000 max raw components)
-
-## Files to Modify
-
-| File | Changes |
-|---|---|
-| `viewer_widget_pygfx.py` | Add `_build_part_hierarchy()`, update `_split_reasonable_components` limits, add `get_parts_hierarchy()` method |
-| `ui/parts_panel.py` | Add `PartGroupCard` widget, update `set_parts()` to handle hierarchy, add expand/collapse logic |
-| `stl_viewer.py` | Update `_togglePartsMode` to call `get_parts_hierarchy()` instead of `get_parts_list()` |
-
-## Technical Details
-
-- Clustering uses scipy's `fcluster` with `distance` criterion on part centroids — linkage method: `ward` or `average`
-- Distance threshold = `bbox_diagonal * 0.08` (tunable, covers ~8% of model size)
-- Parts with >500 faces (or above 80th percentile) skip clustering and become top-level
-- Maximum ~50 top-level groups for usability
+### Dependencies
+No new dependencies — uses `trimesh` (face_adjacency), `networkx` (connected components), and `numpy`, all already installed.
 
