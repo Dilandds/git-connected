@@ -226,6 +226,9 @@ class ViewControlsToolbar(QWidget):
     toggle_screenshot = pyqtSignal()
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
+    draw_eraser_toggled = pyqtSignal(bool)
+    draw_undo_requested = pyqtSignal()
+    draw_clear_requested = pyqtSignal()
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
     
@@ -337,6 +340,15 @@ class ViewControlsToolbar(QWidget):
         self.draw_btn.clicked.connect(self._on_draw_clicked)
         self.draw_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.draw_btn)
+
+        # Floating draw toolbar (shown when draw mode is active)
+        from ui.draw_toolbar import DrawToolbar
+        self.draw_toolbar = DrawToolbar(self)
+        self.draw_toolbar.color_picker_requested.connect(self.show_draw_color_picker)
+        self.draw_toolbar.eraser_toggled.connect(self.draw_eraser_toggled.emit)
+        self.draw_toolbar.undo_requested.connect(self.draw_undo_requested.emit)
+        self.draw_toolbar.clear_all_requested.connect(self.draw_clear_requested.emit)
+        content_layout.addWidget(self.draw_toolbar)
         
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
@@ -559,6 +571,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📏")
@@ -629,6 +642,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("📝")
@@ -658,6 +672,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("📝")
@@ -689,6 +704,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("📝")
@@ -711,6 +727,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
     
@@ -719,6 +736,7 @@ class ViewControlsToolbar(QWidget):
         self.draw_mode_enabled = not self.draw_mode_enabled
         if self.draw_mode_enabled:
             self.draw_btn.set_label("Drawing")
+            self.draw_toolbar.show()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -732,6 +750,7 @@ class ViewControlsToolbar(QWidget):
                 self.screenshot_btn.set_active(False)
         else:
             self.draw_btn.set_label("Draw ▼")
+            self.draw_toolbar.reset()
         self.draw_btn.set_active(self.draw_mode_enabled)
         self.toggle_draw.emit()
 
@@ -740,6 +759,7 @@ class ViewControlsToolbar(QWidget):
         self.draw_mode_enabled = False
         self.draw_btn.set_label("Draw ▼")
         self.draw_btn.set_active(False)
+        self.draw_toolbar.reset()
     
     def show_draw_color_picker(self):
         """Show the color picker popup below the draw button."""

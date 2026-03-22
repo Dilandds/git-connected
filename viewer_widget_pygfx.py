@@ -183,6 +183,7 @@ class STLViewerWidget(QWidget):
         self._current_stroke_line = None  # live preview line
         self._draw_event_filter_installed = False
         self._drawing_active = False  # True while mouse button is held
+        self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
 
         # Arrow mode state
         self.arrow_mode = False
@@ -2271,6 +2272,7 @@ class STLViewerWidget(QWidget):
         """Disable draw mode."""
         self.draw_mode = False
         self._drawing_active = False
+        self._eraser_mode = False
         self._current_stroke_points = []
         self._remove_current_stroke_line()
 
@@ -2356,6 +2358,56 @@ class STLViewerWidget(QWidget):
             if self._canvas:
                 self._canvas.request_draw()
 
+    def set_eraser_mode(self, enabled: bool):
+        """Toggle eraser mode. When on, clicks remove strokes instead of drawing."""
+        self._eraser_mode = enabled
+        logger.info(f"set_eraser_mode: {enabled}")
+
+    def erase_stroke_at(self, x, y):
+        """Erase the stroke closest to the click point on the mesh surface."""
+        if self._annotation_trimesh is None or not self._draw_strokes:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+        try:
+            locations, _, _ = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin], ray_directions=[ray_direction]
+            )
+            if len(locations) == 0:
+                return False
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            hit_point = locations[np.argmin(dists)]
+
+            # Find the closest stroke to hit_point
+            threshold = self._get_draw_normal_offset() * 50  # generous click radius
+            best_idx = -1
+            best_dist = float('inf')
+            for i, stroke_data in enumerate(self._draw_strokes_data):
+                pts = np.array(stroke_data['points'], dtype=np.float32)
+                if len(pts) == 0:
+                    continue
+                d = np.min(np.linalg.norm(pts - hit_point, axis=1))
+                if d < best_dist:
+                    best_dist = d
+                    best_idx = i
+            if best_idx >= 0 and best_dist < threshold:
+                stroke_obj = self._draw_strokes.pop(best_idx)
+                self._draw_strokes_data.pop(best_idx)
+                try:
+                    self._scene.remove(stroke_obj)
+                except Exception:
+                    pass
+                if self._canvas:
+                    self._canvas.request_draw()
+                logger.info(f"erase_stroke_at: Removed stroke {best_idx} (dist={best_dist:.4f})")
+                return True
+            return False
+        except Exception as e:
+            logger.debug(f"erase_stroke_at: {e}")
+            return False
+
     def _draw_event_filter_impl(self, obj, event):
         """Handle draw mode mouse events."""
         if not self.draw_mode or self._canvas is None:
@@ -2363,6 +2415,8 @@ class STLViewerWidget(QWidget):
         t = event.type()
         if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
             pos = event.pos()
+            if self._eraser_mode:
+                return self.erase_stroke_at(pos.x(), pos.y())
             hit = self._draw_start_stroke(pos.x(), pos.y())
             return hit
         elif t == QEvent.MouseMove and self._drawing_active:

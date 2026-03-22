@@ -877,6 +877,9 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.toggle_draw.connect(self._toggle_draw_mode)
         self.toolbar.toggle_parts.connect(self._toggle_parts_mode)
         self.toolbar.draw_color_changed.connect(self._on_draw_color_changed)
+        self.toolbar.draw_eraser_toggled.connect(self._on_draw_eraser_toggled)
+        self.toolbar.draw_undo_requested.connect(self._on_draw_undo)
+        self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
     
@@ -1728,6 +1731,24 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'set_draw_color'):
             vw.set_draw_color(color)
+
+    def _on_draw_eraser_toggled(self, enabled: bool):
+        """Handle eraser mode toggle."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_eraser_mode'):
+            vw.set_eraser_mode(enabled)
+
+    def _on_draw_undo(self):
+        """Undo last drawn stroke."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'undo_last_stroke'):
+            vw.undo_last_stroke()
+
+    def _on_draw_clear(self):
+        """Clear all drawn strokes."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'clear_drawings'):
+            vw.clear_drawings()
 
     
     def _on_screenshot_captured(self, pixmap):
