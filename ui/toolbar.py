@@ -511,12 +511,20 @@ class ViewControlsToolbar(QWidget):
         for view_id, icon, label in views:
             action = menu.addAction(f"{icon}  {label}")
             action.setCheckable(True)
-            action.setChecked(self._current_view == view_id)
+            action.setChecked(not self.parts_mode_enabled and self._current_view == view_id)
             action.triggered.connect(lambda checked, v=view_id: self._set_view(v))
+        menu.addSeparator()
+        parts_action = menu.addAction("🧩  Parts")
+        parts_action.setCheckable(True)
+        parts_action.setChecked(self.parts_mode_enabled)
+        parts_action.triggered.connect(self._on_parts_selected)
         menu.exec_(self.view_btn.mapToGlobal(self.view_btn.rect().bottomLeft()))
 
     def _set_view(self, view_id):
         """Set view preset and emit signal."""
+        if self.parts_mode_enabled:
+            self.parts_mode_enabled = False
+            self.toggle_parts.emit()
         self._current_view = view_id
         icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
         labels = {"front": "Front", "rear": "Rear", "left": "Left", "right": "Right", "top": "Top", "bottom": "Bottom"}
@@ -555,6 +563,10 @@ class ViewControlsToolbar(QWidget):
         if self.ruler_mode_enabled:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📐")
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self._restore_view_btn()
+                self.toggle_parts.emit()
             if self.annotation_mode_enabled:
                 self.annotation_mode_enabled = False
                 self.annotation_btn.set_active(False)
@@ -603,11 +615,6 @@ class ViewControlsToolbar(QWidget):
         arrow_action.setChecked(self.arrow_mode_enabled)
         arrow_action.triggered.connect(self._on_arrow_selected)
 
-        parts_action = menu.addAction("🧩  Parts")
-        parts_action.setCheckable(True)
-        parts_action.setChecked(self.parts_mode_enabled)
-        parts_action.triggered.connect(self._on_parts_selected)
-
         menu.exec_(self.annotation_btn.mapToGlobal(
             self.annotation_btn.rect().bottomLeft()
         ))
@@ -623,6 +630,10 @@ class ViewControlsToolbar(QWidget):
         if self.annotation_mode_enabled:
             self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("✏️")
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self._restore_view_btn()
+                self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -653,6 +664,10 @@ class ViewControlsToolbar(QWidget):
         if self.arrow_mode_enabled:
             self.annotation_btn.set_label("Arrow ▼")
             self.annotation_btn.set_icon("➤")
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self._restore_view_btn()
+                self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -676,15 +691,19 @@ class ViewControlsToolbar(QWidget):
         # Exit other modes
         if self.annotation_mode_enabled:
             self.annotation_mode_enabled = False
+            self.annotation_btn.set_active(False)
+            self.annotation_btn.set_icon("📝")
             self.toggle_annotation.emit()
         if self.arrow_mode_enabled:
             self.arrow_mode_enabled = False
+            self.annotation_btn.set_active(False)
+            self.annotation_btn.set_icon("📝")
             self.toggle_arrow.emit()
 
         self.parts_mode_enabled = not self.parts_mode_enabled
         if self.parts_mode_enabled:
-            self.annotation_btn.set_label("Parts ▼")
-            self.annotation_btn.set_icon("🧩")
+            self.view_btn.set_label("Parts ▼")
+            self.view_btn.set_icon("🧩")
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -698,15 +717,20 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
         else:
-            self.annotation_btn.set_label("Annotate ▼")
-            self.annotation_btn.set_icon("📝")
-        self.annotation_btn.set_active(self.parts_mode_enabled)
+            icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
+            labels = {"front": "Front", "rear": "Rear", "left": "Left", "right": "Right", "top": "Top", "bottom": "Bottom"}
+            self.view_btn.set_icon(icons[self._current_view])
+            self.view_btn.set_label(f"{labels[self._current_view]} ▼")
         self.toggle_parts.emit()
     
     def _on_screenshot_clicked(self):
         """Handle screenshot mode toggle."""
         self.screenshot_mode_enabled = not self.screenshot_mode_enabled
         if self.screenshot_mode_enabled:
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self._restore_view_btn()
+                self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -779,6 +803,10 @@ class ViewControlsToolbar(QWidget):
         self.draw_mode_enabled = not self.draw_mode_enabled
         if self.draw_mode_enabled:
             self.draw_btn.set_label("Drawing ▼")
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self._restore_view_btn()
+                self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -800,6 +828,7 @@ class ViewControlsToolbar(QWidget):
     def _on_eraser_toggled(self):
         """Toggle eraser mode."""
         self._eraser_active = not self._eraser_active
+        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "Drawing ▼")
         self.draw_eraser_toggled.emit(self._eraser_active)
 
     def reset_draw_state(self):
@@ -835,13 +864,17 @@ class ViewControlsToolbar(QWidget):
         self.fullscreen_btn.set_active(self.is_fullscreen)
         self.toggle_fullscreen.emit()
 
+    def _restore_view_btn(self):
+        """Restore view button to show current view preset."""
+        icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
+        labels = {"front": "Front", "rear": "Rear", "left": "Left", "right": "Right", "top": "Top", "bottom": "Bottom"}
+        self.view_btn.set_icon(icons[self._current_view])
+        self.view_btn.set_label(f"{labels[self._current_view]} ▼")
+
     def reset_parts_state(self):
         """Reset parts button state (called when exiting parts mode externally)."""
         self.parts_mode_enabled = False
-        if not self.annotation_mode_enabled and not self.arrow_mode_enabled:
-            self.annotation_btn.set_label("Annotate ▼")
-            self.annotation_btn.set_icon("📝")
-            self.annotation_btn.set_active(False)
+        self._restore_view_btn()
     
     def _on_load_clicked(self):
         """Handle load file."""
