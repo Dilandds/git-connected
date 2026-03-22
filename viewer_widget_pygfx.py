@@ -3021,108 +3021,15 @@ class STLViewerWidget(QWidget):
         return parts
 
     def get_parts_hierarchy(self):
-        """Return hierarchical grouping of parts for the PartsPanel.
+        """Return flat list of parts sorted largest-to-smallest by face count.
         
-        Large parts (>= 80th percentile face count or >500 faces) are top-level.
-        Small parts are clustered by spatial proximity into groups.
-        Returns: list of dicts with optional 'children' key.
+        No sub-grouping — each segmented part is a standalone selectable entry.
         """
         flat_parts = self.get_parts_list()
-        if len(flat_parts) <= 20:
-            # Few enough parts — no need to group
-            return flat_parts
-
-        try:
-            from scipy.cluster.hierarchy import linkage, fcluster
-            from scipy.spatial.distance import pdist
-        except ImportError:
-            logger.warning("scipy not available for hierarchical grouping, returning flat list")
-            return flat_parts
-
-        # Compute centroids for each part
-        centroids = []
-        for p in self._mesh_parts:
-            mesh_obj = p.get('mesh_obj')
-            if mesh_obj is not None and hasattr(mesh_obj, 'geometry') and hasattr(mesh_obj.geometry, 'positions'):
-                verts = mesh_obj.geometry.positions.data
-                centroid = verts.mean(axis=0) if len(verts) > 0 else np.array([0, 0, 0])
-            else:
-                centroid = np.array([0, 0, 0])
-            centroids.append(centroid)
-        centroids = np.array(centroids)
-
-        face_counts = [p['face_count'] for p in flat_parts]
-        
-        # Determine large-part threshold: max(500, 80th percentile)
-        threshold_faces = max(500, int(np.percentile(face_counts, 80))) if face_counts else 500
-        
-        large_indices = [i for i, fc in enumerate(face_counts) if fc >= threshold_faces]
-        small_indices = [i for i, fc in enumerate(face_counts) if fc < threshold_faces]
-
-        hierarchy = []
-        
-        # Large parts are standalone top-level entries
-        for i in large_indices:
-            hierarchy.append(flat_parts[i])
-
-        if len(small_indices) <= 1:
-            # Just add the single small part directly
-            for i in small_indices:
-                hierarchy.append(flat_parts[i])
-            return hierarchy
-
-        # Cluster small parts by centroid proximity
-        small_centroids = centroids[small_indices]
-        
-        # Compute bounding box diagonal for distance threshold
-        bbox_min = small_centroids.min(axis=0)
-        bbox_max = small_centroids.max(axis=0)
-        bbox_diag = np.linalg.norm(bbox_max - bbox_min)
-        dist_threshold = bbox_diag * 0.08
-        
-        if dist_threshold < 1e-6:
-            # All centroids at same point — single group
-            dist_threshold = 1.0
-
-        try:
-            distances = pdist(small_centroids)
-            Z = linkage(distances, method='average')
-            labels = fcluster(Z, t=dist_threshold, criterion='distance')
-        except Exception as e:
-            logger.warning(f"Clustering failed: {e}, returning flat list")
-            return flat_parts
-
-        # Build groups from cluster labels
-        groups = {}
-        for idx, label in enumerate(labels):
-            groups.setdefault(int(label), []).append(small_indices[idx])
-
-        group_num = 1
-        for label in sorted(groups.keys()):
-            member_indices = groups[label]
-            if len(member_indices) == 1:
-                # Single-member group — add as standalone
-                hierarchy.append(flat_parts[member_indices[0]])
-            else:
-                total_faces = sum(face_counts[i] for i in member_indices)
-                children = [flat_parts[i] for i in member_indices]
-                group_entry = {
-                    'id': -(group_num),  # Negative IDs for groups
-                    'name': f'Group {group_num}',
-                    'face_count': total_faces,
-                    'visible': True,
-                    'children': children,
-                }
-                hierarchy.append(group_entry)
-                group_num += 1
-
-        # Sort: large standalone parts first, then groups
-        hierarchy.sort(key=lambda x: -x['face_count'])
-        
-        # Cap at ~50 top-level entries for usability
-        logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(hierarchy)} top-level entries "
-                     f"({len(large_indices)} large, {group_num - 1} groups from {len(small_indices)} small parts)")
-        return hierarchy
+        # Sort by face count descending
+        flat_parts.sort(key=lambda x: -x.get('face_count', 0))
+        logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(flat_parts)} parts (sorted by size)")
+        return flat_parts
 
     def set_part_visible(self, part_id, visible):
         """Show or hide a specific part by ID."""

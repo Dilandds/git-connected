@@ -26,7 +26,7 @@ class PartCard(QFrame):
         self._is_visible = True
         self.face_count = face_count
         self._indent = indent
-        self.setFixedHeight(36 if indent else 40)
+        self.setFixedHeight(40 if indent else 52)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(name)
         self._update_style()
@@ -55,7 +55,7 @@ class PartCard(QFrame):
         info_layout.setSpacing(0)
 
         self.name_label = QLabel(name)
-        font_size = "10px" if self._indent else "11px"
+        font_size = "11px" if self._indent else "13px"
         self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: {font_size}; font-weight: 500; border: none; background: transparent;")
         info_layout.addWidget(self.name_label)
 
