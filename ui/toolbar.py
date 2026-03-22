@@ -672,6 +672,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.annotation_btn.set_label("Annotate ▼")
             self.annotation_btn.set_icon("📝")
