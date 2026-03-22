@@ -55,7 +55,7 @@ class PartCard(QFrame):
         info_layout.setSpacing(0)
 
         self.name_label = QLabel(name)
-        font_size = "10px" if self._indent else "11px"
+        font_size = "11px" if self._indent else "13px"
         self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: {font_size}; font-weight: 500; border: none; background: transparent;")
         info_layout.addWidget(self.name_label)
 
