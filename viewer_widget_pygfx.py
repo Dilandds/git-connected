@@ -404,8 +404,75 @@ class STLViewerWidget(QWidget):
                         return True
                 return False
 
+            def _segment_by_angle(mesh_input, angle_threshold_deg=30):
+                """Segment a connected mesh into regions separated by sharp dihedral edges."""
+                import networkx as nx
+                try:
+                    adj = mesh_input.face_adjacency
+                    angles = mesh_input.face_adjacency_angles
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): face_adjacency failed: {e}")
+                    return [mesh_input]
+
+                n_faces = len(mesh_input.faces)
+                if n_faces < 10:
+                    return [mesh_input]
+
+                threshold_rad = np.radians(angle_threshold_deg)
+                smooth_mask = angles < threshold_rad
+                smooth_edges = adj[smooth_mask]
+
+                G = nx.Graph()
+                G.add_nodes_from(range(n_faces))
+                G.add_edges_from(smooth_edges.tolist())
+                face_groups = list(nx.connected_components(G))
+
+                if len(face_groups) <= 1:
+                    return [mesh_input]
+
+                # Safety: if too many segments, skip
+                if len(face_groups) > 200:
+                    logger.info(f"parts_debug (pygfx): angle segmentation produced {len(face_groups)} segments, skipping")
+                    return [mesh_input]
+
+                # Merge tiny segments (< 4 faces) into largest neighbor
+                MIN_FACES = 4
+                large_groups = []
+                tiny_groups = []
+                for grp in face_groups:
+                    if len(grp) >= MIN_FACES:
+                        large_groups.append(grp)
+                    else:
+                        tiny_groups.append(grp)
+
+                if not large_groups:
+                    return [mesh_input]
+
+                # Assign tiny faces to the largest group overall (simple merge)
+                if tiny_groups:
+                    biggest = max(large_groups, key=len)
+                    for tg in tiny_groups:
+                        biggest.update(tg)
+
+                # Extract sub-meshes
+                segments = []
+                for grp in sorted(large_groups, key=len, reverse=True):
+                    face_indices = np.array(sorted(grp))
+                    try:
+                        sub = mesh_input.submesh([face_indices], append=True)
+                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                            segments.append(sub)
+                    except Exception:
+                        pass
+
+                if not segments:
+                    return [mesh_input]
+
+                logger.info(f"parts_debug (pygfx): angle segmentation produced {len(segments)} segments from {n_faces} faces")
+                return segments
+
             def _split_reasonable_components(source_mesh):
-                """Split mesh into connected components, with raised limits for hierarchical grouping."""
+                """Split mesh into connected components, then segment large ones by dihedral angle."""
                 try:
                     components = list(source_mesh.split(only_watertight=False))
                 except Exception as e:
@@ -418,15 +485,31 @@ class STLViewerWidget(QWidget):
                 ]
                 logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
                 if len(components) <= 1:
-                    return components if components else [source_mesh]
+                    comp = components[0] if components else source_mesh
+                    # Even a single connected component can be segmented by angle
+                    if len(comp.faces) >= 50:
+                        segmented = _segment_by_angle(comp)
+                        if len(segmented) > 1:
+                            logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts by angle")
+                            return segmented
+                    return [comp]
 
                 # Safety valve: cap at 5000 raw components
                 if len(components) > 5000:
                     logger.info(f"parts_debug (pygfx): >5000 components, returning single mesh")
                     return [source_mesh]
 
-                logger.info(f"parts_debug (pygfx): keeping {len(components)} components (hierarchy will group them)")
-                return components
+                # Apply angle segmentation to large connected components
+                result = []
+                for comp in components:
+                    if len(comp.faces) >= 50:
+                        segmented = _segment_by_angle(comp)
+                        result.extend(segmented)
+                    else:
+                        result.append(comp)
+
+                logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + angle segmentation")
+                return result
 
             # STEP
             if file_ext.endswith('.step') or file_ext.endswith('.stp'):
