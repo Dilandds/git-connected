@@ -26,7 +26,7 @@ class PartCard(QFrame):
         self._is_visible = True
         self.face_count = face_count
         self._indent = indent
-        self.setFixedHeight(36 if indent else 40)
+        self.setFixedHeight(40 if indent else 52)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(name)
         self._update_style()
