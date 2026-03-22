@@ -2272,6 +2272,7 @@ class STLViewerWidget(QWidget):
         """Disable draw mode."""
         self.draw_mode = False
         self._drawing_active = False
+        self._eraser_mode = False
         self._current_stroke_points = []
         self._remove_current_stroke_line()
 
