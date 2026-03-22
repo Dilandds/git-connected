@@ -91,6 +91,7 @@ class TabState:
     annotations_exported: bool = False
     ecto_temp_dir: Optional[str] = None
     filename: Optional[str] = None  # display name for tab
+    loaded_via_conversion: bool = False  # True when file was loaded via Convert File flow
 
 
 # ======================== Main Window ========================
@@ -225,6 +226,7 @@ class STLViewerWindow(QMainWindow):
         self.sidebar_panel.upload_btn.clicked.connect(self.upload_stl_file)
         self.sidebar_panel.export_scaled_stl.connect(self.export_scaled_stl)
         self.sidebar_panel.annotations_exported.connect(self._on_annotations_exported)
+        self.sidebar_panel.conversion_complete.connect(self._load_converted_file)
         splitter.addWidget(self.sidebar_panel)
         logger.info("init_ui: Sidebar panel created")
         
@@ -628,8 +630,16 @@ class STLViewerWindow(QMainWindow):
             self.sidebar_panel.update_dimensions(tab.sidebar_data, tab.file_path)
             count = len(tab.annotation_panel.get_annotations())
             self.sidebar_panel.update_annotation_count(count)
+            # Show conversion options for 3DM/STEP; block for other formats
+            fp = (tab.file_path or "").lower()
+            is_conv = fp.endswith('.3dm') or fp.endswith('.step') or fp.endswith('.stp')
+            if is_conv:
+                self.sidebar_panel.set_converter_source_from_file(tab.file_path)
+            else:
+                self.sidebar_panel.set_conversion_blocked(True)
         else:
             self.sidebar_panel.reset_all_data()
+            self.sidebar_panel.set_conversion_blocked(False)
         
         # Update toolbar state
         has_file = tab.file_path is not None
@@ -956,6 +966,7 @@ class STLViewerWindow(QMainWindow):
         
         # Reset sidebar panel dimensions and calculations
         self.sidebar_panel.reset_all_data()
+        self.sidebar_panel.reset_converter()
         
         # Reset tab state
         tab = self._current_tab
@@ -1004,9 +1015,17 @@ class STLViewerWindow(QMainWindow):
         if tab and tab.file_path is not None:
             self._create_new_tab()
         
-        self._load_file_into_current_tab(file_path)
+        self._load_file_into_current_tab(file_path, from_conversion=False)
     
-    def _load_file_into_current_tab(self, file_path: str):
+    def _load_converted_file(self, output_path: str):
+        """Load a file that was created by the Convert File flow. Keeps conversion available and ensures 3D view."""
+        if self._current_mode != "3d":
+            self._switch_mode("3d")
+        if self._current_tab and self._current_tab.file_path is not None:
+            self._create_new_tab()
+        self._load_file_into_current_tab(output_path, from_conversion=True)
+    
+    def _load_file_into_current_tab(self, file_path: str, from_conversion: bool = False):
         """Load a 3D file into the current tab's viewer."""
         tab = self._current_tab
         if tab is None or tab.viewer_widget is None:
@@ -1035,6 +1054,15 @@ class STLViewerWindow(QMainWindow):
             filename = Path(file_path).name
             tab.file_path = file_path
             tab.filename = filename
+            tab.loaded_via_conversion = from_conversion
+            
+            # Show conversion options for 3DM/STEP; block for other formats (STL, OBJ, etc.)
+            file_ext = file_path.lower()
+            is_convertible = (file_ext.endswith('.3dm') or file_ext.endswith('.step') or file_ext.endswith('.stp'))
+            if is_convertible:
+                self.sidebar_panel.set_converter_source_from_file(file_path)
+            else:
+                self.sidebar_panel.set_conversion_blocked(True)
             
             # Update tab bar text
             self.tab_bar.setTabText(self.current_tab_index, filename)
@@ -1138,10 +1166,15 @@ class STLViewerWindow(QMainWindow):
                 logger.warning(f"Could not set render mode: {e}")
     
     def _reset_rotation(self):
-        """Reset view to default isometric rotation."""
+        """Reset view to default isometric rotation and clear drawings."""
         vw = self.viewer_widget
         if vw is None:
             return
+        if hasattr(vw, 'clear_drawings'):
+            try:
+                vw.clear_drawings()
+            except Exception as e:
+                logger.warning(f"Could not clear drawings: {e}")
         if hasattr(vw, 'reset_view'):
             try:
                 vw.reset_view()
@@ -1527,7 +1560,10 @@ class STLViewerWindow(QMainWindow):
             if self.toolbar.draw_mode_enabled:
                 self._exit_draw_mode()
             # Populate parts list from viewer
-            parts = vw.get_parts_list() if hasattr(vw, 'get_parts_list') else []
+            has_get_parts = hasattr(vw, 'get_parts_list')
+            logger.info(f"parts_debug: _toggle_parts_mode viewer={vw.__class__.__module__}.{vw.__class__.__name__}, has get_parts_list={has_get_parts}")
+            parts = vw.get_parts_list() if has_get_parts else []
+            logger.info(f"parts_debug: _toggle_parts_mode got {len(parts)} parts from viewer")
             tab.parts_panel.set_parts(parts)
             tab.parts_panel.show()
             self.parts_stack.setCurrentWidget(tab.parts_panel)
@@ -1965,7 +2001,7 @@ class STLViewerWindow(QMainWindow):
                 self._create_new_tab()
             
             logger.info("upload_stl_file: Loading 3D file into viewer...")
-            self._load_file_into_current_tab(file_path)
+            self._load_file_into_current_tab(file_path, from_conversion=False)
         else:
             logger.info("upload_stl_file: File selection cancelled")
     
@@ -2090,7 +2126,7 @@ class STLViewerWindow(QMainWindow):
                 self._load_technical_ecto(ecto_path)
                 return
             
-            model_path, annotations, reader_mode, temp_dir = EctoFormat.import_ecto(ecto_path)
+            model_path, annotations, reader_mode, temp_dir, drawings = EctoFormat.import_ecto(ecto_path)
             
             if model_path is None:
                 QMessageBox.critical(
@@ -2173,6 +2209,11 @@ class STLViewerWindow(QMainWindow):
                 
                 logger.info(f"_load_ecto_file: Loaded {len(annotations)} annotations (reader_mode={reader_mode})")
                 self._update_sidebar_annotation_count()
+            
+            # Restore drawings ( strokes on the 3D model surface)
+            if drawings and vw and hasattr(vw, 'restore_draw_strokes'):
+                vw.restore_draw_strokes(drawings)
+                logger.info(f"_load_ecto_file: Restored {len(drawings)} drawing strokes")
             
             logger.info(f"_load_ecto_file: Successfully loaded .ecto file")
             

@@ -70,9 +70,10 @@ class EctoFormat:
             return False
     
     @staticmethod
-    def export(mesh, annotations: List[dict], output_path: str, 
-               source_format: str = 'stl', original_filename: str = None) -> Tuple[bool, str, Optional[str]]:
-        """Create an .ecto bundle containing the model, annotations, and images.
+    def export(mesh, annotations: List[dict], output_path: str,
+               source_format: str = 'stl', original_filename: str = None,
+               drawings: Optional[List[dict]] = None) -> Tuple[bool, str, Optional[str]]:
+        """Create an .ecto bundle containing the model, annotations, images, and drawings.
         
         Args:
             mesh: PyVista mesh object to export
@@ -80,6 +81,7 @@ class EctoFormat:
             output_path: Path for the output .ecto file
             source_format: Format to save the model as ('stl' or 'obj')
             original_filename: Original filename for metadata
+            drawings: Optional list of draw strokes [{points: [[x,y,z],...], color: '#RRGGBB'}]
             
         Returns:
             tuple: (success: bool, message_or_path: str, creator_token: str|None)
@@ -158,7 +160,15 @@ class EctoFormat:
                 json.dump(annotations_data, f, indent=2, ensure_ascii=False)
             logger.info(f"export: Created annotations.json with {len(processed_annotations)} annotations")
             
-            # 4. Create manifest.json (creator_token identifies sender for reopen-as-editor)
+            # 4. Create drawings.json if drawings provided
+            drawings_data = drawings or []
+            if drawings_data:
+                drawings_path = os.path.join(temp_dir, 'drawings.json')
+                with open(drawings_path, 'w', encoding='utf-8') as f:
+                    json.dump({'version': '1.0', 'strokes': drawings_data}, f, indent=2, ensure_ascii=False)
+                logger.info(f"export: Created drawings.json with {len(drawings_data)} strokes")
+
+            # 5. Create manifest.json (creator_token identifies sender for reopen-as-editor)
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'created_by': 'ECTOFORM',
@@ -169,14 +179,15 @@ class EctoFormat:
                 'reader_mode': True,
                 'creator_token': creator_token,
                 'annotation_count': len(processed_annotations),
-                'has_images': has_images
+                'has_images': has_images,
+                'drawing_count': len(drawings_data)
             }
             manifest_path = os.path.join(temp_dir, 'manifest.json')
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
             logger.info(f"export: Created manifest.json")
-            
-            # 5. Create the .ecto ZIP file
+
+            # 6. Create the .ecto ZIP file
             with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 # Add manifest
                 zf.write(manifest_path, 'manifest.json')
@@ -184,6 +195,9 @@ class EctoFormat:
                 zf.write(model_path, model_filename)
                 # Add annotations
                 zf.write(annotations_path, 'annotations.json')
+                # Add drawings if any
+                if drawings_data:
+                    zf.write(drawings_path, 'drawings.json')
                 # Add images if any
                 if has_images and os.path.exists(images_dir):
                     for img_file in os.listdir(images_dir):
@@ -207,7 +221,7 @@ class EctoFormat:
                     logger.warning(f"export: Failed to cleanup temp directory: {e}")
     
     @staticmethod
-    def import_ecto(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str]:
+    def import_ecto(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str, Optional[List[dict]]]:
         """Open an .ecto bundle and extract its contents.
         
         Extracts the bundle to a temporary directory and returns paths to the contents.
@@ -217,14 +231,14 @@ class EctoFormat:
             ecto_path: Path to the .ecto file
             
         Returns:
-            tuple: (model_path: str or None, annotations: list or None, reader_mode: bool, temp_dir: str)
-                   Returns (None, None, False, error_message) on failure
+            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings)
+                   On failure: (None, None, False, error_message, None)
         """
         if not os.path.exists(ecto_path):
-            return None, None, False, f"File not found: {ecto_path}"
+            return None, None, False, f"File not found: {ecto_path}", None
         
         if not EctoFormat.is_ecto_file(ecto_path):
-            return None, None, False, "Invalid .ecto file format"
+            return None, None, False, "Invalid .ecto file format", None
         
         temp_dir = None
         try:
@@ -246,7 +260,7 @@ class EctoFormat:
             model_path = os.path.join(temp_dir, model_filename)
             
             if not os.path.exists(model_path):
-                return None, None, False, f"Model file not found in bundle: {model_filename}"
+                return None, None, False, f"Model file not found in bundle: {model_filename}", None
             
             # Sender vs reader: if creator_token is in local registry, this machine created the file
             creator_token = manifest.get('creator_token')
@@ -286,12 +300,24 @@ class EctoFormat:
                         else:
                             resolved_paths.append(img_path)
                     ann['image_paths'] = resolved_paths
+
+            # Read drawings (optional - for 3D model drawings on surface)
+            drawings = []
+            drawings_path = os.path.join(temp_dir, 'drawings.json')
+            if os.path.exists(drawings_path):
+                try:
+                    with open(drawings_path, 'r', encoding='utf-8') as f:
+                        drawings_data = json.load(f)
+                    drawings = drawings_data.get('strokes', [])
+                    logger.info(f"import_ecto: Loaded {len(drawings)} drawing strokes")
+                except Exception as e:
+                    logger.warning(f"import_ecto: Could not read drawings.json: {e}")
             
             logger.info(f"import_ecto: Successfully extracted. Model: {model_path}, "
                        f"Annotations: {len(annotations) if annotations else 0}, "
-                       f"Reader mode: {reader_mode}")
+                       f"Drawings: {len(drawings)}, Reader mode: {reader_mode}")
             
-            return model_path, annotations, reader_mode, temp_dir
+            return model_path, annotations, reader_mode, temp_dir, drawings
             
         except Exception as e:
             logger.error(f"import_ecto: Failed to import .ecto file: {e}", exc_info=True)
@@ -301,7 +327,7 @@ class EctoFormat:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            return None, None, False, str(e)
+            return None, None, False, str(e), None
     
     @staticmethod
     def get_manifest(ecto_path: str) -> Optional[Dict[str, Any]]:

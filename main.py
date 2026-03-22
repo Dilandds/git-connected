@@ -66,6 +66,7 @@ def main():
     logger.info("=" * 50)
     logger.info("Starting ECTOFORM Application")
     logger.info(f"Platform: {sys.platform}, Python: {sys.version.split()[0]}")
+    logger.info(f"parts_debug: USE_PYGFX={USE_PYGFX} (pygfx=WebGPU viewer, False=PyVista viewer)")
     logger.info(f"App log file: {log_file}")
     logger.info("=" * 50)
     

@@ -178,6 +178,7 @@ class STLViewerWidget(QWidget):
         self.draw_mode = False
         self._draw_color = '#FF0000'
         self._draw_strokes = []  # list of pygfx.Line objects in scene
+        self._draw_strokes_data = []  # parallel list for export: [{'points': [...], 'color': '...'}]
         self._current_stroke_points = []  # points being drawn
         self._current_stroke_line = None  # live preview line
         self._draw_event_filter_installed = False
@@ -406,23 +407,33 @@ class STLViewerWidget(QWidget):
                 """Split mesh into connected components, with guardrails against triangle-explosion meshes."""
                 try:
                     components = list(source_mesh.split(only_watertight=False))
-                except Exception:
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): split() failed: {e}, returning single mesh")
                     return [source_mesh]
 
                 components = [
                     c for c in components
                     if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
                 ]
+                logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
                 if len(components) <= 1:
                     return components if components else [source_mesh]
 
-                # Some CAD conversions duplicate vertices per face; splitting then creates one-part-per-triangle.
-                # In those cases, keep the mesh as a single part to avoid unusable UI.
-                if len(components) > 400:
+                face_counts = [len(c.faces) for c in components]
+                median_faces = float(np.median(face_counts))
+                limit = max(200, int(len(source_mesh.faces) * 0.25))
+                logger.info(f"parts_debug (pygfx): median_faces={median_faces:.1f}, limit={limit}")
+                if median_faces < 10:
+                    logger.info(f"parts_debug (pygfx): median<10, returning single mesh")
                     return [source_mesh]
-                if len(components) > max(50, int(len(source_mesh.faces) * 0.15)):
+                if len(components) > 2000:
+                    logger.info(f"parts_debug (pygfx): >2000 components, returning single mesh")
+                    return [source_mesh]
+                if len(components) > limit:
+                    logger.info(f"parts_debug (pygfx): exceeds limit, returning single mesh")
                     return [source_mesh]
 
+                logger.info(f"parts_debug (pygfx): keeping {len(components)} components")
                 return components
 
             # STEP
@@ -555,12 +566,15 @@ class STLViewerWidget(QWidget):
 
             elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
                 fname = Path(file_path).stem if file_path else "Part"
+                logger.info(f"parts_debug (pygfx): Single Trimesh, verts={len(mesh_tri.vertices)}, faces={len(mesh_tri.faces)}")
                 components = _split_reasonable_components(mesh_tri)
 
                 if len(components) > 1:
                     sub_meshes = [(f"{fname} #{i + 1}", comp) for i, comp in enumerate(components)]
+                    logger.info(f"parts_debug (pygfx): Using {len(sub_meshes)} components")
                 else:
                     sub_meshes = [(fname, mesh_tri)]
+                    logger.info(f"parts_debug (pygfx): Single component, part='{fname}'")
             else:
                 raise ValueError("No mesh in file")
 
@@ -569,7 +583,7 @@ class STLViewerWidget(QWidget):
 
             # Combined mesh for raycasting/MeshCalculator
             mesh_tri = trimesh.util.concatenate([g for _, g in sub_meshes]) if len(sub_meshes) > 1 else sub_meshes[0][1]
-            logger.info(f"load_stl (pygfx): Built {len(sub_meshes)} part(s) for panel")
+            logger.info(f"load_stl (pygfx): Built {len(sub_meshes)} part(s) for panel: {[(n, len(t.faces)) for n, t in sub_meshes]}")
 
             if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
                 raise ValueError("No mesh in file")
@@ -869,6 +883,7 @@ class STLViewerWidget(QWidget):
             self._scene.remove(self._mesh_obj)
             self._mesh_obj = None
         self._mesh_parts = []
+        self.clear_drawings()
         if getattr(self, '_axes', None) is not None:
             try:
                 self._axes.visible = False
@@ -2282,6 +2297,49 @@ class STLViewerWidget(QWidget):
             except Exception:
                 pass
         self._draw_strokes.clear()
+        self._draw_strokes_data.clear()
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def get_draw_strokes(self):
+        """Return serializable list of strokes for .ecto export. Each stroke: {'points': [[x,y,z],...], 'color': '#RRGGBB'}."""
+        # Use stored stroke data (populated at draw time) for reliable export
+        return [{'points': [p.tolist() if hasattr(p, 'tolist') else list(p) for p in s['points']], 'color': s['color']}
+                for s in self._draw_strokes_data]
+
+    def restore_draw_strokes(self, strokes):
+        """Restore strokes from .ecto import. Each stroke: {'points': [[x,y,z],...], 'color': '#RRGGBB'}."""
+        import pygfx as gfx
+        for stroke in self._draw_strokes:
+            try:
+                self._scene.remove(stroke)
+            except Exception:
+                pass
+        self._draw_strokes.clear()
+        self._draw_strokes_data.clear()
+        for stroke_data in strokes or []:
+            try:
+                points = stroke_data.get('points', [])
+                color = stroke_data.get('color', self._draw_color)
+                if len(points) < 2:
+                    continue
+                positions = np.array(points, dtype=np.float32)
+                segments = []
+                for i in range(len(positions) - 1):
+                    segments.append(positions[i])
+                    segments.append(positions[i + 1])
+                seg_positions = np.array(segments, dtype=np.float32)
+                geom = gfx.Geometry(positions=seg_positions)
+                mat = gfx.LineSegmentMaterial(
+                    color=color, thickness=3.0,
+                    depth_test=True, depth_write=True
+                )
+                line_obj = gfx.Line(geom, mat)
+                self._scene.add(line_obj)
+                self._draw_strokes.append(line_obj)
+                self._draw_strokes_data.append({'points': points, 'color': color})
+            except Exception as e:
+                logger.warning(f"restore_draw_strokes: Skip stroke: {e}")
         if self._canvas:
             self._canvas.request_draw()
 
@@ -2289,6 +2347,8 @@ class STLViewerWidget(QWidget):
         """Remove the most recently drawn stroke."""
         if self._draw_strokes:
             stroke = self._draw_strokes.pop()
+            if self._draw_strokes_data:
+                self._draw_strokes_data.pop()
             try:
                 self._scene.remove(stroke)
             except Exception:
@@ -2393,6 +2453,8 @@ class STLViewerWidget(QWidget):
             line_obj = gfx.Line(geom, mat)
             self._scene.add(line_obj)
             self._draw_strokes.append(line_obj)
+            points = [p.tolist() if hasattr(p, 'tolist') else list(p) for p in self._current_stroke_points]
+            self._draw_strokes_data.append({'points': points, 'color': self._draw_color})
         except Exception as e:
             logger.warning(f"_draw_finish_stroke: {e}")
         self._current_stroke_points = []
@@ -2818,7 +2880,7 @@ class STLViewerWidget(QWidget):
 
     def get_parts_list(self):
         """Return list of part metadata for the PartsPanel."""
-        return [
+        parts = [
             {
                 'id': p['id'],
                 'name': p['name'],
@@ -2827,6 +2889,8 @@ class STLViewerWidget(QWidget):
             }
             for p in self._mesh_parts
         ]
+        logger.info(f"parts_debug (pygfx): get_parts_list returning {len(parts)} parts: {[(x['name'], x['face_count']) for x in parts]}")
+        return parts
 
     def set_part_visible(self, part_id, visible):
         """Show or hide a specific part by ID."""

@@ -13,6 +13,7 @@ vtk>=9.0.0,<9.6.0
 pygfx
 wgpu
 trimesh
+networkx  # Required for trimesh.split() (connected components / multi-part detection)
 rtree  # Required for trimesh ray casting (annotation mode picking)
 rendercanvas
 ezdxf>=0.18.0  # DXF file format support

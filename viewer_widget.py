@@ -34,6 +34,71 @@ def debug_print(msg):
     safe_flush(sys.stderr)
 
 
+def _pyvista_to_trimesh(pv_mesh):
+    """Convert PyVista PolyData to trimesh.Trimesh for component splitting."""
+    import trimesh
+    try:
+        pv_mesh = pv_mesh.triangulate()
+    except Exception:
+        pass
+    verts = np.asarray(pv_mesh.points, dtype=np.float64)
+    faces_arr = pv_mesh.faces
+    if len(faces_arr) >= 4 and len(faces_arr) % 4 == 0:
+        faces = faces_arr.reshape(-1, 4)[:, 1:4]
+    else:
+        idx = 0
+        faces_list = []
+        while idx < len(faces_arr):
+            n = int(faces_arr[idx])
+            idx += 1
+            if n == 3 and idx + 3 <= len(faces_arr):
+                faces_list.append([faces_arr[idx], faces_arr[idx + 1], faces_arr[idx + 2]])
+            idx += n
+        faces = np.array(faces_list, dtype=np.int32) if faces_list else np.empty((0, 3), dtype=np.int32)
+    return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+
+
+def _trimesh_to_pyvista(tm):
+    """Convert trimesh.Trimesh to PyVista PolyData."""
+    import trimesh
+    vertices = np.asarray(tm.vertices, dtype=np.float64)
+    faces = np.asarray(tm.faces, dtype=np.int32)
+    cells = np.column_stack([np.full(len(faces), 3), faces]).ravel().astype(np.int32)
+    return pv.PolyData(vertices, cells)
+
+
+def _split_reasonable_components(source_mesh):
+    """Split mesh into connected components, with guardrails against triangle-explosion meshes."""
+    import trimesh
+    try:
+        components = list(source_mesh.split(only_watertight=False))
+    except Exception as e:
+        logger.info(f"parts_debug: _split_reasonable_components split() failed: {e}, returning single mesh")
+        return [source_mesh]
+    components = [
+        c for c in components
+        if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
+    ]
+    logger.info(f"parts_debug: trimesh.split returned {len(components)} components")
+    if len(components) <= 1:
+        logger.info(f"parts_debug: <=1 components, returning as-is")
+        return components if components else [source_mesh]
+    face_counts = [len(c.faces) for c in components]
+    median_faces = float(np.median(face_counts))
+    logger.info(f"parts_debug: median_faces={median_faces:.1f}, max_components={max(200, int(len(source_mesh.faces) * 0.25))}")
+    if median_faces < 10:
+        logger.info(f"parts_debug: median_faces<10 (triangle explosion), returning single mesh")
+        return [source_mesh]
+    if len(components) > 2000:
+        logger.info(f"parts_debug: >2000 components, returning single mesh")
+        return [source_mesh]
+    if len(components) > max(200, int(len(source_mesh.faces) * 0.25)):
+        logger.info(f"parts_debug: exceeds guardrail limit, returning single mesh")
+        return [source_mesh]
+    logger.info(f"parts_debug: keeping {len(components)} components")
+    return components
+
+
 class STLViewerWidget(QWidget):
     """PyVista-based 3D viewer widget for displaying STL files."""
     
@@ -99,6 +164,7 @@ class STLViewerWidget(QWidget):
         self.plotter = None
         self.current_mesh = None
         self.current_actor = None  # Track the mesh actor to remove it specifically
+        self._mesh_parts = []  # list of {'id', 'name', 'actor', 'visible', 'face_count'} for Parts panel
         self._orientation_widget = None  # Bottom-right rotation gizmo (annotation mode only)
         self._initialized = False
         self._model_loaded = False
@@ -349,28 +415,33 @@ class STLViewerWidget(QWidget):
                 return False
         
         try:
-            # Remove previous mesh actor if it exists (instead of clearing everything)
-            if self.current_actor is not None:
-                logger.info("load_stl: Removing previous mesh actor...")
-                try:
-                    self.plotter.remove_actor(self.current_actor)
-                    logger.info("load_stl: Previous mesh actor removed")
-                    # Ensure renderer settings are preserved after removing actor
-                    self._restore_renderer_settings()
-                except Exception as e:
-                    logger.warning(f"load_stl: Could not remove actor, using clear: {e}")
-                    # Fallback to clear if remove_actor fails
+            # Remove previous mesh actor(s) if they exist
+            def _remove_previous_mesh():
+                if self._mesh_parts:
+                    for p in self._mesh_parts:
+                        try:
+                            self.plotter.remove_actor(p['actor'])
+                        except Exception:
+                            pass
+                    self._mesh_parts = []
+                elif self.current_actor is not None:
+                    try:
+                        self.plotter.remove_actor(self.current_actor)
+                    except Exception as e:
+                        logger.warning(f"load_stl: Could not remove actor, using clear: {e}")
+                        self.plotter.clear()
+                        self.plotter.add_axes()
+                        self._restore_renderer_settings()
+                        return
+                elif self.current_mesh is not None:
                     self.plotter.clear()
                     self.plotter.add_axes()
-                    # Restore renderer settings after clear
-                    self._restore_renderer_settings()
-            elif self.current_mesh is not None:
-                # If we have a mesh but no actor reference, use clear
-                logger.info("load_stl: Clearing previous mesh...")
-                self.plotter.clear()
-                self.plotter.add_axes()
-                # Restore renderer settings after clear
+                self.current_actor = None
                 self._restore_renderer_settings()
+
+            if self.current_actor is not None or self._mesh_parts or self.current_mesh is not None:
+                logger.info("load_stl: Removing previous mesh...")
+                _remove_previous_mesh()
             
             # Detect file format and load accordingly
             file_ext = file_path.lower()
@@ -546,51 +617,65 @@ class STLViewerWidget(QWidget):
             
             logger.info(f"load_stl: Mesh validated - {mesh.n_points} points, {mesh.n_cells} cells")
             
-            # Store the original mesh BEFORE processing for rendering
-            # This ensures volume calculations use the unmodified mesh
+            # Store the original mesh for volume/dimensions (before splitting)
             self.current_mesh = mesh.copy()
             
-            # Prepare mesh for high-quality rendering (optional enhancements)
-            # These steps are optional - if they fail, we'll use the original mesh
-            logger.info("load_stl: Preparing mesh for rendering...")
-            render_mesh = mesh  # Start with original mesh
-            
-            # Try to triangulate if needed (optional enhancement)
+            # Split into connected components for Parts panel (multi-part support)
+            from pathlib import Path
+            sub_meshes = []
             try:
-                if not render_mesh.is_all_triangles():
-                    logger.info("load_stl: Triangulating mesh...")
-                    render_mesh = render_mesh.triangulate()
-                    logger.info("load_stl: Mesh triangulated successfully")
+                logger.info(f"parts_debug: Converting PyVista mesh to trimesh (points={mesh.n_points}, cells={mesh.n_cells})")
+                mesh_tri = _pyvista_to_trimesh(mesh)
+                logger.info(f"parts_debug: trimesh has {len(mesh_tri.vertices)} verts, {len(mesh_tri.faces)} faces")
+                components = _split_reasonable_components(mesh_tri)
+                fname = Path(file_path).stem if file_path else "Part"
+                if len(components) > 1:
+                    sub_meshes = [(f"{fname} #{i + 1}", c) for i, c in enumerate(components)]
+                    logger.info(f"parts_debug: Using {len(sub_meshes)} components from split")
+                else:
+                    sub_meshes = [(fname, mesh_tri)]
+                    logger.info(f"parts_debug: Single component, using whole mesh as part '{fname}'")
             except Exception as e:
-                logger.warning(f"load_stl: Could not triangulate mesh: {e}, using original mesh")
-                render_mesh = mesh  # Fallback to original mesh
-            
-            # Compute cell/face normals for flat shading (sharp edges, accurate flat surfaces)
-            logger.info("load_stl: Computing mesh normals (flat shading)...")
-            try:
-                render_mesh.compute_normals(inplace=True, point_normals=False, cell_normals=True)
-                logger.info("load_stl: Mesh normals computed (flat) successfully")
-            except Exception as e:
-                logger.warning(f"load_stl: Could not compute normals: {e}, continuing anyway")
-            
-            logger.info("load_stl: Adding mesh to plotter...")
-            # Ensure renderer settings are active before adding mesh (preserves quality when uploading)
+                logger.warning(f"load_stl: Could not split components: {e}, using single part")
+                try:
+                    mesh_tri = _pyvista_to_trimesh(mesh)
+                    sub_meshes = [(Path(file_path).stem if file_path else "Part", mesh_tri)]
+                except Exception:
+                    sub_meshes = [(Path(file_path).stem if file_path else "Part", _pyvista_to_trimesh(mesh))]
+
+            logger.info(f"load_stl: Built {len(sub_meshes)} part(s) for panel: {[(n, len(t.faces)) for n, t in sub_meshes]}")
+
             self._restore_renderer_settings()
-            
-            # Add mesh to plotter with consistent rendering parameters
-            # Store the actor reference so we can remove it later
-            # Use the processed mesh for rendering (with normals and triangulation if successful)
-            self.current_actor = self.plotter.add_mesh(
-                render_mesh,
-                color='lightblue',
+            self._mesh_parts = []
+            mesh_params = dict(
                 show_edges=False,
-                smooth_shading=False,  # Flat shading for sharp edges and accurate flat surfaces
-                ambient=0.7,  # Increased for less shadowing
-                diffuse=0.4,  # Reduced to balance with higher ambient
-                specular=0.2,  # Reduced for less harsh highlights
-                specular_power=20  # Reduced for softer specular
+                smooth_shading=False,
+                ambient=0.7,
+                diffuse=0.4,
+                specular=0.2,
+                specular_power=20
             )
-            logger.info("load_stl: Mesh added to plotter")
+            for part_idx, (part_name, part_tri) in enumerate(sub_meshes):
+                part_pv = _trimesh_to_pyvista(part_tri)
+                try:
+                    if not part_pv.is_all_triangles():
+                        part_pv = part_pv.triangulate()
+                except Exception:
+                    pass
+                try:
+                    part_pv.compute_normals(inplace=True, point_normals=False, cell_normals=True)
+                except Exception:
+                    pass
+                actor = self.plotter.add_mesh(part_pv, color='lightblue', **mesh_params)
+                self._mesh_parts.append({
+                    'id': part_idx,
+                    'name': part_name,
+                    'actor': actor,
+                    'visible': True,
+                    'face_count': len(part_tri.faces),
+                })
+            self.current_actor = self._mesh_parts[0]['actor'] if self._mesh_parts else None
+            logger.info(f"load_stl: Mesh parts added to plotter, _mesh_parts={len(self._mesh_parts)}")
             # Ensure renderer settings are still active after adding mesh
             # This preserves visual quality when uploading files multiple times
             self._restore_renderer_settings()
@@ -634,11 +719,18 @@ class STLViewerWidget(QWidget):
         logger.info("clear_viewer: Clearing viewer...")
         # Remove orientation gizmo if present
         self._remove_orientation_gizmo()
-        # Remove mesh actor if it exists
-        if self.current_actor is not None:
+        # Remove mesh actor(s)
+        if self._mesh_parts:
+            for p in self._mesh_parts:
+                try:
+                    self.plotter.remove_actor(p['actor'])
+                except Exception:
+                    pass
+            self._mesh_parts = []
+        elif self.current_actor is not None:
             try:
                 self.plotter.remove_actor(self.current_actor)
-            except:
+            except Exception:
                 pass
         self.plotter.clear()
         self.plotter.add_axes()
@@ -2323,3 +2415,97 @@ class STLViewerWidget(QWidget):
         b = int(hex_color[4:6], 16) / 255.0
         luminance = 0.299 * r + 0.587 * g + 0.114 * b
         return luminance < 0.5
+
+    # ========== Part Visibility Methods (Parts panel) ==========
+
+    def get_parts_list(self):
+        """Return list of part metadata for the PartsPanel."""
+        parts = [
+            {
+                'id': p['id'],
+                'name': p['name'],
+                'face_count': p.get('face_count', 0),
+                'visible': p.get('visible', True),
+            }
+            for p in self._mesh_parts
+        ]
+        logger.info(f"parts_debug: get_parts_list returning {len(parts)} parts, _mesh_parts len={len(self._mesh_parts)}: {[(x['name'], x['face_count']) for x in parts]}")
+        return parts
+
+    def set_part_visible(self, part_id, visible):
+        """Show or hide a specific part by ID."""
+        for p in self._mesh_parts:
+            if p['id'] == part_id:
+                p['visible'] = visible
+                p['actor'].SetVisibility(1 if visible else 0)
+                break
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def show_all_parts(self):
+        """Make all parts visible."""
+        for p in self._mesh_parts:
+            p['visible'] = True
+            p['actor'].SetVisibility(1)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def hide_all_parts(self):
+        """Hide all parts."""
+        for p in self._mesh_parts:
+            p['visible'] = False
+            p['actor'].SetVisibility(0)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def invert_parts_visibility(self):
+        """Invert visibility of all parts."""
+        for p in self._mesh_parts:
+            p['visible'] = not p['visible']
+            p['actor'].SetVisibility(1 if p['visible'] else 0)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def isolate_part(self, part_id):
+        """Show only the specified part, hide all others."""
+        for p in self._mesh_parts:
+            vis = (p['id'] == part_id)
+            p['visible'] = vis
+            p['actor'].SetVisibility(1 if vis else 0)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def highlight_part(self, part_id):
+        """Briefly highlight a selected part (make others semi-transparent)."""
+        for p in self._mesh_parts:
+            if not p['visible']:
+                continue
+            prop = p['actor'].GetProperty()
+            if p['id'] == part_id:
+                prop.SetOpacity(1.0)
+            else:
+                prop.SetOpacity(0.25)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def unhighlight_parts(self):
+        """Restore normal opacity on all parts."""
+        for p in self._mesh_parts:
+            prop = p['actor'].GetProperty()
+            prop.SetOpacity(1.0)
+        try:
+            self.plotter.render()
+        except Exception:
+            pass

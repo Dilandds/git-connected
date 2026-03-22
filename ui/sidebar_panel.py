@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings
 from PyQt5.QtGui import QFont, QColor, QDoubleValidator
-from ui.components import DimensionRow, SurfaceAreaRow, WeightRow, Separator, ScaleResultRow, ReportCheckbox
+from ui.components import DimensionRow, SurfaceAreaRow, WeightRow, Separator, ScaleResultRow, ReportCheckbox, confirm_dialog
 from ui.styles import get_button_style, default_theme
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ class SidebarPanel(QWidget):
     
     # Signal emitted when annotations are exported as .ecto
     annotations_exported = pyqtSignal()
+    
+    # Signal emitted when conversion completes with output file path (for loading into viewer)
+    conversion_complete = pyqtSignal(str)
     
     # Material density data (g/cm³)
     MATERIALS = [
@@ -1121,18 +1124,16 @@ class SidebarPanel(QWidget):
             )
             return
         
-        # Get annotations from annotation panel
+        # Get annotations and drawings
         annotations = self._get_annotations()
+        drawings = self._get_drawings()
         
-        if not annotations:
-            reply = QMessageBox.question(
+        if not annotations and not drawings:
+            if not confirm_dialog(
                 self,
-                "No Annotations",
-                "There are no annotations to include.\nDo you want to export the model as .ecto without annotations?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply != QMessageBox.Yes:
+                "No Annotations or Drawings",
+                "There are no annotations or drawings to include.\nDo you want to export the model as .ecto without them?"
+            ):
                 return
         
         # Open save dialog
@@ -1159,13 +1160,14 @@ class SidebarPanel(QWidget):
             self.export_annotations_btn.setText("Exporting...")
             QApplication.processEvents()
             
-            # Export as .ecto bundle
+            # Export as .ecto bundle (includes annotations and drawings)
             success, result, creator_token = EctoFormat.export(
                 mesh=mesh,
                 annotations=annotations,
                 output_path=file_path,
                 source_format='stl',
-                original_filename=self.current_stl_filename
+                original_filename=self.current_stl_filename,
+                drawings=drawings
             )
             
             # Restore button
@@ -1185,14 +1187,16 @@ class SidebarPanel(QWidget):
                 
                 # Build success message
                 msg = f"Export complete!\n\nCreated: {os.path.basename(file_path)}"
-                if annotations:
+                if annotations or drawings:
                     msg += f"\n\n📦 Bundle contains:"
                     msg += f"\n• 3D Model (STL)"
-                    msg += f"\n• {len(annotations)} annotation{'s' if len(annotations) != 1 else ''}"
-                    # Count images
-                    image_count = sum(len(ann.get('image_paths', [])) for ann in annotations)
-                    if image_count > 0:
-                        msg += f"\n• {image_count} attached photo{'s' if image_count != 1 else ''}"
+                    if annotations:
+                        msg += f"\n• {len(annotations)} annotation{'s' if len(annotations) != 1 else ''}"
+                        image_count = sum(len(ann.get('image_paths', [])) for ann in annotations)
+                        if image_count > 0:
+                            msg += f"\n• {image_count} attached photo{'s' if image_count != 1 else ''}"
+                    if drawings:
+                        msg += f"\n• {len(drawings)} drawing stroke{'s' if len(drawings) != 1 else ''}"
                 else:
                     msg += f"\n\n📦 Bundle contains: 3D Model only"
                 
@@ -1222,6 +1226,17 @@ class SidebarPanel(QWidget):
         while parent is not None:
             if hasattr(parent, 'annotation_panel') and hasattr(parent.annotation_panel, 'export_annotations'):
                 return parent.annotation_panel.export_annotations()
+            parent = parent.parent()
+        return []
+
+    def _get_drawings(self):
+        """Get drawings (strokes) from the viewer widget for .ecto export."""
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
+                vw = parent.viewer_widget
+                if hasattr(vw, 'get_draw_strokes'):
+                    return vw.get_draw_strokes()
             parent = parent.parent()
         return []
     
@@ -1287,7 +1302,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(title_label)
 
         # Subtitle
-        subtitle = QLabel("Select a file to see available conversions")
+        subtitle = QLabel("Select a STEP or 3DM file to see available conversions")
         subtitle.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; margin-bottom: 6px;")
         card_layout.addWidget(subtitle)
 
@@ -1390,6 +1405,7 @@ class SidebarPanel(QWidget):
 
         # Internal state
         self._converter_source_path = None
+        self._conversion_blocked = False  # True when current model was loaded via drag/upload/toolbar
 
         # Conversion map: source_ext -> list of (label, output_ext, conversion_type)
         self._conversion_map = {
@@ -1408,8 +1424,55 @@ class SidebarPanel(QWidget):
         self._add_card_shadow(card)
         return card
 
+    def set_conversion_blocked(self, blocked: bool):
+        """Block or unblock the conversion feature. Block when loaded file is not 3DM/STEP."""
+        self._conversion_blocked = blocked
+        self._converter_select_btn.setEnabled(not blocked)
+        self._converter_select_btn.setVisible(True)
+        if blocked:
+            self._converter_file_label.hide()
+            self._converter_combo.hide()
+            self._converter_run_btn.hide()
+            self._converter_source_path = None
+
+    def reset_converter(self):
+        """Reset the converter section to its initial state (e.g. when model is cleared)."""
+        self._conversion_blocked = False
+        self._converter_select_btn.setEnabled(True)
+        self._converter_file_label.setText("")
+        self._converter_file_label.hide()
+        self._converter_combo.clear()
+        self._converter_combo.hide()
+        self._converter_run_btn.hide()
+        self._converter_source_path = None
+
+    def set_converter_source_from_file(self, file_path: str):
+        """Pre-populate converter with the given 3DM/STEP file (e.g. when loaded via upload)."""
+        if not file_path:
+            return
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext not in self._conversion_map:
+            return
+        self._conversion_blocked = False
+        self._converter_select_btn.setEnabled(True)
+        self._converter_source_path = file_path
+        filename = os.path.basename(file_path)
+        self._converter_file_label.setText(f"📄 {filename}")
+        self._converter_file_label.show()
+        options = self._conversion_map.get(ext, [])
+        self._converter_combo.clear()
+        for label, output_ext, conv_type in options:
+            self._converter_combo.addItem(label, (output_ext, conv_type))
+        if options:
+            self._converter_combo.setCurrentIndex(0)
+            self._converter_combo.show()
+            self._converter_run_btn.show()
+            self._converter_run_btn.setEnabled(True)
+
     def _select_converter_source(self):
         """Open file dialog to select source file for conversion."""
+        if self._conversion_blocked:
+            return
         input_path, _ = QFileDialog.getOpenFileName(
             self, "Select File to Convert", "",
             "Supported Files (*.3dm *.step *.stp);;Rhino 3DM (*.3dm);;STEP Files (*.step *.stp)"
@@ -1486,6 +1549,7 @@ class SidebarPanel(QWidget):
                 self, "Conversion Complete",
                 f"{label} conversion successful!\n\nSaved to:\n{output_path}"
             )
+            self.conversion_complete.emit(output_path)
         except Exception as e:
             QApplication.restoreOverrideCursor()
             logger.error(f"Conversion failed ({label}): {e}", exc_info=True)
