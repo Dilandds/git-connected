@@ -226,6 +226,9 @@ class ViewControlsToolbar(QWidget):
     toggle_screenshot = pyqtSignal()
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
+    draw_eraser_toggled = pyqtSignal(bool)
+    draw_undo_requested = pyqtSignal()
+    draw_clear_requested = pyqtSignal()
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
     
