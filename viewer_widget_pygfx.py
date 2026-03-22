@@ -405,7 +405,7 @@ class STLViewerWidget(QWidget):
                 return False
 
             def _split_reasonable_components(source_mesh):
-                """Split mesh into connected components, with guardrails against triangle-explosion meshes."""
+                """Split mesh into connected components, with raised limits for hierarchical grouping."""
                 try:
                     components = list(source_mesh.split(only_watertight=False))
                 except Exception as e:
@@ -420,21 +420,12 @@ class STLViewerWidget(QWidget):
                 if len(components) <= 1:
                     return components if components else [source_mesh]
 
-                face_counts = [len(c.faces) for c in components]
-                median_faces = float(np.median(face_counts))
-                limit = max(200, int(len(source_mesh.faces) * 0.25))
-                logger.info(f"parts_debug (pygfx): median_faces={median_faces:.1f}, limit={limit}")
-                if median_faces < 10:
-                    logger.info(f"parts_debug (pygfx): median<10, returning single mesh")
-                    return [source_mesh]
-                if len(components) > 2000:
-                    logger.info(f"parts_debug (pygfx): >2000 components, returning single mesh")
-                    return [source_mesh]
-                if len(components) > limit:
-                    logger.info(f"parts_debug (pygfx): exceeds limit, returning single mesh")
+                # Safety valve: cap at 5000 raw components
+                if len(components) > 5000:
+                    logger.info(f"parts_debug (pygfx): >5000 components, returning single mesh")
                     return [source_mesh]
 
-                logger.info(f"parts_debug (pygfx): keeping {len(components)} components")
+                logger.info(f"parts_debug (pygfx): keeping {len(components)} components (hierarchy will group them)")
                 return components
 
             # STEP
