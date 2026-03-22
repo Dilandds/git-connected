@@ -571,6 +571,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self.draw_toolbar.reset()
         else:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📏")
