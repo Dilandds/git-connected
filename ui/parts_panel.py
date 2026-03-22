@@ -382,6 +382,7 @@ class PartsPanel(QWidget):
                     item['id'], item['name'], item.get('face_count', 0), children
                 )
                 group_card.child_visibility_toggled.connect(self._on_child_visibility_from_group)
+                group_card.selected.connect(self._on_group_selected)
                 self._group_cards[item['id']] = group_card
                 self._list_layout.insertWidget(self._list_layout.count() - 1, group_card)
 
