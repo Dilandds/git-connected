@@ -723,12 +723,62 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
     
-    def _on_draw_clicked(self):
-        """Handle draw mode toggle. Right-click or long-press shows color picker."""
+    def _show_draw_menu(self):
+        """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 6px;
+                padding: 4px 0;
+            }}
+            QMenu::item {{
+                padding: 6px 16px;
+                color: {default_theme.text_primary};
+                font-size: 11px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.row_bg_hover};
+            }}
+            QMenu::item:checked {{
+                font-weight: bold;
+            }}
+        """)
+
+        draw_action = menu.addAction("🖊  Draw")
+        draw_action.setCheckable(True)
+        draw_action.setChecked(self.draw_mode_enabled)
+        draw_action.triggered.connect(self._on_draw_toggled)
+
+        eraser_action = menu.addAction("🧹  Eraser")
+        eraser_action.setCheckable(True)
+        eraser_action.setChecked(self._eraser_active)
+        eraser_action.setEnabled(self.draw_mode_enabled)
+        eraser_action.triggered.connect(self._on_eraser_toggled)
+
+        menu.addSeparator()
+
+        color_action = menu.addAction("🎨  Pen Color")
+        color_action.triggered.connect(self.show_draw_color_picker)
+
+        undo_action = menu.addAction("↩  Undo Stroke")
+        undo_action.setEnabled(self.draw_mode_enabled)
+        undo_action.triggered.connect(self.draw_undo_requested.emit)
+
+        clear_action = menu.addAction("🗑  Clear All")
+        clear_action.setEnabled(self.draw_mode_enabled)
+        clear_action.triggered.connect(self.draw_clear_requested.emit)
+
+        menu.exec_(self.draw_btn.mapToGlobal(
+            self.draw_btn.rect().bottomLeft()
+        ))
+
+    def _on_draw_toggled(self):
+        """Toggle draw mode on/off."""
         self.draw_mode_enabled = not self.draw_mode_enabled
         if self.draw_mode_enabled:
-            self.draw_btn.set_label("Drawing")
-            self.draw_toolbar.show()
+            self.draw_btn.set_label("Drawing ▼")
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -742,16 +792,22 @@ class ViewControlsToolbar(QWidget):
                 self.screenshot_btn.set_active(False)
         else:
             self.draw_btn.set_label("Draw ▼")
-            self.draw_toolbar.reset()
+            self._eraser_active = False
+            self.draw_eraser_toggled.emit(False)
         self.draw_btn.set_active(self.draw_mode_enabled)
         self.toggle_draw.emit()
+
+    def _on_eraser_toggled(self):
+        """Toggle eraser mode."""
+        self._eraser_active = not self._eraser_active
+        self.draw_eraser_toggled.emit(self._eraser_active)
 
     def reset_draw_state(self):
         """Reset draw button state (called when exiting draw mode externally)."""
         self.draw_mode_enabled = False
+        self._eraser_active = False
         self.draw_btn.set_label("Draw ▼")
         self.draw_btn.set_active(False)
-        self.draw_toolbar.reset()
     
     def show_draw_color_picker(self):
         """Show the color picker popup below the draw button."""
