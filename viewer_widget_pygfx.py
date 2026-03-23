@@ -186,6 +186,10 @@ class STLViewerWidget(QWidget):
         self._drawing_active = False  # True while mouse button is held
         self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
 
+        # Parts pick mode state
+        self.parts_pick_mode = False
+        self._parts_pick_event_filter_installed = False
+
         # Arrow mode state
         self.arrow_mode = False
         self._arrow_objects = []  # list of {'id', 'group', 'point', 'direction', 'length_factor', 'color'}
