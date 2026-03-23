@@ -404,75 +404,234 @@ class STLViewerWidget(QWidget):
                         return True
                 return False
 
-            def _segment_by_angle(mesh_input, angle_threshold_deg=30):
-                """Segment a connected mesh into regions separated by sharp dihedral edges."""
+            def _segment_mesh(mesh_input):
+                """Multi-strategy mesh segmentation. Tries strategies in order, stops at first success.
+                
+                Strategy 1: Facets (coplanar grouping) — best for CAD models
+                Strategy 2: Multi-threshold dihedral angle — catches tessellated curves
+                Strategy 3: Normal-based clustering — fallback for complex geometry
+                
+                Success: 2–200 segments, each with ≥1% of total surface area.
+                """
                 import networkx as nx
-                try:
-                    adj = mesh_input.face_adjacency
-                    angles = mesh_input.face_adjacency_angles
-                except Exception as e:
-                    logger.info(f"parts_debug (pygfx): face_adjacency failed: {e}")
-                    return [mesh_input]
 
                 n_faces = len(mesh_input.faces)
                 if n_faces < 10:
                     return [mesh_input]
 
-                threshold_rad = np.radians(angle_threshold_deg)
-                smooth_mask = angles < threshold_rad
-                smooth_edges = adj[smooth_mask]
+                total_area = mesh_input.area
+                min_segment_area = total_area * 0.01  # 1% threshold
 
-                G = nx.Graph()
-                G.add_nodes_from(range(n_faces))
-                G.add_edges_from(smooth_edges.tolist())
-                face_groups = list(nx.connected_components(G))
+                def _validate_segments(segments):
+                    """Check if segments meet success criteria."""
+                    if len(segments) < 2 or len(segments) > 200:
+                        return False
+                    valid = [s for s in segments if s.area >= min_segment_area]
+                    return len(valid) >= 2
 
-                if len(face_groups) <= 1:
-                    return [mesh_input]
+                def _merge_tiny_segments(segments):
+                    """Merge segments below 1% area into the largest segment."""
+                    if not segments:
+                        return segments
+                    large = [s for s in segments if s.area >= min_segment_area]
+                    tiny = [s for s in segments if s.area < min_segment_area]
+                    if not large:
+                        return segments
+                    if tiny:
+                        biggest_idx = max(range(len(large)), key=lambda i: large[i].area)
+                        combined = [large[biggest_idx]] + tiny
+                        try:
+                            merged = trimesh.util.concatenate(combined)
+                            large[biggest_idx] = merged
+                        except Exception:
+                            pass
+                    return large
 
-                # Safety: if too many segments, skip
-                if len(face_groups) > 200:
-                    logger.info(f"parts_debug (pygfx): angle segmentation produced {len(face_groups)} segments, skipping")
-                    return [mesh_input]
+                # --- Strategy 1: Facets (coplanar grouping) ---
+                try:
+                    logger.info(f"parts_debug (pygfx): trying facets strategy on {n_faces} faces")
+                    facets = mesh_input.facets
+                    if facets is not None and len(facets) > 1:
+                        face_normals = mesh_input.face_normals
+                        facet_normals = []
+                        for facet in facets:
+                            face_areas = mesh_input.area_faces[facet]
+                            weighted_normal = np.average(face_normals[facet], weights=face_areas, axis=0)
+                            norm = np.linalg.norm(weighted_normal)
+                            if norm > 0:
+                                weighted_normal /= norm
+                            facet_normals.append(weighted_normal)
+                        
+                        facet_normals = np.array(facet_normals)
+                        
+                        # Map faces to facets
+                        face_to_facet = np.full(n_faces, -1, dtype=int)
+                        for i, facet in enumerate(facets):
+                            face_to_facet[facet] = i
+                        
+                        # Assign unfaceted faces to their own pseudo-facets
+                        next_facet_id = len(facets)
+                        unfaceted_groups = []
+                        unfaceted_faces = np.where(face_to_facet == -1)[0]
+                        for uf in unfaceted_faces:
+                            face_to_facet[uf] = next_facet_id
+                            unfaceted_groups.append(np.array([uf]))
+                            next_facet_id += 1
+                        
+                        all_facet_groups = list(facets) + unfaceted_groups
+                        n_all_facets = len(all_facet_groups)
+                        
+                        extra_normals = face_normals[unfaceted_faces] if len(unfaceted_faces) > 0 else np.empty((0, 3))
+                        all_normals = np.vstack([facet_normals, extra_normals]) if len(extra_normals) > 0 else facet_normals
+                        
+                        # Build facet adjacency graph, merge if normals within 30°
+                        adj = mesh_input.face_adjacency
+                        G = nx.Graph()
+                        G.add_nodes_from(range(n_all_facets))
+                        merge_threshold = np.cos(np.radians(30))
+                        
+                        for pair in adj:
+                            f0, f1 = face_to_facet[pair[0]], face_to_facet[pair[1]]
+                            if f0 != f1 and f0 >= 0 and f1 >= 0:
+                                dot = np.dot(all_normals[f0], all_normals[f1])
+                                if dot >= merge_threshold:
+                                    G.add_edge(f0, f1)
+                        
+                        merged_groups = list(nx.connected_components(G))
+                        
+                        if len(merged_groups) >= 2:
+                            segments = []
+                            for mg in sorted(merged_groups, key=len, reverse=True):
+                                face_indices = []
+                                for facet_id in mg:
+                                    if facet_id < len(all_facet_groups):
+                                        face_indices.extend(all_facet_groups[facet_id].tolist())
+                                if face_indices:
+                                    try:
+                                        sub = mesh_input.submesh([np.array(face_indices)], append=True)
+                                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                                            segments.append(sub)
+                                    except Exception:
+                                        pass
+                            
+                            if _validate_segments(segments):
+                                segments = _merge_tiny_segments(segments)
+                                logger.info(f"parts_debug (pygfx): facets strategy produced {len(segments)} segments")
+                                return segments
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): facets strategy failed: {e}")
 
-                # Merge tiny segments (< 4 faces) into largest neighbor
-                MIN_FACES = 4
-                large_groups = []
-                tiny_groups = []
-                for grp in face_groups:
-                    if len(grp) >= MIN_FACES:
-                        large_groups.append(grp)
+                # --- Strategy 2: Multi-threshold dihedral angle ---
+                try:
+                    adj = mesh_input.face_adjacency
+                    angles = mesh_input.face_adjacency_angles
+                    
+                    for angle_deg in [15, 10, 5]:
+                        logger.info(f"parts_debug (pygfx): trying dihedral angle {angle_deg}° on {n_faces} faces")
+                        threshold_rad = np.radians(angle_deg)
+                        smooth_mask = angles < threshold_rad
+                        smooth_edges = adj[smooth_mask]
+                        
+                        G = nx.Graph()
+                        G.add_nodes_from(range(n_faces))
+                        G.add_edges_from(smooth_edges.tolist())
+                        face_groups = list(nx.connected_components(G))
+                        
+                        if len(face_groups) >= 2 and len(face_groups) <= 200:
+                            segments = []
+                            for grp in sorted(face_groups, key=len, reverse=True):
+                                try:
+                                    sub = mesh_input.submesh([np.array(sorted(grp))], append=True)
+                                    if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                                        segments.append(sub)
+                                except Exception:
+                                    pass
+                            
+                            if _validate_segments(segments):
+                                segments = _merge_tiny_segments(segments)
+                                logger.info(f"parts_debug (pygfx): dihedral {angle_deg}° produced {len(segments)} segments")
+                                return segments
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): dihedral strategy failed: {e}")
+
+                # --- Strategy 3: Normal-based clustering ---
+                try:
+                    from scipy.cluster.hierarchy import linkage, fcluster
+                    from scipy.spatial.distance import pdist
+                    
+                    logger.info(f"parts_debug (pygfx): trying normal clustering on {n_faces} faces")
+                    face_normals = mesh_input.face_normals
+                    
+                    max_sample = 5000
+                    if n_faces > max_sample:
+                        sample_idx = np.random.choice(n_faces, max_sample, replace=False)
+                        sample_normals = face_normals[sample_idx]
                     else:
-                        tiny_groups.append(grp)
+                        sample_idx = np.arange(n_faces)
+                        sample_normals = face_normals
+                    
+                    dists = pdist(sample_normals, metric='cosine')
+                    Z = linkage(dists, method='average')
+                    
+                    for cos_thresh in [0.3, 0.5, 0.7]:
+                        labels = fcluster(Z, t=cos_thresh, criterion='distance')
+                        n_clusters = len(set(labels))
+                        
+                        if n_clusters < 2 or n_clusters > 50:
+                            continue
+                        
+                        if n_faces > max_sample:
+                            all_labels = np.zeros(n_faces, dtype=int)
+                            all_labels[sample_idx] = labels
+                            cluster_normals = {}
+                            for cl in set(labels):
+                                mask = labels == cl
+                                cn = sample_normals[mask].mean(axis=0)
+                                n = np.linalg.norm(cn)
+                                if n > 0:
+                                    cn /= n
+                                cluster_normals[cl] = cn
+                            
+                            unsampled = np.setdiff1d(np.where(all_labels == 0)[0], sample_idx[labels == 0] if 0 in set(labels) else np.array([]))
+                            for fi in unsampled:
+                                best_cl = max(cluster_normals.keys(),
+                                            key=lambda cl: abs(np.dot(face_normals[fi], cluster_normals[cl])))
+                                all_labels[fi] = best_cl
+                        else:
+                            all_labels = labels
+                        
+                        adj_pairs = mesh_input.face_adjacency
+                        segments = []
+                        for cl in set(all_labels):
+                            cl_faces = set(np.where(all_labels == cl)[0])
+                            if not cl_faces:
+                                continue
+                            subG = nx.Graph()
+                            subG.add_nodes_from(cl_faces)
+                            for pair in adj_pairs:
+                                if pair[0] in cl_faces and pair[1] in cl_faces:
+                                    subG.add_edge(pair[0], pair[1])
+                            
+                            for comp in nx.connected_components(subG):
+                                try:
+                                    sub = mesh_input.submesh([np.array(sorted(comp))], append=True)
+                                    if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                                        segments.append(sub)
+                                except Exception:
+                                    pass
+                        
+                        if _validate_segments(segments):
+                            segments = _merge_tiny_segments(segments)
+                            logger.info(f"parts_debug (pygfx): normal clustering (t={cos_thresh}) produced {len(segments)} segments")
+                            return segments
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): normal clustering failed: {e}")
 
-                if not large_groups:
-                    return [mesh_input]
-
-                # Assign tiny faces to the largest group overall (simple merge)
-                if tiny_groups:
-                    biggest = max(large_groups, key=len)
-                    for tg in tiny_groups:
-                        biggest.update(tg)
-
-                # Extract sub-meshes
-                segments = []
-                for grp in sorted(large_groups, key=len, reverse=True):
-                    face_indices = np.array(sorted(grp))
-                    try:
-                        sub = mesh_input.submesh([face_indices], append=True)
-                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
-                            segments.append(sub)
-                    except Exception:
-                        pass
-
-                if not segments:
-                    return [mesh_input]
-
-                logger.info(f"parts_debug (pygfx): angle segmentation produced {len(segments)} segments from {n_faces} faces")
-                return segments
+                logger.info(f"parts_debug (pygfx): all segmentation strategies failed, returning single mesh")
+                return [mesh_input]
 
             def _split_reasonable_components(source_mesh):
-                """Split mesh into connected components, then segment large ones by dihedral angle."""
+                """Split mesh into connected components, then segment large ones."""
                 try:
                     components = list(source_mesh.split(only_watertight=False))
                 except Exception as e:
@@ -486,29 +645,26 @@ class STLViewerWidget(QWidget):
                 logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
                 if len(components) <= 1:
                     comp = components[0] if components else source_mesh
-                    # Even a single connected component can be segmented by angle
                     if len(comp.faces) >= 50:
-                        segmented = _segment_by_angle(comp)
+                        segmented = _segment_mesh(comp)
                         if len(segmented) > 1:
-                            logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts by angle")
+                            logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts")
                             return segmented
                     return [comp]
 
-                # Safety valve: cap at 5000 raw components
                 if len(components) > 5000:
                     logger.info(f"parts_debug (pygfx): >5000 components, returning single mesh")
                     return [source_mesh]
 
-                # Apply angle segmentation to large connected components
                 result = []
                 for comp in components:
                     if len(comp.faces) >= 50:
-                        segmented = _segment_by_angle(comp)
+                        segmented = _segment_mesh(comp)
                         result.extend(segmented)
                     else:
                         result.append(comp)
 
-                logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + angle segmentation")
+                logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + segmentation")
                 return result
 
             # STEP
@@ -3008,16 +3164,19 @@ class STLViewerWidget(QWidget):
 
     def get_parts_list(self):
         """Return list of part metadata for the PartsPanel."""
-        parts = [
-            {
+        parts = []
+        for p in self._mesh_parts:
+            surface_area = 0.0
+            if 'trimesh' in p and p['trimesh'] is not None:
+                surface_area = float(p['trimesh'].area)
+            parts.append({
                 'id': p['id'],
                 'name': p['name'],
                 'face_count': p.get('face_count', 0),
+                'surface_area': surface_area,
                 'visible': p.get('visible', True),
-            }
-            for p in self._mesh_parts
-        ]
-        logger.info(f"parts_debug (pygfx): get_parts_list returning {len(parts)} parts: {[(x['name'], x['face_count']) for x in parts]}")
+            })
+        logger.info(f"parts_debug (pygfx): get_parts_list returning {len(parts)} parts")
         return parts
 
     def get_parts_hierarchy(self):
@@ -3038,14 +3197,14 @@ class STLViewerWidget(QWidget):
         if len(flat_parts) <= 1:
             return flat_parts
 
-        # Compute face count threshold — parts above this are standalone
-        face_counts = [p['face_count'] for p in flat_parts]
-        threshold_faces = max(500, int(np.percentile(face_counts, 80))) if len(face_counts) > 5 else 500
+        # Compute surface area threshold — parts above this are standalone
+        areas = [p.get('surface_area', 0.0) for p in flat_parts]
+        threshold_area = max(np.percentile(areas, 80), max(areas) * 0.05) if len(areas) > 5 else max(areas) * 0.05 if areas else 0
 
         large_parts = []
         small_parts = []
         for p in flat_parts:
-            if p['face_count'] >= threshold_faces:
+            if p.get('surface_area', 0.0) >= threshold_area:
                 large_parts.append(p)
             else:
                 small_parts.append(p)
@@ -3098,17 +3257,18 @@ class STLViewerWidget(QWidget):
 
             # Use negative IDs for groups to avoid collision with real part IDs
             group_counter = -1
-            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p['face_count'] for p in c)):
+            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p.get('surface_area', 0.0) for p in c)):
                 if len(cluster_parts) == 1:
-                    # Single-part cluster — just add as standalone
                     result.append(cluster_parts[0])
                 else:
+                    total_area = sum(p.get('surface_area', 0.0) for p in cluster_parts)
                     total_faces = sum(p['face_count'] for p in cluster_parts)
                     child_ids = [p['id'] for p in cluster_parts]
                     group_entry = {
                         'id': group_counter,
                         'name': f"Group {abs(group_counter)}",
                         'face_count': total_faces,
+                        'surface_area': total_area,
                         'visible': all(p.get('visible', True) for p in cluster_parts),
                         'child_ids': child_ids,
                     }
@@ -3117,8 +3277,8 @@ class STLViewerWidget(QWidget):
         elif len(small_parts) == 1:
             result.append(small_parts[0])
 
-        # Sort by face count descending
-        result.sort(key=lambda x: -x.get('face_count', 0))
+        # Sort by surface area descending
+        result.sort(key=lambda x: -x.get('surface_area', 0.0))
         logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(result)} entries "
                      f"({len(large_parts)} standalone, {len(result) - len(large_parts)} groups/small)")
         return result

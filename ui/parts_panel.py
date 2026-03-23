@@ -18,13 +18,14 @@ class PartCard(QFrame):
     selected = pyqtSignal(int)
     visibility_toggled = pyqtSignal(int, bool)  # part_id, visible
 
-    def __init__(self, part_id: int, name: str, face_count: int = 0, child_ids: list = None, parent=None):
+    def __init__(self, part_id: int, name: str, face_count: int = 0, child_ids: list = None, surface_area: float = 0.0, parent=None):
         super().__init__(parent)
         self.part_id = part_id
-        self.child_ids = child_ids or []  # empty for standalone parts
+        self.child_ids = child_ids or []
         self._is_selected = False
         self._is_visible = True
         self.face_count = face_count
+        self.surface_area = surface_area
         self.setFixedHeight(52)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(name)
@@ -61,8 +62,8 @@ class PartCard(QFrame):
         info_layout.addWidget(self.name_label)
 
         meta_parts = []
-        if self.face_count > 0:
-            meta_parts.append(f"{self.face_count:,} faces")
+        if self.surface_area > 0:
+            meta_parts.append(self._format_area(self.surface_area))
         if self.is_group:
             meta_parts.append(f"{len(self.child_ids)} parts")
         if meta_parts:
@@ -103,6 +104,18 @@ class PartCard(QFrame):
         self._is_visible = visible
         self.eye_btn.setText("👁" if visible else "👁‍🗨")
         self._update_style()
+
+    @staticmethod
+    def _format_area(area: float) -> str:
+        """Format surface area for display."""
+        if area >= 1e6:
+            return f"{area / 1e6:.1f} m²"
+        elif area >= 1e2:
+            return f"{area:.0f} cm²"
+        elif area >= 1:
+            return f"{area:.1f} cm²"
+        else:
+            return f"{area * 100:.1f} mm²"
 
     def mousePressEvent(self, event):
         self.selected.emit(self.part_id)
@@ -249,7 +262,7 @@ class PartsPanel(QWidget):
 
         for item in parts_list:
             child_ids = item.get('child_ids', [])
-            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids)
+            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids, surface_area=item.get('surface_area', 0.0))
             card.set_visible_state(item.get('visible', True))
             card.selected.connect(self._on_card_selected)
             card.visibility_toggled.connect(self._on_visibility_toggled)
