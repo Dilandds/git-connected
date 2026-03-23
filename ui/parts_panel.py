@@ -287,6 +287,11 @@ class PartsPanel(QWidget):
     def get_selected_part_id(self):
         return self._selected_card_id
 
+    def select_part(self, part_id: int):
+        """Programmatically select a card and emit the same signals as a click."""
+        if part_id in self._cards:
+            self._on_card_selected(part_id)
+
     # ---- Internal ----
 
     def _on_card_selected(self, card_id: int):

@@ -797,13 +797,15 @@ class STLViewerWindow(QMainWindow):
     # ======================== Viewer / Annotation Signal Wiring ========================
     
     def _connect_viewer_signals_for(self, viewer):
-        """Connect viewer widget signals for drag-and-drop."""
+        """Connect viewer widget signals for drag-and-drop and part picking."""
         if hasattr(viewer, 'file_dropped'):
             viewer.file_dropped.connect(self._load_dropped_file)
         if hasattr(viewer, 'click_to_upload'):
             viewer.click_to_upload.connect(self.upload_stl_file)
         if hasattr(viewer, 'drop_error'):
             viewer.drop_error.connect(self._show_drop_error)
+        if hasattr(viewer, 'part_clicked'):
+            viewer.part_clicked.connect(self._on_viewer_part_clicked)
     
     def _connect_annotation_panel_signals_for(self, tab: TabState):
         """Connect annotation panel signals for a specific tab."""
@@ -1578,6 +1580,8 @@ class STLViewerWindow(QMainWindow):
             self.parts_stack.setCurrentWidget(tab.parts_panel)
             self.right_panel_stack.setCurrentWidget(self.parts_stack)
             self.right_panel_stack.show()
+            if hasattr(vw, 'enable_parts_click_mode'):
+                vw.enable_parts_click_mode()
             if hasattr(vw, 'reframe_for_viewport'):
                 QTimer.singleShot(50, vw.reframe_for_viewport)
             logger.info("_toggle_parts_mode: Parts mode enabled")
@@ -1590,6 +1594,8 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if tab and tab.parts_panel:
             tab.parts_panel.hide()
+        if vw and hasattr(vw, 'disable_parts_click_mode'):
+            vw.disable_parts_click_mode()
         # Restore all parts visible
         if vw and hasattr(vw, 'show_all_parts'):
             vw.show_all_parts()
@@ -1621,6 +1627,16 @@ class STLViewerWindow(QMainWindow):
         panel.isolate_selected_requested.connect(lambda pid: self._part_isolate(pid))
         panel.isolate_group_requested.connect(lambda pids: self._group_isolate(pids))
         panel.exit_parts_mode.connect(self._exit_parts_mode_from_panel)
+
+    def _on_viewer_part_clicked(self, part_id):
+        """Sync sidebar when a part is clicked directly in the viewer."""
+        tab = self._current_tab
+        if tab is None or not getattr(tab, 'parts_mode_active', False):
+            return
+        if tab.parts_panel is not None and hasattr(tab.parts_panel, 'select_part'):
+            tab.parts_panel.select_part(part_id)
+        else:
+            self._part_select(part_id)
 
     def _part_set_visible(self, part_id, visible):
         vw = self.viewer_widget
