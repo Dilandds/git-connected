@@ -1578,6 +1578,9 @@ class STLViewerWindow(QMainWindow):
             self.parts_stack.setCurrentWidget(tab.parts_panel)
             self.right_panel_stack.setCurrentWidget(self.parts_stack)
             self.right_panel_stack.show()
+            # Enable click-to-select in 3D viewport
+            if hasattr(vw, 'enable_parts_pick_mode'):
+                vw.enable_parts_pick_mode()
             if hasattr(vw, 'reframe_for_viewport'):
                 QTimer.singleShot(50, vw.reframe_for_viewport)
             logger.info("_toggle_parts_mode: Parts mode enabled")
