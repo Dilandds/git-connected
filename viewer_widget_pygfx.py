@@ -3229,3 +3229,75 @@ class STLViewerWidget(QWidget):
     def unhighlight_parts(self):
         """Restore normal materials on all parts."""
         self.set_render_mode(self._render_mode)
+
+    # ========== Parts Pick Mode (click-to-select in 3D) ==========
+
+    def enable_parts_pick_mode(self):
+        """Enable click-to-select parts in the 3D viewport."""
+        self.parts_pick_mode = True
+        if not self._parts_pick_event_filter_installed and self._canvas is not None:
+            self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
+            self._parts_pick_event_filter_installed = True
+        logger.info("enable_parts_pick_mode: Parts pick mode enabled")
+
+    def disable_parts_pick_mode(self):
+        """Disable click-to-select parts."""
+        self.parts_pick_mode = False
+        if self._parts_pick_event_filter_installed and self._canvas is not None:
+            self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
+            self._parts_pick_event_filter_installed = False
+        logger.info("disable_parts_pick_mode: Parts pick mode disabled")
+
+    def _parts_pick_event_filter_impl(self, obj, event):
+        """Handle parts pick mode events. Only intercept left clicks that hit a part."""
+        if not self.parts_pick_mode or self._canvas is None:
+            return False
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.pos()
+            picked = self._on_parts_pick_click(pos.x(), pos.y())
+            return picked  # consume only if we hit a part; else let trackball rotate
+        return False
+
+    def _on_parts_pick_click(self, x, y):
+        """Raycast against each part's trimesh to find which part was clicked."""
+        if not self._mesh_parts:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+
+        import trimesh
+        best_part_id = None
+        best_dist = float('inf')
+        cam_pos = np.array(self._camera.local.position)
+
+        for p in self._mesh_parts:
+            if not p.get('visible', True):
+                continue
+            tm = p.get('trimesh')
+            if tm is None:
+                continue
+            try:
+                locations, _, _ = tm.ray.intersects_location(
+                    ray_origins=[ray_origin],
+                    ray_directions=[ray_direction],
+                )
+                if len(locations) > 0:
+                    dists = np.linalg.norm(locations - cam_pos, axis=1)
+                    min_dist = np.min(dists)
+                    if min_dist < best_dist:
+                        best_dist = min_dist
+                        best_part_id = p['id']
+            except Exception as e:
+                logger.debug(f"_on_parts_pick_click: raycast error for part {p['id']}: {e}")
+
+        if best_part_id is not None:
+            logger.info(f"_on_parts_pick_click: clicked part {best_part_id}")
+            self.part_clicked.emit(best_part_id)
+            return True
+        return False
