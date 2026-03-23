@@ -1173,6 +1173,10 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw is None:
             return
+        # Exit parts mode and hide the parts panel
+        if self.toolbar.parts_mode_enabled:
+            self.toolbar.parts_mode_enabled = False
+            self._exit_parts_mode()
         if hasattr(vw, 'clear_drawings'):
             try:
                 vw.clear_drawings()
