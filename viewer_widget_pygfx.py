@@ -110,6 +110,7 @@ class STLViewerWidget(QWidget):
     file_dropped = pyqtSignal(str)
     click_to_upload = pyqtSignal()
     drop_error = pyqtSignal(str)
+    part_clicked = pyqtSignal(int)  # emitted when user clicks a part in parts mode
 
     def __init__(self, parent=None):
         _debug_print("STLViewerWidget (pygfx): Initializing...")
