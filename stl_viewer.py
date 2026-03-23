@@ -797,13 +797,15 @@ class STLViewerWindow(QMainWindow):
     # ======================== Viewer / Annotation Signal Wiring ========================
     
     def _connect_viewer_signals_for(self, viewer):
-        """Connect viewer widget signals for drag-and-drop."""
+        """Connect viewer widget signals for drag-and-drop and part picking."""
         if hasattr(viewer, 'file_dropped'):
             viewer.file_dropped.connect(self._load_dropped_file)
         if hasattr(viewer, 'click_to_upload'):
             viewer.click_to_upload.connect(self.upload_stl_file)
         if hasattr(viewer, 'drop_error'):
             viewer.drop_error.connect(self._show_drop_error)
+        if hasattr(viewer, 'part_clicked'):
+            viewer.part_clicked.connect(self._on_viewer_part_clicked)
     
     def _connect_annotation_panel_signals_for(self, tab: TabState):
         """Connect annotation panel signals for a specific tab."""
