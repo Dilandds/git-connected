@@ -1649,6 +1649,11 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'highlight_parts'):
             vw.highlight_parts(part_ids)
 
+    def _on_viewer_part_clicked(self, part_id, panel):
+        """Handle click on a part in the 3D viewer — select it in the panel."""
+        # Find which card owns this part_id (could be a standalone card or a group containing it)
+        panel.select_part_by_id(part_id)
+
     def _parts_show_all(self):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'show_all_parts'):
