@@ -1628,6 +1628,11 @@ class STLViewerWindow(QMainWindow):
         panel.isolate_group_requested.connect(lambda pids: self._group_isolate(pids))
         panel.exit_parts_mode.connect(self._exit_parts_mode_from_panel)
 
+        # Connect viewer part_clicked signal to panel selection
+        vw = tab.viewer_widget
+        if vw and hasattr(vw, 'part_clicked'):
+            vw.part_clicked.connect(lambda pid, p=panel: self._on_viewer_part_clicked(pid, p))
+
     def _part_set_visible(self, part_id, visible):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'set_part_visible'):
