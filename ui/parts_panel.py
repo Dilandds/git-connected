@@ -18,13 +18,14 @@ class PartCard(QFrame):
     selected = pyqtSignal(int)
     visibility_toggled = pyqtSignal(int, bool)  # part_id, visible
 
-    def __init__(self, part_id: int, name: str, face_count: int = 0, child_ids: list = None, parent=None):
+    def __init__(self, part_id: int, name: str, face_count: int = 0, child_ids: list = None, surface_area: float = 0.0, parent=None):
         super().__init__(parent)
         self.part_id = part_id
-        self.child_ids = child_ids or []  # empty for standalone parts
+        self.child_ids = child_ids or []
         self._is_selected = False
         self._is_visible = True
         self.face_count = face_count
+        self.surface_area = surface_area
         self.setFixedHeight(52)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(name)
