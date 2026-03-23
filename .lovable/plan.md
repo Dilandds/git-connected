@@ -1,60 +1,38 @@
 
 
-# Mesh Segmentation for Connected Parts
+# Fix Build + Implement Multi-Strategy Segmentation & Surface Area
 
-## Problem
-Currently, parts are only separated when they are **topologically disconnected** (no shared edges/vertices). For a model like the pipe with a flange, the entire object is one connected mesh — so it appears as a single part. The user wants to isolate semantically distinct regions (e.g. the flat flange vs. the curved pipe) even when they share edges.
+## Step 1: Create `lovable.toml`
+Add a minimal config so Lovable stops complaining about missing dev commands. This is a Python desktop app — there's no web server to run.
 
-## Solution: Dihedral Angle-Based Segmentation (Faceting)
-
-Trimesh already has `trimesh.graph.facets()` and face adjacency data that can segment a connected mesh by **sharp edges** — where the angle between two adjacent face normals exceeds a threshold. This is exactly how CAD models naturally divide: a flat plate meets a curved pipe at a sharp crease.
-
-### How It Works
-
-```text
-Before (connectivity-only split):
-  Entire pipe+flange = 1 part
-
-After (dihedral angle segmentation):
-  Part 1: Flat flange plate     [sharp edge boundary]
-  Part 2: Curved pipe body      [sharp edge boundary]  
-  Part 3: Bolt holes (cylinders)
+```toml
+[run]
+dev = "echo 'Desktop Python app — run locally with: python main.py'"
 ```
 
-The algorithm:
-1. For each connected component, compute **face adjacency** and **dihedral angles** between adjacent faces
-2. Faces sharing an edge with dihedral angle < threshold (~30°) are grouped together (smooth region)
-3. Each smooth region becomes a separate sub-part
-4. Very tiny regions (< 4 faces) are merged into their largest neighbor to avoid noise
+## Step 2: Multi-Strategy `_segment_mesh()` in `viewer_widget_pygfx.py`
 
-### Implementation Plan
+Replace the current `_segment_by_angle()` with a cascading segmenter that tries strategies **in order, stopping at the first success**:
 
-**File: `viewer_widget_pygfx.py`**
+1. **Facets (coplanar grouping)** — `trimesh.graph.facets()` groups coplanar adjacent faces. Merge adjacent facets whose average normals are within ~30°. Best for CAD models with flat plates + cylinders.
 
-1. Add `_segment_by_angle(trimesh_mesh, angle_threshold=30)` method:
-   - Use `trimesh_mesh.face_adjacency` and `trimesh_mesh.face_adjacency_angles`
-   - Build a graph where faces are nodes; edges connect faces whose dihedral angle is below the threshold (i.e. smooth continuation)
-   - Find connected components of this graph → each component = one "segment"
-   - Extract sub-meshes using `trimesh_mesh.submesh()` for each face group
-   - Merge tiny segments (< 4 faces) into their nearest larger neighbor
-   - Return list of `(name, trimesh)` tuples
+2. **Multi-threshold dihedral angle** — Try 15°, 10°, 5° in sequence. Catches tessellated curves where the default 30° was too coarse.
 
-2. Update `_split_reasonable_components()`:
-   - After splitting by connectivity, apply `_segment_by_angle()` to each connected component that has enough faces (e.g. > 50 faces)
-   - Small connected components skip angle segmentation (already isolated)
+3. **Normal-based clustering** — `scipy.cluster.hierarchy.fcluster` on face normal vectors (angular distance, ~45° threshold), then split each cluster into spatially connected sub-regions via face adjacency.
 
-3. The existing hierarchy grouping (`get_parts_hierarchy()`) will then cluster these finer segments into meaningful groups automatically
+**Success criteria**: 2–200 segments, each with ≥1% of total surface area. If a strategy doesn't meet this, try the next. If none work, return the mesh as a single part.
 
-**No changes needed to `ui/parts_panel.py` or `stl_viewer.py`** — the panel already handles the hierarchical data structure.
+## Step 3: Surface Area Instead of Face Count
 
-### Technical Details
+- Store `surface_area` per part using `trimesh.area` / `mesh.area_faces`
+- Sort parts by surface area (largest first) in `get_parts_hierarchy()`
+- Update `PartCard` in `ui/parts_panel.py` to display formatted area (e.g. "12.4 cm²") instead of "X faces"
 
-- **trimesh API**: `mesh.face_adjacency` returns pairs of adjacent face indices; `mesh.face_adjacency_angles` returns the dihedral angle for each pair — both are built-in and fast
-- **Graph library**: `networkx` (already a dependency for `trimesh.split()`) for connected components on the face adjacency graph
-- **Angle threshold**: Default 30° (0.52 rad) — flat-to-curved transitions are typically 45-90°, so 30° captures most meaningful boundaries. Could be made adjustable later.
-- **Safety**: If segmentation produces > 200 sub-parts from a single component, fall back to the unsegmented component (prevents over-fragmentation on organic meshes)
-- **Performance**: Face adjacency is O(n_faces) via trimesh's half-edge structure; graph connected components is O(n_faces + n_edges)
+## Files to Modify
 
-### Dependencies
-No new dependencies — uses `trimesh` (face_adjacency), `networkx` (connected components), and `numpy`, all already installed.
+| File | Change |
+|---|---|
+| `lovable.toml` | Create — fix build error |
+| `viewer_widget_pygfx.py` | Replace `_segment_by_angle` with cascading `_segment_mesh`, add surface area tracking |
+| `ui/parts_panel.py` | Display surface area instead of face count |
 
