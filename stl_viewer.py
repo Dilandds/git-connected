@@ -1566,22 +1566,21 @@ class STLViewerWindow(QMainWindow):
                 self._exit_screenshot_mode()
             if self.toolbar.draw_mode_enabled:
                 self._exit_draw_mode()
-            # Populate parts list from viewer — prefer hierarchy if available
-            has_hierarchy = hasattr(vw, 'get_parts_hierarchy')
-            has_flat = hasattr(vw, 'get_parts_list')
-            logger.info(f"parts_debug: _toggle_parts_mode viewer={vw.__class__.__module__}.{vw.__class__.__name__}, has hierarchy={has_hierarchy}, has flat={has_flat}")
-            if has_hierarchy:
-                parts = vw.get_parts_hierarchy()
-            elif has_flat:
-                parts = vw.get_parts_list()
-            else:
-                parts = []
-            logger.info(f"parts_debug: _toggle_parts_mode got {len(parts)} top-level entries from viewer")
-            tab.parts_panel.set_parts(parts)
+            # Clear any previous cards — panel starts empty, populated on click
+            tab.parts_panel.clear_all()
             tab.parts_panel.show()
             self.parts_stack.setCurrentWidget(tab.parts_panel)
             self.right_panel_stack.setCurrentWidget(self.parts_stack)
             self.right_panel_stack.show()
+            # Cache hierarchy data for on-click lookup
+            has_hierarchy = hasattr(vw, 'get_parts_hierarchy')
+            has_flat = hasattr(vw, 'get_parts_list')
+            if has_hierarchy:
+                self._cached_parts_hierarchy = vw.get_parts_hierarchy()
+            elif has_flat:
+                self._cached_parts_hierarchy = vw.get_parts_list()
+            else:
+                self._cached_parts_hierarchy = []
             # Enable click-to-select in 3D viewport
             if hasattr(vw, 'enable_parts_pick_mode'):
                 vw.enable_parts_pick_mode()
