@@ -262,7 +262,7 @@ class PartsPanel(QWidget):
 
         for item in parts_list:
             child_ids = item.get('child_ids', [])
-            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids)
+            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids, surface_area=item.get('surface_area', 0.0))
             card.set_visible_state(item.get('visible', True))
             card.selected.connect(self._on_card_selected)
             card.visibility_toggled.connect(self._on_visibility_toggled)

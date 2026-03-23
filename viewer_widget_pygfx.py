@@ -3101,17 +3101,18 @@ class STLViewerWidget(QWidget):
 
             # Use negative IDs for groups to avoid collision with real part IDs
             group_counter = -1
-            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p['face_count'] for p in c)):
+            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p.get('surface_area', 0.0) for p in c)):
                 if len(cluster_parts) == 1:
-                    # Single-part cluster — just add as standalone
                     result.append(cluster_parts[0])
                 else:
+                    total_area = sum(p.get('surface_area', 0.0) for p in cluster_parts)
                     total_faces = sum(p['face_count'] for p in cluster_parts)
                     child_ids = [p['id'] for p in cluster_parts]
                     group_entry = {
                         'id': group_counter,
                         'name': f"Group {abs(group_counter)}",
                         'face_count': total_faces,
+                        'surface_area': total_area,
                         'visible': all(p.get('visible', True) for p in cluster_parts),
                         'child_ids': child_ids,
                     }
@@ -3120,8 +3121,8 @@ class STLViewerWidget(QWidget):
         elif len(small_parts) == 1:
             result.append(small_parts[0])
 
-        # Sort by face count descending
-        result.sort(key=lambda x: -x.get('face_count', 0))
+        # Sort by surface area descending
+        result.sort(key=lambda x: -x.get('surface_area', 0.0))
         logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(result)} entries "
                      f"({len(large_parts)} standalone, {len(result) - len(large_parts)} groups/small)")
         return result
