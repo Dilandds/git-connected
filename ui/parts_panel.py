@@ -62,8 +62,8 @@ class PartCard(QFrame):
         info_layout.addWidget(self.name_label)
 
         meta_parts = []
-        if self.face_count > 0:
-            meta_parts.append(f"{self.face_count:,} faces")
+        if self.surface_area > 0:
+            meta_parts.append(self._format_area(self.surface_area))
         if self.is_group:
             meta_parts.append(f"{len(self.child_ids)} parts")
         if meta_parts:
