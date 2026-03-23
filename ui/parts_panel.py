@@ -169,7 +169,7 @@ class PartsPanel(QWidget):
         layout.addLayout(header)
 
         # Info
-        info = QLabel("Toggle visibility of parts and groups.")
+        info = QLabel("Click parts in the 3D view to select them. Toggle visibility with the eye icon.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; border: none; background: transparent;")
         layout.addWidget(info)
@@ -187,8 +187,9 @@ class PartsPanel(QWidget):
         scroll.setWidget(self._list_widget)
         layout.addWidget(scroll, 1)
 
-        self._no_parts_label = QLabel("No parts detected")
+        self._no_parts_label = QLabel("Click a part in the viewer to add it here")
         self._no_parts_label.setAlignment(Qt.AlignCenter)
+        self._no_parts_label.setWordWrap(True)
         self._no_parts_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px; border: none; background: transparent; padding: 8px;")
         self._list_layout.insertWidget(0, self._no_parts_label)
 
@@ -248,18 +249,35 @@ class PartsPanel(QWidget):
         self.clear_all()
 
         for item in parts_list:
-            child_ids = item.get('child_ids', [])
-            card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids)
-            card.set_visible_state(item.get('visible', True))
-            card.selected.connect(self._on_card_selected)
-            card.visibility_toggled.connect(self._on_visibility_toggled)
-            self._cards[item['id']] = card
-            self._list_layout.insertWidget(self._list_layout.count() - 1, card)
+            self._add_card(item)
 
         if self._cards:
             self._no_parts_label.hide()
 
         self._count_label.setText(f"{len(self._cards)} part{'s' if len(self._cards) != 1 else ''}")
+
+    def add_part(self, item: dict):
+        """Dynamically add a single part/group card (if not already present).
+        
+        Returns the card_id (which may be different from item['id'] for grouped parts).
+        """
+        card_id = item['id']
+        if card_id in self._cards:
+            return card_id
+        self._add_card(item)
+        self._no_parts_label.hide()
+        self._count_label.setText(f"{len(self._cards)} part{'s' if len(self._cards) != 1 else ''}")
+        return card_id
+
+    def _add_card(self, item: dict):
+        """Internal: create and insert a PartCard from item dict."""
+        child_ids = item.get('child_ids', [])
+        card = PartCard(item['id'], item['name'], item.get('face_count', 0), child_ids=child_ids)
+        card.set_visible_state(item.get('visible', True))
+        card.selected.connect(self._on_card_selected)
+        card.visibility_toggled.connect(self._on_visibility_toggled)
+        self._cards[item['id']] = card
+        self._list_layout.insertWidget(self._list_layout.count() - 1, card)
 
     def clear_all(self):
         for card in list(self._cards.values()):
