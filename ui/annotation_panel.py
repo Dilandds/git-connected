@@ -69,9 +69,8 @@ def _rounded_text_pixmap(text: str, size: int = 28, fill_color: str = "#DBEAFE")
     margin = 2
     painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
     # Bold text centered - white on dark, black on light
-    font = make_font(bold=True)
-        n = len(str(text))
-    font.setPointSize(8 if n > 10 else (9 if n > 3 else 10))
+    n = len(str(text))
+    font = make_font(size=8 if n > 10 else (9 if n > 3 else 10), bold=True)
     painter.setFont(font)
     text_color = QColor("#FFFFFF") if _is_dark_color(fill_color) else QColor("#000000")
     painter.setPen(text_color)
