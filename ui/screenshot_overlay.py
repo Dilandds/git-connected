@@ -50,17 +50,27 @@ class ScreenshotOverlay(QWidget):
             self._drawing = True
             self.update()
 
+    def _constrain_square(self, origin, pos):
+        """Constrain pos so the selection from origin is always a square."""
+        dx = pos.x() - origin.x()
+        dy = pos.y() - origin.y()
+        side = max(abs(dx), abs(dy))
+        sx = side if dx >= 0 else -side
+        sy = side if dy >= 0 else -side
+        return QPoint(origin.x() + sx, origin.y() + sy)
+
     def mouseMoveEvent(self, event):
         if self._drawing:
-            self._current = event.pos()
+            self._current = self._constrain_square(self._origin, event.pos())
             self.update()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._drawing:
             self._drawing = False
-            rect = QRect(self._origin, event.pos()).normalized()
+            final_pos = self._constrain_square(self._origin, event.pos())
+            rect = QRect(self._origin, final_pos).normalized()
             self.update()
-            # Only emit if the rectangle has a minimum size
+            # Only emit if the square has a minimum size
             if rect.width() > 10 and rect.height() > 10:
                 self.region_selected.emit(rect)
 
