@@ -336,9 +336,9 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.material_combo)
         
         # Weight rows using components
-        self.weight_volume_row = WeightRow("Volume", "--", "standard", self)
-        self.weight_density_row = WeightRow("Density", "--", "standard", self)
-        self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self)
+        self.weight_volume_row = WeightRow("Volume", "--", "standard", self, color_variant='navy')
+        self.weight_density_row = WeightRow("Density", "--", "standard", self, color_variant='purple')
+        self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self, color_variant='gold')
         
         card_layout.addWidget(self.weight_volume_row)
         card_layout.addWidget(self.weight_density_row)
