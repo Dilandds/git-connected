@@ -205,9 +205,9 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(title_label)
         
         # Dimension rows using components
-        self.width_row = DimensionRow("Length (X)", "--", self)
-        self.height_row = DimensionRow("Width (Y)", "--", self)
-        self.depth_row = DimensionRow("Height (Z)", "--", self)
+        self.width_row = DimensionRow("Length (X)", "--", self, color_variant='navy')
+        self.height_row = DimensionRow("Width (Y)", "--", self, color_variant='purple')
+        self.depth_row = DimensionRow("Height (Z)", "--", self, color_variant='gold')
         
         card_layout.addWidget(self.width_row)
         card_layout.addWidget(self.height_row)
