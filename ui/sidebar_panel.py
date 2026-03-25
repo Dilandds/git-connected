@@ -257,8 +257,8 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Surface area rows using components
-        self.surface_total_row = SurfaceAreaRow("Total area", "--", "standard", self)
-        self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "highlight", self)
+        self.surface_total_row = SurfaceAreaRow("Total area", "--", "standard", self, color_variant='navy')
+        self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "standard", self, color_variant='purple')
         
         card_layout.addWidget(self.surface_total_row)
         card_layout.addWidget(self.surface_cm_row)
