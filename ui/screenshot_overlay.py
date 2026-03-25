@@ -67,9 +67,10 @@ class ScreenshotOverlay(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._drawing:
             self._drawing = False
-            rect = QRect(self._origin, event.pos()).normalized()
+            final_pos = self._constrain_square(self._origin, event.pos())
+            rect = QRect(self._origin, final_pos).normalized()
             self.update()
-            # Only emit if the rectangle has a minimum size
+            # Only emit if the square has a minimum size
             if rect.width() > 10 and rect.height() > 10:
                 self.region_selected.emit(rect)
 
