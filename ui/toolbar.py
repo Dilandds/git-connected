@@ -369,6 +369,12 @@ class ViewControlsToolbar(QWidget):
         content_layout.addWidget(self.draw_btn)
         self._eraser_active = False
         
+        # Parts button - top-level
+        self.parts_btn = ToolbarButton("🧩", "Parts", "Toggle part visibility and selection")
+        self.parts_btn.clicked.connect(self._on_parts_selected)
+        self.parts_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.parts_btn)
+        
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
