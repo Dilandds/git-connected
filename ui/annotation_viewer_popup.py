@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QRectF
 from PyQt5.QtGui import QFont, QPixmap, QCursor, QPainter
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -398,9 +398,7 @@ class AnnotationViewerPopup(QDialog):
         num_icon.setFixedSize(32, 32)
         header_layout.addWidget(num_icon)
         title_label = QLabel(f"{self.label} {self._display_number}")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(13)
+        title_font = make_font(size=13, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title};")
         header_layout.addWidget(title_label)

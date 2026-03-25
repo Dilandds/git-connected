@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +72,7 @@ class TechnicalSidebar(QWidget):
 
         # Title header
         header = QLabel("Technical Overview")
-        hfont = QFont()
-        hfont.setBold(True)
-        hfont.setPointSize(13)
+        hfont = make_font(size=13, bold=True)
         header.setFont(hfont)
         header.setStyleSheet(f"color: {default_theme.text_title};")
         layout.addWidget(header)

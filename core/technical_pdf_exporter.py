@@ -9,6 +9,7 @@ import logging
 import os
 import tempfile
 from typing import List, Optional
+from ui.styles import make_font
 
 logger = logging.getLogger(__name__)
 
@@ -321,9 +322,7 @@ class TechnicalPDFExporter:
 
             # Badge number — larger font
             painter.setPen(QColor("#FFFFFF"))
-            font = QFont()
-            font.setBold(True)
-            font.setPointSize(18)
+            font = make_font(size=18, bold=True)
             painter.setFont(font)
             painter.drawText(badge_rect, Qt.AlignCenter, str(idx))
 

@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,7 @@ class ToolbarButton(QPushButton):
         # Text label
         self.text_label = QLabel(label_text)
         self.text_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
-        label_font = QFont()
-        label_font.setPointSize(10)
+        label_font = make_font(size=10)
         self.text_label.setFont(label_font)
         self.text_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self._layout.addWidget(self.text_label)

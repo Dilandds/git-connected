@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,8 @@ def _rounded_text_pixmap(text: str, size: int = 28, fill_color: str = "#DBEAFE")
     margin = 2
     painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
     # Bold text centered - white on dark, black on light
-    font = QFont()
-    font.setBold(True)
     n = len(str(text))
-    font.setPointSize(8 if n > 10 else (9 if n > 3 else 10))
+    font = make_font(size=8 if n > 10 else (9 if n > 3 else 10), bold=True)
     painter.setFont(font)
     text_color = QColor("#FFFFFF") if _is_dark_color(fill_color) else QColor("#000000")
     painter.setPen(text_color)
@@ -199,9 +197,7 @@ class AnnotationCard(QFrame):
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.annotation.label)
         self.label_edit.setPlaceholderText("Point")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(11)
+        title_font = make_font(size=11, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
             QLineEdit {{
@@ -465,9 +461,7 @@ class AnnotationPanel(QWidget):
         anno_icon.setAlignment(Qt.AlignCenter)
         title_row.addWidget(anno_icon)
         title_label = QLabel("Annotations")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(12)
+        title_font = make_font(size=12, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title};")
         title_row.addWidget(title_label)

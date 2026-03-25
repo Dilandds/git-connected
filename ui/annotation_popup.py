@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QPixmap
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -179,9 +179,7 @@ class AnnotationPopup(QDialog):
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.label)
         self.label_edit.setPlaceholderText("Point")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(13)
+        title_font = make_font(size=13, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
             QLineEdit {{

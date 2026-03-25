@@ -78,13 +78,37 @@ class Theme:
 default_theme = Theme()
 
 # Font Constants
+FONT_FAMILY = 'Calibri'
+FONT_FAMILY_CSS = "'Calibri', 'Inter', 'Roboto', 'Segoe UI', sans-serif"
 FONTS = {
-    'family': "'Calibri', 'Inter', 'Roboto', 'Segoe UI', sans-serif",
+    'family': FONT_FAMILY_CSS,
     'title_size': '16px',
     'subtitle_size': '14px',
     'body_size': '11px',
     'value_size': '13px',
 }
+
+
+def make_font(size=None, bold=False, pixel_size=None, weight=None):
+    """Create a QFont with the app's standard family for cross-platform consistency.
+    
+    Args:
+        size: Point size (use for most UI text)
+        bold: Whether to set bold
+        pixel_size: Pixel size (use instead of size when pixel-perfect control needed)
+        weight: QFont weight (e.g. 600 for semi-bold). Overrides bold if set.
+    """
+    from PyQt5.QtGui import QFont as _QFont
+    f = _QFont(FONT_FAMILY)
+    if pixel_size is not None:
+        f.setPixelSize(pixel_size)
+    elif size is not None:
+        f.setPointSize(size)
+    if weight is not None:
+        f.setWeight(weight)
+    elif bold:
+        f.setBold(True)
+    return f
 
 
 def get_global_stylesheet(theme=None):
