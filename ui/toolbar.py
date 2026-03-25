@@ -321,7 +321,7 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.clicked.connect(self._on_theme_clicked)
         content_layout.addWidget(self.theme_btn)
         
-        self.render_mode_btn = ToolbarButton("◇", "Solid ▼", "")
+        self.render_mode_btn = ToolbarButton("◆", "Shaded ▼", "")
         self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
         content_layout.addWidget(self.render_mode_btn)
         
