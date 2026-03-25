@@ -196,6 +196,27 @@ class TechnicalPDFExporter:
                 ]))
                 story.append(ann_table)
 
+            # ==================== PAGE 2: Annotated Drawing ====================
+            story.append(PageBreak())
+            story.append(Paragraph(doc_title, title_style))
+            story.append(Spacer(1, 4))
+
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(annotated_img_path)
+            iw, ih = pil_img.size
+            pil_img.close()
+            aspect = ih / iw if iw else 1
+
+            # Reserve ~40pt for title + spacer
+            available_h = page_height - 50
+            img_w = page_width
+            img_h = img_w * aspect
+            if img_h > available_h:
+                img_h = available_h
+                img_w = img_h / aspect
+
+            story.append(Image(annotated_img_path, width=img_w, height=img_h))
+
             doc.build(story)
             logger.info("Technical Overview PDF exported: %s", output_path)
             return True, output_path
