@@ -110,34 +110,12 @@ class TechnicalPDFExporter:
 
             story = []
 
-            # ==================== PAGE 1: Annotated Drawing ====================
+            # ==================== PAGE 1: Information & Annotations ====================
             doc_title = metadata.get("title") or title
             story.append(Paragraph(doc_title, title_style))
-            story.append(Spacer(1, 4))
 
-            # Fit annotated image to fill the remaining page space (portrait)
             page_width = A4[0] - 30 * mm
             page_height = A4[1] - 30 * mm  # usable area
-
-            from PIL import Image as PILImage
-            pil_img = PILImage.open(annotated_img_path)
-            iw, ih = pil_img.size
-            pil_img.close()
-            aspect = ih / iw if iw else 1
-
-            # Reserve ~40pt for title + spacer
-            available_h = page_height - 50
-            img_w = page_width
-            img_h = img_w * aspect
-            if img_h > available_h:
-                img_h = available_h
-                img_w = img_h / aspect
-
-            story.append(Image(annotated_img_path, width=img_w, height=img_h))
-
-            # ==================== PAGE 2: Information & Annotations ====================
-            story.append(PageBreak())
-            story.append(Paragraph(doc_title, title_style))
 
             subtitle_parts = []
             if metadata.get("property"):
@@ -217,6 +195,27 @@ class TechnicalPDFExporter:
                     ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                 ]))
                 story.append(ann_table)
+
+            # ==================== PAGE 2: Annotated Drawing ====================
+            story.append(PageBreak())
+            story.append(Paragraph(doc_title, title_style))
+            story.append(Spacer(1, 4))
+
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(annotated_img_path)
+            iw, ih = pil_img.size
+            pil_img.close()
+            aspect = ih / iw if iw else 1
+
+            # Reserve ~40pt for title + spacer
+            available_h = page_height - 50
+            img_w = page_width
+            img_h = img_w * aspect
+            if img_h > available_h:
+                img_h = available_h
+                img_w = img_h / aspect
+
+            story.append(Image(annotated_img_path, width=img_w, height=img_h))
 
             doc.build(story)
             logger.info("Technical Overview PDF exported: %s", output_path)
