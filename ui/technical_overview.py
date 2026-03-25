@@ -18,7 +18,7 @@ from PyQt5.QtGui import (
     QPixmap, QPainter, QPen, QColor, QFont, QFontMetrics,
     QBrush, QPainterPath, QPolygonF, QImage, QWheelEvent, QMouseEvent
 )
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -216,16 +216,12 @@ class ImageCanvas(QWidget):
         painter.drawRoundedRect(r, 12, 12)
 
         # Primary text: same as 3D viewer (18px, weight 600, #1a1a2e)
-        font_primary = QFont()
-        font_primary.setPixelSize(18)
-        font_primary.setWeight(600)
+        font_primary = make_font(pixel_size=18, weight=600)
         painter.setFont(font_primary)
         painter.setPen(QColor("#1a1a2e"))
         primary_height = painter.fontMetrics().height()
         # Helper text: same as 3D viewer (11px, weight 400, #a0aec0)
-        font_helper = QFont()
-        font_helper.setPixelSize(11)
-        font_helper.setWeight(400)
+        font_helper = make_font(pixel_size=11, weight=400)
         painter.setFont(font_helper)
         helper_height = painter.fontMetrics().height()
         spacing = 12
@@ -278,9 +274,7 @@ class ImageCanvas(QWidget):
         painter.drawEllipse(badge_rect)
 
         painter.setPen(QColor(ARROW_BADGE_TEXT))
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(9)
+        font = make_font(size=9, bold=True)
         painter.setFont(font)
         painter.drawText(badge_rect, Qt.AlignCenter, str(number))
 
@@ -598,9 +592,7 @@ class TechnicalAnnotationPanel(QWidget):
         info.setSpacing(4)
 
         title = QLabel(ann.label or f"Annotation {number}")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(11)
+        title_font = make_font(size=11, bold=True)
         title.setFont(title_font)
         title.setStyleSheet(f"color: {default_theme.text_primary}; border: none;")
         info.addWidget(title)

@@ -196,9 +196,7 @@ class SidebarPanel(QWidget):
         
         # Card title
         title_label = QLabel("Dimensions")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         card_layout.addWidget(title_label)
@@ -240,9 +238,7 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Total Surface Area")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         
@@ -278,8 +274,7 @@ class SidebarPanel(QWidget):
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Calculated surface area: Sum of the areas of all triangles in the 3D mesh. Useful for estimating galvanizing or surface treatment costs.")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
         disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
         disclaimer.setWordWrap(True)
@@ -310,9 +305,7 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Estimated Weight")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         
@@ -395,9 +388,7 @@ class SidebarPanel(QWidget):
         self._adjust_weight_collapse_btn.clicked.connect(self._toggle_adjust_weight)
         
         title_label = QLabel("Adjust to Target Weight")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; padding: 2px 0;")
         # Ensure full title is visible (avoids truncation on narrow sidebars)
@@ -479,9 +470,7 @@ class SidebarPanel(QWidget):
         
         # Results section title
         results_label = QLabel("Scaled Results")
-        results_font = QFont()
-        results_font.setPointSize(11)
-        results_font.setBold(True)
+        results_font = make_font(size=11, bold=True)
         results_label.setFont(results_font)
         results_label.setStyleSheet(f"color: {default_theme.text_secondary}; margin-top: 4px;")
         content_layout.addWidget(results_label)
@@ -577,9 +566,7 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Export 3D PDF")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         
@@ -594,8 +581,7 @@ class SidebarPanel(QWidget):
         
         # Description
         desc_label = QLabel("Export interactive 3D PDF for Adobe Acrobat Reader.\nRotate, pan, and zoom the model inside the PDF.")
-        desc_font = QFont()
-        desc_font.setPointSize(11)
+        desc_font = make_font(size=11)
         desc_label.setFont(desc_font)
         desc_label.setStyleSheet(f"color: {default_theme.text_secondary};")
         desc_label.setWordWrap(True)
@@ -653,8 +639,7 @@ class SidebarPanel(QWidget):
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Requires Adobe Acrobat Reader for interactive 3D. Ensure VTK provides vtkU3DExporter (usually via 'pip install -U vtk').")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
         disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
         disclaimer.setWordWrap(True)
@@ -996,9 +981,7 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Export as .ecto")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         
@@ -1013,8 +996,7 @@ class SidebarPanel(QWidget):
         
         # Description
         desc_label = QLabel("Export a single .ecto file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .ecto files.")
-        desc_font = QFont()
-        desc_font.setPointSize(11)
+        desc_font = make_font(size=11)
         desc_label.setFont(desc_font)
         desc_label.setStyleSheet(f"color: {default_theme.text_secondary};")
         desc_label.setWordWrap(True)
@@ -1077,8 +1059,7 @@ class SidebarPanel(QWidget):
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Single file contains: model + annotations + photos. Recipients open it directly in ECTOFORM.")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
         disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
         disclaimer.setWordWrap(True)
@@ -1293,9 +1274,7 @@ class SidebarPanel(QWidget):
 
         # Card title
         title_label = QLabel("🔄  Convert File")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
         title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
         card_layout.addWidget(title_label)
