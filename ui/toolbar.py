@@ -276,6 +276,33 @@ class ViewControlsToolbar(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         
+        # Scroll area for horizontal scrolling when toolbar overflows
+        self.toolbar_scroll = QScrollArea()
+        self.toolbar_scroll.setObjectName("toolbarScroll")
+        self.toolbar_scroll.setWidgetResizable(True)
+        self.toolbar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.toolbar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.toolbar_scroll.setFixedHeight(40)
+        self.toolbar_scroll.setStyleSheet(f"""
+            QScrollArea#toolbarScroll {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollArea#toolbarScroll QScrollBar:horizontal {{
+                height: 4px;
+                background: transparent;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::handle:horizontal {{
+                background: {default_theme.border_standard};
+                border-radius: 2px;
+                min-width: 30px;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::add-line:horizontal,
+            QScrollArea#toolbarScroll QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+        """)
+
         # Expanded toolbar content
         self.toolbar_content = QWidget()
         self.toolbar_content.setObjectName("toolbarContent")
