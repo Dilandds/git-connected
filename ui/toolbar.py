@@ -905,7 +905,7 @@ class ViewControlsToolbar(QWidget):
     def reset_parts_state(self):
         """Reset parts button state (called when exiting parts mode externally)."""
         self.parts_mode_enabled = False
-        self._restore_view_btn()
+        self.parts_btn.set_active(False)
     
     def _on_load_clicked(self):
         """Handle load file."""
