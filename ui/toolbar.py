@@ -276,6 +276,33 @@ class ViewControlsToolbar(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         
+        # Scroll area for horizontal scrolling when toolbar overflows
+        self.toolbar_scroll = QScrollArea()
+        self.toolbar_scroll.setObjectName("toolbarScroll")
+        self.toolbar_scroll.setWidgetResizable(True)
+        self.toolbar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.toolbar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.toolbar_scroll.setFixedHeight(40)
+        self.toolbar_scroll.setStyleSheet(f"""
+            QScrollArea#toolbarScroll {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollArea#toolbarScroll QScrollBar:horizontal {{
+                height: 4px;
+                background: transparent;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::handle:horizontal {{
+                background: {default_theme.border_standard};
+                border-radius: 2px;
+                min-width: 30px;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::add-line:horizontal,
+            QScrollArea#toolbarScroll QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+        """)
+
         # Expanded toolbar content
         self.toolbar_content = QWidget()
         self.toolbar_content.setObjectName("toolbarContent")
@@ -342,6 +369,12 @@ class ViewControlsToolbar(QWidget):
         content_layout.addWidget(self.draw_btn)
         self._eraser_active = False
         
+        # Parts button - top-level
+        self.parts_btn = ToolbarButton("🧩", "Parts", "Toggle part visibility and selection")
+        self.parts_btn.clicked.connect(self._on_parts_selected)
+        self.parts_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.parts_btn)
+        
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
@@ -362,16 +395,24 @@ class ViewControlsToolbar(QWidget):
         # Apply tooltip styling for black text
         self._apply_tooltip_style()
         
-        # Flexible spacer
-        content_layout.addStretch()
-        
-        # Collapse button (at the end)
+        # Collapse button (at the end) - outside scroll area
         self.collapse_btn = ToolbarButton("▲", "", "")
         self.collapse_btn.clicked.connect(self._toggle_expanded)
         self.collapse_btn.setFixedWidth(36)
-        content_layout.addWidget(self.collapse_btn)
         
-        container_layout.addWidget(self.toolbar_content)
+        # Set toolbar_content into scroll area
+        self.toolbar_scroll.setWidget(self.toolbar_content)
+        
+        # Build the expanded row: scroll area + collapse button
+        expanded_row = QHBoxLayout()
+        expanded_row.setContentsMargins(0, 0, 4, 0)
+        expanded_row.setSpacing(0)
+        expanded_row.addWidget(self.toolbar_scroll, 1)
+        expanded_row.addWidget(self.collapse_btn)
+        
+        self.expanded_widget = QWidget()
+        self.expanded_widget.setLayout(expanded_row)
+        container_layout.addWidget(self.expanded_widget)
         
         # Collapsed strip (only shown when collapsed)
         self.collapsed_strip = QWidget()
@@ -404,10 +445,10 @@ class ViewControlsToolbar(QWidget):
     def _update_expanded_state(self, animate=True):
         """Update the UI based on expanded/collapsed state."""
         if self.is_expanded:
-            self.toolbar_content.setVisible(True)
+            self.expanded_widget.setVisible(True)
             self.collapsed_strip.setVisible(False)
         else:
-            self.toolbar_content.setVisible(False)
+            self.expanded_widget.setVisible(False)
             self.collapsed_strip.setVisible(True)
     
     def set_stl_loaded(self, loaded):
@@ -419,6 +460,7 @@ class ViewControlsToolbar(QWidget):
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
         self.draw_btn.setEnabled(loaded)
+        self.parts_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
     
     def _on_grid_clicked(self):
@@ -511,19 +553,15 @@ class ViewControlsToolbar(QWidget):
         for view_id, icon, label in views:
             action = menu.addAction(f"{icon}  {label}")
             action.setCheckable(True)
-            action.setChecked(not self.parts_mode_enabled and self._current_view == view_id)
+            action.setChecked(self._current_view == view_id)
             action.triggered.connect(lambda checked, v=view_id: self._set_view(v))
-        menu.addSeparator()
-        parts_action = menu.addAction("🧩  Parts")
-        parts_action.setCheckable(True)
-        parts_action.setChecked(self.parts_mode_enabled)
-        parts_action.triggered.connect(self._on_parts_selected)
         menu.exec_(self.view_btn.mapToGlobal(self.view_btn.rect().bottomLeft()))
 
     def _set_view(self, view_id):
         """Set view preset and emit signal."""
         if self.parts_mode_enabled:
             self.parts_mode_enabled = False
+            self.parts_btn.set_active(False)
             self.toggle_parts.emit()
         self._current_view = view_id
         icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
@@ -565,7 +603,7 @@ class ViewControlsToolbar(QWidget):
             self.ruler_btn.set_icon("📐")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
-                self._restore_view_btn()
+                self.parts_btn.set_active(False)
                 self.toggle_parts.emit()
             if self.annotation_mode_enabled:
                 self.annotation_mode_enabled = False
@@ -632,7 +670,7 @@ class ViewControlsToolbar(QWidget):
             self.annotation_btn.set_icon("✏️")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
-                self._restore_view_btn()
+                self.parts_btn.set_active(False)
                 self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
@@ -666,7 +704,7 @@ class ViewControlsToolbar(QWidget):
             self.annotation_btn.set_icon("➤")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
-                self._restore_view_btn()
+                self.parts_btn.set_active(False)
                 self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
@@ -702,8 +740,6 @@ class ViewControlsToolbar(QWidget):
 
         self.parts_mode_enabled = not self.parts_mode_enabled
         if self.parts_mode_enabled:
-            self.view_btn.set_label("Parts ▼")
-            self.view_btn.set_icon("🧩")
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
@@ -716,11 +752,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
-        else:
-            icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
-            labels = {"front": "Front", "rear": "Rear", "left": "Left", "right": "Right", "top": "Top", "bottom": "Bottom"}
-            self.view_btn.set_icon(icons[self._current_view])
-            self.view_btn.set_label(f"{labels[self._current_view]} ▼")
+        self.parts_btn.set_active(self.parts_mode_enabled)
         self.toggle_parts.emit()
     
     def _on_screenshot_clicked(self):
@@ -729,7 +761,7 @@ class ViewControlsToolbar(QWidget):
         if self.screenshot_mode_enabled:
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
-                self._restore_view_btn()
+                self.parts_btn.set_active(False)
                 self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
@@ -805,7 +837,7 @@ class ViewControlsToolbar(QWidget):
             self.draw_btn.set_label("Drawing ▼")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
-                self._restore_view_btn()
+                self.parts_btn.set_active(False)
                 self.toggle_parts.emit()
             if self.ruler_mode_enabled:
                 self.ruler_mode_enabled = False
@@ -874,7 +906,7 @@ class ViewControlsToolbar(QWidget):
     def reset_parts_state(self):
         """Reset parts button state (called when exiting parts mode externally)."""
         self.parts_mode_enabled = False
-        self._restore_view_btn()
+        self.parts_btn.set_active(False)
     
     def _on_load_clicked(self):
         """Handle load file."""
