@@ -1,10 +1,9 @@
 """
 Technical Overview PDF Exporter.
 
-Generates a PDF report containing:
-1. The document image with numbered arrow annotations rendered on top.
-2. A table listing each annotation number, label, and description text.
-3. Metadata from the sidebar (property, title, manufacturers, dates, comments).
+Generates a 2-page portrait PDF report:
+  Page 1 – The document image with numbered arrow annotations rendered on top.
+  Page 2 – Metadata table, comments, and an annotations list with numbers, labels, and descriptions.
 """
 import logging
 import os
@@ -26,7 +25,7 @@ class TechnicalPDFExporter:
         title: str = "Technical Overview",
     ) -> tuple:
         """
-        Export the Technical Overview to a PDF.
+        Export the Technical Overview to a 2-page portrait PDF.
 
         Returns:
             (bool, str) — (success, output_path or error message)
@@ -59,10 +58,10 @@ class TechnicalPDFExporter:
             if not os.path.exists(annotated_img_path):
                 return False, "Failed to render annotated image"
 
-            # --- 2. Build PDF ----------------------------------------------------------------
+            # --- 2. Build PDF (portrait A4) --------------------------------------------------
             doc = SimpleDocTemplate(
                 output_path,
-                pagesize=A4,
+                pagesize=A4,  # portrait
                 rightMargin=15 * mm,
                 leftMargin=15 * mm,
                 topMargin=15 * mm,
@@ -82,7 +81,7 @@ class TechnicalPDFExporter:
                 "TOSubtitle",
                 parent=styles["Normal"],
                 fontSize=11,
-                spaceAfter=16,
+                spaceAfter=10,
                 alignment=TA_CENTER,
                 textColor=colors.HexColor("#64748B"),
             )
@@ -111,8 +110,33 @@ class TechnicalPDFExporter:
 
             story = []
 
-            # --- Header ---
+            # ==================== PAGE 1: Annotated Drawing ====================
             doc_title = metadata.get("title") or title
+            story.append(Paragraph(doc_title, title_style))
+            story.append(Spacer(1, 4))
+
+            # Fit annotated image to fill the remaining page space (portrait)
+            page_width = A4[0] - 30 * mm
+            page_height = A4[1] - 30 * mm  # usable area
+
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(annotated_img_path)
+            iw, ih = pil_img.size
+            pil_img.close()
+            aspect = ih / iw if iw else 1
+
+            # Reserve ~40pt for title + spacer
+            available_h = page_height - 50
+            img_w = page_width
+            img_h = img_w * aspect
+            if img_h > available_h:
+                img_h = available_h
+                img_w = img_h / aspect
+
+            story.append(Image(annotated_img_path, width=img_w, height=img_h))
+
+            # ==================== PAGE 2: Information & Annotations ====================
+            story.append(PageBreak())
             story.append(Paragraph(doc_title, title_style))
 
             subtitle_parts = []
@@ -162,26 +186,6 @@ class TechnicalPDFExporter:
                 story.append(Paragraph("Comments", section_style))
                 story.append(Paragraph(metadata["comments"].replace("\n", "<br/>"), body_style))
                 story.append(Spacer(1, 10))
-
-            # --- Annotated document image ---
-            story.append(Paragraph("Annotated Document", section_style))
-            page_width = A4[0] - 30 * mm
-            # Maintain aspect ratio
-            from PIL import Image as PILImage
-            pil_img = PILImage.open(annotated_img_path)
-            iw, ih = pil_img.size
-            pil_img.close()
-            aspect = ih / iw if iw else 1
-            img_w = page_width
-            img_h = img_w * aspect
-            # Cap height to avoid overflowing a page
-            max_h = A4[1] - 60 * mm
-            if img_h > max_h:
-                img_h = max_h
-                img_w = img_h / aspect
-
-            story.append(Image(annotated_img_path, width=img_w, height=img_h))
-            story.append(Spacer(1, 14))
 
             # --- Annotations table ---
             if annotations:
@@ -238,6 +242,8 @@ class TechnicalPDFExporter:
         """
         Render the document pixmap with arrow annotations drawn on top
         and save as a PNG image for embedding in the PDF.
+
+        Uses thicker lines and larger numbered badges for PDF clarity.
         """
         from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QImage
         from PyQt5.QtCore import Qt, QPointF, QRectF
@@ -246,18 +252,18 @@ class TechnicalPDFExporter:
             return
 
         # Compute margins needed to fit all annotation origins (which may be outside 0-1)
-        base_margin = 50
+        base_margin = 80
         extra_left = extra_right = extra_top = extra_bottom = 0
         for ann in annotations:
             ox, oy = getattr(ann, 'origin_x', 0.5), getattr(ann, 'origin_y', 0.5)
             if ox < 0:
-                extra_left = max(extra_left, -ox * pixmap.width() + 30)
+                extra_left = max(extra_left, -ox * pixmap.width() + 60)
             if ox > 1:
-                extra_right = max(extra_right, (ox - 1) * pixmap.width() + 30)
+                extra_right = max(extra_right, (ox - 1) * pixmap.width() + 60)
             if oy < 0:
-                extra_top = max(extra_top, -oy * pixmap.height() + 30)
+                extra_top = max(extra_top, -oy * pixmap.height() + 60)
             if oy > 1:
-                extra_bottom = max(extra_bottom, (oy - 1) * pixmap.height() + 30)
+                extra_bottom = max(extra_bottom, (oy - 1) * pixmap.height() + 60)
 
         margin_l = base_margin + int(extra_left)
         margin_r = base_margin + int(extra_right)
@@ -277,14 +283,13 @@ class TechnicalPDFExporter:
         img_rect = QRectF(margin_l, margin_t, pixmap.width(), pixmap.height())
         painter.drawPixmap(img_rect.toRect(), pixmap)
 
-        # Draw each annotation arrow
+        # Draw each annotation arrow — thicker lines and larger badges for print
         for idx, ann in enumerate(annotations, start=1):
             target = QPointF(
                 img_rect.x() + ann.target_x * img_rect.width(),
                 img_rect.y() + ann.target_y * img_rect.height(),
             )
 
-            # Use stored origin coordinates
             origin = QPointF(
                 img_rect.x() + ann.origin_x * img_rect.width(),
                 img_rect.y() + ann.origin_y * img_rect.height(),
@@ -292,19 +297,19 @@ class TechnicalPDFExporter:
 
             arrow_color = QColor(getattr(ann, "color", "#5294E2") or "#5294E2")
 
-            # Arrow line
-            pen = QPen(arrow_color, 2.5)
+            # Arrow line — much thicker for PDF visibility
+            pen = QPen(arrow_color, 5.0)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
             painter.drawLine(origin, target)
 
-            # Bullet at target
+            # Bullet at target — larger
             painter.setPen(Qt.NoPen)
             painter.setBrush(QBrush(arrow_color))
-            painter.drawEllipse(target, 3.0, 3.0)
+            painter.drawEllipse(target, 7.0, 7.0)
 
-            # Numbered badge at origin
-            badge_size = 24
+            # Numbered badge at origin — much larger
+            badge_size = 44
             badge_rect = QRectF(
                 origin.x() - badge_size / 2,
                 origin.y() - badge_size / 2,
@@ -315,10 +320,11 @@ class TechnicalPDFExporter:
             painter.setBrush(QBrush(arrow_color))
             painter.drawEllipse(badge_rect)
 
+            # Badge number — larger font
             painter.setPen(QColor("#FFFFFF"))
             font = QFont()
             font.setBold(True)
-            font.setPointSize(10)
+            font.setPointSize(18)
             painter.setFont(font)
             painter.drawText(badge_rect, Qt.AlignCenter, str(idx))
 
