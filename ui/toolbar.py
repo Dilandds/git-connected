@@ -506,9 +506,9 @@ class ViewControlsToolbar(QWidget):
         """)
 
         modes = [
+            ("shaded", "◆", "Shaded"),
             ("solid", "◇", "Solid"),
             ("wireframe", "◈", "Wireframe"),
-            ("shaded", "◆", "Shaded"),
         ]
         for mode_id, icon, label in modes:
             action = menu.addAction(f"{icon}  {label}")
