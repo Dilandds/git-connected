@@ -1088,9 +1088,6 @@ class STLViewerWindow(QMainWindow):
                     tab.mesh = mesh
                     self.sidebar_panel.update_dimensions(mesh_data, file_path)
             
-            # Apply initial render mode (shaded by default)
-            self._set_render_mode(self.toolbar.render_mode)
-            
             # Load any existing annotations for this file
             self._load_annotations_for_file(file_path)
     

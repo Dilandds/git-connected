@@ -205,9 +205,9 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(title_label)
         
         # Dimension rows using components
-        self.width_row = DimensionRow("Length (X)", "--", self, color_variant='navy')
-        self.height_row = DimensionRow("Width (Y)", "--", self, color_variant='purple')
-        self.depth_row = DimensionRow("Height (Z)", "--", self, color_variant='gold')
+        self.width_row = DimensionRow("Length (X)", "--", self)
+        self.height_row = DimensionRow("Width (Y)", "--", self)
+        self.depth_row = DimensionRow("Height (Z)", "--", self)
         
         card_layout.addWidget(self.width_row)
         card_layout.addWidget(self.height_row)
@@ -257,8 +257,8 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Surface area rows using components
-        self.surface_total_row = SurfaceAreaRow("Total area", "--", "standard", self, color_variant='navy')
-        self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "standard", self, color_variant='purple')
+        self.surface_total_row = SurfaceAreaRow("Total area", "--", "standard", self)
+        self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "highlight", self)
         
         card_layout.addWidget(self.surface_total_row)
         card_layout.addWidget(self.surface_cm_row)
@@ -336,9 +336,9 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.material_combo)
         
         # Weight rows using components
-        self.weight_volume_row = WeightRow("Volume", "--", "standard", self, color_variant='navy')
-        self.weight_density_row = WeightRow("Density", "--", "standard", self, color_variant='purple')
-        self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self, color_variant='gold')
+        self.weight_volume_row = WeightRow("Volume", "--", "standard", self)
+        self.weight_density_row = WeightRow("Density", "--", "standard", self)
+        self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self)
         
         card_layout.addWidget(self.weight_volume_row)
         card_layout.addWidget(self.weight_density_row)

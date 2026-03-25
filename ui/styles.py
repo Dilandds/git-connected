@@ -79,18 +79,11 @@ default_theme = Theme()
 
 # Font Constants
 FONTS = {
-    'family': "'Calibri', 'Inter', 'Roboto', 'Segoe UI', sans-serif",
+    'family': "'Inter', 'Roboto', 'Segoe UI', sans-serif",
     'title_size': '16px',
     'subtitle_size': '14px',
     'body_size': '11px',
     'value_size': '13px',
-}
-
-# Gradient row colors
-ROW_GRADIENTS = {
-    'navy': ('qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1B3A5C, stop:1 #2C5F8A)', '#1a3454'),
-    'purple': ('qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6B2D7B, stop:1 #9B4DCA)', '#5e2870'),
-    'gold': ('qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #B8960F, stop:1 #D4AF37)', '#a6870d'),
 }
 
 
