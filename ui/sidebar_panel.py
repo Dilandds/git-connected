@@ -125,8 +125,7 @@ class SidebarPanel(QWidget):
         # Title label
         title_label = QLabel("ECTOFORM")
         title_label.setObjectName("titleLabel")
-        title_font = QFont("Inter", 16)
-        title_font.setBold(True)
+        title_font = make_font(size=16, bold=True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
