@@ -589,7 +589,7 @@ class ViewControlsToolbar(QWidget):
         labels = {'solid': 'Solid', 'wireframe': 'Wireframe', 'shaded': 'Shaded'}
         self.render_mode_btn.set_icon(icons[mode])
         self.render_mode_btn.set_label(f"{labels[mode]} ▼")
-        self.render_mode_btn.set_active(mode != 'solid')
+        self.render_mode_btn.set_active(mode != 'shaded')
         self.render_mode_changed.emit(mode)
     
     def _on_reset_clicked(self):
