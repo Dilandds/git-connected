@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent
 from PyQt5.QtGui import QFont, QPainter, QColor
-from ui.styles import default_theme
+from ui.styles import default_theme, ROW_GRADIENTS
 
 
 def confirm_dialog(parent, title: str, message: str) -> bool:
