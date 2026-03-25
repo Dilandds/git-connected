@@ -395,16 +395,24 @@ class ViewControlsToolbar(QWidget):
         # Apply tooltip styling for black text
         self._apply_tooltip_style()
         
-        # Flexible spacer
-        content_layout.addStretch()
-        
-        # Collapse button (at the end)
+        # Collapse button (at the end) - outside scroll area
         self.collapse_btn = ToolbarButton("▲", "", "")
         self.collapse_btn.clicked.connect(self._toggle_expanded)
         self.collapse_btn.setFixedWidth(36)
-        content_layout.addWidget(self.collapse_btn)
         
-        container_layout.addWidget(self.toolbar_content)
+        # Set toolbar_content into scroll area
+        self.toolbar_scroll.setWidget(self.toolbar_content)
+        
+        # Build the expanded row: scroll area + collapse button
+        expanded_row = QHBoxLayout()
+        expanded_row.setContentsMargins(0, 0, 4, 0)
+        expanded_row.setSpacing(0)
+        expanded_row.addWidget(self.toolbar_scroll, 1)
+        expanded_row.addWidget(self.collapse_btn)
+        
+        self.expanded_widget = QWidget()
+        self.expanded_widget.setLayout(expanded_row)
+        container_layout.addWidget(self.expanded_widget)
         
         # Collapsed strip (only shown when collapsed)
         self.collapsed_strip = QWidget()
