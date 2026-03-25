@@ -79,7 +79,7 @@ default_theme = Theme()
 
 # Font Constants
 FONTS = {
-    'family': "'Inter', 'Roboto', 'Segoe UI', sans-serif",
+    'family': "'Calibri', 'Inter', 'Roboto', 'Segoe UI', sans-serif",
     'title_size': '16px',
     'subtitle_size': '14px',
     'body_size': '11px',

@@ -239,7 +239,7 @@ class ViewControlsToolbar(QWidget):
         # State tracking
         self.grid_enabled = True
         self.dark_theme = False
-        self.render_mode = 'solid'  # 'solid', 'wireframe', 'shaded'
+        self.render_mode = 'shaded'  # 'shaded', 'solid', 'wireframe'
         self.is_fullscreen = False
         self.ruler_mode_enabled = False
         self.annotation_mode_enabled = False
@@ -506,9 +506,9 @@ class ViewControlsToolbar(QWidget):
         """)
 
         modes = [
+            ("shaded", "◆", "Shaded"),
             ("solid", "◇", "Solid"),
             ("wireframe", "◈", "Wireframe"),
-            ("shaded", "◆", "Shaded"),
         ]
         for mode_id, icon, label in modes:
             action = menu.addAction(f"{icon}  {label}")
@@ -589,7 +589,7 @@ class ViewControlsToolbar(QWidget):
         labels = {'solid': 'Solid', 'wireframe': 'Wireframe', 'shaded': 'Shaded'}
         self.render_mode_btn.set_icon(icons[mode])
         self.render_mode_btn.set_label(f"{labels[mode]} ▼")
-        self.render_mode_btn.set_active(mode != 'solid')
+        self.render_mode_btn.set_active(mode != 'shaded')
         self.render_mode_changed.emit(mode)
     
     def _on_reset_clicked(self):
