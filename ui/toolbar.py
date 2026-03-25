@@ -445,10 +445,10 @@ class ViewControlsToolbar(QWidget):
     def _update_expanded_state(self, animate=True):
         """Update the UI based on expanded/collapsed state."""
         if self.is_expanded:
-            self.toolbar_content.setVisible(True)
+            self.expanded_widget.setVisible(True)
             self.collapsed_strip.setVisible(False)
         else:
-            self.toolbar_content.setVisible(False)
+            self.expanded_widget.setVisible(False)
             self.collapsed_strip.setVisible(True)
     
     def set_stl_loaded(self, loaded):
