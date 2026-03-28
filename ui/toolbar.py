@@ -320,7 +320,7 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.clicked.connect(self._on_theme_clicked)
         content_layout.addWidget(self.theme_btn)
         
-        self.render_mode_btn = ToolbarButton("◇", "Solid ▼", "")
+        self.render_mode_btn = ToolbarButton("◇", "Visual Style ▼", "")
         self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
         content_layout.addWidget(self.render_mode_btn)
         
@@ -369,11 +369,11 @@ class ViewControlsToolbar(QWidget):
         content_layout.addWidget(self.draw_btn)
         self._eraser_active = False
         
-        # Parts button - top-level
+        # Parts button - hidden, state managed via Visual Style dropdown
         self.parts_btn = ToolbarButton("🧩", "Parts", "Toggle part visibility and selection")
         self.parts_btn.clicked.connect(self._on_parts_selected)
-        self.parts_btn.setEnabled(False)  # Disabled until model is loaded
-        content_layout.addWidget(self.parts_btn)
+        self.parts_btn.setEnabled(False)
+        self.parts_btn.setVisible(False)  # Not shown in toolbar; accessed via Visual Style menu
         
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
@@ -482,7 +482,7 @@ class ViewControlsToolbar(QWidget):
         self.toggle_theme.emit()
     
     def _show_render_mode_menu(self):
-        """Show dropdown menu for render mode selection."""
+        """Show dropdown menu for render mode and parts selection."""
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -502,6 +502,11 @@ class ViewControlsToolbar(QWidget):
             QMenu::item:checked {{
                 font-weight: bold;
             }}
+            QMenu::separator {{
+                height: 1px;
+                background: {default_theme.border_standard};
+                margin: 4px 8px;
+            }}
         """)
 
         modes = [
@@ -514,6 +519,14 @@ class ViewControlsToolbar(QWidget):
             action.setCheckable(True)
             action.setChecked(self.render_mode == mode_id)
             action.triggered.connect(lambda checked, m=mode_id: self._set_render_mode(m))
+
+        # Separator + Parts option
+        menu.addSeparator()
+        parts_action = menu.addAction("■  Parts")
+        parts_action.setCheckable(True)
+        parts_action.setChecked(self.parts_mode_enabled)
+        parts_action.setEnabled(self.stl_loaded)
+        parts_action.triggered.connect(self._on_parts_selected)
 
         # Show below the button
         menu.exec_(self.render_mode_btn.mapToGlobal(
@@ -585,9 +598,8 @@ class ViewControlsToolbar(QWidget):
         """Set the render mode and update button appearance."""
         self.render_mode = mode
         icons = {'solid': '◇', 'wireframe': '◈', 'shaded': '◆'}
-        labels = {'solid': 'Solid', 'wireframe': 'Wireframe', 'shaded': 'Shaded'}
         self.render_mode_btn.set_icon(icons[mode])
-        self.render_mode_btn.set_label(f"{labels[mode]} ▼")
+        self.render_mode_btn.set_label("Visual Style ▼")
         self.render_mode_btn.set_active(mode != 'shaded')
         self.render_mode_changed.emit(mode)
     
@@ -834,7 +846,7 @@ class ViewControlsToolbar(QWidget):
         """Toggle draw mode on/off."""
         self.draw_mode_enabled = not self.draw_mode_enabled
         if self.draw_mode_enabled:
-            self.draw_btn.set_label("3Drawing ▼")
+            self.draw_btn.set_label("Drawing ▼")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
                 self.parts_btn.set_active(False)
@@ -859,7 +871,7 @@ class ViewControlsToolbar(QWidget):
     def _on_eraser_toggled(self):
         """Toggle eraser mode."""
         self._eraser_active = not self._eraser_active
-        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "3Drawing ▼")
+        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "Drawing ▼")
         self.draw_eraser_toggled.emit(self._eraser_active)
 
     def reset_draw_state(self):
