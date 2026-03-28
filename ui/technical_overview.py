@@ -623,11 +623,11 @@ class TechnicalAnnotationPanel(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #3A2020; border: none; border-radius: 13px;
+                background-color: #2A1518; border: none; border-radius: 13px;
                 color: #F87171; font-size: 14px; font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
-            QPushButton:hover {{ background-color: #4A2828; }}
+            QPushButton:hover {{ background-color: #351E22; }}
         """)
         del_btn.clicked.connect(lambda: self.annotation_deleted.emit(ann.id))
         layout.addWidget(del_btn, 0, Qt.AlignTop)

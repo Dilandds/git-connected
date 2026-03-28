@@ -581,7 +581,7 @@ class ScaleResultRow(QFrame):
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowComparison {{
-                            background-color: #4A3A28;
+                            background-color: #263520;
                             border-left: 4px solid #FB923C;
                             border-top: none;
                             border-right: none;
@@ -592,7 +592,7 @@ class ScaleResultRow(QFrame):
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowComparison {{
-                            background-color: #3A2E20;
+                            background-color: #1E2A18;
                             border-left: 4px solid #FB923C;
                             border-top: none;
                             border-right: none;

@@ -290,15 +290,15 @@ class AnnotationPopup(QDialog):
         delete_btn.setCursor(Qt.PointingHandCursor)
         delete_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #3A2020;
-                border: 1px solid #5A3030;
+                background-color: #2A1518;
+                border: 1px solid #3A2528;
                 border-radius: 6px;
                 padding: 8px 16px;
                 font-size: 12px;
                 color: #F87171;
             }}
             QPushButton:hover {{
-                background-color: #4A2828;
+                background-color: #351E22;
             }}
         """)
         delete_btn.clicked.connect(self._on_delete)
