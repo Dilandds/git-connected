@@ -122,13 +122,27 @@ class SidebarPanel(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(10, 10, 20, 10)
         
+        # Upload card (lighter than background)
+        upload_card = QFrame()
+        upload_card.setObjectName("uploadCard")
+        upload_card.setStyleSheet(f"""
+            QFrame#uploadCard {{
+                background-color: {default_theme.card_background};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 12px;
+            }}
+        """)
+        upload_card_layout = QVBoxLayout(upload_card)
+        upload_card_layout.setContentsMargins(16, 18, 16, 18)
+        upload_card_layout.setSpacing(10)
+        
         # Title label
         title_label = QLabel("ECTOFORM")
         title_label.setObjectName("titleLabel")
         title_font = make_font(size=16, bold=True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        upload_card_layout.addWidget(title_label)
         
         # Upload button
         self.upload_btn = QPushButton("Upload 3D File")
@@ -137,7 +151,7 @@ class SidebarPanel(QWidget):
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
         self.upload_btn.setToolTip("Upload STL, STEP, 3DM, OBJ, or IGES file for 3D visualization")
-        layout.addWidget(self.upload_btn)
+        upload_card_layout.addWidget(self.upload_btn)
         
         # Info label
         info_label = QLabel(
@@ -146,7 +160,9 @@ class SidebarPanel(QWidget):
         info_label.setObjectName("infoLabel")
         info_label.setAlignment(Qt.AlignCenter)
         info_label.setWordWrap(True)
-        layout.addWidget(info_label)
+        upload_card_layout.addWidget(info_label)
+        
+        layout.addWidget(upload_card)
         
         # Create sections
         self.dimensions_group = self.create_dimensions_section()
