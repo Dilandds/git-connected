@@ -22,52 +22,52 @@ class Theme:
     """Centralized theme with all color definitions."""
     
     # Background colors
-    background = '#F8FAFC'
-    card_background = '#F8FAFC'
+    background = '#1E1E2E'
+    card_background = '#2A2A3C'
     
     # Text colors
-    text_primary = '#0F172A'
-    text_secondary = '#475569'
-    text_title = '#1E293B'
-    text_subtext = '#64748B'
+    text_primary = '#E8E8F0'
+    text_secondary = '#A0A0B8'
+    text_title = '#F0F0F8'
+    text_subtext = '#8888A0'
     text_white = 'white'
     
     # Button colors
     button_primary = '#5294E2'
     button_primary_hover = '#4080D0'
     button_primary_pressed = '#3570B8'
-    button_default_bg = '#E2E8F0'
-    button_default_border = '#CBD5E1'
+    button_default_bg = '#3A3A4E'
+    button_default_border = '#4A4A60'
     
     # Row colors
-    row_bg_standard = '#F0F7FF'
-    row_bg_hover = '#E0E7FF'
-    row_bg_highlight = '#E0F7FA'
-    row_bg_highlight_hover = '#B2EBF2'
+    row_bg_standard = '#323244'
+    row_bg_hover = '#3C3C52'
+    row_bg_highlight = '#2A3A4A'
+    row_bg_highlight_hover = '#344A5A'
     
     # Border and separator colors
-    border_standard = '#E2E8F0'
-    border_light = '#D1D5DB'
-    border_medium = '#9CA3AF'
+    border_standard = '#3A3A4E'
+    border_light = '#4A4A60'
+    border_medium = '#5A5A70'
     border_highlight = '#2DA398'
-    separator = '#E0E6ED'
+    separator = '#3A3A4E'
     
     # Special colors
     icon_blue = '#4A90E2'
-    icon_info_gray = '#718096'
-    icon_warning = '#92400E'
-    scrollbar_handle = '#CBD5E1'
-    scrollbar_handle_hover = '#94A3B8'
-    combobox_arrow = '#6B7280'
+    icon_info_gray = '#8888A0'
+    icon_warning = '#F0A050'
+    scrollbar_handle = '#4A4A60'
+    scrollbar_handle_hover = '#5A5A70'
+    combobox_arrow = '#8888A0'
     
     # Footer colors
-    footer_warning_bg = '#FFFBEB'
-    footer_warning_border = '#FEF3C7'
+    footer_warning_bg = '#3A3020'
+    footer_warning_border = '#5A4A30'
     
     # Input colors
-    input_bg = '#FFFFFF'
-    input_border = '#D1D5DB'
-    input_border_hover = '#9CA3AF'
+    input_bg = '#2A2A3C'
+    input_border = '#4A4A60'
+    input_border_hover = '#5A5A70'
     
     def get_color(self, color_name):
         """Get color by name."""
@@ -291,7 +291,7 @@ def get_global_stylesheet(theme=None):
             border-radius: 8px;
         }}
         QFrame#scaleRowComparison {{
-            background-color: #FFF7ED;
+            background-color: #3A2E20;
             border-left: 4px solid #FB923C;
             border-radius: 8px;
         }}

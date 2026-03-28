@@ -473,10 +473,10 @@ class TechnicalAnnotationPanel(QWidget):
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2; border: 1px solid #FECACA;
-                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #DC2626;
+                background-color: #3A2020; border: 1px solid #5A3030;
+                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #F87171;
             }}
-            QPushButton:hover {{ background-color: #FECACA; }}
+            QPushButton:hover {{ background-color: #4A2828; }}
         """)
         clear_btn.clicked.connect(self._on_clear_all)
         btn_row.addWidget(clear_btn)
@@ -532,7 +532,7 @@ class TechnicalAnnotationPanel(QWidget):
         card.installEventFilter(self)
         card.setStyleSheet(f"""
             QFrame {{
-                background-color: #F0F7FF;
+                background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
             }}
@@ -623,11 +623,11 @@ class TechnicalAnnotationPanel(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2; border: none; border-radius: 13px;
-                color: #DC2626; font-size: 14px; font-weight: bold;
+                background-color: #3A2020; border: none; border-radius: 13px;
+                color: #F87171; font-size: 14px; font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
-            QPushButton:hover {{ background-color: #FECACA; }}
+            QPushButton:hover {{ background-color: #4A2828; }}
         """)
         del_btn.clicked.connect(lambda: self.annotation_deleted.emit(ann.id))
         layout.addWidget(del_btn, 0, Qt.AlignTop)

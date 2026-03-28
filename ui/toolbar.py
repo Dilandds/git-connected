@@ -1096,9 +1096,9 @@ class ViewControlsToolbar(QWidget):
 
         tooltip_style = """
             QToolTip {
-                background-color: #ffffff;
-                color: #000000;
-                border: 1px solid #cccccc;
+                background-color: #2A2A3C;
+                color: #E8E8F0;
+                border: 1px solid #4A4A60;
                 padding: 4px 8px;
                 border-radius: 4px;
                 font-size: 11px;

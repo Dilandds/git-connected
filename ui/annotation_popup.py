@@ -68,16 +68,16 @@ class ImageThumbnail(QFrame):
         remove_btn.setCursor(Qt.PointingHandCursor)
         remove_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
+                background-color: #3A2020;
                 border: none;
                 border-radius: 13px;
-                color: #DC2626;
+                color: #F87171;
                 font-size: 14px;
                 font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
+                background-color: #4A2828;
             }}
         """)
         remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.image_path))
@@ -290,15 +290,15 @@ class AnnotationPopup(QDialog):
         delete_btn.setCursor(Qt.PointingHandCursor)
         delete_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                border: 1px solid #FECACA;
+                background-color: #3A2020;
+                border: 1px solid #5A3030;
                 border-radius: 6px;
                 padding: 8px 16px;
                 font-size: 12px;
-                color: #DC2626;
+                color: #F87171;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
+                background-color: #4A2828;
             }}
         """)
         delete_btn.clicked.connect(self._on_delete)

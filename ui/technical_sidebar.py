@@ -255,13 +255,13 @@ class TechnicalSidebar(QWidget):
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #EF4444;
+                background-color: #B91C1C;
                 border: none; border-radius: 6px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
             QPushButton:hover {{
-                background-color: #DC2626;
+                background-color: #991B1B;
             }}
         """)
         self.reset_btn.clicked.connect(lambda: self.reset_requested.emit())
@@ -371,11 +371,11 @@ class TechnicalSidebar(QWidget):
         rm_btn.setCursor(Qt.PointingHandCursor)
         rm_btn.setStyleSheet("""
             QPushButton {
-                background-color: #FEE2E2; border: none; border-radius: 13px;
-                color: #DC2626; font-size: 14px; font-weight: bold;
+                background-color: #3A2020; border: none; border-radius: 13px;
+                color: #F87171; font-size: 14px; font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }
-            QPushButton:hover { background-color: #FECACA; }
+            QPushButton:hover { background-color: #4A2828; }
         """)
         rm_btn.clicked.connect(lambda: self._remove_manufacturer_row(row, le))
         rl.addWidget(rm_btn)
