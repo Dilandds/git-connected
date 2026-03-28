@@ -142,6 +142,7 @@ class SidebarPanel(QWidget):
         title_font = make_font(size=16, bold=True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
         upload_card_layout.addWidget(title_label)
         
         # Upload button
@@ -160,7 +161,7 @@ class SidebarPanel(QWidget):
         info_label.setObjectName("infoLabel")
         info_label.setAlignment(Qt.AlignCenter)
         info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_subtext};")
+        info_label.setStyleSheet("background: transparent; border: none; color: white;")
         upload_card_layout.addWidget(info_label)
         
         layout.addWidget(upload_card)
