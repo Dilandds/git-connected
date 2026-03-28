@@ -39,12 +39,12 @@ class Theme:
     button_primary = '#2596BE'
     button_primary_hover = '#1E7FA3'
     button_primary_pressed = '#186A8A'
-    button_default_bg = '#1A3448'
-    button_default_border = '#244A62'
+    button_default_bg = '#2e323a'
+    button_default_border = '#3a3e48'
     
     # Row colors
-    row_bg_standard = '#162D40'
-    row_bg_hover = '#1E3A52'
+    row_bg_standard = '#2a2e34'
+    row_bg_hover = '#32363e'
     row_bg_highlight = '#1A3A50'
     row_bg_highlight_hover = '#22485E'
     
