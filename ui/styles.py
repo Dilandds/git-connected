@@ -49,11 +49,11 @@ class Theme:
     row_bg_highlight_hover = '#364048'
     
     # Border and separator colors
-    border_standard = '#1E3A52'
-    border_light = '#244A62'
-    border_medium = '#2E5A72'
+    border_standard = '#32363e'
+    border_light = '#3a3e48'
+    border_medium = '#4a4e58'
     border_highlight = '#2596BE'
-    separator = '#1E3A52'
+    separator = '#32363e'
     
     # Special colors
     icon_blue = '#2596BE'
