@@ -263,8 +263,8 @@ class AnnotationCard(QFrame):
                 padding: 0; min-width: 28px; min-height: 28px;
             }}
             QPushButton:hover {{
-                background-color: #FEE2E2;
-                color: #DC2626;
+                background-color: #3A2020;
+                color: #F87171;
                 border-radius: 14px;
             }}
         """)
