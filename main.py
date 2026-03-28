@@ -145,13 +145,13 @@ def main():
         # Create default splash if image not found
         if splash_pixmap is None or splash_pixmap.isNull():
             splash_pixmap = QPixmap(600, 450)
-            splash_pixmap.fill(QColor("#1E1E2E"))
+            splash_pixmap.fill(QColor("#0D1B2A"))
         
         splash = QSplashScreen(splash_pixmap, QtCore.WindowStaysOnTopHint)
         splash.setStyleSheet("""
             QSplashScreen {
-                background-color: #1E1E2E;
-                color: #E8E8F0;
+                background-color: #0D1B2A;
+                color: #E0ECF4;
                 font-size: 14px;
                 font-weight: 500;
             }

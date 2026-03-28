@@ -179,7 +179,10 @@ class STLViewerWindow(QMainWindow):
         mode_bar.setFixedHeight(36)
         mode_bar.setStyleSheet(f"""
             QWidget {{
-                background-color: {default_theme.card_background};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {default_theme.gradient_start},
+                    stop:0.5 {default_theme.gradient_mid},
+                    stop:1 {default_theme.gradient_end});
                 border-bottom: 1px solid {default_theme.border_standard};
             }}
         """)
