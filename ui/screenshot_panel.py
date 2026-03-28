@@ -52,7 +52,7 @@ class ScreenshotCard(QFrame):
         self.name_edit = QLineEdit(f"Screenshot {index + 1}")
         self.name_edit.setStyleSheet(f"""
             QLineEdit {{
-                color: {default_theme.text_primary};
+                color: {default_theme.text_light};
                 font-weight: bold;
                 font-size: 12px;
                 background: transparent;
