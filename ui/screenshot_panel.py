@@ -89,8 +89,8 @@ class ScreenshotCard(QFrame):
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
-                color: {default_theme.text_primary};
+                background-color: #3a3e48;
+                color: {default_theme.text_light};
             }}
         """)
         close_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
