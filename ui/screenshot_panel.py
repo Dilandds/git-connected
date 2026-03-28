@@ -266,7 +266,7 @@ class ScreenshotPanel(QWidget):
         self.cards = []        # list of ScreenshotCard widgets
         self.setMinimumWidth(280)
         self.setMaximumWidth(350)  # Match annotation panel width
-        self.setStyleSheet(f"background-color: {default_theme.card_background};")
+        self.setStyleSheet(f"background-color: {default_theme.background};")
         self._init_ui()
 
     def _init_ui(self):
