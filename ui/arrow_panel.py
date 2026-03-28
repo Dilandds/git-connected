@@ -158,7 +158,7 @@ class ArrowPanel(QWidget):
         icon_lbl.setAlignment(Qt.AlignCenter)
         header.addWidget(icon_lbl)
         title = QLabel("Arrows")
-        title.setStyleSheet(f"color: {default_theme.text_title}; font-size: 14px; font-weight: bold; border: none; background: transparent;")
+        title.setStyleSheet(f"color: {default_theme.text_light}; font-size: 14px; font-weight: bold; border: none; background: transparent;")
         header.addWidget(title)
         header.addStretch()
         exit_btn = QPushButton("\u00D7")  # Multiplication sign (×) - renders cleaner than ✕

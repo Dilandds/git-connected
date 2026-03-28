@@ -569,7 +569,7 @@ class AnnotationPanel(QWidget):
             }}
             QPushButton:disabled {{
                 background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_secondary};
+                color: {default_theme.text_light_secondary};
             }}
         """)
         self.clear_btn.clicked.connect(self._on_clear_all)
