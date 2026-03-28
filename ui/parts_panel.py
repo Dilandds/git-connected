@@ -90,8 +90,8 @@ class PartCard(QFrame):
         else:
             border_color = f"{default_theme.button_primary}40" if self.is_group else default_theme.border_standard
             self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.row_bg_standard}; border: 1px solid {border_color}; border-radius: 6px; }}
-                QFrame:hover {{ background-color: {default_theme.row_bg_hover}; }}
+                QFrame {{ background-color: #2e323a; border: 1px solid {border_color}; border-radius: 6px; }}
+                QFrame:hover {{ background-color: #3a3e48; }}
             """)
 
     def set_selected(self, selected: bool):
