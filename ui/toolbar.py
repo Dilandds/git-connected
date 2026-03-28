@@ -871,7 +871,7 @@ class ViewControlsToolbar(QWidget):
     def _on_eraser_toggled(self):
         """Toggle eraser mode."""
         self._eraser_active = not self._eraser_active
-        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "3Drawing ▼")
+        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "Drawing ▼")
         self.draw_eraser_toggled.emit(self._eraser_active)
 
     def reset_draw_state(self):
