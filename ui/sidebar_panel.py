@@ -142,6 +142,7 @@ class SidebarPanel(QWidget):
         title_font = make_font(size=16, bold=True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
         upload_card_layout.addWidget(title_label)
         
         # Upload button
