@@ -473,10 +473,10 @@ class TechnicalAnnotationPanel(QWidget):
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #3A2020; border: 1px solid #5A3030;
+                background-color: #2A1518; border: 1px solid #3A2528;
                 border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #F87171;
             }}
-            QPushButton:hover {{ background-color: #4A2828; }}
+            QPushButton:hover {{ background-color: #351E22; }}
         """)
         clear_btn.clicked.connect(self._on_clear_all)
         btn_row.addWidget(clear_btn)
