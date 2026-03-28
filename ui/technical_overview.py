@@ -532,7 +532,7 @@ class TechnicalAnnotationPanel(QWidget):
         card.installEventFilter(self)
         card.setStyleSheet(f"""
             QFrame {{
-                background-color: #F0F7FF;
+                background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
             }}
