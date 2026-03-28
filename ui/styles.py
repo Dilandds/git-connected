@@ -45,8 +45,8 @@ class Theme:
     # Row colors
     row_bg_standard = '#2a2e34'
     row_bg_hover = '#32363e'
-    row_bg_highlight = '#1A3A50'
-    row_bg_highlight_hover = '#22485E'
+    row_bg_highlight = '#2e3840'
+    row_bg_highlight_hover = '#364048'
     
     # Border and separator colors
     border_standard = '#1E3A52'
