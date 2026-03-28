@@ -132,7 +132,7 @@ def get_global_stylesheet(theme=None):
         /* General QPushButton style - default, won't override specific buttons */
         QPushButton {{
             background-color: {theme.button_default_bg};
-            color: {theme.text_title};
+            color: {theme.text_light};
             border: 1px solid {theme.button_default_border};
             border-radius: 6px;
             padding: 8px 16px;
