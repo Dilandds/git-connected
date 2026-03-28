@@ -439,8 +439,8 @@ class AnnotationPanel(QWidget):
         header = QFrame()
         header.setStyleSheet("""
             QFrame {
-                background-color: #FFC90E;
-                border: 1px solid #E5B80A;
+                background-color: #3A3520;
+                border: 1px solid #5A5030;
                 border-radius: 8px;
             }
         """)

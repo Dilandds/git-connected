@@ -291,7 +291,7 @@ def get_global_stylesheet(theme=None):
             border-radius: 8px;
         }}
         QFrame#scaleRowComparison {{
-            background-color: #FFF7ED;
+            background-color: #3A2E20;
             border-left: 4px solid #FB923C;
             border-radius: 8px;
         }}

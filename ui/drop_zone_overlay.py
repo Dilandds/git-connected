@@ -31,7 +31,7 @@ class DropZoneOverlay(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setStyleSheet("""
             DropZoneOverlay {
-                background-color: #ffffff;
+                background-color: #1E1E2E;
             }
         """)
         
