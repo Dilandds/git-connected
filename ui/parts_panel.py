@@ -81,7 +81,7 @@ class PartCard(QFrame):
     def _update_style(self):
         if self._is_selected:
             self.setStyleSheet(f"""
-                QFrame {{ background-color: {default_theme.row_bg_hover}; border: 2px solid {default_theme.button_primary}; border-radius: 6px; }}
+                QFrame {{ background-color: #3a3e48; border: 2px solid {default_theme.button_primary}; border-radius: 6px; }}
             """)
         elif not self._is_visible:
             self.setStyleSheet(f"""
