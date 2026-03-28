@@ -161,7 +161,7 @@ class SidebarPanel(QWidget):
         info_label.setObjectName("infoLabel")
         info_label.setAlignment(Qt.AlignCenter)
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("background: transparent; border: none; color: white;")
+        info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_subtext};")
         upload_card_layout.addWidget(info_label)
         
         layout.addWidget(upload_card)
