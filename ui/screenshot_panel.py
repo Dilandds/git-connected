@@ -296,7 +296,7 @@ class ScreenshotPanel(QWidget):
                 padding: 0; min-width: 28px; min-height: 28px;
             }}
             QPushButton#exitScreenshotBtn:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background-color: #3a3e48;
             }}
         """)
         exit_btn.clicked.connect(self.exit_screenshot_mode.emit)
