@@ -81,7 +81,7 @@ class ScreenshotCard(QFrame):
         close_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
-                color: {default_theme.text_secondary};
+                color: {default_theme.text_light_secondary};
                 border: none;
                 border-radius: 4px;
                 font-size: 14px;
