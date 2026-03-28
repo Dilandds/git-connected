@@ -308,7 +308,7 @@ class ScreenshotPanel(QWidget):
             "Draw a rectangle to capture. Use the zoom buttons to zoom."
         )
         self.instruction.setWordWrap(True)
-        self.instruction.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px; background: transparent;")
+        self.instruction.setStyleSheet(f"color: {default_theme.text_light_secondary}; font-size: 11px; background: transparent;")
         layout.addWidget(self.instruction)
 
         # Scroll area for cards
