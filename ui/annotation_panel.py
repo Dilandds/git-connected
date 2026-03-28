@@ -482,7 +482,7 @@ class AnnotationPanel(QWidget):
             }}
             QPushButton:hover {{
                 color: {default_theme.text_light};
-                background-color: {default_theme.row_bg_hover};
+                background-color: #3a3e48;
                 border-radius: 14px;
             }}
         """)
