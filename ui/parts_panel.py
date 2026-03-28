@@ -57,7 +57,7 @@ class PartCard(QFrame):
         info_layout.setSpacing(0)
 
         self.name_label = QLabel(name)
-        self.name_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 13px; font-weight: 500; border: none; background: transparent;")
+        self.name_label.setStyleSheet(f"color: {default_theme.text_light}; font-size: 13px; font-weight: 500; border: none; background: transparent;")
         info_layout.addWidget(self.name_label)
 
         meta_parts = []
