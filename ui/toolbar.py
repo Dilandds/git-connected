@@ -481,6 +481,14 @@ class ViewControlsToolbar(QWidget):
         self.theme_btn.set_active(self.dark_theme)
         self.toggle_theme.emit()
     
+    def _get_parts_icon_path(self):
+        """Return path to the black parts icon."""
+        if getattr(sys, 'frozen', False):
+            base = sys._MEIPASS
+        else:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, 'assets', 'parts_icon_black.png')
+
     def _show_render_mode_menu(self):
         """Show dropdown menu for render mode and parts selection."""
         menu = QMenu(self)
