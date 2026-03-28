@@ -482,7 +482,7 @@ class ViewControlsToolbar(QWidget):
         self.toggle_theme.emit()
     
     def _show_render_mode_menu(self):
-        """Show dropdown menu for render mode selection."""
+        """Show dropdown menu for render mode and parts selection."""
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -502,6 +502,11 @@ class ViewControlsToolbar(QWidget):
             QMenu::item:checked {{
                 font-weight: bold;
             }}
+            QMenu::separator {{
+                height: 1px;
+                background: {default_theme.border_standard};
+                margin: 4px 8px;
+            }}
         """)
 
         modes = [
@@ -514,6 +519,14 @@ class ViewControlsToolbar(QWidget):
             action.setCheckable(True)
             action.setChecked(self.render_mode == mode_id)
             action.triggered.connect(lambda checked, m=mode_id: self._set_render_mode(m))
+
+        # Separator + Parts option
+        menu.addSeparator()
+        parts_action = menu.addAction("■  Parts")
+        parts_action.setCheckable(True)
+        parts_action.setChecked(self.parts_mode_enabled)
+        parts_action.setEnabled(self.stl_loaded)
+        parts_action.triggered.connect(self._on_parts_selected)
 
         # Show below the button
         menu.exec_(self.render_mode_btn.mapToGlobal(
