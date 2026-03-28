@@ -522,7 +522,11 @@ class ViewControlsToolbar(QWidget):
 
         # Separator + Parts option
         menu.addSeparator()
-        parts_action = menu.addAction("■  Parts")
+        parts_icon_path = self._get_parts_icon_path()
+        if parts_icon_path and os.path.exists(parts_icon_path):
+            parts_action = menu.addAction(QIcon(parts_icon_path), "Parts")
+        else:
+            parts_action = menu.addAction("■  Parts")
         parts_action.setCheckable(True)
         parts_action.setChecked(self.parts_mode_enabled)
         parts_action.setEnabled(self.stl_loaded)
