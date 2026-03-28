@@ -462,7 +462,7 @@ class ScaleResultRow(QFrame):
             self.setObjectName("scaleRowComparison")
             self.setStyleSheet(f"""
                 QFrame#scaleRowComparison {{
-                    background-color: #FFF7ED;
+                    background-color: #3A2E20;
                     border-left: 4px solid #FB923C;
                     border-top: none;
                     border-right: none;
