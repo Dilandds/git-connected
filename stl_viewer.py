@@ -366,7 +366,7 @@ class STLViewerWindow(QMainWindow):
                 border: 1px solid {default_theme.border_light};
                 border-radius: 4px;
                 padding: 4px 14px; font-size: 11px;
-                color: {default_theme.text_secondary};
+                color: {default_theme.text_light_secondary};
             }}
             QPushButton:hover {{
                 background-color: {default_theme.row_bg_hover};
