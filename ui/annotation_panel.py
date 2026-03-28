@@ -557,7 +557,7 @@ class AnnotationPanel(QWidget):
         self.clear_btn.setEnabled(False)
         self.clear_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {default_theme.row_bg_standard};
+                background-color: {default_theme.button_default_bg};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
                 padding: 6px 12px;
