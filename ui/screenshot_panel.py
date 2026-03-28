@@ -60,9 +60,9 @@ class ScreenshotCard(QFrame):
                 padding: 2px 4px;
             }}
             QLineEdit:focus {{
-                border: 1px solid {default_theme.border_medium};
+                border: 1px solid #4a4e58;
                 border-radius: 4px;
-                background: white;
+                background: #2a2e34;
             }}
         """)
         self.name_edit.setPlaceholderText("Name")
