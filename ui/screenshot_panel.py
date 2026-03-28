@@ -288,7 +288,7 @@ class ScreenshotPanel(QWidget):
         exit_btn.setStyleSheet(f"""
             QPushButton#exitScreenshotBtn {{
                 background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_secondary};
+                color: {default_theme.text_light_secondary};
                 border: none;
                 border-radius: 14px;
                 font-size: 16px;
