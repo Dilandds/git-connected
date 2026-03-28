@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
-from PyQt5.QtGui import QFont, QFontMetrics, QPixmap
+from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QIcon
 from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
