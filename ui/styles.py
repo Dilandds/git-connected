@@ -215,7 +215,7 @@ def get_global_stylesheet(theme=None):
             border-radius: 8px;
         }}
         QFrame#surfaceFooter {{
-            background-color: {theme.background};
+            background-color: {theme.row_bg_standard};
             border: 1px solid {theme.border_standard};
             border-radius: 6px;
         }}
