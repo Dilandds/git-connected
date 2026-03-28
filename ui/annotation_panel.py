@@ -565,7 +565,7 @@ class AnnotationPanel(QWidget):
                 color: {default_theme.text_light};
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background-color: #3a3e48;
             }}
             QPushButton:disabled {{
                 background-color: {default_theme.button_default_bg};
