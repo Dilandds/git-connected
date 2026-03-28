@@ -463,7 +463,7 @@ class AnnotationPanel(QWidget):
         title_label = QLabel("anotation mode")
         title_font = make_font(size=12, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title};")
+        title_label.setStyleSheet(f"color: {default_theme.text_light};")
         title_row.addWidget(title_label)
         title_row.addStretch()
         
