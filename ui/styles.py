@@ -135,21 +135,33 @@ def get_global_stylesheet(theme=None):
             padding: 8px 16px;
             font-size: 14px;
         }}
-        /* Specific upload button - highest specificity, must come after general QPushButton */
+        /* Specific upload button - glossy blue with rounded corners */
         QPushButton#uploadBtn {{
-            background-color: {theme.button_primary};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #5DADE2,
+                stop:0.4 #3B8ED0,
+                stop:0.6 #2E78B8,
+                stop:1 #1A5F9E);
             color: {theme.text_white};
-            border: none;
-            border-radius: 8px;
+            border: 1px solid #1A5F9E;
+            border-radius: 22px;
             padding: 12px 20px;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
         }}
         QPushButton#uploadBtn:hover {{
-            background-color: {theme.button_primary_hover};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #6BB8E8,
+                stop:0.4 #4A9AD8,
+                stop:0.6 #3888C8,
+                stop:1 #2068A8);
         }}
         QPushButton#uploadBtn:pressed {{
-            background-color: {theme.button_primary_pressed};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #2E78B8,
+                stop:0.4 #1A5F9E,
+                stop:0.6 #155288,
+                stop:1 #104572);
         }}
         /* Specific label styles - must come before general QLabel to override */
         QLabel#titleLabel {{
