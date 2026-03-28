@@ -228,13 +228,13 @@ class PartsPanel(QWidget):
         btn.setFixedHeight(28)
         btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_standard};
+                background-color: {default_theme.button_default_bg};
+                color: {default_theme.text_light};
+                border: 1px solid {default_theme.button_default_border};
                 border-radius: 6px; font-size: 10px;
             }}
-            QPushButton:hover {{ background-color: {default_theme.row_bg_hover}; }}
-            QPushButton:disabled {{ color: {default_theme.text_subtext}; background-color: {default_theme.background}; }}
+            QPushButton:hover {{ background-color: #3a3e48; }}
+            QPushButton:disabled {{ color: {default_theme.text_light_secondary}; background-color: {default_theme.background}; }}
         """)
         return btn
 
