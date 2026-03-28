@@ -181,7 +181,7 @@ class ScreenshotCard(QFrame):
         """Show a full-size preview dialog of the screenshot."""
         dialog = QDialog(self.window())
         dialog.setWindowTitle(self.name_edit.text().strip() or f"Screenshot {self.index + 1}")
-        dialog.setStyleSheet(f"background-color: {default_theme.card_background};")
+        dialog.setStyleSheet(f"background-color: {default_theme.background};")
 
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(10, 10, 10, 10)
