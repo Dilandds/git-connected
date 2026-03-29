@@ -1,12 +1,12 @@
 """
-Screenshot panel — displays captured screenshots with Delete / Save actions.
+Screenshot panel — displays captured screenshots in a 2-column grid with Delete / Save actions.
 """
 import logging
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
-    QDialog, QApplication, QLineEdit
+    QDialog, QApplication, QLineEdit, QGridLayout
 )
 from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -15,12 +15,14 @@ from ui.styles import default_theme, FONTS
 
 logger = logging.getLogger(__name__)
 
+GRID_COLUMNS = 2
+
 
 class ScreenshotCard(QFrame):
-    """A card displaying a screenshot thumbnail with Delete / Save buttons."""
+    """A compact card displaying a screenshot thumbnail with Delete / Save buttons."""
 
-    delete_requested = pyqtSignal(int)  # card index
-    save_requested = pyqtSignal(int)    # card index
+    delete_requested = pyqtSignal(int)
+    save_requested = pyqtSignal(int)
 
     def __init__(self, index: int, pixmap: QPixmap, timestamp: str, parent=None):
         super().__init__(parent)
@@ -40,42 +42,42 @@ class ScreenshotCard(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
 
-        # Header row: camera icon + editable name + timestamp + close button
+        # Header row: camera icon + name + timestamp + close
         header = QHBoxLayout()
-        header.setSpacing(6)
-        cam_label = QLabel("📷 ")
-        cam_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 12px; background: transparent;")
+        header.setSpacing(2)
+        cam_label = QLabel("📷")
+        cam_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
         header.addWidget(cam_label)
         self.name_edit = QLineEdit(f"Screenshot {index + 1}")
         self.name_edit.setStyleSheet(f"""
             QLineEdit {{
                 color: {default_theme.text_primary};
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 10px;
                 background: transparent;
                 border: none;
-                padding: 2px 4px;
+                padding: 1px 2px;
             }}
             QLineEdit:focus {{
                 border: 1px solid {default_theme.border_medium};
-                border-radius: 4px;
+                border-radius: 3px;
                 background: white;
             }}
         """)
         self.name_edit.setPlaceholderText("Name")
         self.name_edit.setCursor(Qt.IBeamCursor)
-        self.name_edit.setMinimumWidth(80)
         self.name_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         header.addWidget(self.name_edit)
-        header.addStretch()
+
         ts_label = QLabel(timestamp)
-        ts_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; background: transparent;")
+        ts_label.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 8px; background: transparent;")
         header.addWidget(ts_label)
+
         close_btn = QPushButton("✕")
-        close_btn.setFixedSize(26, 26)
+        close_btn.setFixedSize(20, 20)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setToolTip("Remove screenshot")
         close_btn.setStyleSheet(f"""
@@ -83,10 +85,10 @@ class ScreenshotCard(QFrame):
                 background-color: transparent;
                 color: {default_theme.text_secondary};
                 border: none;
-                border-radius: 4px;
-                font-size: 14px;
+                border-radius: 3px;
+                font-size: 11px;
                 font-weight: bold;
-                padding: 0; min-width: 26px; min-height: 26px;
+                padding: 0; min-width: 20px; min-height: 20px;
             }}
             QPushButton:hover {{
                 background-color: {default_theme.row_bg_hover};
@@ -97,24 +99,22 @@ class ScreenshotCard(QFrame):
         header.addWidget(close_btn)
         layout.addLayout(header)
 
-        # Thumbnail — fit entire image within the card width
+        # Square thumbnail
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
-        self.thumb_label.setStyleSheet("background: transparent; cursor: pointer;")
+        self.thumb_label.setStyleSheet("background: transparent;")
         self.thumb_label.setCursor(Qt.PointingHandCursor)
-        self.thumb_label.setMinimumHeight(80)
-        self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.thumb_label.setMinimumSize(60, 60)
+        self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._update_thumbnail()
         layout.addWidget(self.thumb_label)
 
-        # Action buttons (always visible)
-        self.actions_widget = QWidget()
-        self.actions_widget.setStyleSheet("background: transparent;")
-        actions_layout = QHBoxLayout(self.actions_widget)
-        actions_layout.setContentsMargins(0, 4, 0, 0)
-        actions_layout.setSpacing(8)
+        # Action buttons
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 2, 0, 0)
+        actions.setSpacing(4)
 
-        self.delete_btn = QPushButton("🗑  Delete")
+        self.delete_btn = QPushButton("🗑 Delete")
         self.delete_btn.setObjectName("screenshotDeleteBtn")
         self.delete_btn.setCursor(Qt.PointingHandCursor)
         self.delete_btn.setStyleSheet(f"""
@@ -122,9 +122,9 @@ class ScreenshotCard(QFrame):
                 background-color: #FEE2E2;
                 color: #DC2626;
                 border: 1px solid #FECACA;
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 11px;
+                border-radius: 5px;
+                padding: 3px 6px;
+                font-size: 9px;
                 font-weight: bold;
             }}
             QPushButton#screenshotDeleteBtn:hover {{
@@ -132,9 +132,9 @@ class ScreenshotCard(QFrame):
             }}
         """)
         self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
-        actions_layout.addWidget(self.delete_btn)
+        actions.addWidget(self.delete_btn)
 
-        self.save_btn = QPushButton("💾  Save")
+        self.save_btn = QPushButton("💾 Save")
         self.save_btn.setObjectName("screenshotSaveBtn")
         self.save_btn.setCursor(Qt.PointingHandCursor)
         self.save_btn.setStyleSheet(f"""
@@ -142,9 +142,9 @@ class ScreenshotCard(QFrame):
                 background-color: #D1FAE5;
                 color: #059669;
                 border: 1px solid #A7F3D0;
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 11px;
+                border-radius: 5px;
+                padding: 3px 6px;
+                font-size: 9px;
                 font-weight: bold;
             }}
             QPushButton#screenshotSaveBtn:hover {{
@@ -152,17 +152,13 @@ class ScreenshotCard(QFrame):
             }}
         """)
         self.save_btn.clicked.connect(lambda: self.save_requested.emit(self.index))
-        actions_layout.addWidget(self.save_btn)
+        actions.addWidget(self.save_btn)
 
-        # Center the buttons as a group
-        actions_layout.insertStretch(0, 1)
-        actions_layout.addStretch(1)
-        layout.addWidget(self.actions_widget)
+        layout.addLayout(actions)
 
     def _update_thumbnail(self):
-        # Scale to fit the full card width while showing entire image
-        card_width = max(self.width() - 20, 220)
-        scaled = self.pixmap.scaled(card_width, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        card_w = max(self.width() - 16, 80)
+        scaled = self.pixmap.scaled(card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.thumb_label.setPixmap(scaled)
 
     def resizeEvent(self, event):
@@ -171,7 +167,6 @@ class ScreenshotCard(QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            # Click on thumbnail → show preview
             thumb_pos = self.thumb_label.mapFrom(self, event.pos())
             if self.thumb_label.rect().contains(thumb_pos):
                 self._show_preview()
@@ -189,7 +184,6 @@ class ScreenshotCard(QFrame):
         img_label = QLabel()
         img_label.setAlignment(Qt.AlignCenter)
 
-        # Scale to fit screen while keeping aspect ratio
         screen = QApplication.primaryScreen()
         if screen:
             screen_size = screen.availableGeometry()
@@ -202,7 +196,6 @@ class ScreenshotCard(QFrame):
         img_label.setPixmap(scaled)
         layout.addWidget(img_label)
 
-        # Action buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
@@ -256,7 +249,7 @@ class ScreenshotCard(QFrame):
 
 
 class ScreenshotPanel(QWidget):
-    """Right-side panel listing captured screenshots."""
+    """Right-side panel listing captured screenshots in a 2-column grid."""
 
     exit_screenshot_mode = pyqtSignal()
 
@@ -265,7 +258,7 @@ class ScreenshotPanel(QWidget):
         self.screenshots = []  # list of (QPixmap, timestamp_str)
         self.cards = []        # list of ScreenshotCard widgets
         self.setMinimumWidth(280)
-        self.setMaximumWidth(350)  # Match annotation panel width
+        self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
         self._init_ui()
 
@@ -276,7 +269,7 @@ class ScreenshotPanel(QWidget):
 
         # Header
         header = QHBoxLayout()
-        title = QLabel("📷  Screenshot mode")
+        title = QLabel("📷  Screenshots")
         title.setStyleSheet(f"color: {default_theme.text_title}; font-weight: bold; font-size: 14px; background: transparent;")
         header.addWidget(title)
         header.addStretch()
@@ -305,13 +298,13 @@ class ScreenshotPanel(QWidget):
 
         # Instruction
         self.instruction = QLabel(
-            "Draw a rectangle to capture. Use the zoom buttons to zoom."
+            "Draw a square on the model to capture a screenshot."
         )
         self.instruction.setWordWrap(True)
         self.instruction.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px; background: transparent;")
         layout.addWidget(self.instruction)
 
-        # Scroll area for cards
+        # Scroll area with grid
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -319,10 +312,9 @@ class ScreenshotPanel(QWidget):
 
         self.cards_container = QWidget()
         self.cards_container.setStyleSheet("background: transparent;")
-        self.cards_layout = QVBoxLayout(self.cards_container)
-        self.cards_layout.setContentsMargins(0, 0, 0, 0)
-        self.cards_layout.setSpacing(8)
-        self.cards_layout.addStretch()
+        self.grid_layout = QGridLayout(self.cards_container)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(6)
 
         scroll.setWidget(self.cards_container)
         layout.addWidget(scroll, 1)
@@ -348,6 +340,17 @@ class ScreenshotPanel(QWidget):
         self.clear_btn.hide()
         layout.addWidget(self.clear_btn)
 
+    def _rebuild_grid(self):
+        """Rebuild the grid layout from the cards list."""
+        # Remove all items from grid (without deleting widgets)
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+        # Re-add cards in 2-column grid
+        for i, card in enumerate(self.cards):
+            row = i // GRID_COLUMNS
+            col = i % GRID_COLUMNS
+            self.grid_layout.addWidget(card, row, col)
+
     # ---- public API ----
 
     def add_screenshot(self, pixmap: QPixmap):
@@ -361,15 +364,18 @@ class ScreenshotPanel(QWidget):
         card.save_requested.connect(self._on_save)
         self.cards.append(card)
 
-        # Insert before the stretch
-        self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
+        # Add to grid
+        row = idx // GRID_COLUMNS
+        col = idx % GRID_COLUMNS
+        self.grid_layout.addWidget(card, row, col)
+
         self.clear_btn.setVisible(len(self.screenshots) > 0)
         self.instruction.setVisible(len(self.screenshots) == 0)
 
     def clear_all(self):
         """Remove all screenshots."""
         for card in self.cards:
-            self.cards_layout.removeWidget(card)
+            self.grid_layout.removeWidget(card)
             card.deleteLater()
         self.cards.clear()
         self.screenshots.clear()
@@ -385,11 +391,12 @@ class ScreenshotPanel(QWidget):
         if 0 <= index < len(self.cards):
             card = self.cards.pop(index)
             self.screenshots.pop(index)
-            self.cards_layout.removeWidget(card)
+            self.grid_layout.removeWidget(card)
             card.deleteLater()
             # Re-index remaining cards
             for i, c in enumerate(self.cards):
                 c.update_index(i)
+            self._rebuild_grid()
             self.clear_btn.setVisible(len(self.screenshots) > 0)
             self.instruction.setVisible(len(self.screenshots) == 0)
             logger.info(f"Screenshot {index} deleted")
@@ -398,7 +405,6 @@ class ScreenshotPanel(QWidget):
         if index < 0 or index >= len(self.screenshots):
             return
         pixmap, _ = self.screenshots[index]
-        # Use card's name as suggested filename (sanitize for filesystem)
         if index < len(self.cards):
             raw = self.cards[index].name_edit.text().strip()
             suggested = "".join(c for c in raw if c not in r'\/:*?"<>|') if raw else f"Screenshot {index + 1}"
