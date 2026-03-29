@@ -1065,6 +1065,10 @@ class ViewControlsToolbar(QWidget):
         self.fullscreen_btn.set_active(self.is_fullscreen)
         self.toggle_fullscreen.emit()
 
+    def _on_convert_clicked(self):
+        """Handle convert button click."""
+        self.open_converter.emit()
+
     def _sync_2d_views_button(self):
         """Keep label '2D Views ▼'; icon reflects current orthographic view."""
         icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
