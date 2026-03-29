@@ -692,7 +692,7 @@ class STLViewerWindow(QMainWindow):
             self.sidebar_panel.update_annotation_count(count)
         else:
             self.sidebar_panel.reset_all_data()
-            self.sidebar_panel.set_conversion_blocked(False)
+            
         
         # Update toolbar state
         has_file = tab.file_path is not None
