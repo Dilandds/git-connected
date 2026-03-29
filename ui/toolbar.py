@@ -115,6 +115,27 @@ class _PartsMenuRow(QWidget):
         super().mousePressEvent(event)
 
 
+# Toolbar chips: white background + black labels (selected tab uses dark style in styles.py)
+_TB_BG = "#ffffff"
+_TB_FG = "#000000"
+_TB_HOVER = "#f0f0f0"
+_TB_BORDER = "#d0d0d0"
+
+
+def _toolbar_label_font(size=10):
+    """Font for toolbar button text; Windows often renders small labels too thin — use bold there."""
+    f = make_font(size=size)
+    if sys.platform == 'win32':
+        f.setBold(True)
+    return f
+
+
+def _toolbar_label_style(color: str, size: int = 10) -> str:
+    """QLabel stylesheet for toolbar text; bold on Windows so QSS matches QFont."""
+    w = 'font-weight: bold;' if sys.platform == 'win32' else ''
+    return f'color: {color}; font-size: {size}px; background: transparent; {w}'
+
+
 class ToolbarButton(QPushButton):
     """A styled toolbar button with icon and text."""
     
@@ -133,7 +154,7 @@ class ToolbarButton(QPushButton):
         
         # Icon (image or emoji)
         self.icon_label = QLabel()
-        self.icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 12px; background: transparent;")
+        self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: 12px; background: transparent;")
         self.icon_label.setAlignment(Qt.AlignCenter)
         self._icon_size = 24 if icon_path else 14
         self.icon_label.setFixedWidth(self._icon_size)
@@ -146,9 +167,8 @@ class ToolbarButton(QPushButton):
         
         # Text label
         self.text_label = QLabel(label_text)
-        self.text_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
-        label_font = make_font(size=10)
-        self.text_label.setFont(label_font)
+        self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, 10))
+        self.text_label.setFont(_toolbar_label_font(10))
         self.text_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self._layout.addWidget(self.text_label)
         
@@ -207,7 +227,7 @@ class ToolbarButton(QPushButton):
         if self._is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {default_theme.row_bg_highlight};
+                    background-color: {_TB_BG};
                     border: 1px solid {default_theme.border_highlight};
                     border-radius: 6px;
                 }}
@@ -215,7 +235,7 @@ class ToolbarButton(QPushButton):
         else:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: {_TB_BG};
                     border: 1px solid transparent;
                     border-radius: 6px;
                 }}
@@ -226,7 +246,7 @@ class ToolbarButton(QPushButton):
         if self._is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {default_theme.row_bg_highlight_hover};
+                    background-color: {_TB_HOVER};
                     border: 1px solid {default_theme.border_highlight};
                     border-radius: 6px;
                 }}
@@ -234,8 +254,8 @@ class ToolbarButton(QPushButton):
         else:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {default_theme.row_bg_hover};
-                    border: 1px solid {default_theme.border_light};
+                    background-color: {_TB_HOVER};
+                    border: 1px solid {_TB_BORDER};
                     border-radius: 6px;
                 }}
             """)
@@ -244,13 +264,13 @@ class ToolbarButton(QPushButton):
         """Apply disabled style."""
         self.setStyleSheet(f"""
             QPushButton {{
-                background-color: {default_theme.button_default_bg};
+                background-color: #ececec;
                 border: 1px solid transparent;
                 border-radius: 6px;
             }}
         """)
-        self.icon_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px; background: transparent;")
-        self.text_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; background: transparent;")
+        self.icon_label.setStyleSheet(f"color: #888888; font-size: 12px; background: transparent;")
+        self.text_label.setStyleSheet(_toolbar_label_style('#888888', 10))
     
     def set_active(self, active):
         """Set the active state of the button."""
@@ -297,8 +317,9 @@ class ToolbarButton(QPushButton):
         super().setEnabled(enabled)
         if enabled:
             self._apply_default_style()
-            self.icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 14px; background: transparent;")
-            self.text_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px; background: transparent;")
+            self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: 12px; background: transparent;")
+            self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, 10))
+            self.text_label.setFont(_toolbar_label_font(10))
         else:
             self._apply_disabled_style()
 
@@ -384,24 +405,37 @@ class ViewControlsToolbar(QWidget):
         self.toolbar_scroll.setWidgetResizable(True)
         self.toolbar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.toolbar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.toolbar_scroll.setFixedHeight(40)
+        # Room for toolbar row (~32px) + visible horizontal scrollbar (~10px) + margin
+        self.toolbar_scroll.setFixedHeight(48)
         self.toolbar_scroll.setStyleSheet(f"""
             QScrollArea#toolbarScroll {{
                 border: none;
                 background: transparent;
             }}
             QScrollArea#toolbarScroll QScrollBar:horizontal {{
-                height: 4px;
-                background: transparent;
+                height: 10px;
+                background: rgba(0, 0, 0, 0.35);
+                border: none;
+                border-radius: 4px;
+                margin: 2px 6px 4px 6px;
             }}
             QScrollArea#toolbarScroll QScrollBar::handle:horizontal {{
-                background: {default_theme.border_standard};
-                border-radius: 2px;
-                min-width: 30px;
+                background: {default_theme.scrollbar_handle_hover};
+                border-radius: 4px;
+                min-width: 40px;
+                margin: 1px;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::handle:horizontal:hover {{
+                background: #5a5e68;
             }}
             QScrollArea#toolbarScroll QScrollBar::add-line:horizontal,
             QScrollArea#toolbarScroll QScrollBar::sub-line:horizontal {{
                 width: 0px;
+                height: 0px;
+            }}
+            QScrollArea#toolbarScroll QScrollBar::add-page:horizontal,
+            QScrollArea#toolbarScroll QScrollBar::sub-page:horizontal {{
+                background: transparent;
             }}
         """)
 

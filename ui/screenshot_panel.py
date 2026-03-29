@@ -52,7 +52,7 @@ class ScreenshotCard(QFrame):
         cam_label = QLabel("📷")
         cam_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
         header.addWidget(cam_label)
-        self.name_edit = QLineEdit(f"Screenshot {index + 1}")
+        self.name_edit = QLineEdit(f"Image {index + 1}")
         self.name_edit.setStyleSheet(f"""
             QLineEdit {{
                 color: {default_theme.text_primary};
@@ -176,7 +176,7 @@ class ScreenshotCard(QFrame):
     def _show_preview(self):
         """Show a full-size preview dialog of the screenshot."""
         dialog = QDialog(self.window())
-        dialog.setWindowTitle(self.name_edit.text().strip() or f"Screenshot {self.index + 1}")
+        dialog.setWindowTitle(self.name_edit.text().strip() or f"Image {self.index + 1}")
         dialog.setStyleSheet(f"background-color: {default_theme.card_background};")
 
         layout = QVBoxLayout(dialog)
@@ -411,9 +411,9 @@ class ScreenshotPanel(QWidget):
         pixmap, _ = self.screenshots[index]
         if index < len(self.cards):
             raw = self.cards[index].name_edit.text().strip()
-            suggested = "".join(c for c in raw if c not in r'\/:*?"<>|') if raw else f"Screenshot {index + 1}"
+            suggested = "".join(c for c in raw if c not in r'\/:*?"<>|') if raw else f"Image {index + 1}"
         else:
-            suggested = f"Screenshot {index + 1}"
+            suggested = f"Image {index + 1}"
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Screenshot",

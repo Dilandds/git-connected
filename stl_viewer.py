@@ -193,9 +193,10 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn = QPushButton("🔲 3D Viewer")
         self._mode_tech_btn = QPushButton("📋 Technical Overview")
         for btn in (self._mode_3d_btn, self._mode_tech_btn):
-            btn.setFixedHeight(26)
+            btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
+            btn.setAttribute(Qt.WA_StyledBackground, True)
         self._mode_3d_btn.setChecked(True)
         self._current_mode = "3d"
         
@@ -242,10 +243,13 @@ class STLViewerWindow(QMainWindow):
         # ---- Tab Bar (left-aligned so "Untitled" starts at left edge) ----
         self.tab_bar = QTabBar()
         self.tab_bar.setObjectName("ectoTabBar")
+        self.tab_bar.setAttribute(Qt.WA_StyledBackground, True)
+        self.tab_bar.setMinimumHeight(30)
         self.tab_bar.setTabsClosable(True)
         self.tab_bar.setMovable(False)
         self.tab_bar.setExpanding(False)
         self.tab_bar.setDrawBase(False)
+        self.tab_bar.setElideMode(Qt.ElideRight)
         self.tab_bar.tabCloseRequested.connect(self._on_tab_close_requested)
         # Add "+" button as the last tab (before connecting currentChanged so signal doesn't fire before _plus_tab_index exists)
         self._plus_tab_index = self.tab_bar.addTab("+")
@@ -254,7 +258,8 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.LeftSide, None)
         tab_bar_container = QWidget()
         tab_bar_layout = QHBoxLayout(tab_bar_container)
-        tab_bar_layout.setContentsMargins(0, 0, 0, 0)
+        # Left inset so first tab label (bold) is not flush against the splitter edge / clipped
+        tab_bar_layout.setContentsMargins(6, 0, 0, 0)
         tab_bar_layout.setSpacing(0)
         tab_bar_layout.addWidget(self.tab_bar, 0, Qt.AlignLeft)
         tab_bar_layout.addStretch(1)
@@ -352,24 +357,66 @@ class STLViewerWindow(QMainWindow):
     
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
+        # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
         active_style = f"""
             QPushButton {{
-                background-color: {default_theme.button_primary};
-                border: none; border-radius: 4px;
-                padding: 4px 14px; font-size: 11px; font-weight: bold;
-                color: white;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #9aa3b8,
+                    stop:0.1 #7d8598,
+                    stop:0.28 #636877,
+                    stop:0.55 #565c6e,
+                    stop:1 #3e424f);
+                color: {default_theme.text_white};
+                border-top: 1px solid #b8c0d4;
+                border-left: 1px solid #9aa2b4;
+                border-right: 1px solid #3a3f4c;
+                border-bottom: 1px solid #252830;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #a8b0c4,
+                    stop:0.1 #8a92a6,
+                    stop:0.28 #6f7688,
+                    stop:0.55 #5f6576,
+                    stop:1 #484c59);
+                border-top: 1px solid #c8d0e0;
+                border-left: 1px solid #a8b0c0;
+                border-right: 1px solid #424650;
+                border-bottom: 1px solid #2a2e38;
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #5a6172,
+                    stop:0.45 #4d5362,
+                    stop:1 #3a3e4a);
+                border-top: 1px solid #3a3f4c;
+                border-left: 1px solid #353942;
+                border-right: 1px solid #5a5f6e;
+                border-bottom: 1px solid #6a7080;
             }}
         """
         inactive_style = f"""
             QPushButton {{
-                background-color: transparent;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #2e323c,
+                    stop:1 #1e2128);
                 border: 1px solid {default_theme.border_light};
-                border-radius: 4px;
-                padding: 4px 14px; font-size: 11px;
+                border-top: 1px solid #454a58;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 11px;
                 color: {default_theme.text_secondary};
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #3a3e4a,
+                    stop:1 #2a2e36);
+                color: {default_theme.text_white};
+                border: 1px solid {default_theme.border_medium};
             }}
         """
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)

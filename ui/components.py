@@ -88,7 +88,7 @@ class DimensionRow(QFrame):
         self.setFixedHeight(44)
         self.setStyleSheet(f"""
             QFrame#dimensionRow {{
-                background-color: {default_theme.row_bg_standard};
+                background-color: #ffffff;
                 border-radius: 8px;
                 border: none;
             }}
@@ -101,7 +101,7 @@ class DimensionRow(QFrame):
         # Label
         label = QLabel(label_text)
         label.setObjectName("dimensionLabel")
-        label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_secondary};")
+        label.setStyleSheet("background-color: transparent; color: #000000;")
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
@@ -114,7 +114,7 @@ class DimensionRow(QFrame):
         # Value
         self.value_label = QLabel(value_text)
         self.value_label.setObjectName("dimensionValue")
-        self.value_label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_primary};")
+        self.value_label.setStyleSheet("background-color: transparent; color: #000000;")
         value_font = QFont()
         value_font.setPointSize(13)
         value_font.setBold(True)
@@ -135,14 +135,14 @@ class DimensionRow(QFrame):
             if event.type() == QEvent.Enter:
                 self.setStyleSheet(f"""
                     QFrame#dimensionRow {{
-                        background-color: {default_theme.row_bg_hover};
+                        background-color: #f0f0f0;
                         border-radius: 8px;
                     }}
                 """)
             elif event.type() == QEvent.Leave:
                 self.setStyleSheet(f"""
                     QFrame#dimensionRow {{
-                        background-color: {default_theme.row_bg_standard};
+                        background-color: #ffffff;
                         border-radius: 8px;
                     }}
                 """)
@@ -162,11 +162,21 @@ class SurfaceAreaRow(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFixedHeight(44)
         
-        if row_type == "standard":
+        if row_type == "total_area":
+            self.setObjectName("surfaceRowTotalArea")
+            _st = default_theme.surface_total_area_bg
+            self.setStyleSheet(f"""
+                QFrame#surfaceRowTotalArea {{
+                    background-color: {_st};
+                    border-radius: 8px;
+                    border: none;
+                }}
+            """)
+        elif row_type == "standard":
             self.setObjectName("surfaceRowStandard")
             self.setStyleSheet(f"""
                 QFrame#surfaceRowStandard {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: #ffffff;
                     border-radius: 8px;
                     border: none;
                 }}
@@ -175,7 +185,7 @@ class SurfaceAreaRow(QFrame):
             self.setObjectName("surfaceRowHighlight")
             self.setStyleSheet(f"""
                 QFrame#surfaceRowHighlight {{
-                    background-color: {default_theme.row_bg_highlight};
+                    background-color: #ffffff;
                     border-left: 4px solid {default_theme.border_highlight};
                     border-top: none;
                     border-right: none;
@@ -187,7 +197,7 @@ class SurfaceAreaRow(QFrame):
             self.setObjectName("surfaceRowStandard")
             self.setStyleSheet(f"""
                 QFrame#surfaceRowStandard {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: #ffffff;
                     border-radius: 8px;
                     border: none;
                 }}
@@ -199,8 +209,14 @@ class SurfaceAreaRow(QFrame):
         
         # Label
         label = QLabel(label_text)
-        label.setObjectName("surfaceLabel")
-        label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_secondary};")
+        if row_type == "total_area":
+            label.setObjectName("surfaceTotalLabel")
+            label.setStyleSheet(
+                f"background-color: transparent; color: {default_theme.text_white};"
+            )
+        else:
+            label.setObjectName("surfaceLabel")
+            label.setStyleSheet("background-color: transparent; color: #000000;")
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
@@ -212,8 +228,14 @@ class SurfaceAreaRow(QFrame):
         
         # Value
         self.value_label = QLabel(value_text)
-        self.value_label.setObjectName("surfaceValue")
-        self.value_label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_primary};")
+        if row_type == "total_area":
+            self.value_label.setObjectName("surfaceTotalValue")
+            self.value_label.setStyleSheet(
+                f"background-color: transparent; color: {default_theme.text_white};"
+            )
+        else:
+            self.value_label.setObjectName("surfaceValue")
+            self.value_label.setStyleSheet("background-color: transparent; color: #000000;")
         value_font = QFont()
         value_font.setPointSize(13)
         value_font.setBold(True)
@@ -232,18 +254,37 @@ class SurfaceAreaRow(QFrame):
         """Handle hover events."""
         if obj == self:
             obj_name = self.objectName()
-            if obj_name == "surfaceRowStandard":
+            if obj_name == "surfaceRowTotalArea":
+                _bg = default_theme.surface_total_area_bg
+                _hov = default_theme.surface_total_area_hover
+                if event.type() == QEvent.Enter:
+                    self.setStyleSheet(f"""
+                        QFrame#surfaceRowTotalArea {{
+                            background-color: {_hov};
+                            border-radius: 8px;
+                            border: none;
+                        }}
+                    """)
+                elif event.type() == QEvent.Leave:
+                    self.setStyleSheet(f"""
+                        QFrame#surfaceRowTotalArea {{
+                            background-color: {_bg};
+                            border-radius: 8px;
+                            border: none;
+                        }}
+                    """)
+            elif obj_name == "surfaceRowStandard":
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#surfaceRowStandard {{
-                            background-color: {default_theme.row_bg_hover};
+                            background-color: #f0f0f0;
                             border-radius: 8px;
                         }}
                     """)
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#surfaceRowStandard {{
-                            background-color: {default_theme.row_bg_standard};
+                            background-color: #ffffff;
                             border-radius: 8px;
                         }}
                     """)
@@ -251,7 +292,7 @@ class SurfaceAreaRow(QFrame):
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#surfaceRowHighlight {{
-                            background-color: {default_theme.row_bg_highlight_hover};
+                            background-color: #f0f0f0;
                             border-left: 4px solid {default_theme.border_highlight};
                             border-top: none;
                             border-right: none;
@@ -262,7 +303,7 @@ class SurfaceAreaRow(QFrame):
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#surfaceRowHighlight {{
-                            background-color: {default_theme.row_bg_highlight};
+                            background-color: #ffffff;
                             border-left: 4px solid {default_theme.border_highlight};
                             border-top: none;
                             border-right: none;
@@ -286,11 +327,12 @@ class WeightRow(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFixedHeight(44)
         
+        _wp = default_theme.weight_panel_bg
         if row_type == "standard":
             self.setObjectName("weightRowStandard")
             self.setStyleSheet(f"""
                 QFrame#weightRowStandard {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: {_wp};
                     border-radius: 8px;
                     border: none;
                 }}
@@ -299,7 +341,7 @@ class WeightRow(QFrame):
             self.setObjectName("weightRowHighlight")
             self.setStyleSheet(f"""
                 QFrame#weightRowHighlight {{
-                    background-color: {default_theme.row_bg_highlight};
+                    background-color: {_wp};
                     border: 1px solid {default_theme.border_highlight};
                     border-radius: 8px;
                 }}
@@ -308,7 +350,7 @@ class WeightRow(QFrame):
             self.setObjectName("weightRowStandard")
             self.setStyleSheet(f"""
                 QFrame#weightRowStandard {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: {_wp};
                     border-radius: 8px;
                     border: none;
                 }}
@@ -321,7 +363,9 @@ class WeightRow(QFrame):
         # Label
         label = QLabel(label_text)
         label.setObjectName("weightLabel")
-        label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_secondary};")
+        label.setStyleSheet(
+            f"background-color: transparent; color: {default_theme.text_white};"
+        )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
@@ -334,7 +378,9 @@ class WeightRow(QFrame):
         # Value
         self.value_label = QLabel(value_text)
         self.value_label.setObjectName("weightValue")
-        self.value_label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_primary};")
+        self.value_label.setStyleSheet(
+            f"background-color: transparent; color: {default_theme.text_primary};"
+        )
         value_font = QFont()
         value_font.setPointSize(13)
         value_font.setBold(True)
@@ -353,18 +399,20 @@ class WeightRow(QFrame):
         """Handle hover events."""
         if obj == self:
             obj_name = self.objectName()
+            _wp = default_theme.weight_panel_bg
+            _wph = default_theme.weight_panel_hover
             if obj_name == "weightRowStandard":
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#weightRowStandard {{
-                            background-color: {default_theme.row_bg_hover};
+                            background-color: {_wph};
                             border-radius: 8px;
                         }}
                     """)
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#weightRowStandard {{
-                            background-color: {default_theme.row_bg_standard};
+                            background-color: {_wp};
                             border-radius: 8px;
                         }}
                     """)
@@ -372,7 +420,7 @@ class WeightRow(QFrame):
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#weightRowHighlight {{
-                            background-color: {default_theme.row_bg_highlight_hover};
+                            background-color: {_wph};
                             border: 1px solid {default_theme.border_highlight};
                             border-radius: 8px;
                         }}
@@ -380,7 +428,7 @@ class WeightRow(QFrame):
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#weightRowHighlight {{
-                            background-color: {default_theme.row_bg_highlight};
+                            background-color: {_wp};
                             border: 1px solid {default_theme.border_highlight};
                             border-radius: 8px;
                         }}
@@ -442,11 +490,12 @@ class ScaleResultRow(QFrame):
         
         if row_type == "standard":
             self.setObjectName("scaleRowStandard")
+            _wp = default_theme.weight_panel_bg
             self.setStyleSheet(f"""
                 QFrame#scaleRowStandard {{
-                    background-color: {default_theme.row_bg_standard};
+                    background-color: {_wp};
+                    border: 1px solid transparent;
                     border-radius: 8px;
-                    border: none;
                 }}
             """)
         elif row_type == "highlight":
@@ -462,20 +511,19 @@ class ScaleResultRow(QFrame):
             self.setObjectName("scaleRowComparison")
             self.setStyleSheet(f"""
                 QFrame#scaleRowComparison {{
-                    background-color: #1E2A18;
+                    background-color: {default_theme.row_bg_standard};
+                    border: none;
                     border-left: 4px solid #FB923C;
-                    border-top: none;
-                    border-right: none;
-                    border-bottom: none;
                     border-radius: 8px;
                 }}
             """)
         elif row_type == "volume":
             self.setObjectName("scaleRowVolume")
+            _wp = default_theme.weight_panel_bg
             self.setStyleSheet(f"""
                 QFrame#scaleRowVolume {{
-                    background-color: {default_theme.row_bg_standard};
-                    border: 1px solid {default_theme.border_light};
+                    background-color: {_wp};
+                    border: 1px solid {default_theme.border_medium};
                     border-radius: 8px;
                 }}
             """)
@@ -484,10 +532,16 @@ class ScaleResultRow(QFrame):
             self.setStyleSheet(f"""
                 QFrame#scaleRowStandard {{
                     background-color: {default_theme.row_bg_standard};
+                    border: 1px solid transparent;
                     border-radius: 8px;
-                    border: none;
                 }}
             """)
+        
+        _label_fg = (
+            default_theme.text_white
+            if row_type in ("standard", "volume")
+            else default_theme.text_primary
+        )
         
         row_layout = QHBoxLayout(self)
         row_layout.setContentsMargins(14, 8, 14, 8)
@@ -496,7 +550,9 @@ class ScaleResultRow(QFrame):
         # Label
         label = QLabel(label_text)
         label.setObjectName("scaleLabel")
-        label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_secondary};")
+        label.setStyleSheet(
+            f"background-color: transparent; color: {_label_fg};"
+        )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
@@ -509,7 +565,9 @@ class ScaleResultRow(QFrame):
         # Value
         self.value_label = QLabel(value_text)
         self.value_label.setObjectName("scaleValue")
-        self.value_label.setStyleSheet(f"background-color: transparent; color: {default_theme.text_primary};")
+        self.value_label.setStyleSheet(
+            f"background-color: transparent; color: {_label_fg};"
+        )
         value_font = QFont()
         value_font.setPointSize(13)
         value_font.setBold(True)
@@ -529,25 +587,31 @@ class ScaleResultRow(QFrame):
         if obj == self:
             obj_name = self.objectName()
             if obj_name == "scaleRowStandard":
+                _wp = default_theme.weight_panel_bg
+                _wph = default_theme.weight_panel_hover
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowStandard {{
-                            background-color: {default_theme.row_bg_hover};
+                            background-color: {_wph};
+                            border: 1px solid transparent;
                             border-radius: 8px;
                         }}
                     """)
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowStandard {{
-                            background-color: {default_theme.row_bg_standard};
+                            background-color: {_wp};
+                            border: 1px solid transparent;
                             border-radius: 8px;
                         }}
                     """)
             elif obj_name == "scaleRowVolume":
+                _wp = default_theme.weight_panel_bg
+                _wph = default_theme.weight_panel_hover
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowVolume {{
-                            background-color: {default_theme.row_bg_hover};
+                            background-color: {_wph};
                             border: 1px solid {default_theme.border_medium};
                             border-radius: 8px;
                         }}
@@ -555,8 +619,8 @@ class ScaleResultRow(QFrame):
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowVolume {{
-                            background-color: {default_theme.row_bg_standard};
-                            border: 1px solid {default_theme.border_light};
+                            background-color: {_wp};
+                            border: 1px solid {default_theme.border_medium};
                             border-radius: 8px;
                         }}
                     """)
@@ -581,22 +645,18 @@ class ScaleResultRow(QFrame):
                 if event.type() == QEvent.Enter:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowComparison {{
-                            background-color: #263520;
+                            background-color: {default_theme.row_bg_hover};
+                            border: none;
                             border-left: 4px solid #FB923C;
-                            border-top: none;
-                            border-right: none;
-                            border-bottom: none;
                             border-radius: 8px;
                         }}
                     """)
                 elif event.type() == QEvent.Leave:
                     self.setStyleSheet(f"""
                         QFrame#scaleRowComparison {{
-                            background-color: #1E2A18;
+                            background-color: {default_theme.row_bg_standard};
+                            border: none;
                             border-left: 4px solid #FB923C;
-                            border-top: none;
-                            border-right: none;
-                            border-bottom: none;
                             border-radius: 8px;
                         }}
                     """)

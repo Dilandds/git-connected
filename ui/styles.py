@@ -24,6 +24,10 @@ class Theme:
     # Background colors – dark palette
     background = '#22262c'
     card_background = '#2a2e34'
+    # Upload card (sidebar): subtle grey gradient + shadow — distinct from flat cards
+    upload_card_gradient_top = '#383d46'
+    upload_card_gradient_mid = '#2d323a'
+    upload_card_gradient_bottom = '#1f2329'
     gradient_start = '#22262c'
     gradient_mid = '#3a3e48'
     gradient_end = '#717584'
@@ -72,6 +76,14 @@ class Theme:
     input_border = '#3a3e48'
     input_border_hover = '#4a4e58'
     
+    # Estimated Weight card: material combo + three rows
+    weight_panel_bg = '#636877'
+    weight_panel_hover = '#6F7588'
+    
+    # Total Surface Area — "Total area" row only
+    surface_total_area_bg = '#3d5a9b'
+    surface_total_area_hover = '#4568a8'
+    
     def get_color(self, color_name):
         """Get color by name."""
         return getattr(self, color_name, None)
@@ -79,6 +91,26 @@ class Theme:
 
 # Create default theme instance
 default_theme = Theme()
+
+
+def sidebar_section_card_stylesheet(theme):
+    """Gradient + border shared by all left sidebar section cards.
+
+    Glossy / dimensional look (same palette as Theme): top highlight stop, deeper
+    vertical shading, and per-side borders for a light top/left vs dark bottom/right bevel.
+    """
+    return (
+        f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+        f"stop:0 {theme.border_medium}, "
+        f"stop:0.12 {theme.upload_card_gradient_top}, "
+        f"stop:0.52 {theme.upload_card_gradient_mid}, "
+        f"stop:1 {theme.upload_card_gradient_bottom}); "
+        f"border-top: 1px solid {theme.border_medium}; "
+        f"border-left: 1px solid {theme.border_light}; "
+        f"border-right: 1px solid {theme.border_standard}; "
+        f"border-bottom: 1px solid {theme.upload_card_gradient_bottom}; "
+        f"border-radius: 14px;"
+    )
 
 # Font Constants
 FONT_FAMILY = 'Calibri'
@@ -118,7 +150,9 @@ def get_global_stylesheet(theme=None):
     """Get the complete global stylesheet for the application."""
     if theme is None:
         theme = default_theme
-    
+
+    _sc = sidebar_section_card_stylesheet(theme)
+
     return f"""
         QMainWindow {{
             background-color: {theme.background};
@@ -171,8 +205,19 @@ def get_global_stylesheet(theme=None):
             font-size: {FONTS['title_size']};
         }}
         QLabel#infoLabel {{
-            color: {theme.text_subtext};
+            color: {theme.text_white};
             font-family: {FONTS['family']};
+        }}
+        QWidget#adjustWeightHeader {{
+            background-color: transparent;
+            border: none;
+        }}
+        QLabel#adjustWeightCollapseArrow {{
+            color: {theme.text_secondary};
+            background-color: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
         }}
         /* General QLabel style - less specific, won't override named labels */
         QLabel {{
@@ -180,83 +225,92 @@ def get_global_stylesheet(theme=None):
             font-family: {FONTS['family']};
         }}
         QLabel#dimensionLabel {{
-            color: {theme.text_secondary};
+            color: #000000;
         }}
         QLabel#dimensionValue {{
-            color: {theme.text_primary};
+            color: #000000;
+        }}
+        QFrame#uploadCard {{
+            {_sc}
         }}
         QFrame#dimensionsCard {{
-            background-color: {theme.card_background};
-            border-radius: 12px;
-            border: none;
+            {_sc}
         }}
         QFrame#dimensionRow {{
-            background-color: {theme.row_bg_standard};
+            background-color: #ffffff;
             border-radius: 8px;
         }}
         QFrame#surfaceAreaCard {{
-            background-color: {theme.card_background};
-            border-radius: 12px;
-            border: none;
+            {_sc}
         }}
         QFrame#surfaceRowStandard {{
-            background-color: {theme.row_bg_standard};
+            background-color: #ffffff;
             border-radius: 8px;
         }}
+        QFrame#surfaceRowTotalArea {{
+            background-color: {theme.surface_total_area_bg};
+            border-radius: 8px;
+            border: none;
+        }}
         QFrame#surfaceRowHighlight {{
-            background-color: {theme.row_bg_highlight};
+            background-color: #ffffff;
             border-left: 4px solid {theme.border_highlight};
             border-top: none;
             border-right: none;
             border-bottom: none;
             border-radius: 8px;
         }}
+        QLabel#surfaceTotalLabel {{
+            color: {theme.text_white};
+        }}
+        QLabel#surfaceTotalValue {{
+            color: {theme.text_white};
+        }}
         QFrame#surfaceFooter {{
-            background-color: {theme.background};
-            border: 1px solid {theme.border_standard};
+            background-color: #ffffff;
+            border: 1px solid #d0d0d0;
             border-radius: 6px;
         }}
         QLabel#surfaceLabel {{
-            color: {theme.text_secondary};
+            color: #000000;
         }}
         QLabel#surfaceValue {{
-            color: {theme.text_primary};
+            color: #000000;
         }}
         QFrame#weightCard {{
-            background-color: {theme.card_background};
-            border-radius: 12px;
-            border: none;
+            {_sc}
         }}
         QFrame#weightRowStandard {{
-            background-color: {theme.row_bg_standard};
+            background-color: {theme.weight_panel_bg};
             border-radius: 8px;
         }}
         QFrame#weightRowHighlight {{
-            background-color: {theme.row_bg_highlight};
+            background-color: {theme.weight_panel_bg};
             border: 1px solid {theme.border_highlight};
             border-radius: 8px;
         }}
         QLabel#weightLabel {{
-            color: {theme.text_secondary};
+            color: {theme.text_white};
         }}
         QLabel#weightValue {{
-            color: {theme.text_primary};
+            color: {theme.text_white};
         }}
         QComboBox#materialCombo {{
-            background-color: {theme.input_bg};
-            border: 1px solid {theme.input_border};
+            background-color: {theme.weight_panel_bg};
+            border: 1px solid {theme.border_medium};
             border-radius: 8px;
             padding: 8px 12px;
             font-size: 12px;
-            color: {theme.text_primary};
+            color: {theme.text_white};
         }}
         QComboBox#materialCombo:hover {{
             border: 1px solid {theme.input_border_hover};
         }}
         QComboBox#materialCombo::drop-down {{
             border: none;
-            border-left: 1px solid {theme.input_border};
+            border-left: 1px solid {theme.border_medium};
             width: 32px;
+            background-color: transparent;
         }}
         QComboBox#materialCombo::down-arrow {{
             image: url({_dropdown_arrow_url()});
@@ -264,11 +318,12 @@ def get_global_stylesheet(theme=None):
             height: 14px;
         }}
         QComboBox#materialCombo QAbstractItemView {{
-            background-color: {theme.input_bg};
-            border: 1px solid {theme.input_border};
+            background-color: {theme.weight_panel_bg};
+            border: 1px solid {theme.border_medium};
             border-radius: 8px;
-            selection-background-color: {theme.row_bg_standard};
-            selection-color: {theme.text_primary};
+            color: {theme.text_white};
+            selection-background-color: {theme.weight_panel_hover};
+            selection-color: {theme.text_white};
             padding: 4px;
         }}
         QScrollBar:vertical {{
@@ -292,12 +347,11 @@ def get_global_stylesheet(theme=None):
             background: none;
         }}
         QFrame#adjustWeightCard {{
-            background-color: {theme.card_background};
-            border-radius: 12px;
-            border: none;
+            {_sc}
         }}
         QFrame#scaleRowStandard {{
-            background-color: {theme.row_bg_standard};
+            background-color: {theme.weight_panel_bg};
+            border: 1px solid transparent;
             border-radius: 8px;
         }}
         QFrame#scaleRowHighlight {{
@@ -306,9 +360,21 @@ def get_global_stylesheet(theme=None):
             border-radius: 8px;
         }}
         QFrame#scaleRowComparison {{
-            background-color: #1E2A18;
+            background-color: {theme.row_bg_standard};
+            border: none;
             border-left: 4px solid #FB923C;
             border-radius: 8px;
+        }}
+        QFrame#scaleRowVolume {{
+            background-color: {theme.weight_panel_bg};
+            border: 1px solid {theme.border_medium};
+            border-radius: 8px;
+        }}
+        QLabel#scaleLabel {{
+            color: {theme.text_primary};
+        }}
+        QLabel#scaleValue {{
+            color: {theme.text_primary};
         }}
         QLineEdit#targetWeightInput {{
             background-color: {theme.input_bg};
@@ -319,9 +385,11 @@ def get_global_stylesheet(theme=None):
             color: {theme.text_primary};
         }}
         QLineEdit#targetWeightInput:hover {{
+            background-color: {theme.input_bg};
             border: 1px solid {theme.input_border_hover};
         }}
         QLineEdit#targetWeightInput:focus {{
+            background-color: {theme.input_bg};
             border: 2px solid {theme.button_primary};
         }}
         QPushButton#calculateScaleBtn {{
@@ -342,6 +410,8 @@ def get_global_stylesheet(theme=None):
         QPushButton#calculateScaleBtn:disabled {{
             background-color: {theme.button_default_bg};
             color: {theme.text_secondary};
+            border: 1px solid {theme.border_standard};
+            border-radius: 8px;
         }}
         QPushButton#exportScaledBtn {{
             background-color: #10B981;
@@ -361,11 +431,17 @@ def get_global_stylesheet(theme=None):
         QPushButton#exportScaledBtn:disabled {{
             background-color: {theme.button_default_bg};
             color: {theme.text_secondary};
+            border: 1px solid {theme.border_standard};
+            border-radius: 8px;
         }}
         QFrame#pdfReportCard {{
-            background-color: {theme.card_background};
-            border-radius: 12px;
-            border: none;
+            {_sc}
+        }}
+        QFrame#exportAnnotationsCard {{
+            {_sc}
+        }}
+        QFrame#converterCard {{
+            {_sc}
         }}
         QFrame#reportCheckboxRow {{
             background-color: {theme.row_bg_standard};
@@ -432,41 +508,81 @@ def get_global_stylesheet(theme=None):
             background-color: {theme.button_primary};
             color: {theme.text_white};
         }}
-        /* ---- Tab Bar Styling ---- */
+        /* ---- Tab Bar: glossy / dimensional (same palette as mode switcher + sidebar cards) ---- */
         QTabBar#ectoTabBar {{
             background: {theme.background};
             border: none;
             border-bottom: 1px solid {theme.border_standard};
+            min-height: 30px;
         }}
         QTabBar#ectoTabBar::tab {{
-            background: {theme.button_default_bg};
-            color: {theme.text_secondary};
-            border: 1px solid {theme.border_standard};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {theme.border_medium},
+                stop:0.18 {theme.card_background},
+                stop:1 {theme.background});
+            color: {theme.text_white};
+            border-top: 1px solid {theme.border_light};
+            border-left: 1px solid {theme.border_light};
+            border-right: 1px solid {theme.border_standard};
             border-bottom: none;
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
-            padding: 6px 18px;
+            padding-top: 5px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            padding-left: 20px;
             margin-right: 2px;
             font-size: 12px;
             font-family: {FONTS['family']};
             min-width: 80px;
+            min-height: 24px;
         }}
         QTabBar#ectoTabBar::tab:selected {{
-            background: {theme.card_background};
-            color: {theme.text_primary};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {theme.weight_panel_hover},
+                stop:0.1 {theme.border_medium},
+                stop:0.32 {theme.weight_panel_bg},
+                stop:0.68 {theme.border_standard},
+                stop:1 {theme.button_default_bg});
+            color: {theme.text_white};
             font-weight: bold;
-            border-bottom: 2px solid {theme.button_primary};
+            border-top: 1px solid {theme.border_medium};
+            border-left: 1px solid {theme.border_light};
+            border-right: 1px solid {theme.border_standard};
+            border-bottom: none;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            padding-top: 6px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            padding-left: 22px;
+            min-height: 24px;
         }}
         QTabBar#ectoTabBar::tab:hover:!selected {{
-            background: {theme.row_bg_hover};
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {theme.border_light},
+                stop:0.22 {theme.row_bg_hover},
+                stop:1 {theme.card_background});
+            color: {theme.text_white};
+            border-top: 1px solid {theme.border_medium};
+            border-left: 1px solid {theme.border_light};
+            border-right: 1px solid {theme.border_standard};
+            border-bottom: none;
+            padding-top: 5px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            padding-left: 20px;
         }}
         QTabBar#ectoTabBar::tab:last {{
-            /* "+" tab styling */
             min-width: 32px;
-            padding: 6px 10px;
+            padding-top: 5px;
+            padding-right: 12px;
+            padding-bottom: 6px;
+            padding-left: 12px;
             font-weight: bold;
             font-size: 16px;
-            color: {theme.text_secondary};
+            color: {theme.text_white};
+            min-height: 24px;
         }}
         QTabBar#ectoTabBar::close-button {{
             image: none;
