@@ -30,6 +30,7 @@ class ScreenshotCard(QFrame):
         self.pixmap = pixmap
         self.setObjectName("screenshotCard")
         self.setCursor(Qt.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setStyleSheet(f"""
             QFrame#screenshotCard {{
                 background-color: {default_theme.row_bg_standard};
@@ -42,8 +43,8 @@ class ScreenshotCard(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
 
         # Header row: camera icon + name + timestamp + close
         header = QHBoxLayout()
