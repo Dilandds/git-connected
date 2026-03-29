@@ -2293,8 +2293,17 @@ class STLViewerWidget(QWidget):
         if self._renderer and self._scene and self._camera:
             try:
                 cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.viewer_container.width(), self.viewer_container.height())
-                target_w = int(cw * SCREENSHOT_CAPTURE_SCALE)
-                target_h = int(ch * SCREENSHOT_CAPTURE_SCALE)
+
+                sel_w = max(1, int(rect.width()))
+                sel_h = max(1, int(rect.height()))
+                base_scale = SCREENSHOT_CAPTURE_SCALE
+                adaptive_scale = max(
+                    base_scale,
+                    _SCREENSHOT_TARGET_CROP_EDGE_PX / max(sel_w, sel_h)
+                )
+
+                target_w = int(cw * adaptive_scale)
+                target_h = int(ch * adaptive_scale)
                 me = max(target_w, target_h)
                 if me > _SCREENSHOT_MAX_EDGE_PX:
                     r = _SCREENSHOT_MAX_EDGE_PX / me
