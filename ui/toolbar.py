@@ -351,6 +351,7 @@ class ViewControlsToolbar(QWidget):
     draw_clear_requested = pyqtSignal()
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
+    open_converter = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
