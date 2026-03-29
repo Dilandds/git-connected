@@ -2287,9 +2287,11 @@ class STLViewerWidget(QWidget):
         import numpy as np
 
         captured = False
-        # Try pygfx renderer snapshot at high resolution
+        # Try pygfx: create an offscreen renderer at high resolution, render, then crop
         if self._renderer and self._scene and self._camera:
             try:
+                import pygfx as gfx
+
                 cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.viewer_container.width(), self.viewer_container.height())
                 target_w = int(cw * SCREENSHOT_CAPTURE_SCALE)
                 target_h = int(ch * SCREENSHOT_CAPTURE_SCALE)
@@ -2306,10 +2308,12 @@ class STLViewerWidget(QWidget):
 
                 logger.info(f"Screenshot render: {target_w}x{target_h} (scale from {cw}x{ch})")
 
-                img_array = self._renderer.snapshot(
-                    self._scene, self._camera,
-                    (target_w, target_h)
-                )
+                # Create offscreen texture target and renderer at the desired resolution
+                texture = gfx.Texture(dim=2, size=(target_w, target_h, 1), format="rgba8unorm")
+                offscreen_renderer = gfx.renderers.wgpu.WgpuRenderer(texture)
+                offscreen_renderer.render(self._scene, self._camera)
+                img_array = offscreen_renderer.snapshot()
+
                 if img_array is not None:
                     img_array = np.ascontiguousarray(img_array)
                     h_img, w_img = img_array.shape[:2]
@@ -2333,6 +2337,8 @@ class STLViewerWidget(QWidget):
                     cropped = full_pixmap.copy(hr_rect)
                     logger.info(f"Screenshot crop: {cropped.width()}x{cropped.height()} px")
                     captured = True
+            except Exception as e:
+                logger.warning(f"High-res screenshot failed, falling back to grab(): {e}")
             except Exception as e:
                 logger.warning(f"High-res screenshot failed, falling back to grab(): {e}")
 
