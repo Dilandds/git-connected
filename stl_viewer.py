@@ -240,7 +240,7 @@ class STLViewerWindow(QMainWindow):
         self.sidebar_panel.upload_btn.clicked.connect(self.upload_stl_file)
         self.sidebar_panel.export_scaled_stl.connect(self.export_scaled_stl)
         self.sidebar_panel.annotations_exported.connect(self._on_annotations_exported)
-        self.sidebar_panel.conversion_complete.connect(self._load_converted_file)
+        
         splitter.addWidget(self.sidebar_panel)
         logger.info("init_ui: Sidebar panel created")
         
@@ -690,16 +690,9 @@ class STLViewerWindow(QMainWindow):
             self.sidebar_panel.update_dimensions(tab.sidebar_data, tab.file_path)
             count = len(tab.annotation_panel.get_annotations())
             self.sidebar_panel.update_annotation_count(count)
-            # Show conversion options for 3DM/STEP; block for other formats
-            fp = (tab.file_path or "").lower()
-            is_conv = fp.endswith('.3dm') or fp.endswith('.step') or fp.endswith('.stp')
-            if is_conv:
-                self.sidebar_panel.set_converter_source_from_file(tab.file_path)
-            else:
-                self.sidebar_panel.set_conversion_blocked(True)
         else:
             self.sidebar_panel.reset_all_data()
-            self.sidebar_panel.set_conversion_blocked(False)
+            
         
         # Update toolbar state
         has_file = tab.file_path is not None
@@ -942,6 +935,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
+        self.toolbar.open_converter.connect(self._open_converter_dialog)
     
     def _connect_ruler_toolbar_signals(self):
         """Connect ruler toolbar signals to handler methods."""
@@ -1034,7 +1028,7 @@ class STLViewerWindow(QMainWindow):
         
         # Reset sidebar panel dimensions and calculations
         self.sidebar_panel.reset_all_data()
-        self.sidebar_panel.reset_converter()
+        
         
         # Reset tab state
         tab = self._current_tab
@@ -1085,8 +1079,21 @@ class STLViewerWindow(QMainWindow):
         
         self._load_file_into_current_tab(file_path, from_conversion=False)
     
+    def _open_converter_dialog(self):
+        """Open the file converter dialog."""
+        from ui.converter_dialog import ConverterDialog
+        # Pre-populate with current file if it's a convertible format
+        preset = None
+        if self._current_tab and self._current_tab.file_path:
+            ext = self._current_tab.file_path.lower()
+            if ext.endswith('.3dm') or ext.endswith('.step') or ext.endswith('.stp'):
+                preset = self._current_tab.file_path
+        dlg = ConverterDialog(self, preset_file=preset)
+        dlg.conversion_complete.connect(self._load_converted_file)
+        dlg.exec_()
+
     def _load_converted_file(self, output_path: str):
-        """Load a file that was created by the Convert File flow. Keeps conversion available and ensures 3D view."""
+        """Load a file that was created by the Convert File flow."""
         if self._current_mode != "3d":
             self._switch_mode("3d")
         if self._current_tab and self._current_tab.file_path is not None:
@@ -1124,13 +1131,6 @@ class STLViewerWindow(QMainWindow):
             tab.filename = filename
             tab.loaded_via_conversion = from_conversion
             
-            # Show conversion options for 3DM/STEP; block for other formats (STL, OBJ, etc.)
-            file_ext = file_path.lower()
-            is_convertible = (file_ext.endswith('.3dm') or file_ext.endswith('.step') or file_ext.endswith('.stp'))
-            if is_convertible:
-                self.sidebar_panel.set_converter_source_from_file(file_path)
-            else:
-                self.sidebar_panel.set_conversion_blocked(True)
             
             # Update tab bar text
             self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(filename))

@@ -351,6 +351,7 @@ class ViewControlsToolbar(QWidget):
     draw_clear_requested = pyqtSignal()
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
+    open_converter = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -514,6 +515,14 @@ class ViewControlsToolbar(QWidget):
         self.parts_btn.setEnabled(False)
         self.parts_btn.setVisible(False)  # Not shown in toolbar; accessed via Visual Style menu
         
+        # Spacer before utility group
+        content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
+
+        # Convert button - always enabled
+        self.convert_btn = ToolbarButton("🔄", "Convert", "Convert between 3D file formats (3DM, STEP, STL)")
+        self.convert_btn.clicked.connect(self._on_convert_clicked)
+        content_layout.addWidget(self.convert_btn)
+
         self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
@@ -1055,6 +1064,10 @@ class ViewControlsToolbar(QWidget):
             self.fullscreen_btn.set_icon("⛶")
         self.fullscreen_btn.set_active(self.is_fullscreen)
         self.toggle_fullscreen.emit()
+
+    def _on_convert_clicked(self):
+        """Handle convert button click."""
+        self.open_converter.emit()
 
     def _sync_2d_views_button(self):
         """Keep label '2D Views ▼'; icon reflects current orthographic view."""
