@@ -35,21 +35,28 @@ def _menu_diamond_px() -> int:
 
 
 def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    p.setPen(Qt.NoPen)
-    p.setBrush(QColor(0, 0, 0))
-    gap = max(0.5, size * 0.08)
-    cell = (size - 3 * gap) / 2.0
-    for r in range(2):
-        for c in range(2):
-            x = gap + c * (cell + gap * 0.5)
-            y = gap + r * (cell + gap * 0.5)
-            p.drawRoundedRect(x, y, cell, cell, 1.0, 1.0)
-    p.end()
-    return pm
+    try:
+        if size <= 0:
+            logger.warning("_parts_menu_pixmap_fallback called with size=%d, clamping to 10", size)
+            size = 10
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(0, 0, 0))
+        gap = max(0.5, size * 0.08)
+        cell = (size - 3 * gap) / 2.0
+        for r in range(2):
+            for c in range(2):
+                x = gap + c * (cell + gap * 0.5)
+                y = gap + r * (cell + gap * 0.5)
+                p.drawRoundedRect(x, y, cell, cell, 1.0, 1.0)
+        p.end()
+        return pm
+    except Exception:
+        logger.warning("_parts_menu_pixmap_fallback failed", exc_info=True)
+        return QPixmap()
 
 
 def _load_parts_menu_pixmap(path: str) -> QPixmap:
