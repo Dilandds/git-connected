@@ -51,7 +51,7 @@ def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
             for c in range(2):
                 x = gap + c * (cell + gap * 0.5)
                 y = gap + r * (cell + gap * 0.5)
-                p.drawRoundedRect(x, y, cell, cell, 1.0, 1.0)
+                p.drawRoundedRect(int(x), int(y), int(cell), int(cell), 1.0, 1.0)
         p.end()
         return pm
     except Exception:
