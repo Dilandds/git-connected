@@ -199,9 +199,6 @@ class SidebarPanel(QWidget):
         self.export_annotations_group = self.create_export_annotations_section()
         layout.addWidget(self.export_annotations_group)
         
-        # Create File Converter section
-        self.converter_group = self.create_converter_section()
-        layout.addWidget(self.converter_group)
         
         # Add stretch
         layout.addStretch()
