@@ -11,7 +11,7 @@ class ScreenshotOverlay(QWidget):
 
     region_selected = pyqtSignal(QRect)  # emitted with the selected rectangle
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, zoom_callback=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
@@ -22,6 +22,7 @@ class ScreenshotOverlay(QWidget):
         self._origin = QPoint()
         self._current = QPoint()
         self._drawing = False
+        self._zoom_callback = zoom_callback
 
     # ---- painting ----
 
