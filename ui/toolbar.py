@@ -18,10 +18,20 @@ logger = logging.getLogger(__name__)
 
 def _menu_diamond_px() -> int:
     """Match ◆/◇/◈ in QMenu items (font-size 11px)."""
-    fm = QFontMetrics(make_font(size=11))
-    w = fm.horizontalAdvance("◆")
-    h = fm.boundingRect("◆").height()
-    return max(10, min(12, int(round(max(w, h)))))
+    try:
+        fm = QFontMetrics(make_font(size=11))
+        try:
+            w = fm.horizontalAdvance("◆")
+        except AttributeError:
+            logger.debug("horizontalAdvance not available, falling back to width()")
+            w = fm.width("◆")
+        h = fm.boundingRect("◆").height()
+        result = max(10, min(12, int(round(max(w, h)))))
+        logger.debug("_menu_diamond_px -> %d", result)
+        return result
+    except Exception:
+        logger.warning("_menu_diamond_px failed, using fallback 11", exc_info=True)
+        return 11
 
 
 def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
