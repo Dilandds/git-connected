@@ -35,28 +35,30 @@ def _menu_diamond_px() -> int:
 
 
 def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
+    """Draw a 2x2 grid of black squares — Windows-safe, integer-only."""
     try:
         if size <= 0:
-            logger.warning("_parts_menu_pixmap_fallback called with size=%d, clamping to 10", size)
             size = 10
         pm = QPixmap(size, size)
         pm.fill(Qt.transparent)
         p = QPainter(pm)
-        p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(0, 0, 0))
-        gap = max(0.5, size * 0.08)
-        cell = (size - 3 * gap) / 2.0
+        cell = size // 2 - 1
+        gap = 1
+        black = QColor(0, 0, 0)
         for r in range(2):
             for c in range(2):
-                x = gap + c * (cell + gap * 0.5)
-                y = gap + r * (cell + gap * 0.5)
-                p.drawRoundedRect(int(x), int(y), int(cell), int(cell), 1.0, 1.0)
+                x = gap + c * (cell + gap)
+                y = gap + r * (cell + gap)
+                p.fillRect(QRect(x, y, cell, cell), black)
         p.end()
+        logger.debug("_parts_menu_pixmap_fallback v2: ok size=%d cell=%d", size, cell)
         return pm
     except Exception:
-        logger.warning("_parts_menu_pixmap_fallback failed", exc_info=True)
-        return QPixmap()
+        logger.warning("_parts_menu_pixmap_fallback v2 failed", exc_info=True)
+        pm = QPixmap(max(size, 10), max(size, 10))
+        pm.fill(QColor(0, 0, 0))
+        return pm
 
 
 def _load_parts_menu_pixmap(path: str) -> QPixmap:
