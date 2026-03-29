@@ -1086,8 +1086,21 @@ class STLViewerWindow(QMainWindow):
         
         self._load_file_into_current_tab(file_path, from_conversion=False)
     
+    def _open_converter_dialog(self):
+        """Open the file converter dialog."""
+        from ui.converter_dialog import ConverterDialog
+        # Pre-populate with current file if it's a convertible format
+        preset = None
+        if self._current_tab and self._current_tab.file_path:
+            ext = self._current_tab.file_path.lower()
+            if ext.endswith('.3dm') or ext.endswith('.step') or ext.endswith('.stp'):
+                preset = self._current_tab.file_path
+        dlg = ConverterDialog(self, preset_file=preset)
+        dlg.conversion_complete.connect(self._load_converted_file)
+        dlg.exec_()
+
     def _load_converted_file(self, output_path: str):
-        """Load a file that was created by the Convert File flow. Keeps conversion available and ensures 3D view."""
+        """Load a file that was created by the Convert File flow."""
         if self._current_mode != "3d":
             self._switch_mode("3d")
         if self._current_tab and self._current_tab.file_path is not None:
