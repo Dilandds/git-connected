@@ -15,12 +15,10 @@ from ui.drop_zone_overlay import DropZoneOverlay
 
 logger = logging.getLogger(__name__)
 
-# Rubber-band screenshot settings.
-# Base scale keeps large selections sharp; adaptive scaling boosts small selections so the final crop uses much more of the available resolution budget.
-SCREENSHOT_CAPTURE_SCALE = 16
-_SCREENSHOT_TARGET_CROP_EDGE_PX = 12000
-_SCREENSHOT_MAX_EDGE_PX = 16384
-_SCREENSHOT_MAX_PIXELS = 200_000_000  # ~14k × 14k RGBA; scales down uniformly if needed
+# Rubber-band screenshot: render at this multiple of logical canvas size then crop.
+SCREENSHOT_CAPTURE_SCALE = 8
+_SCREENSHOT_MAX_EDGE_PX = 8192
+_SCREENSHOT_MAX_PIXELS = 67_000_000  # ~8k × 8k — safe for most GPUs
 
 from ui.orientation_gizmo import OrientationGizmoWidget
 
@@ -2293,17 +2291,8 @@ class STLViewerWidget(QWidget):
         if self._renderer and self._scene and self._camera:
             try:
                 cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.viewer_container.width(), self.viewer_container.height())
-
-                sel_w = max(1, int(rect.width()))
-                sel_h = max(1, int(rect.height()))
-                base_scale = SCREENSHOT_CAPTURE_SCALE
-                adaptive_scale = max(
-                    base_scale,
-                    _SCREENSHOT_TARGET_CROP_EDGE_PX / max(sel_w, sel_h)
-                )
-
-                target_w = int(cw * adaptive_scale)
-                target_h = int(ch * adaptive_scale)
+                target_w = int(cw * SCREENSHOT_CAPTURE_SCALE)
+                target_h = int(ch * SCREENSHOT_CAPTURE_SCALE)
                 me = max(target_w, target_h)
                 if me > _SCREENSHOT_MAX_EDGE_PX:
                     r = _SCREENSHOT_MAX_EDGE_PX / me
@@ -2314,6 +2303,8 @@ class STLViewerWidget(QWidget):
                     r = (_SCREENSHOT_MAX_PIXELS / px) ** 0.5
                     target_w = max(1, int(target_w * r))
                     target_h = max(1, int(target_h * r))
+
+                logger.info(f"Screenshot render: {target_w}x{target_h} (scale from {cw}x{ch})")
 
                 img_array = self._renderer.snapshot(
                     self._scene, self._camera,
@@ -2332,7 +2323,7 @@ class STLViewerWidget(QWidget):
                     qimg = QImage(img_array.data, w_img, h_img, img_array.strides[0], fmt)
                     full_pixmap = QPixmap.fromImage(qimg.copy())
 
-                    # Map rubber-band rect from widget coords to snapshot pixels (use actual render size)
+                    # Map rubber-band rect from widget coords to snapshot pixels
                     sx = w_img / cw
                     sy = h_img / ch
                     hr_rect = QRect(
@@ -2340,6 +2331,7 @@ class STLViewerWidget(QWidget):
                         int(rect.width() * sx), int(rect.height() * sy)
                     )
                     cropped = full_pixmap.copy(hr_rect)
+                    logger.info(f"Screenshot crop: {cropped.width()}x{cropped.height()} px")
                     captured = True
             except Exception as e:
                 logger.warning(f"High-res screenshot failed, falling back to grab(): {e}")
