@@ -11,7 +11,7 @@ class ScreenshotOverlay(QWidget):
 
     region_selected = pyqtSignal(QRect)  # emitted with the selected rectangle
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, zoom_callback=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
@@ -22,6 +22,7 @@ class ScreenshotOverlay(QWidget):
         self._origin = QPoint()
         self._current = QPoint()
         self._drawing = False
+        self._zoom_callback = zoom_callback
 
     # ---- painting ----
 
@@ -73,6 +74,18 @@ class ScreenshotOverlay(QWidget):
             # Only emit if the square has a minimum size
             if rect.width() > 10 and rect.height() > 10:
                 self.region_selected.emit(rect)
+
+    def wheelEvent(self, event):
+        """Forward wheel events for zoom."""
+        if self._zoom_callback:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self._zoom_callback(1.15)
+            elif delta < 0:
+                self._zoom_callback(0.85)
+            event.accept()
+        else:
+            super().wheelEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:

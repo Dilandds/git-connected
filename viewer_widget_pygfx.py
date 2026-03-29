@@ -2237,7 +2237,7 @@ class STLViewerWidget(QWidget):
             return False
         from ui.screenshot_overlay import ScreenshotOverlay
         if self._screenshot_overlay is None:
-            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container)
+            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container, zoom_callback=self._screenshot_zoom)
             self._screenshot_overlay.region_selected.connect(self._on_screenshot_region_selected)
         self._screenshot_overlay.setGeometry(self.viewer_container.rect())
         self._screenshot_overlay.raise_()
