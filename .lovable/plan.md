@@ -1,60 +1,36 @@
 
 
-# Mesh Segmentation for Connected Parts
+## Plan: Move File Converter from Sidebar to Top Toolbar
 
-## Problem
-Currently, parts are only separated when they are **topologically disconnected** (no shared edges/vertices). For a model like the pipe with a flange, the entire object is one connected mesh — so it appears as a single part. The user wants to isolate semantically distinct regions (e.g. the flat flange vs. the curved pipe) even when they share edges.
+### Overview
+Move the "Convert File" feature from the left sidebar panel to the top toolbar as a new button that opens a dialog window for file conversion.
 
-## Solution: Dihedral Angle-Based Segmentation (Faceting)
+### Changes
 
-Trimesh already has `trimesh.graph.facets()` and face adjacency data that can segment a connected mesh by **sharp edges** — where the angle between two adjacent face normals exceeds a threshold. This is exactly how CAD models naturally divide: a flat plate meets a curved pipe at a sharp crease.
+**1. Create a converter dialog (`ui/converter_dialog.py`)**
+- New `QDialog` class containing all the converter UI (source file selector, format dropdown, convert button)
+- Move the conversion logic (file selection, format detection, running conversion) from `sidebar_panel.py` into this dialog
+- Style it to match the app's dark theme with gradient background
+- Emit `conversion_complete` signal when done
 
-### How It Works
+**2. Add "Convert" button to toolbar (`ui/toolbar.py`)**
+- Add a new `ToolbarButton` (e.g. "🔄", "Convert") in the utility actions section, after the existing buttons
+- Add a new signal `open_converter = pyqtSignal()`
+- Wire the button click to emit that signal
+- This button should always be enabled (converter works independently of loaded model)
 
-```text
-Before (connectivity-only split):
-  Entire pipe+flange = 1 part
+**3. Remove converter section from sidebar (`ui/sidebar_panel.py`)**
+- Remove `create_converter_section()` and all related methods (`set_conversion_blocked`, `reset_converter`, `set_converter_source_from_file`, `_select_converter_source`, `_run_selected_conversion`, `_run_conversion`)
+- Remove the `conversion_complete` signal from SidebarPanel
+- Remove the converter card from `init_ui`
 
-After (dihedral angle segmentation):
-  Part 1: Flat flange plate     [sharp edge boundary]
-  Part 2: Curved pipe body      [sharp edge boundary]  
-  Part 3: Bolt holes (cylinders)
-```
-
-The algorithm:
-1. For each connected component, compute **face adjacency** and **dihedral angles** between adjacent faces
-2. Faces sharing an edge with dihedral angle < threshold (~30°) are grouped together (smooth region)
-3. Each smooth region becomes a separate sub-part
-4. Very tiny regions (< 4 faces) are merged into their largest neighbor to avoid noise
-
-### Implementation Plan
-
-**File: `viewer_widget_pygfx.py`**
-
-1. Add `_segment_by_angle(trimesh_mesh, angle_threshold=30)` method:
-   - Use `trimesh_mesh.face_adjacency` and `trimesh_mesh.face_adjacency_angles`
-   - Build a graph where faces are nodes; edges connect faces whose dihedral angle is below the threshold (i.e. smooth continuation)
-   - Find connected components of this graph → each component = one "segment"
-   - Extract sub-meshes using `trimesh_mesh.submesh()` for each face group
-   - Merge tiny segments (< 4 faces) into their nearest larger neighbor
-   - Return list of `(name, trimesh)` tuples
-
-2. Update `_split_reasonable_components()`:
-   - After splitting by connectivity, apply `_segment_by_angle()` to each connected component that has enough faces (e.g. > 50 faces)
-   - Small connected components skip angle segmentation (already isolated)
-
-3. The existing hierarchy grouping (`get_parts_hierarchy()`) will then cluster these finer segments into meaningful groups automatically
-
-**No changes needed to `ui/parts_panel.py` or `stl_viewer.py`** — the panel already handles the hierarchical data structure.
+**4. Update main window wiring (`stl_viewer.py`)**
+- Connect toolbar's `open_converter` signal to open the new `ConverterDialog`
+- Connect `ConverterDialog.conversion_complete` to `_load_converted_file`
+- Remove all sidebar converter calls (`set_converter_source_from_file`, `set_conversion_blocked`, `reset_converter`)
 
 ### Technical Details
-
-- **trimesh API**: `mesh.face_adjacency` returns pairs of adjacent face indices; `mesh.face_adjacency_angles` returns the dihedral angle for each pair — both are built-in and fast
-- **Graph library**: `networkx` (already a dependency for `trimesh.split()`) for connected components on the face adjacency graph
-- **Angle threshold**: Default 30° (0.52 rad) — flat-to-curved transitions are typically 45-90°, so 30° captures most meaningful boundaries. Could be made adjustable later.
-- **Safety**: If segmentation produces > 200 sub-parts from a single component, fall back to the unsegmented component (prevents over-fragmentation on organic meshes)
-- **Performance**: Face adjacency is O(n_faces) via trimesh's half-edge structure; graph connected components is O(n_faces + n_edges)
-
-### Dependencies
-No new dependencies — uses `trimesh` (face_adjacency), `networkx` (connected components), and `numpy`, all already installed.
+- The dialog will be a modal `QDialog` with the same widgets currently in the sidebar card
+- Conversion map and `FileConverter` usage stays identical
+- The dialog can optionally pre-populate with the current file path if it's a convertible format (3DM/STEP)
 
