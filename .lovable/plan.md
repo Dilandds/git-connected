@@ -1,30 +1,50 @@
 
 
-## Plan: Add Defensive Logging to Visual Style Menu (Windows Crash Fix)
+## Plan: Replace Fragile QPainter Fallback with Simple fillRect
 
 ### Problem
-Clicking "Visual Style" crashes on Windows with no error. The likely culprits are:
-1. **`_menu_diamond_px()`** — `QFontMetrics.horizontalAdvance()` was added in Qt 5.11; older PyQt5 builds may not have it, causing a silent crash
-2. **`_load_parts_menu_pixmap()`** — `QImage.convertToFormat()` on a scaled pixmap could fail on Windows GPU drivers
-3. **`_PartsMenuRow`** — `pix_lbl.setFixedSize(pm.size())` with a null/zero pixmap crashes layout
-4. **`QPainter` in fallback** — painting on a 0-size pixmap can segfault
+`drawRoundedRect` has strict overload resolution on Windows PyQt5 that causes crashes regardless of int/float casting. The rounded corners on a 5px cell are invisible anyway.
 
-### Changes
+### Fix — `ui/toolbar.py`, `_parts_menu_pixmap_fallback()`
 
-**`ui/toolbar.py`** — Add try/except guards and logging throughout the Visual Style menu pipeline:
+Replace the entire function body with a simpler approach that avoids `drawRoundedRect` completely:
 
-1. **`_menu_diamond_px()`** — Wrap in try/except, fall back to `11` if `horizontalAdvance` fails. Add `logger.debug`.
+```python
+from PyQt5.QtCore import QRect
 
-2. **`_load_parts_menu_pixmap(path)`** — Wrap the entire function in try/except returning empty `QPixmap()` on failure. Log each step (load, scale, convert). Guard against zero-size pixmaps.
+def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
+    try:
+        if size <= 0:
+            size = 10
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(0, 0, 0))
+        cell = size // 2 - 1          # integer math only
+        gap = 1
+        for r in range(2):
+            for c in range(2):
+                x = gap + c * (cell + gap)
+                y = gap + r * (cell + gap)
+                p.fillRect(QRect(x, y, cell, cell), QColor(0, 0, 0))
+        p.end()
+        return pm
+    except Exception:
+        logger.warning("_parts_menu_pixmap_fallback failed", exc_info=True)
+        pm = QPixmap(max(size, 10), max(size, 10))
+        pm.fill(QColor(0, 0, 0))
+        return pm
+```
 
-3. **`_parts_menu_pixmap_fallback(size)`** — Guard against `size <= 0`. Wrap `QPainter` block in try/except.
+Key changes:
+- **All integer arithmetic** — no floats anywhere
+- **`fillRect(QRect, QColor)`** instead of `drawRoundedRect` — this overload exists in all PyQt5 versions and has no type ambiguity
+- **`QRect` constructed from ints** — guaranteed compatible
+- **Ultimate fallback**: if even `fillRect` fails, return a solid black square (still better than crashing)
 
-4. **`_PartsMenuRow.__init__`** — After getting pixmap, check `pm.isNull()` before `setFixedSize`. Log the pixmap state.
+This produces the same 2×2 grid of black squares visible in the user's screenshot. The 1px rounded corners from `drawRoundedRect` were imperceptible at this size anyway.
 
-5. **`_show_render_mode_menu()`** — Wrap the entire method body in try/except with `logger.error(... exc_info=True)` so any crash is logged instead of silently killing the app.
-
-### Technical Details
-- All guards use `logger.warning/error` so issues appear in `app_debug.log`
-- No functional changes — just defensive wrapping and logging
-- The `horizontalAdvance` compatibility fix (fallback to `width()`) addresses a known PyQt5 version issue on some Windows installs
+### Files changed
+- `ui/toolbar.py` — only `_parts_menu_pixmap_fallback()` function (lines 37-59)
 
