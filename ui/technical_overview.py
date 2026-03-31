@@ -18,7 +18,7 @@ from PyQt5.QtGui import (
     QPixmap, QPainter, QPen, QColor, QFont, QFontMetrics,
     QBrush, QPainterPath, QPolygonF, QImage, QWheelEvent, QMouseEvent
 )
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +183,7 @@ class ImageCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         if not self._pixmap:
+            painter.fillRect(self.rect(), QColor("#ffffff"))
             self._draw_drop_zone(painter)
             painter.end()
             return
@@ -209,35 +210,28 @@ class ImageCanvas(QWidget):
         painter.end()
 
     def _draw_drop_zone(self, painter: QPainter):
-        """Draw upload prompt when no image is loaded. Match 3D viewer drop zone styles."""
-        painter.setPen(QPen(QColor(default_theme.border_light), 2, Qt.DashLine))
+        """Draw upload prompt when no image is loaded — white area, black text, dashed border."""
+        _ink = "#111827"
         margin = 40
         r = self.rect().adjusted(margin, margin, -margin, -margin)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor("#94a3b8"), 2, Qt.DashLine))
         painter.drawRoundedRect(r, 12, 12)
 
-        # Primary text: same as 3D viewer (18px, weight 600, #1a1a2e)
-        font_primary = QFont()
-        font_primary.setPixelSize(18)
-        font_primary.setWeight(600)
-        painter.setFont(font_primary)
-        painter.setPen(QColor("#1a1a2e"))
-        primary_height = painter.fontMetrics().height()
-        # Helper text: same as 3D viewer (11px, weight 400, #a0aec0)
-        font_helper = QFont()
-        font_helper.setPixelSize(11)
-        font_helper.setWeight(400)
-        painter.setFont(font_helper)
-        helper_height = painter.fontMetrics().height()
+        font_primary = make_font(pixel_size=18, bold=True)
+        primary_height = QFontMetrics(font_primary).height()
+        font_helper = make_font(pixel_size=12, bold=True)
+        helper_height = QFontMetrics(font_helper).height()
         spacing = 12
         block_height = primary_height + spacing + helper_height
         start_y = r.top() + (r.height() - block_height) // 2
         primary_rect = QRectF(r.left(), start_y, r.width(), primary_height)
         helper_rect = QRectF(r.left(), start_y + primary_height + spacing, r.width(), helper_height)
         painter.setFont(font_primary)
-        painter.setPen(QColor("#1a1a2e"))
+        painter.setPen(QColor(_ink))
         painter.drawText(primary_rect, Qt.AlignCenter, "Click or drag to upload")
         painter.setFont(font_helper)
-        painter.setPen(QColor("#a0aec0"))
+        painter.setPen(QColor(_ink))
         painter.drawText(helper_rect, Qt.AlignCenter, "JPEG · PNG · PDF")
 
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):
@@ -278,9 +272,7 @@ class ImageCanvas(QWidget):
         painter.drawEllipse(badge_rect)
 
         painter.setPen(QColor(ARROW_BADGE_TEXT))
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(9)
+        font = make_font(size=9, bold=True)
         painter.setFont(font)
         painter.drawText(badge_rect, Qt.AlignCenter, str(number))
 
@@ -479,10 +471,10 @@ class TechnicalAnnotationPanel(QWidget):
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2; border: 1px solid #FECACA;
-                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #DC2626;
+                background-color: #2A1518; border: 1px solid #3A2528;
+                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #F87171;
             }}
-            QPushButton:hover {{ background-color: #FECACA; }}
+            QPushButton:hover {{ background-color: #351E22; }}
         """)
         clear_btn.clicked.connect(self._on_clear_all)
         btn_row.addWidget(clear_btn)
@@ -538,7 +530,7 @@ class TechnicalAnnotationPanel(QWidget):
         card.installEventFilter(self)
         card.setStyleSheet(f"""
             QFrame {{
-                background-color: #F0F7FF;
+                background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
             }}
@@ -598,9 +590,7 @@ class TechnicalAnnotationPanel(QWidget):
         info.setSpacing(4)
 
         title = QLabel(ann.label or f"Annotation {number}")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(11)
+        title_font = make_font(size=11, bold=True)
         title.setFont(title_font)
         title.setStyleSheet(f"color: {default_theme.text_primary}; border: none;")
         info.addWidget(title)
@@ -631,11 +621,11 @@ class TechnicalAnnotationPanel(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2; border: none; border-radius: 13px;
-                color: #DC2626; font-size: 14px; font-weight: bold;
+                background-color: #2A1518; border: none; border-radius: 13px;
+                color: #F87171; font-size: 14px; font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
-            QPushButton:hover {{ background-color: #FECACA; }}
+            QPushButton:hover {{ background-color: #351E22; }}
         """)
         del_btn.clicked.connect(lambda: self.annotation_deleted.emit(ann.id))
         layout.addWidget(del_btn, 0, Qt.AlignTop)

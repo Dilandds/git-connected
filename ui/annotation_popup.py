@@ -10,9 +10,20 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QPixmap
-from ui.styles import default_theme
+from ui.styles import make_font
 
 logger = logging.getLogger(__name__)
+
+# Light dialog theme (white) — independent of the app’s dark sidebar / theme.
+_POPUP_BG = "#ffffff"
+_POPUP_BORDER = "#d1d5db"
+_POPUP_TEXT = "#111827"
+_POPUP_TEXT_MUTED = "#6b7280"
+_POPUP_SECTION = "#374151"
+_POPUP_INPUT_BG = "#ffffff"
+_POPUP_INPUT_BORDER = "#d1d5db"
+_POPUP_SHADE = "#f3f4f6"
+_POPUP_FOCUS = "#2596BE"
 
 
 class ImageThumbnail(QFrame):
@@ -31,8 +42,8 @@ class ImageThumbnail(QFrame):
         """Initialize the thumbnail UI."""
         self.setStyleSheet(f"""
             QFrame {{
-                background-color: {default_theme.card_background};
-                border: 1px solid {default_theme.border_light};
+                background-color: {_POPUP_INPUT_BG};
+                border: 1px solid {_POPUP_INPUT_BORDER};
                 border-radius: 6px;
             }}
         """)
@@ -45,7 +56,7 @@ class ImageThumbnail(QFrame):
         self.img_label = QLabel()
         self.img_label.setAlignment(Qt.AlignCenter)
         self.img_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.img_label.setStyleSheet("border: none; cursor: pointer;")
+        self.img_label.setStyleSheet("background: transparent; border: none; cursor: pointer;")
         self.img_label.setScaledContents(False)
         self.img_label.setCursor(Qt.PointingHandCursor)
         self.img_label.installEventFilter(self)
@@ -68,16 +79,16 @@ class ImageThumbnail(QFrame):
         remove_btn.setCursor(Qt.PointingHandCursor)
         remove_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                border: none;
+                background-color: #fef2f2;
+                border: 1px solid #fecaca;
                 border-radius: 13px;
-                color: #DC2626;
+                color: #dc2626;
                 font-size: 14px;
                 font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
+                background-color: #fee2e2;
             }}
         """)
         remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.image_path))
@@ -149,11 +160,42 @@ class AnnotationPopup(QDialog):
     
     def init_ui(self):
         """Initialize the popup UI."""
+        self.setObjectName("annotationPopup")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        # Scoped rules override global app QLabel styles (which can paint dark strips behind text/icons).
         self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {default_theme.card_background};
-                border: 1px solid {default_theme.border_standard};
+            QDialog#annotationPopup {{
+                background-color: {_POPUP_BG};
+                border: 1px solid {_POPUP_BORDER};
                 border-radius: 10px;
+            }}
+            QDialog#annotationPopup QLabel {{
+                background-color: transparent;
+                border: none;
+                color: {_POPUP_TEXT};
+            }}
+            QDialog#annotationPopup QLabel#annotationDateBadge {{
+                color: {_POPUP_TEXT_MUTED};
+                font-size: 13px;
+                background-color: {_POPUP_SHADE};
+                border: 1px solid {_POPUP_BORDER};
+                border-radius: 6px;
+                padding: 6px 10px;
+            }}
+            QDialog#annotationPopup QLabel#annotationCommentHeading,
+            QDialog#annotationPopup QLabel#annotationPhotosHeading {{
+                color: {_POPUP_SECTION};
+                font-size: 12px;
+                font-weight: bold;
+                background-color: transparent;
+            }}
+            QDialog#annotationPopup QLabel#annotationPhotosPlaceholder {{
+                color: {_POPUP_TEXT_MUTED};
+                font-size: 11px;
+                background-color: transparent;
+            }}
+            QDialog#annotationPopup QScrollArea > QWidget > QWidget {{
+                background-color: {_POPUP_BG};
             }}
         """)
         
@@ -165,33 +207,37 @@ class AnnotationPopup(QDialog):
         header_layout = QHBoxLayout()
         from ui.annotation_icon import get_annotation_icon_pixmap
         anno_icon = QLabel()
+        anno_icon.setObjectName("annotationIconLabel")
+        anno_icon.setAutoFillBackground(False)
         pix = get_annotation_icon_pixmap(28)
         if not pix.isNull():
             anno_icon.setPixmap(pix)
         anno_icon.setFixedSize(28, 28)
         anno_icon.setAlignment(Qt.AlignCenter)
+        anno_icon.setAttribute(Qt.WA_StyledBackground, True)
         header_layout.addWidget(anno_icon)
         from ui.annotation_panel import _rounded_text_pixmap
         num_icon = QLabel()
+        num_icon.setObjectName("annotationNumBadge")
+        num_icon.setAutoFillBackground(False)
         num_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), size=32))
         num_icon.setFixedSize(32, 32)
+        num_icon.setAttribute(Qt.WA_StyledBackground, True)
         header_layout.addWidget(num_icon)
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.label)
         self.label_edit.setPlaceholderText("Point")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(13)
+        title_font = make_font(size=13, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
             QLineEdit {{
-                color: {default_theme.text_title};
+                color: {_POPUP_TEXT};
                 background: transparent;
                 border: none;
                 border-bottom: 1px solid transparent;
             }}
             QLineEdit:focus {{
-                border-bottom: 1px solid {default_theme.border_light};
+                border-bottom: 1px solid {_POPUP_FOCUS};
             }}
         """)
         self.label_edit.setFixedHeight(28)
@@ -203,32 +249,36 @@ class AnnotationPopup(QDialog):
         from ui.annotation_panel import _format_annotation_date
         date_text = _format_annotation_date(self.created_at, include_time=True) if self.created_at and hasattr(self.created_at, 'month') else str(self.annotation_id)
         date_label = QLabel(date_text)
-        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px;")
+        date_label.setObjectName("annotationDateBadge")
+        date_label.setAutoFillBackground(False)
+        date_label.setAttribute(Qt.WA_StyledBackground, True)
         header_layout.addWidget(date_label)
         
         main_layout.addLayout(header_layout)
         
         # Text input
         text_label = QLabel("Comment:")
-        text_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px;")
+        text_label.setObjectName("annotationCommentHeading")
+        text_label.setAutoFillBackground(False)
         main_layout.addWidget(text_label)
         
         self.text_edit = QTextEdit()
+        self.text_edit.setObjectName("annotationCommentEdit")
         self.text_edit.setPlaceholderText("Add your annotation comment here...")
         self.text_edit.setText(self.text)
         self.text_edit.setMinimumHeight(80)
         self.text_edit.setMaximumHeight(120)
         self.text_edit.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {default_theme.input_bg};
-                border: 1px solid {default_theme.input_border};
+            QTextEdit#annotationCommentEdit {{
+                background-color: {_POPUP_INPUT_BG};
+                border: 1px solid {_POPUP_INPUT_BORDER};
                 border-radius: 6px;
                 padding: 8px;
-                font-size: 11px;
-                color: {default_theme.text_primary};
+                font-size: 12px;
+                color: {_POPUP_TEXT};
             }}
-            QTextEdit:focus {{
-                border: 2px solid {default_theme.button_primary};
+            QTextEdit#annotationCommentEdit:focus {{
+                border: 2px solid {_POPUP_FOCUS};
             }}
         """)
         main_layout.addWidget(self.text_edit)
@@ -236,7 +286,8 @@ class AnnotationPopup(QDialog):
         # Photos section
         photos_header = QHBoxLayout()
         photos_label = QLabel("Photos:")
-        photos_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px;")
+        photos_label.setObjectName("annotationPhotosHeading")
+        photos_label.setAutoFillBackground(False)
         photos_header.addWidget(photos_label)
         
         photos_header.addStretch()
@@ -246,15 +297,15 @@ class AnnotationPopup(QDialog):
         add_photo_btn.setCursor(Qt.PointingHandCursor)
         add_photo_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {default_theme.row_bg_standard};
-                border: 1px solid {default_theme.border_light};
+                background-color: {_POPUP_SHADE};
+                border: 1px solid {_POPUP_INPUT_BORDER};
                 border-radius: 4px;
                 padding: 4px 10px;
-                font-size: 10px;
-                color: {default_theme.text_primary};
+                font-size: 11px;
+                color: {_POPUP_TEXT};
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background-color: #e5e7eb;
             }}
         """)
         add_photo_btn.clicked.connect(self._add_photo)
@@ -269,10 +320,11 @@ class AnnotationPopup(QDialog):
         self.photos_scroll.setWidgetResizable(True)
         self.photos_scroll.setMinimumHeight(250)
         self.photos_scroll.setFrameShape(QFrame.NoFrame)
-        self.photos_scroll.setStyleSheet("background: transparent;")
+        self.photos_scroll.setStyleSheet(f"QScrollArea {{ background: {_POPUP_BG}; border: none; }}")
         self.photos_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         self.photos_container = QWidget()
+        self.photos_container.setStyleSheet(f"background-color: {_POPUP_BG};")
         self.photos_layout = QVBoxLayout(self.photos_container)
         self.photos_layout.setContentsMargins(0, 0, 0, 0)
         self.photos_layout.setSpacing(8)
@@ -292,15 +344,16 @@ class AnnotationPopup(QDialog):
         delete_btn.setCursor(Qt.PointingHandCursor)
         delete_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                border: 1px solid #FECACA;
+                background-color: #fef2f2;
+                border: 1px solid #fecaca;
                 border-radius: 6px;
                 padding: 8px 16px;
                 font-size: 12px;
-                color: #DC2626;
+                font-weight: bold;
+                color: #dc2626;
             }}
             QPushButton:hover {{
-                background-color: #FECACA;
+                background-color: #fee2e2;
             }}
         """)
         delete_btn.clicked.connect(self._on_delete)
@@ -375,7 +428,8 @@ class AnnotationPopup(QDialog):
         # Add placeholder if empty
         if not self.image_paths:
             placeholder = QLabel("No photos attached")
-            placeholder.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+            placeholder.setObjectName("annotationPhotosPlaceholder")
+            placeholder.setAutoFillBackground(False)
             placeholder.setAlignment(Qt.AlignCenter)
             placeholder.setMinimumHeight(80)
             self.photos_layout.addWidget(placeholder)

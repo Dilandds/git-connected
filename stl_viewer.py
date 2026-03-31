@@ -54,6 +54,16 @@ from ui.technical_sidebar import TechnicalSidebar
 
 logger = logging.getLogger(__name__)
 
+# QTabBar + QSS can still clip the first glyph on macOS; leading en spaces reserve real width.
+_TAB_CAPTION_LEAD = "\u2002\u2002\u2002"
+
+
+def _ecto_tab_caption(visible_name: str) -> str:
+    """Tab strip label with left inset so the first character is not clipped."""
+    if not visible_name or visible_name == "+":
+        return visible_name
+    return _TAB_CAPTION_LEAD + visible_name
+
 
 def safe_flush(stream):
     """Safely flush a stream, handling None (common in PyInstaller Windows builds)."""
@@ -179,7 +189,10 @@ class STLViewerWindow(QMainWindow):
         mode_bar.setFixedHeight(36)
         mode_bar.setStyleSheet(f"""
             QWidget {{
-                background-color: {default_theme.card_background};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {default_theme.gradient_start},
+                    stop:0.5 {default_theme.gradient_mid},
+                    stop:1 {default_theme.gradient_end});
                 border-bottom: 1px solid {default_theme.border_standard};
             }}
         """)
@@ -190,9 +203,10 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn = QPushButton("🔲 3D Viewer")
         self._mode_tech_btn = QPushButton("📋 Technical Overview")
         for btn in (self._mode_3d_btn, self._mode_tech_btn):
-            btn.setFixedHeight(26)
+            btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
+            btn.setAttribute(Qt.WA_StyledBackground, True)
         self._mode_3d_btn.setChecked(True)
         self._current_mode = "3d"
         
@@ -226,7 +240,7 @@ class STLViewerWindow(QMainWindow):
         self.sidebar_panel.upload_btn.clicked.connect(self.upload_stl_file)
         self.sidebar_panel.export_scaled_stl.connect(self.export_scaled_stl)
         self.sidebar_panel.annotations_exported.connect(self._on_annotations_exported)
-        self.sidebar_panel.conversion_complete.connect(self._load_converted_file)
+        
         splitter.addWidget(self.sidebar_panel)
         logger.info("init_ui: Sidebar panel created")
         
@@ -239,10 +253,13 @@ class STLViewerWindow(QMainWindow):
         # ---- Tab Bar (left-aligned so "Untitled" starts at left edge) ----
         self.tab_bar = QTabBar()
         self.tab_bar.setObjectName("ectoTabBar")
+        self.tab_bar.setAttribute(Qt.WA_StyledBackground, True)
+        self.tab_bar.setMinimumHeight(30)
         self.tab_bar.setTabsClosable(True)
         self.tab_bar.setMovable(False)
         self.tab_bar.setExpanding(False)
         self.tab_bar.setDrawBase(False)
+        self.tab_bar.setElideMode(Qt.ElideNone)
         self.tab_bar.tabCloseRequested.connect(self._on_tab_close_requested)
         # Add "+" button as the last tab (before connecting currentChanged so signal doesn't fire before _plus_tab_index exists)
         self._plus_tab_index = self.tab_bar.addTab("+")
@@ -251,7 +268,8 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.LeftSide, None)
         tab_bar_container = QWidget()
         tab_bar_layout = QHBoxLayout(tab_bar_container)
-        tab_bar_layout.setContentsMargins(0, 0, 0, 0)
+        # Left inset so first tab label (bold) is not flush against the splitter edge / clipped
+        tab_bar_layout.setContentsMargins(14, 0, 0, 0)
         tab_bar_layout.setSpacing(0)
         tab_bar_layout.addWidget(self.tab_bar, 0, Qt.AlignLeft)
         tab_bar_layout.addStretch(1)
@@ -349,24 +367,66 @@ class STLViewerWindow(QMainWindow):
     
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
+        # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
         active_style = f"""
             QPushButton {{
-                background-color: {default_theme.button_primary};
-                border: none; border-radius: 4px;
-                padding: 4px 14px; font-size: 11px; font-weight: bold;
-                color: white;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #9aa3b8,
+                    stop:0.1 #7d8598,
+                    stop:0.28 #636877,
+                    stop:0.55 #565c6e,
+                    stop:1 #3e424f);
+                color: {default_theme.text_white};
+                border-top: 1px solid #b8c0d4;
+                border-left: 1px solid #9aa2b4;
+                border-right: 1px solid #3a3f4c;
+                border-bottom: 1px solid #252830;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #a8b0c4,
+                    stop:0.1 #8a92a6,
+                    stop:0.28 #6f7688,
+                    stop:0.55 #5f6576,
+                    stop:1 #484c59);
+                border-top: 1px solid #c8d0e0;
+                border-left: 1px solid #a8b0c0;
+                border-right: 1px solid #424650;
+                border-bottom: 1px solid #2a2e38;
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #5a6172,
+                    stop:0.45 #4d5362,
+                    stop:1 #3a3e4a);
+                border-top: 1px solid #3a3f4c;
+                border-left: 1px solid #353942;
+                border-right: 1px solid #5a5f6e;
+                border-bottom: 1px solid #6a7080;
             }}
         """
         inactive_style = f"""
             QPushButton {{
-                background-color: transparent;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #2e323c,
+                    stop:1 #1e2128);
                 border: 1px solid {default_theme.border_light};
-                border-radius: 4px;
-                padding: 4px 14px; font-size: 11px;
+                border-top: 1px solid #454a58;
+                border-radius: 5px;
+                padding: 5px 14px;
+                font-size: 11px;
                 color: {default_theme.text_secondary};
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #3a3e4a,
+                    stop:1 #2a2e36);
+                color: {default_theme.text_white};
+                border: 1px solid {default_theme.border_medium};
             }}
         """
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
@@ -565,7 +625,7 @@ class STLViewerWindow(QMainWindow):
             display_name = Path(file_path).name
             tab.file_path = file_path
             tab.filename = display_name
-        tab_bar_index = self.tab_bar.insertTab(self._plus_tab_index, display_name)
+        tab_bar_index = self.tab_bar.insertTab(self._plus_tab_index, _ecto_tab_caption(display_name))
         self._plus_tab_index += 1  # "+" tab shifted right
         
         # Switch to the new tab
@@ -630,16 +690,9 @@ class STLViewerWindow(QMainWindow):
             self.sidebar_panel.update_dimensions(tab.sidebar_data, tab.file_path)
             count = len(tab.annotation_panel.get_annotations())
             self.sidebar_panel.update_annotation_count(count)
-            # Show conversion options for 3DM/STEP; block for other formats
-            fp = (tab.file_path or "").lower()
-            is_conv = fp.endswith('.3dm') or fp.endswith('.step') or fp.endswith('.stp')
-            if is_conv:
-                self.sidebar_panel.set_converter_source_from_file(tab.file_path)
-            else:
-                self.sidebar_panel.set_conversion_blocked(True)
         else:
             self.sidebar_panel.reset_all_data()
-            self.sidebar_panel.set_conversion_blocked(False)
+            
         
         # Update toolbar state
         has_file = tab.file_path is not None
@@ -877,8 +930,12 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.toggle_draw.connect(self._toggle_draw_mode)
         self.toolbar.toggle_parts.connect(self._toggle_parts_mode)
         self.toolbar.draw_color_changed.connect(self._on_draw_color_changed)
+        self.toolbar.draw_eraser_toggled.connect(self._on_draw_eraser_toggled)
+        self.toolbar.draw_undo_requested.connect(self._on_draw_undo)
+        self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
+        self.toolbar.open_converter.connect(self._open_converter_dialog)
     
     def _connect_ruler_toolbar_signals(self):
         """Connect ruler toolbar signals to handler methods."""
@@ -959,6 +1016,11 @@ class STLViewerWindow(QMainWindow):
         if self.annotation_panel.isVisible():
             self._exit_annotation_mode()
         
+        # Exit parts mode and hide parts panel
+        if self.toolbar.parts_mode_enabled:
+            self.toolbar.parts_mode_enabled = False
+            self._exit_parts_mode()
+        
         # Exit screenshot mode if active and clear all screenshots
         if self.toolbar.screenshot_mode_enabled:
             self._exit_screenshot_mode()
@@ -966,7 +1028,7 @@ class STLViewerWindow(QMainWindow):
         
         # Reset sidebar panel dimensions and calculations
         self.sidebar_panel.reset_all_data()
-        self.sidebar_panel.reset_converter()
+        
         
         # Reset tab state
         tab = self._current_tab
@@ -977,7 +1039,7 @@ class STLViewerWindow(QMainWindow):
             tab.mesh = None
             tab.annotations_exported = False
             # Update tab bar text
-            self.tab_bar.setTabText(self.current_tab_index, "Untitled")
+            self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption("Untitled"))
         
         logger.info("_clear_current_model: Model and all data cleared")
     
@@ -1017,8 +1079,21 @@ class STLViewerWindow(QMainWindow):
         
         self._load_file_into_current_tab(file_path, from_conversion=False)
     
+    def _open_converter_dialog(self):
+        """Open the file converter dialog."""
+        from ui.converter_dialog import ConverterDialog
+        # Pre-populate with current file if it's a convertible format
+        preset = None
+        if self._current_tab and self._current_tab.file_path:
+            ext = self._current_tab.file_path.lower()
+            if ext.endswith('.3dm') or ext.endswith('.step') or ext.endswith('.stp'):
+                preset = self._current_tab.file_path
+        dlg = ConverterDialog(self, preset_file=preset)
+        dlg.conversion_complete.connect(self._load_converted_file)
+        dlg.exec_()
+
     def _load_converted_file(self, output_path: str):
-        """Load a file that was created by the Convert File flow. Keeps conversion available and ensures 3D view."""
+        """Load a file that was created by the Convert File flow."""
         if self._current_mode != "3d":
             self._switch_mode("3d")
         if self._current_tab and self._current_tab.file_path is not None:
@@ -1056,16 +1131,9 @@ class STLViewerWindow(QMainWindow):
             tab.filename = filename
             tab.loaded_via_conversion = from_conversion
             
-            # Show conversion options for 3DM/STEP; block for other formats (STL, OBJ, etc.)
-            file_ext = file_path.lower()
-            is_convertible = (file_ext.endswith('.3dm') or file_ext.endswith('.step') or file_ext.endswith('.stp'))
-            if is_convertible:
-                self.sidebar_panel.set_converter_source_from_file(file_path)
-            else:
-                self.sidebar_panel.set_conversion_blocked(True)
             
             # Update tab bar text
-            self.tab_bar.setTabText(self.current_tab_index, filename)
+            self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(filename))
             
             self.setWindowTitle(f"ECTOFORM - {filename}")
             self.toolbar.set_loaded_filename(filename)
@@ -1082,6 +1150,9 @@ class STLViewerWindow(QMainWindow):
             
             # Load any existing annotations for this file
             self._load_annotations_for_file(file_path)
+            
+            # Keep 3D view aligned with toolbar (default visual style is shaded)
+            self._set_render_mode(self.toolbar.render_mode)
     
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
@@ -1170,6 +1241,11 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw is None:
             return
+        # Exit parts mode and hide the parts panel
+        if self.toolbar.parts_mode_enabled:
+            self.toolbar.parts_mode_enabled = False
+            self._exit_parts_mode()
+            self._save_current_tab_state()
         if hasattr(vw, 'clear_drawings'):
             try:
                 vw.clear_drawings()
@@ -1559,16 +1635,24 @@ class STLViewerWindow(QMainWindow):
                 self._exit_screenshot_mode()
             if self.toolbar.draw_mode_enabled:
                 self._exit_draw_mode()
-            # Populate parts list from viewer
-            has_get_parts = hasattr(vw, 'get_parts_list')
-            logger.info(f"parts_debug: _toggle_parts_mode viewer={vw.__class__.__module__}.{vw.__class__.__name__}, has get_parts_list={has_get_parts}")
-            parts = vw.get_parts_list() if has_get_parts else []
-            logger.info(f"parts_debug: _toggle_parts_mode got {len(parts)} parts from viewer")
-            tab.parts_panel.set_parts(parts)
+            # Clear any previous cards — panel starts empty, populated on click
+            tab.parts_panel.clear_all()
             tab.parts_panel.show()
             self.parts_stack.setCurrentWidget(tab.parts_panel)
             self.right_panel_stack.setCurrentWidget(self.parts_stack)
             self.right_panel_stack.show()
+            # Cache hierarchy data for on-click lookup
+            has_hierarchy = hasattr(vw, 'get_parts_hierarchy')
+            has_flat = hasattr(vw, 'get_parts_list')
+            if has_hierarchy:
+                self._cached_parts_hierarchy = vw.get_parts_hierarchy()
+            elif has_flat:
+                self._cached_parts_hierarchy = vw.get_parts_list()
+            else:
+                self._cached_parts_hierarchy = []
+            # Enable click-to-select in 3D viewport
+            if hasattr(vw, 'enable_parts_pick_mode'):
+                vw.enable_parts_pick_mode()
             if hasattr(vw, 'reframe_for_viewport'):
                 QTimer.singleShot(50, vw.reframe_for_viewport)
             logger.info("_toggle_parts_mode: Parts mode enabled")
@@ -1581,6 +1665,9 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if tab and tab.parts_panel:
             tab.parts_panel.hide()
+        # Disable click-to-select in 3D viewport
+        if vw and hasattr(vw, 'disable_parts_pick_mode'):
+            vw.disable_parts_pick_mode()
         # Restore all parts visible
         if vw and hasattr(vw, 'show_all_parts'):
             vw.show_all_parts()
@@ -1588,6 +1675,9 @@ class STLViewerWindow(QMainWindow):
             vw.unhighlight_parts()
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()
+        parent = self.right_panel_stack.parentWidget()
+        if parent:
+            parent.updateGeometry()
         if vw and hasattr(vw, 'reframe_for_viewport'):
             QTimer.singleShot(50, vw.reframe_for_viewport)
         self.toolbar.reset_parts_state()
@@ -1605,11 +1695,18 @@ class STLViewerWindow(QMainWindow):
         panel = tab.parts_panel
         panel.part_visibility_changed.connect(lambda pid, vis: self._part_set_visible(pid, vis))
         panel.part_selected.connect(lambda pid: self._part_select(pid))
+        panel.group_selected.connect(lambda pids: self._group_select(pids))
         panel.show_all_requested.connect(self._parts_show_all)
         panel.hide_all_requested.connect(self._parts_hide_all)
         panel.invert_visibility_requested.connect(self._parts_invert)
         panel.isolate_selected_requested.connect(lambda pid: self._part_isolate(pid))
+        panel.isolate_group_requested.connect(lambda pids: self._group_isolate(pids))
         panel.exit_parts_mode.connect(self._exit_parts_mode_from_panel)
+
+        # Connect viewer part_clicked signal to panel selection
+        vw = tab.viewer_widget
+        if vw and hasattr(vw, 'part_clicked'):
+            vw.part_clicked.connect(lambda pid, p=panel: self._on_viewer_part_clicked(pid, p))
 
     def _part_set_visible(self, part_id, visible):
         vw = self.viewer_widget
@@ -1620,6 +1717,30 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'highlight_part'):
             vw.highlight_part(part_id)
+
+    def _group_select(self, part_ids):
+        """Highlight all parts in a group."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'highlight_parts'):
+            vw.highlight_parts(part_ids)
+
+    def _on_viewer_part_clicked(self, part_id, panel):
+        """Handle click on a part in the 3D viewer — add card if needed, then select."""
+        # Find the hierarchy entry that owns this part_id
+        item = self._find_hierarchy_entry_for(part_id)
+        if item:
+            panel.add_part(item)
+            panel.select_part_by_id(part_id)
+
+    def _find_hierarchy_entry_for(self, part_id):
+        """Find the hierarchy entry (standalone or group) that contains part_id."""
+        cached = getattr(self, '_cached_parts_hierarchy', [])
+        for entry in cached:
+            if entry['id'] == part_id:
+                return entry
+            if part_id in entry.get('child_ids', []):
+                return entry
+        return None
 
     def _parts_show_all(self):
         vw = self.viewer_widget
@@ -1640,6 +1761,19 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'isolate_part'):
             vw.isolate_part(part_id)
+
+    def _group_isolate(self, part_ids):
+        """Isolate a group — show only its child parts."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'isolate_parts'):
+            vw.isolate_parts(part_ids)
+        elif vw:
+            # Fallback: hide all, then show group parts
+            if hasattr(vw, 'hide_all_parts'):
+                vw.hide_all_parts()
+            if hasattr(vw, 'set_part_visible'):
+                for pid in part_ids:
+                    vw.set_part_visible(pid, True)
 
     # ========== Screenshot Mode Methods ==========
     
@@ -1704,7 +1838,7 @@ class STLViewerWindow(QMainWindow):
                         self._exit_ruler_mode()
                     if self.toolbar.annotation_mode_enabled:
                         self._exit_annotation_mode()
-                    if self.toolbar.screenshot_mode_enabled:
+                    if self.toolbar.screenshot_mode_enabled or getattr(vw, "screenshot_mode", False):
                         self._exit_screenshot_mode()
                     # Show color picker on first enable
                     self.toolbar.show_draw_color_picker()
@@ -1728,6 +1862,24 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'set_draw_color'):
             vw.set_draw_color(color)
+
+    def _on_draw_eraser_toggled(self, enabled: bool):
+        """Handle eraser mode toggle."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_eraser_mode'):
+            vw.set_eraser_mode(enabled)
+
+    def _on_draw_undo(self):
+        """Undo last drawn stroke."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'undo_last_stroke'):
+            vw.undo_last_stroke()
+
+    def _on_draw_clear(self):
+        """Clear all drawn strokes."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'clear_drawings'):
+            vw.clear_drawings()
 
     
     def _on_screenshot_captured(self, pixmap):
@@ -2170,11 +2322,13 @@ class STLViewerWindow(QMainWindow):
             if tab:
                 tab.file_path = ecto_path
                 tab.filename = display_name
-                self.tab_bar.setTabText(self.current_tab_index, display_name)
+                self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(display_name))
             
             self.setWindowTitle(f"ECTOFORM - {display_name}")
             self.toolbar.set_loaded_filename(display_name)
             self.toolbar.set_stl_loaded(True)
+            
+            self._set_render_mode(self.toolbar.render_mode)
             
             if hasattr(vw, 'current_mesh'):
                 mesh = vw.current_mesh

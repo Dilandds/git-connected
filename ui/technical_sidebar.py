@@ -8,10 +8,24 @@ from PyQt5.QtWidgets import (
     QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QFont
-from ui.styles import default_theme
+from PyQt5.QtGui import QPalette, QColor
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
+
+# Input fields: white surface, black text (Technical Overview sidebar)
+_FIELD_BG = "#ffffff"
+_FIELD_TEXT = "#111827"
+_FIELD_BORDER = "#d1d5db"
+_FIELD_PLACEHOLDER = "#6b7280"
+
+
+def _apply_field_palette(widget):
+    """Ensure typed text is dark and placeholder is muted (global theme may use light-on-dark)."""
+    pal = widget.palette()
+    pal.setColor(QPalette.Text, QColor(_FIELD_TEXT))
+    pal.setColor(QPalette.PlaceholderText, QColor(_FIELD_PLACEHOLDER))
+    widget.setPalette(pal)
 
 
 def _section_label(text: str) -> QLabel:
@@ -26,17 +40,18 @@ def _line_edit(placeholder: str = "") -> QLineEdit:
     le.setFixedHeight(30)
     le.setStyleSheet(f"""
         QLineEdit {{
-            background-color: {default_theme.input_bg};
-            border: 1px solid {default_theme.input_border};
+            background-color: {_FIELD_BG};
+            border: 1px solid {_FIELD_BORDER};
             border-radius: 6px;
             padding: 4px 8px;
             font-size: 11px;
-            color: {default_theme.text_primary};
+            color: {_FIELD_TEXT};
         }}
         QLineEdit:focus {{
             border: 2px solid {default_theme.button_primary};
         }}
     """)
+    _apply_field_palette(le)
     return le
 
 
@@ -72,9 +87,7 @@ class TechnicalSidebar(QWidget):
 
         # Title header
         header = QLabel("Technical Overview")
-        hfont = QFont()
-        hfont.setBold(True)
-        hfont.setPointSize(13)
+        hfont = make_font(size=13, bold=True)
         header.setFont(hfont)
         header.setStyleSheet(f"color: {default_theme.text_title};")
         layout.addWidget(header)
@@ -169,17 +182,18 @@ class TechnicalSidebar(QWidget):
         self.comments_edit.setMaximumHeight(250)
         self.comments_edit.setStyleSheet(f"""
             QTextEdit {{
-                background-color: {default_theme.input_bg};
-                border: 1px solid {default_theme.input_border};
+                background-color: {_FIELD_BG};
+                border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 8px;
                 font-size: 11px;
-                color: {default_theme.text_primary};
+                color: {_FIELD_TEXT};
             }}
             QTextEdit:focus {{
                 border: 2px solid {default_theme.button_primary};
             }}
         """)
+        _apply_field_palette(self.comments_edit)
         layout.addWidget(self.comments_edit)
 
         # Separator
@@ -257,13 +271,13 @@ class TechnicalSidebar(QWidget):
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #EF4444;
+                background-color: #B91C1C;
                 border: none; border-radius: 6px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
             QPushButton:hover {{
-                background-color: #DC2626;
+                background-color: #991B1B;
             }}
         """)
         self.reset_btn.clicked.connect(lambda: self.reset_requested.emit())
@@ -277,12 +291,12 @@ class TechnicalSidebar(QWidget):
     def _style_date_edit(self, de: QDateEdit):
         de.setStyleSheet(f"""
             QDateEdit {{
-                background-color: {default_theme.input_bg};
-                border: 1px solid {default_theme.input_border};
+                background-color: {_FIELD_BG};
+                border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 4px 8px;
                 font-size: 11px;
-                color: {default_theme.text_primary};
+                color: {_FIELD_TEXT};
             }}
             QDateEdit:focus {{
                 border: 2px solid {default_theme.button_primary};
@@ -292,6 +306,7 @@ class TechnicalSidebar(QWidget):
                 width: 20px;
             }}
         """)
+        _apply_field_palette(de)
 
     def _on_annotate_toggled(self):
         self._annotation_mode = self.annotate_btn.isChecked()
@@ -373,11 +388,11 @@ class TechnicalSidebar(QWidget):
         rm_btn.setCursor(Qt.PointingHandCursor)
         rm_btn.setStyleSheet("""
             QPushButton {
-                background-color: #FEE2E2; border: none; border-radius: 13px;
-                color: #DC2626; font-size: 14px; font-weight: bold;
+                background-color: #2A1518; border: none; border-radius: 13px;
+                color: #F87171; font-size: 14px; font-weight: bold;
                 padding: 0; min-width: 26px; min-height: 26px;
             }
-            QPushButton:hover { background-color: #FECACA; }
+            QPushButton:hover { background-color: #351E22; }
         """)
         rm_btn.clicked.connect(lambda: self._remove_manufacturer_row(row, le))
         rl.addWidget(rm_btn)

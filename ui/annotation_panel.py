@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
-from ui.styles import default_theme
+from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,45 @@ PENDING_COLOR = '#909d92'   # Light grey - unvalidated
 VALIDATED_COLOR = '#1821b4'  # Blue - validated
 READER_UNREAD_COLOR = '#36cd2e'  # Green - unread in reader mode
 READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
+
+# Annotation mode top banner — warm leather / skeuomorphic (vertical gradient + bevel)
+_ANNO_LEATHER_TOP = '#D4926A'
+_ANNO_LEATHER_UPPER = '#B8653A'
+_ANNO_LEATHER_MID = '#A0522D'
+_ANNO_LEATHER_DEEP = '#6B3818'
+_ANNO_LEATHER_BOTTOM = '#4B2504'
+
+# Dark annotation list cards — glassy teal slate (gradient + light rim on all sides)
+_ANNO_CARD_BORDER = """
+                border-top: 1px solid rgba(255, 255, 255, 0.42);
+                border-left: 1px solid rgba(255, 255, 255, 0.36);
+                border-right: 1px solid rgba(255, 255, 255, 0.26);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.20);
+                border-radius: 10px;
+"""
+_ANNO_CARD_PENDING = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+    "stop:0 #2d4149, stop:0.5 #1f3238, stop:1 #162225)"
+)
+_ANNO_CARD_VALIDATED = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+    "stop:0 #2a3848, stop:0.5 #1e2a35, stop:1 #151a22)"
+)
+_ANNO_CARD_READER_UNREAD = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+    "stop:0 #2a4538, stop:0.5 #1f322c, stop:1 #16221c)"
+)
+_ANNO_CARD_HOVER = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+    "stop:0 #5a7a8c, stop:0.45 #426070, stop:1 #2d4a58)"
+)
+_ANNO_CARD_BORDER_HOVER = """
+                border-top: 1px solid rgba(255, 255, 255, 0.55);
+                border-left: 1px solid rgba(255, 255, 255, 0.48);
+                border-right: 1px solid rgba(255, 255, 255, 0.34);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+                border-radius: 10px;
+"""
 
 
 def _is_dark_color(hex_color: str) -> bool:
@@ -69,10 +108,8 @@ def _rounded_text_pixmap(text: str, size: int = 28, fill_color: str = "#DBEAFE")
     margin = 2
     painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
     # Bold text centered - white on dark, black on light
-    font = QFont()
-    font.setBold(True)
     n = len(str(text))
-    font.setPointSize(8 if n > 10 else (9 if n > 3 else 10))
+    font = make_font(size=8 if n > 10 else (9 if n > 3 else 10), bold=True)
     painter.setFont(font)
     text_color = QColor("#FFFFFF") if _is_dark_color(fill_color) else QColor("#000000")
     painter.setPen(text_color)
@@ -166,6 +203,7 @@ class AnnotationCard(QFrame):
         self._reader_mode = reader_mode
         self._display_number = display_number if display_number is not None else annotation.id
         self.setObjectName("annotationCard")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setCursor(Qt.PointingHandCursor)
         self.init_ui()
         self._update_style()
@@ -177,7 +215,7 @@ class AnnotationCard(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(8)
         
         # Point indicator (colored dot) - Gray for pending, Black for validated
@@ -199,9 +237,7 @@ class AnnotationCard(QFrame):
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.annotation.label)
         self.label_edit.setPlaceholderText("Point")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(11)
+        title_font = make_font(size=11, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
             QLineEdit {{
@@ -267,8 +303,8 @@ class AnnotationCard(QFrame):
                 padding: 0; min-width: 28px; min-height: 28px;
             }}
             QPushButton:hover {{
-                background-color: #FEE2E2;
-                color: #DC2626;
+                background-color: rgba(255, 255, 255, 0.12);
+                color: #F87171;
                 border-radius: 14px;
             }}
         """)
@@ -320,46 +356,38 @@ class AnnotationCard(QFrame):
         indicator_color = self._get_indicator_color()
         status_color = default_theme.text_secondary
         if self._reader_mode:
-            # Reader mode: Green for unread, Blue for read
             if self.annotation.is_read:
-                bg_color = "#F3F4F6"
-                border_color = "#D1D5DB"
+                base_grad = _ANNO_CARD_VALIDATED
                 self.status_icon.setPixmap(_checkmark_pixmap(12, status_color))
                 self.status_icon.setVisible(True)
                 self.status_label.setText("Read")
             else:
-                bg_color = "#F0FFF0"
-                border_color = "#86EFAC"
-                self.status_icon.setPixmap(QPixmap())  # No icon for unread
+                base_grad = _ANNO_CARD_READER_UNREAD
+                self.status_icon.setPixmap(QPixmap())
                 self.status_icon.setVisible(False)
                 self.status_label.setText("Unread")
         elif self.annotation.is_validated:
-            # Blue for validated - use drawn checkmark (not Unicode) for crisp Windows rendering
-            bg_color = "#F3F4F6"
-            border_color = "#D1D5DB"
+            base_grad = _ANNO_CARD_VALIDATED
             self.status_icon.setPixmap(_checkmark_pixmap(12, status_color))
             self.status_icon.setVisible(True)
             self.status_label.setText("Validated")
         else:
-            # Gray for pending
-            bg_color = "#F9FAFB"
-            border_color = "#E5E7EB"
+            base_grad = _ANNO_CARD_PENDING
             self.status_icon.setPixmap(QPixmap())
             self.status_icon.setVisible(False)
             self.status_label.setText("Click to edit")
-        
+
         _dot_font = 20 if sys.platform == 'win32' else 14
         self.point_indicator.setStyleSheet(f"color: {indicator_color}; font-size: {_dot_font}px; background-color: transparent;")
-        # Number badge follows dot color
         self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), fill_color=indicator_color))
         self.setStyleSheet(f"""
             QFrame#annotationCard {{
-                background-color: {bg_color};
-                border: 1px solid {border_color};
-                border-radius: 8px;
+                background: {base_grad};
+                {_ANNO_CARD_BORDER}
             }}
             QFrame#annotationCard:hover {{
-                background-color: rgba(219, 234, 254, 0.7);
+                background: {_ANNO_CARD_HOVER};
+                {_ANNO_CARD_BORDER_HOVER}
             }}
             QFrame#annotationCard QLabel {{
                 background-color: transparent;
@@ -439,21 +467,33 @@ class AnnotationPanel(QWidget):
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(8)
         
-        # Header
+        # Header — warm leather-style banner (gradient + bevel + dashed section rule)
         header = QFrame()
-        header.setStyleSheet("""
-            QFrame {
-                background-color: #FFC90E;
-                border: 1px solid #E5B80A;
-                border-radius: 8px;
-            }
+        header.setObjectName("annotationModeBanner")
+        header.setAttribute(Qt.WA_StyledBackground, True)
+        header.setStyleSheet(f"""
+            QFrame#annotationModeBanner {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {_ANNO_LEATHER_TOP},
+                    stop:0.12 {_ANNO_LEATHER_UPPER},
+                    stop:0.38 {_ANNO_LEATHER_MID},
+                    stop:0.72 {_ANNO_LEATHER_DEEP},
+                    stop:1 {_ANNO_LEATHER_BOTTOM});
+                border-top: 1px solid rgba(255, 255, 255, 0.52);
+                border-left: 1px solid rgba(255, 255, 255, 0.42);
+                border-right: 1px solid rgba(255, 255, 255, 0.38);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+                border-radius: 14px;
+            }}
         """)
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(12, 10, 12, 10)
-        header_layout.setSpacing(6)
+        header_layout.setContentsMargins(16, 10, 16, 10)
+        header_layout.setSpacing(0)
         
         # Title row
         title_row = QHBoxLayout()
+        title_row.setContentsMargins(2, 0, 0, 0)
+        title_row.setSpacing(10)
         from ui.annotation_icon import get_annotation_icon_pixmap
         anno_icon = QLabel()
         pix = get_annotation_icon_pixmap(22)
@@ -463,13 +503,12 @@ class AnnotationPanel(QWidget):
             anno_icon.setText("📝")
         anno_icon.setFixedSize(22, 22)
         anno_icon.setAlignment(Qt.AlignCenter)
+        anno_icon.setStyleSheet("background: transparent; border: none;")
         title_row.addWidget(anno_icon)
-        title_label = QLabel("Annotations")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(12)
+        title_label = QLabel("Annotation mode")
+        title_font = make_font(size=12, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title};")
+        title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(title_label)
         title_row.addStretch()
         
@@ -477,30 +516,50 @@ class AnnotationPanel(QWidget):
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(28, 28)
         close_btn.setCursor(Qt.PointingHandCursor)
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
+        close_btn.setStyleSheet("""
+            QPushButton {
                 background-color: transparent;
                 border: none;
-                color: {default_theme.text_secondary};
+                color: rgba(255, 255, 255, 0.92);
                 font-size: 16px;
                 font-weight: bold;
                 padding: 0; min-width: 28px; min-height: 28px;
-            }}
-            QPushButton:hover {{
-                color: {default_theme.text_primary};
-                background-color: {default_theme.row_bg_hover};
+            }
+            QPushButton:hover {
+                color: #FFFFFF;
+                background-color: rgba(0, 0, 0, 0.18);
                 border-radius: 14px;
-            }}
+            }
         """)
         close_btn.clicked.connect(self.exit_annotation_mode.emit)
         title_row.addWidget(close_btn)
         
         header_layout.addLayout(title_row)
         
+        divider = QFrame()
+        divider.setObjectName("annotationModeDivider")
+        divider.setFrameShape(QFrame.NoFrame)
+        divider.setMinimumHeight(3)
+        divider.setMaximumHeight(3)
+        divider.setStyleSheet("""
+            QFrame#annotationModeDivider {
+                border: none;
+                border-top: 1px dashed rgba(255, 255, 255, 0.55);
+                margin-top: 8px;
+                margin-bottom: 8px;
+                margin-left: 0px;
+                margin-right: 0px;
+                background: transparent;
+            }
+        """)
+        header_layout.addWidget(divider)
+        
         # Instructions / Reader Mode indicator
         self.instructions_label = QLabel("Please add the first annotation by clicking on the 3D object")
         self.instructions_label.setWordWrap(True)
-        self.instructions_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+        self.instructions_label.setStyleSheet(
+            "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
+        )
         header_layout.addWidget(self.instructions_label)
         
         # Reader mode banner (hidden by default)

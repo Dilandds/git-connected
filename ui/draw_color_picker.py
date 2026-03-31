@@ -36,7 +36,7 @@ class DrawColorPicker(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(8, 8, 8, 10)
         layout.setSpacing(6)
 
         title = QLabel("Pen Color")
@@ -67,7 +67,7 @@ class DrawColorPicker(QWidget):
         layout.addLayout(grid)
 
         custom_btn = QPushButton("Custom…")
-        custom_btn.setFixedHeight(26)
+        custom_btn.setMinimumHeight(30)
         custom_btn.setCursor(Qt.PointingHandCursor)
         custom_btn.setStyleSheet(f"""
             QPushButton {{
@@ -76,6 +76,7 @@ class DrawColorPicker(QWidget):
                 border: 1px solid {default_theme.border_standard};
                 border-radius: 6px;
                 font-size: 11px;
+                padding: 5px 10px 6px 10px;
             }}
             QPushButton:hover {{
                 background-color: {default_theme.row_bg_hover};

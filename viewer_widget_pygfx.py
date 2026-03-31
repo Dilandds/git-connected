@@ -15,6 +15,10 @@ from ui.drop_zone_overlay import DropZoneOverlay
 
 logger = logging.getLogger(__name__)
 
+# Rubber-band screenshot: render at this multiple of logical canvas size then crop.
+SCREENSHOT_CAPTURE_SCALE = 8
+_SCREENSHOT_MAX_EDGE_PX = 8192
+_SCREENSHOT_MAX_PIXELS = 67_000_000  # ~8k × 8k — safe for most GPUs
 
 from ui.orientation_gizmo import OrientationGizmoWidget
 
@@ -110,6 +114,7 @@ class STLViewerWidget(QWidget):
     file_dropped = pyqtSignal(str)
     click_to_upload = pyqtSignal()
     drop_error = pyqtSignal(str)
+    part_clicked = pyqtSignal(int)  # emitted when user clicks a part in parts mode
 
     def __init__(self, parent=None):
         _debug_print("STLViewerWidget (pygfx): Initializing...")
@@ -145,7 +150,7 @@ class STLViewerWidget(QWidget):
         self.plotter = None  # Not used; kept for hasattr checks
         self._model_loaded = False
         self._initialized = False
-        self._render_mode = 'solid'
+        self._render_mode = 'shaded'  # Match toolbar default; Phong shading on load
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
         self._axes_labels = []  # X, Y, Z text labels on the corner axes
@@ -183,6 +188,11 @@ class STLViewerWidget(QWidget):
         self._current_stroke_line = None  # live preview line
         self._draw_event_filter_installed = False
         self._drawing_active = False  # True while mouse button is held
+        self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
+
+        # Parts pick mode state
+        self.parts_pick_mode = False
+        self._parts_pick_event_filter_installed = False
 
         # Arrow mode state
         self.arrow_mode = False
@@ -403,8 +413,75 @@ class STLViewerWidget(QWidget):
                         return True
                 return False
 
+            def _segment_by_angle(mesh_input, angle_threshold_deg=30):
+                """Segment a connected mesh into regions separated by sharp dihedral edges."""
+                import networkx as nx
+                try:
+                    adj = mesh_input.face_adjacency
+                    angles = mesh_input.face_adjacency_angles
+                except Exception as e:
+                    logger.info(f"parts_debug (pygfx): face_adjacency failed: {e}")
+                    return [mesh_input]
+
+                n_faces = len(mesh_input.faces)
+                if n_faces < 10:
+                    return [mesh_input]
+
+                threshold_rad = np.radians(angle_threshold_deg)
+                smooth_mask = angles < threshold_rad
+                smooth_edges = adj[smooth_mask]
+
+                G = nx.Graph()
+                G.add_nodes_from(range(n_faces))
+                G.add_edges_from(smooth_edges.tolist())
+                face_groups = list(nx.connected_components(G))
+
+                if len(face_groups) <= 1:
+                    return [mesh_input]
+
+                # Safety: if too many segments, skip
+                if len(face_groups) > 200:
+                    logger.info(f"parts_debug (pygfx): angle segmentation produced {len(face_groups)} segments, skipping")
+                    return [mesh_input]
+
+                # Merge tiny segments (< 4 faces) into largest neighbor
+                MIN_FACES = 4
+                large_groups = []
+                tiny_groups = []
+                for grp in face_groups:
+                    if len(grp) >= MIN_FACES:
+                        large_groups.append(grp)
+                    else:
+                        tiny_groups.append(grp)
+
+                if not large_groups:
+                    return [mesh_input]
+
+                # Assign tiny faces to the largest group overall (simple merge)
+                if tiny_groups:
+                    biggest = max(large_groups, key=len)
+                    for tg in tiny_groups:
+                        biggest.update(tg)
+
+                # Extract sub-meshes
+                segments = []
+                for grp in sorted(large_groups, key=len, reverse=True):
+                    face_indices = np.array(sorted(grp))
+                    try:
+                        sub = mesh_input.submesh([face_indices], append=True)
+                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                            segments.append(sub)
+                    except Exception:
+                        pass
+
+                if not segments:
+                    return [mesh_input]
+
+                logger.info(f"parts_debug (pygfx): angle segmentation produced {len(segments)} segments from {n_faces} faces")
+                return segments
+
             def _split_reasonable_components(source_mesh):
-                """Split mesh into connected components, with guardrails against triangle-explosion meshes."""
+                """Split mesh into connected components, then segment large ones by dihedral angle."""
                 try:
                     components = list(source_mesh.split(only_watertight=False))
                 except Exception as e:
@@ -417,24 +494,31 @@ class STLViewerWidget(QWidget):
                 ]
                 logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
                 if len(components) <= 1:
-                    return components if components else [source_mesh]
+                    comp = components[0] if components else source_mesh
+                    # Even a single connected component can be segmented by angle
+                    if len(comp.faces) >= 50:
+                        segmented = _segment_by_angle(comp)
+                        if len(segmented) > 1:
+                            logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts by angle")
+                            return segmented
+                    return [comp]
 
-                face_counts = [len(c.faces) for c in components]
-                median_faces = float(np.median(face_counts))
-                limit = max(200, int(len(source_mesh.faces) * 0.25))
-                logger.info(f"parts_debug (pygfx): median_faces={median_faces:.1f}, limit={limit}")
-                if median_faces < 10:
-                    logger.info(f"parts_debug (pygfx): median<10, returning single mesh")
-                    return [source_mesh]
-                if len(components) > 2000:
-                    logger.info(f"parts_debug (pygfx): >2000 components, returning single mesh")
-                    return [source_mesh]
-                if len(components) > limit:
-                    logger.info(f"parts_debug (pygfx): exceeds limit, returning single mesh")
+                # Safety valve: cap at 5000 raw components
+                if len(components) > 5000:
+                    logger.info(f"parts_debug (pygfx): >5000 components, returning single mesh")
                     return [source_mesh]
 
-                logger.info(f"parts_debug (pygfx): keeping {len(components)} components")
-                return components
+                # Apply angle segmentation to large connected components
+                result = []
+                for comp in components:
+                    if len(comp.faces) >= 50:
+                        segmented = _segment_by_angle(comp)
+                        result.extend(segmented)
+                    else:
+                        result.append(comp)
+
+                logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + angle segmentation")
+                return result
 
             # STEP
             if file_ext.endswith('.step') or file_ext.endswith('.stp'):
@@ -1128,10 +1212,10 @@ class STLViewerWidget(QWidget):
             return None
 
     def eventFilter(self, obj, event):
-        """Qt event filter: handle ruler_mode, annotation_mode, and draw_mode events."""
+        """Qt event filter: handle ruler_mode, annotation_mode, draw_mode, and parts_pick_mode events."""
         if self._canvas is None:
             return super().eventFilter(obj, event)
-        if not self.ruler_mode and not self.annotation_mode and not self.draw_mode and not self.arrow_mode:
+        if not self.ruler_mode and not self.annotation_mode and not self.draw_mode and not self.arrow_mode and not self.parts_pick_mode:
             return super().eventFilter(obj, event)
         # Check if obj is canvas, self, viewer_container, or a descendant of any
         is_our_widget = obj in (self._canvas, self, self.viewer_container)
@@ -1151,6 +1235,8 @@ class STLViewerWidget(QWidget):
                 return self._arrow_event_filter_impl(obj, event)
             if self.draw_mode:
                 return self._draw_event_filter_impl(obj, event)
+            if self.parts_pick_mode:
+                return self._parts_pick_event_filter_impl(obj, event)
         return super().eventFilter(obj, event)
 
     def _ruler_event_filter_impl(self, obj, event):
@@ -2151,7 +2237,7 @@ class STLViewerWidget(QWidget):
             return False
         from ui.screenshot_overlay import ScreenshotOverlay
         if self._screenshot_overlay is None:
-            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container)
+            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container, zoom_callback=self._screenshot_zoom)
             self._screenshot_overlay.region_selected.connect(self._on_screenshot_region_selected)
         self._screenshot_overlay.setGeometry(self.viewer_container.rect())
         self._screenshot_overlay.raise_()
@@ -2195,21 +2281,81 @@ class STLViewerWidget(QWidget):
             logger.warning(f"_screenshot_zoom: {e}")
 
     def _on_screenshot_region_selected(self, rect):
-        """Capture the selected region from the canvas."""
+        """Capture the selected region at high resolution from the canvas."""
         from PyQt5.QtCore import QRect
-        # Grab the viewer container (which contains the rendered canvas)
-        full_pixmap = self.viewer_container.grab()
-        # Rect from overlay is in logical pixels; pixmap may have device pixel ratio
-        dpr = full_pixmap.devicePixelRatio() if hasattr(full_pixmap, 'devicePixelRatio') else 1.0
-        if dpr > 1.0:
-            device_rect = QRect(
-                int(rect.x() * dpr), int(rect.y() * dpr),
-                int(rect.width() * dpr), int(rect.height() * dpr)
-            )
-            cropped = full_pixmap.copy(device_rect)
-            cropped.setDevicePixelRatio(dpr)
-        else:
-            cropped = full_pixmap.copy(rect)
+        from PyQt5.QtGui import QImage, QPixmap
+        import numpy as np
+
+        captured = False
+        # Try pygfx: create an offscreen renderer at high resolution, render, then crop
+        if self._renderer and self._scene and self._camera:
+            try:
+                import pygfx as gfx
+
+                cw, ch = self._canvas.get_logical_size() if hasattr(self._canvas, 'get_logical_size') else (self.viewer_container.width(), self.viewer_container.height())
+                target_w = int(cw * SCREENSHOT_CAPTURE_SCALE)
+                target_h = int(ch * SCREENSHOT_CAPTURE_SCALE)
+                me = max(target_w, target_h)
+                if me > _SCREENSHOT_MAX_EDGE_PX:
+                    r = _SCREENSHOT_MAX_EDGE_PX / me
+                    target_w = max(1, int(target_w * r))
+                    target_h = max(1, int(target_h * r))
+                px = target_w * target_h
+                if px > _SCREENSHOT_MAX_PIXELS:
+                    r = (_SCREENSHOT_MAX_PIXELS / px) ** 0.5
+                    target_w = max(1, int(target_w * r))
+                    target_h = max(1, int(target_h * r))
+
+                logger.info(f"Screenshot render: {target_w}x{target_h} (scale from {cw}x{ch})")
+
+                # Create offscreen texture target and renderer at the desired resolution
+                texture = gfx.Texture(dim=2, size=(target_w, target_h, 1), format="rgba8unorm")
+                offscreen_renderer = gfx.renderers.wgpu.WgpuRenderer(texture)
+                offscreen_renderer.render(self._scene, self._camera)
+                img_array = offscreen_renderer.snapshot()
+
+                if img_array is not None:
+                    img_array = np.ascontiguousarray(img_array)
+                    h_img, w_img = img_array.shape[:2]
+                    channels = img_array.shape[2] if img_array.ndim == 3 else 1
+
+                    if channels == 4:
+                        fmt = QImage.Format_RGBA8888
+                    else:
+                        fmt = QImage.Format_RGB888
+
+                    qimg = QImage(img_array.data, w_img, h_img, img_array.strides[0], fmt)
+                    full_pixmap = QPixmap.fromImage(qimg.copy())
+
+                    # Map rubber-band rect from widget coords to snapshot pixels
+                    sx = w_img / cw
+                    sy = h_img / ch
+                    hr_rect = QRect(
+                        int(rect.x() * sx), int(rect.y() * sy),
+                        int(rect.width() * sx), int(rect.height() * sy)
+                    )
+                    cropped = full_pixmap.copy(hr_rect)
+                    logger.info(f"Screenshot crop: {cropped.width()}x{cropped.height()} px")
+                    captured = True
+            except Exception as e:
+                logger.warning(f"High-res screenshot failed, falling back to grab(): {e}")
+            except Exception as e:
+                logger.warning(f"High-res screenshot failed, falling back to grab(): {e}")
+
+        # Fallback: widget grab (screen resolution)
+        if not captured:
+            full_pixmap = self.viewer_container.grab()
+            dpr = full_pixmap.devicePixelRatio() if hasattr(full_pixmap, 'devicePixelRatio') else 1.0
+            if dpr > 1.0:
+                device_rect = QRect(
+                    int(rect.x() * dpr), int(rect.y() * dpr),
+                    int(rect.width() * dpr), int(rect.height() * dpr)
+                )
+                cropped = full_pixmap.copy(device_rect)
+                cropped.setDevicePixelRatio(dpr)
+            else:
+                cropped = full_pixmap.copy(rect)
+
         if self._screenshot_captured_callback:
             self._screenshot_captured_callback(cropped)
 
@@ -2271,6 +2417,7 @@ class STLViewerWidget(QWidget):
         """Disable draw mode."""
         self.draw_mode = False
         self._drawing_active = False
+        self._eraser_mode = False
         self._current_stroke_points = []
         self._remove_current_stroke_line()
 
@@ -2356,6 +2503,56 @@ class STLViewerWidget(QWidget):
             if self._canvas:
                 self._canvas.request_draw()
 
+    def set_eraser_mode(self, enabled: bool):
+        """Toggle eraser mode. When on, clicks remove strokes instead of drawing."""
+        self._eraser_mode = enabled
+        logger.info(f"set_eraser_mode: {enabled}")
+
+    def erase_stroke_at(self, x, y):
+        """Erase the stroke closest to the click point on the mesh surface."""
+        if self._annotation_trimesh is None or not self._draw_strokes:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+        try:
+            locations, _, _ = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin], ray_directions=[ray_direction]
+            )
+            if len(locations) == 0:
+                return False
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            hit_point = locations[np.argmin(dists)]
+
+            # Find the closest stroke to hit_point
+            threshold = self._get_draw_normal_offset() * 50  # generous click radius
+            best_idx = -1
+            best_dist = float('inf')
+            for i, stroke_data in enumerate(self._draw_strokes_data):
+                pts = np.array(stroke_data['points'], dtype=np.float32)
+                if len(pts) == 0:
+                    continue
+                d = np.min(np.linalg.norm(pts - hit_point, axis=1))
+                if d < best_dist:
+                    best_dist = d
+                    best_idx = i
+            if best_idx >= 0 and best_dist < threshold:
+                stroke_obj = self._draw_strokes.pop(best_idx)
+                self._draw_strokes_data.pop(best_idx)
+                try:
+                    self._scene.remove(stroke_obj)
+                except Exception:
+                    pass
+                if self._canvas:
+                    self._canvas.request_draw()
+                logger.info(f"erase_stroke_at: Removed stroke {best_idx} (dist={best_dist:.4f})")
+                return True
+            return False
+        except Exception as e:
+            logger.debug(f"erase_stroke_at: {e}")
+            return False
+
     def _draw_event_filter_impl(self, obj, event):
         """Handle draw mode mouse events."""
         if not self.draw_mode or self._canvas is None:
@@ -2363,6 +2560,8 @@ class STLViewerWidget(QWidget):
         t = event.type()
         if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
             pos = event.pos()
+            if self._eraser_mode:
+                return self.erase_stroke_at(pos.x(), pos.y())
             hit = self._draw_start_stroke(pos.x(), pos.y())
             return hit
         elif t == QEvent.MouseMove and self._drawing_active:
@@ -2892,6 +3091,109 @@ class STLViewerWidget(QWidget):
         logger.info(f"parts_debug (pygfx): get_parts_list returning {len(parts)} parts: {[(x['name'], x['face_count']) for x in parts]}")
         return parts
 
+    def get_parts_hierarchy(self):
+        """Return grouped parts sorted largest-to-smallest.
+        
+        Large parts are standalone entries. Small nearby parts are clustered
+        into groups. Each group is a single selectable item with internal
+        child_ids for visibility/highlighting control.
+        
+        Returns list of dicts:
+          Standalone: {'id': int, 'name': str, 'face_count': int, 'visible': bool}
+          Group:      {'id': int, 'name': str, 'face_count': int, 'visible': bool, 'child_ids': [int, ...]}
+        """
+        from scipy.cluster.hierarchy import linkage, fcluster
+        from scipy.spatial.distance import pdist
+
+        flat_parts = self.get_parts_list()
+        if len(flat_parts) <= 1:
+            return flat_parts
+
+        # Compute face count threshold — parts above this are standalone
+        face_counts = [p['face_count'] for p in flat_parts]
+        threshold_faces = max(500, int(np.percentile(face_counts, 80))) if len(face_counts) > 5 else 500
+
+        large_parts = []
+        small_parts = []
+        for p in flat_parts:
+            if p['face_count'] >= threshold_faces:
+                large_parts.append(p)
+            else:
+                small_parts.append(p)
+
+        result = []
+
+        # Large parts go as standalone entries
+        for p in large_parts:
+            result.append(p)
+
+        # Cluster small parts by spatial proximity
+        if len(small_parts) > 1:
+            # Get centroids of small parts from mesh_parts data
+            centroids = []
+            for sp in small_parts:
+                mp = next((m for m in self._mesh_parts if m['id'] == sp['id']), None)
+                if mp and 'trimesh' in mp and mp['trimesh'] is not None:
+                    centroids.append(mp['trimesh'].centroid)
+                elif mp and hasattr(mp.get('mesh_obj'), 'geometry') and mp['mesh_obj'].geometry is not None:
+                    positions = mp['mesh_obj'].geometry.positions
+                    if positions is not None:
+                        centroids.append(np.mean(positions.data, axis=0))
+                    else:
+                        centroids.append(np.array([0.0, 0.0, 0.0]))
+                else:
+                    centroids.append(np.array([0.0, 0.0, 0.0]))
+
+            centroids = np.array(centroids)
+
+            # Distance threshold based on bounding box
+            bbox_min = centroids.min(axis=0)
+            bbox_max = centroids.max(axis=0)
+            bbox_diag = np.linalg.norm(bbox_max - bbox_min)
+            dist_threshold = bbox_diag * 0.08 if bbox_diag > 0 else 1.0
+
+            if len(small_parts) >= 2:
+                try:
+                    dists = pdist(centroids)
+                    Z = linkage(dists, method='average')
+                    labels = fcluster(Z, t=dist_threshold, criterion='distance')
+                except Exception:
+                    labels = list(range(len(small_parts)))
+            else:
+                labels = [0]
+
+            # Group small parts by cluster label
+            clusters = {}
+            for i, label in enumerate(labels):
+                clusters.setdefault(label, []).append(small_parts[i])
+
+            # Use negative IDs for groups to avoid collision with real part IDs
+            group_counter = -1
+            for cluster_parts in sorted(clusters.values(), key=lambda c: -sum(p['face_count'] for p in c)):
+                if len(cluster_parts) == 1:
+                    # Single-part cluster — just add as standalone
+                    result.append(cluster_parts[0])
+                else:
+                    total_faces = sum(p['face_count'] for p in cluster_parts)
+                    child_ids = [p['id'] for p in cluster_parts]
+                    group_entry = {
+                        'id': group_counter,
+                        'name': f"Group {abs(group_counter)}",
+                        'face_count': total_faces,
+                        'visible': all(p.get('visible', True) for p in cluster_parts),
+                        'child_ids': child_ids,
+                    }
+                    result.append(group_entry)
+                    group_counter -= 1
+        elif len(small_parts) == 1:
+            result.append(small_parts[0])
+
+        # Sort by face count descending
+        result.sort(key=lambda x: -x.get('face_count', 0))
+        logger.info(f"parts_debug (pygfx): get_parts_hierarchy returning {len(result)} entries "
+                     f"({len(large_parts)} standalone, {len(result) - len(large_parts)} groups/small)")
+        return result
+
     def set_part_visible(self, part_id, visible):
         """Show or hide a specific part by ID."""
         for p in self._mesh_parts:
@@ -2935,6 +3237,16 @@ class STLViewerWidget(QWidget):
         if self._canvas:
             self._canvas.request_draw()
 
+    def isolate_parts(self, part_ids):
+        """Show only the specified parts, hide all others."""
+        id_set = set(part_ids)
+        for p in self._mesh_parts:
+            vis = p['id'] in id_set
+            p['visible'] = vis
+            p['mesh_obj'].visible = vis
+        if self._canvas:
+            self._canvas.request_draw()
+
     def highlight_part(self, part_id):
         """Briefly highlight a selected part (make others semi-transparent)."""
         import pygfx as gfx
@@ -2957,6 +3269,99 @@ class STLViewerWidget(QWidget):
         if self._canvas:
             self._canvas.request_draw()
 
+    def highlight_parts(self, part_ids):
+        """Highlight multiple parts (e.g. a group) — make others semi-transparent."""
+        import pygfx as gfx
+        highlighted = set(part_ids)
+        for p in self._mesh_parts:
+            if not p['visible']:
+                continue
+            if p['id'] in highlighted:
+                if self._render_mode == 'wireframe':
+                    p['mesh_obj'].material = gfx.MeshBasicMaterial(wireframe=True, color="#333333", wireframe_thickness=1)
+                elif self._render_mode == 'shaded':
+                    p['mesh_obj'].material = gfx.MeshPhongMaterial(color="#b8b8c0", specular="#a0a0a0", shininess=90)
+                else:
+                    p['mesh_obj'].material = gfx.MeshPhongMaterial(color="#ADD9E6", specular="#333333", shininess=20)
+            else:
+                p['mesh_obj'].material = gfx.MeshPhongMaterial(
+                    color="#ADD9E6", specular="#333333", shininess=20, opacity=0.25
+                )
+        if self._canvas:
+            self._canvas.request_draw()
+
     def unhighlight_parts(self):
         """Restore normal materials on all parts."""
         self.set_render_mode(self._render_mode)
+
+    # ========== Parts Pick Mode (click-to-select in 3D) ==========
+
+    def enable_parts_pick_mode(self):
+        """Enable click-to-select parts in the 3D viewport."""
+        self.parts_pick_mode = True
+        if not self._parts_pick_event_filter_installed and self._canvas is not None:
+            self._canvas.installEventFilter(self)
+            self.installEventFilter(self)
+            self.viewer_container.installEventFilter(self)
+            self._parts_pick_event_filter_installed = True
+        logger.info("enable_parts_pick_mode: Parts pick mode enabled")
+
+    def disable_parts_pick_mode(self):
+        """Disable click-to-select parts."""
+        self.parts_pick_mode = False
+        if self._parts_pick_event_filter_installed and self._canvas is not None:
+            self._canvas.removeEventFilter(self)
+            self.removeEventFilter(self)
+            self.viewer_container.removeEventFilter(self)
+            self._parts_pick_event_filter_installed = False
+        logger.info("disable_parts_pick_mode: Parts pick mode disabled")
+
+    def _parts_pick_event_filter_impl(self, obj, event):
+        """Handle parts pick mode events. Only intercept left clicks that hit a part."""
+        if not self.parts_pick_mode or self._canvas is None:
+            return False
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            pos = event.pos()
+            picked = self._on_parts_pick_click(pos.x(), pos.y())
+            return picked  # consume only if we hit a part; else let trackball rotate
+        return False
+
+    def _on_parts_pick_click(self, x, y):
+        """Raycast against each part's trimesh to find which part was clicked."""
+        if not self._mesh_parts:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+
+        import trimesh
+        best_part_id = None
+        best_dist = float('inf')
+        cam_pos = np.array(self._camera.local.position)
+
+        for p in self._mesh_parts:
+            if not p.get('visible', True):
+                continue
+            tm = p.get('trimesh')
+            if tm is None:
+                continue
+            try:
+                locations, _, _ = tm.ray.intersects_location(
+                    ray_origins=[ray_origin],
+                    ray_directions=[ray_direction],
+                )
+                if len(locations) > 0:
+                    dists = np.linalg.norm(locations - cam_pos, axis=1)
+                    min_dist = np.min(dists)
+                    if min_dist < best_dist:
+                        best_dist = min_dist
+                        best_part_id = p['id']
+            except Exception as e:
+                logger.debug(f"_on_parts_pick_click: raycast error for part {p['id']}: {e}")
+
+        if best_part_id is not None:
+            logger.info(f"_on_parts_pick_click: clicked part {best_part_id}")
+            self.part_clicked.emit(best_part_id)
+            return True
+        return False

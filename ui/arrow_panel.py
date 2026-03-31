@@ -331,12 +331,12 @@ class ArrowPanel(QWidget):
         clear_btn.setFixedHeight(30)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #FEE2E2;
-                color: #DC2626;
-                border: 1px solid #FECACA;
+                background-color: #2A1518;
+                color: #F87171;
+                border: 1px solid #3A2528;
                 border-radius: 6px; font-size: 11px;
             }}
-            QPushButton:hover {{ background-color: #FCA5A5; color: white; }}
+            QPushButton:hover {{ background-color: #351E22; color: white; }}
         """)
         clear_btn.clicked.connect(self.clear_all_requested.emit)
         bottom.addWidget(clear_btn)

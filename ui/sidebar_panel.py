@@ -7,12 +7,12 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QScrollArea, QFrame, QComboBox, QSizePolicy, QGraphicsDropShadowEffect,
-    QLineEdit, QFileDialog, QMessageBox, QApplication
+    QLineEdit, QFileDialog, QMessageBox, QApplication, QStyleFactory,
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings
-from PyQt5.QtGui import QFont, QColor, QDoubleValidator
+from PyQt5.QtGui import QFont, QColor, QDoubleValidator, QPalette
 from ui.components import DimensionRow, SurfaceAreaRow, WeightRow, Separator, ScaleResultRow, ReportCheckbox, confirm_dialog
-from ui.styles import get_button_style, default_theme
+from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,6 @@ class SidebarPanel(QWidget):
     # Signal emitted when annotations are exported as .ecto
     annotations_exported = pyqtSignal()
     
-    # Signal emitted when conversion completes with output file path (for loading into viewer)
-    conversion_complete = pyqtSignal(str)
     
     # Material density data (g/cm³)
     MATERIALS = [
@@ -79,14 +77,29 @@ class SidebarPanel(QWidget):
         self.has_scaled_data = False
         self.init_ui()
     
-    def _add_card_shadow(self, card):
-        """Add a subtle shadow effect to a card."""
+    def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
+        """Add a black drop shadow to a sidebar card, button, or other widget."""
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(12)
+        shadow.setBlurRadius(blur_radius)
         shadow.setXOffset(0)
-        shadow.setYOffset(2)
-        shadow.setColor(QColor(0, 0, 0, 30))  # Semi-transparent black
-        card.setGraphicsEffect(shadow)
+        shadow.setYOffset(y_offset)
+        shadow.setColor(QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
+    def _style_section_card(self, card: QFrame):
+        """Gradient + border on this card, styled background + drop shadow.
+
+        Per-widget stylesheet + WA_StyledBackground is required on macOS / with
+        QGraphicsDropShadowEffect so qlineargradient paints; relying on the app-wide
+        sheet alone often shows a flat background.
+        """
+        name = card.objectName()
+        if not name:
+            return
+        frag = sidebar_section_card_stylesheet(default_theme)
+        card.setStyleSheet(f"QFrame#{name} {{ {frag} }}")
+        card.setAttribute(Qt.WA_StyledBackground, True)
+        self._add_card_shadow(card)
     
     def init_ui(self):
         """Initialize the sidebar UI."""
@@ -120,24 +133,37 @@ class SidebarPanel(QWidget):
         layout = QVBoxLayout(content_widget)
         layout.setAlignment(Qt.AlignTop)
         layout.setSpacing(15)
-        layout.setContentsMargins(10, 10, 20, 10)
+        # Extra top/bottom so upload card drop shadow is not clipped by the scroll area
+        layout.setContentsMargins(10, 14, 20, 18)
+        
+        # Upload card — gradient + shadow via global stylesheet (QFrame#uploadCard)
+        upload_card = QFrame()
+        upload_card.setObjectName("uploadCard")
+        self._style_section_card(upload_card)
+        upload_card_layout = QVBoxLayout(upload_card)
+        upload_card_layout.setContentsMargins(16, 18, 16, 18)
+        upload_card_layout.setSpacing(10)
         
         # Title label
         title_label = QLabel("ECTOFORM")
         title_label.setObjectName("titleLabel")
-        title_font = QFont("Inter", 16)
-        title_font.setBold(True)
+        title_font = make_font(size=16, bold=True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(title_label)
         
         # Upload button
         self.upload_btn = QPushButton("Upload 3D File")
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setObjectName("uploadBtn")
+        self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
         self.upload_btn.setToolTip("Upload STL, STEP, 3DM, OBJ, or IGES file for 3D visualization")
-        layout.addWidget(self.upload_btn)
+        self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
+        # Strong black drop shadow (visible below the pill; layout margin reserves space in stylesheet)
+        self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
+        upload_card_layout.addWidget(self.upload_btn)
         
         # Info label
         info_label = QLabel(
@@ -146,7 +172,10 @@ class SidebarPanel(QWidget):
         info_label.setObjectName("infoLabel")
         info_label.setAlignment(Qt.AlignCenter)
         info_label.setWordWrap(True)
-        layout.addWidget(info_label)
+        info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_white};")
+        upload_card_layout.addWidget(info_label)
+        
+        layout.addWidget(upload_card)
         
         # Create sections
         self.dimensions_group = self.create_dimensions_section()
@@ -170,9 +199,6 @@ class SidebarPanel(QWidget):
         self.export_annotations_group = self.create_export_annotations_section()
         layout.addWidget(self.export_annotations_group)
         
-        # Create File Converter section
-        self.converter_group = self.create_converter_section()
-        layout.addWidget(self.converter_group)
         
         # Add stretch
         layout.addStretch()
@@ -195,13 +221,13 @@ class SidebarPanel(QWidget):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
         
-        # Card title
+        # Card title (transparent so gradient shows through)
         title_label = QLabel("Dimensions")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
+        )
         card_layout.addWidget(title_label)
         
         # Dimension rows using components
@@ -221,8 +247,7 @@ class SidebarPanel(QWidget):
         self.volume_row = DimensionRow("Volume", "--", self)
         card_layout.addWidget(self.volume_row)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
@@ -241,14 +266,16 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Total Surface Area")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
+        )
         
         icon_label = QLabel("⬇")
-        icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
+        icon_label.setStyleSheet(
+            f"color: {default_theme.icon_blue}; font-size: 16px; background: transparent; border: none;"
+        )
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(title_label)
@@ -257,32 +284,39 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Surface area rows using components
-        self.surface_total_row = SurfaceAreaRow("Total area", "--", "standard", self)
+        self.surface_total_row = SurfaceAreaRow("Total area", "--", "total_area", self)
         self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "highlight", self)
         
         card_layout.addWidget(self.surface_total_row)
         card_layout.addWidget(self.surface_cm_row)
         
-        # Information footer
+        # Information footer — explicit white + WA_StyledBackground so it paints on the gradient card
         footer_frame = QFrame()
         footer_frame.setObjectName("surfaceFooter")
         footer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         footer_frame.setMinimumHeight(40)
+        footer_frame.setStyleSheet("""
+            QFrame#surfaceFooter {
+                background-color: #ffffff;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+            }
+        """)
+        footer_frame.setAttribute(Qt.WA_StyledBackground, True)
         
         footer_layout = QHBoxLayout(footer_frame)
         footer_layout.setContentsMargins(10, 8, 10, 8)
         footer_layout.setSpacing(8)
         
         info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet(f"color: {default_theme.icon_info_gray}; font-size: 12px;")
+        info_icon.setStyleSheet("color: #000000; font-size: 12px; background: transparent;")
         info_icon.setFixedWidth(20)
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Calculated surface area: Sum of the areas of all triangles in the 3D mesh. Useful for estimating galvanizing or surface treatment costs.")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
-        disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
+        disclaimer.setStyleSheet("color: #000000; background: transparent; border: none;")
         disclaimer.setWordWrap(True)
         
         footer_layout.addWidget(info_icon)
@@ -291,8 +325,7 @@ class SidebarPanel(QWidget):
         
         card_layout.addWidget(footer_frame)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
@@ -311,14 +344,16 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Estimated Weight")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
+        )
         
         icon_label = QLabel("⚖")
-        icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
+        icon_label.setStyleSheet(
+            f"color: {default_theme.icon_blue}; font-size: 16px; background: transparent; border: none; padding: 0px;"
+        )
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(title_label)
@@ -330,6 +365,57 @@ class SidebarPanel(QWidget):
         self.material_combo = QComboBox()
         self.material_combo.setObjectName("materialCombo")
         self.material_combo.setMinimumHeight(40)
+        self.material_combo.setAttribute(Qt.WA_StyledBackground, True)
+        # Fusion style so stylesheet background applies on macOS; native style often ignores it.
+        _fusion = QStyleFactory.create("Fusion")
+        if _fusion is not None:
+            self.material_combo.setStyle(_fusion)
+        _arrow = _dropdown_arrow_url()
+        _wp = default_theme.weight_panel_bg
+        _wph = default_theme.weight_panel_hover
+        _bd = default_theme.border_medium
+        self.material_combo.setStyleSheet(f"""
+            QComboBox#materialCombo {{
+                background-color: {_wp};
+                background: {_wp};
+                border: 1px solid {_bd};
+                border-radius: 8px;
+                padding: 8px 12px;
+                min-height: 24px;
+                color: {default_theme.text_white};
+            }}
+            QComboBox#materialCombo:hover, QComboBox#materialCombo:focus, QComboBox#materialCombo:on {{
+                background-color: {_wp};
+                background: {_wp};
+                color: {default_theme.text_white};
+            }}
+            QComboBox#materialCombo:focus {{
+                border: 1px solid {default_theme.button_primary};
+            }}
+            QComboBox#materialCombo::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: center right;
+                width: 32px;
+                border: none;
+                border-left: 1px solid {_bd};
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+                background-color: {_wp};
+            }}
+            QComboBox#materialCombo::down-arrow {{
+                image: url({_arrow});
+                width: 14px;
+                height: 14px;
+            }}
+            QComboBox#materialCombo QAbstractItemView {{
+                background-color: {_wp};
+                color: {default_theme.text_white};
+                border: 1px solid {_bd};
+                selection-background-color: {_wph};
+                selection-color: {default_theme.text_white};
+                padding: 4px;
+            }}
+        """)
         for material_name, density in self.MATERIALS:
             self.material_combo.addItem(f"{material_name} ({density} g/cm³)", density)
         self.material_combo.currentIndexChanged.connect(self.on_material_changed)
@@ -344,8 +430,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.weight_density_row)
         card_layout.addWidget(self.weight_result_row)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
@@ -359,65 +444,68 @@ class SidebarPanel(QWidget):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
         
-        # Header row with title, icon, and collapse button (clickable)
-        header_btn = QPushButton()
-        header_btn.setObjectName("adjustWeightHeader")
-        header_btn.setCursor(Qt.PointingHandCursor)
-        header_btn.setFlat(True)
-        header_btn.setStyleSheet(f"""
-            QPushButton#adjustWeightHeader {{
-                background: transparent;
+        # Header row: use QWidget (not QPushButton) so macOS does not paint an opaque
+        # button plate behind the row; nested QPushButtons also confuse native styling.
+        self._adjust_weight_header = QWidget()
+        self._adjust_weight_header.setObjectName("adjustWeightHeader")
+        self._adjust_weight_header.setCursor(Qt.PointingHandCursor)
+        self._adjust_weight_header.setStyleSheet("""
+            QWidget#adjustWeightHeader {
+                background-color: transparent;
                 border: none;
-                text-align: left;
-                padding: 8px 0;
-            }}
-            QPushButton#adjustWeightHeader:hover {{
-                background: transparent;
-            }}
+            }
         """)
-        header_layout = QHBoxLayout(header_btn)
-        header_layout.setContentsMargins(0, 0, 0, 0)
+        self._adjust_weight_header.installEventFilter(self)
+        header_layout = QHBoxLayout(self._adjust_weight_header)
+        header_layout.setContentsMargins(0, 8, 0, 8)
         header_layout.setSpacing(8)
         
-        self._adjust_weight_collapse_btn = QPushButton("▼" if self._adjust_weight_expanded else "▶")
-        self._adjust_weight_collapse_btn.setFixedSize(24, 24)
-        self._adjust_weight_collapse_btn.setCursor(Qt.PointingHandCursor)
-        self._adjust_weight_collapse_btn.setStyleSheet(f"""
-            QPushButton {{
+        # QLabel instead of QPushButton — macOS still draws an opaque button plate on tiny flat buttons.
+        self._adjust_weight_collapse_lbl = QLabel("▼" if self._adjust_weight_expanded else "▶")
+        self._adjust_weight_collapse_lbl.setObjectName("adjustWeightCollapseArrow")
+        self._adjust_weight_collapse_lbl.setFixedSize(24, 24)
+        self._adjust_weight_collapse_lbl.setCursor(Qt.PointingHandCursor)
+        self._adjust_weight_collapse_lbl.setAlignment(Qt.AlignCenter)
+        self._adjust_weight_collapse_lbl.setStyleSheet(f"""
+            QLabel#adjustWeightCollapseArrow {{
+                color: {default_theme.text_secondary};
+                background-color: transparent;
                 background: transparent;
                 border: none;
+                padding: 0px;
+                margin: 0px;
                 font-size: 12px;
-                color: {default_theme.text_secondary};
-            }}
-            QPushButton:hover {{
-                color: {default_theme.text_primary};
             }}
         """)
-        self._adjust_weight_collapse_btn.clicked.connect(self._toggle_adjust_weight)
+        self._adjust_weight_collapse_lbl.installEventFilter(self)
         
         title_label = QLabel("Adjust to Target Weight")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; padding: 2px 0;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; padding: 2px 0; background-color: transparent; background: transparent; border: none;"
+        )
+        title_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         # Ensure full title is visible (avoids truncation on narrow sidebars)
         fm = title_label.fontMetrics()
         title_label.setMinimumWidth(fm.horizontalAdvance("Adjust to Target Weight") + 8)
         
         icon_label = QLabel("⚙")
-        icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
+        icon_label.setStyleSheet(
+            f"color: {default_theme.icon_blue}; font-size: 16px; background-color: transparent; background: transparent; border: none; padding: 0px;"
+        )
         icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         
-        header_layout.addWidget(self._adjust_weight_collapse_btn)
+        header_layout.addWidget(self._adjust_weight_collapse_lbl)
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
-        header_btn.clicked.connect(self._toggle_adjust_weight)
-        card_layout.addWidget(header_btn)
+        card_layout.addWidget(self._adjust_weight_header)
         
-        # Content widget (collapsible)
+        # Content widget (collapsible) — transparent so parent card gradient shows behind rows/fields
         self._adjust_weight_content = QWidget()
+        self._adjust_weight_content.setStyleSheet("background-color: transparent;")
         content_layout = QVBoxLayout(self._adjust_weight_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(10)
@@ -430,6 +518,37 @@ class SidebarPanel(QWidget):
         self.target_weight_input.setObjectName("targetWeightInput")
         self.target_weight_input.setPlaceholderText("Enter target weight")
         self.target_weight_input.setMinimumHeight(40)
+        _le_fusion = QStyleFactory.create("Fusion")
+        if _le_fusion is not None:
+            self.target_weight_input.setStyle(_le_fusion)
+        _ib = default_theme.input_bg
+        _ibd = default_theme.input_border
+        self.target_weight_input.setStyleSheet(f"""
+            QLineEdit#targetWeightInput {{
+                background-color: {_ib};
+                background: {_ib};
+                border: 1px solid {_ibd};
+                border-radius: 8px;
+                padding: 10px 14px;
+                font-size: 13px;
+                color: {default_theme.text_primary};
+            }}
+            QLineEdit#targetWeightInput:hover {{
+                background-color: {_ib};
+                border: 1px solid {default_theme.input_border_hover};
+            }}
+            QLineEdit#targetWeightInput:focus {{
+                background-color: {_ib};
+                border: 2px solid {default_theme.button_primary};
+            }}
+        """)
+        self.target_weight_input.setAttribute(Qt.WA_StyledBackground, True)
+        try:
+            _pal = self.target_weight_input.palette()
+            _pal.setColor(QPalette.PlaceholderText, QColor("#888888"))
+            self.target_weight_input.setPalette(_pal)
+        except Exception:
+            pass
         
         # Set validator for numeric input
         validator = QDoubleValidator(0.0, 999999.0, 4)
@@ -438,7 +557,9 @@ class SidebarPanel(QWidget):
         self.target_weight_input.returnPressed.connect(self.calculate_scale)
         
         unit_label = QLabel("g")
-        unit_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-weight: bold;")
+        unit_label.setStyleSheet(
+            f"color: {default_theme.text_primary}; font-weight: bold; background-color: transparent; border: none;"
+        )
         unit_label.setFixedWidth(20)
         
         input_layout.addWidget(self.target_weight_input)
@@ -468,7 +589,9 @@ class SidebarPanel(QWidget):
             }}
             QPushButton#calculateScaleBtn:disabled {{
                 background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
+                color: {default_theme.text_secondary};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 8px;
             }}
         """)
         self.calculate_scale_btn.clicked.connect(self.calculate_scale)
@@ -480,11 +603,11 @@ class SidebarPanel(QWidget):
         
         # Results section title
         results_label = QLabel("Scaled Results")
-        results_font = QFont()
-        results_font.setPointSize(11)
-        results_font.setBold(True)
+        results_font = make_font(size=11, bold=True)
         results_label.setFont(results_font)
-        results_label.setStyleSheet(f"color: {default_theme.text_secondary}; margin-top: 4px;")
+        results_label.setStyleSheet(
+            f"color: {default_theme.text_secondary}; margin-top: 4px; background-color: transparent; border: none;"
+        )
         content_layout.addWidget(results_label)
         
         # Scale factor row
@@ -510,7 +633,9 @@ class SidebarPanel(QWidget):
         # Weight comparison title
         comparison_label = QLabel("Weight Comparison")
         comparison_label.setFont(results_font)
-        comparison_label.setStyleSheet(f"color: {default_theme.text_secondary}; margin-top: 4px;")
+        comparison_label.setStyleSheet(
+            f"color: {default_theme.text_secondary}; margin-top: 4px; background-color: transparent; border: none;"
+        )
         content_layout.addWidget(comparison_label)
         
         # Weight comparison rows
@@ -542,7 +667,9 @@ class SidebarPanel(QWidget):
             }}
             QPushButton#exportScaledBtn:disabled {{
                 background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
+                color: {default_theme.text_secondary};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 8px;
             }}
         """)
         self.export_scaled_btn.clicked.connect(self.export_scaled_stl_file)
@@ -551,8 +678,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self._adjust_weight_content)
         self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
@@ -561,7 +687,7 @@ class SidebarPanel(QWidget):
         self._adjust_weight_expanded = not self._adjust_weight_expanded
         self._settings.setValue("adjust_weight_expanded", self._adjust_weight_expanded)
         self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
-        self._adjust_weight_collapse_btn.setText("▼" if self._adjust_weight_expanded else "▶")
+        self._adjust_weight_collapse_lbl.setText("▼" if self._adjust_weight_expanded else "▶")
     
     def create_pdf_report_section(self):
         """Create the 3D PDF export section. (UI currently commented out - uncomment in init to show)"""
@@ -578,11 +704,11 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Export 3D PDF")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
+        )
         
         icon_label = QLabel("📐")
         icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
@@ -595,8 +721,7 @@ class SidebarPanel(QWidget):
         
         # Description
         desc_label = QLabel("Export interactive 3D PDF for Adobe Acrobat Reader.\nRotate, pan, and zoom the model inside the PDF.")
-        desc_font = QFont()
-        desc_font.setPointSize(11)
+        desc_font = make_font(size=11)
         desc_label.setFont(desc_font)
         desc_label.setStyleSheet(f"color: {default_theme.text_secondary};")
         desc_label.setWordWrap(True)
@@ -654,8 +779,7 @@ class SidebarPanel(QWidget):
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Requires Adobe Acrobat Reader for interactive 3D. Ensure VTK provides vtkU3DExporter (usually via 'pip install -U vtk').")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
         disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
         disclaimer.setWordWrap(True)
@@ -666,15 +790,21 @@ class SidebarPanel(QWidget):
         
         card_layout.addWidget(footer_frame)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
     def eventFilter(self, obj, event):
-        """Handle hover events for rows."""
-        # Rows handle their own events, but we need to ensure they're installed
-        # The event filter is already installed on each row in create_*_section methods
+        """Handle hover events for rows and clickable section headers."""
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            collapse = getattr(self, "_adjust_weight_collapse_lbl", None)
+            if collapse is not None and obj is collapse:
+                self._toggle_adjust_weight()
+                return True
+            header = getattr(self, "_adjust_weight_header", None)
+            if header is not None and obj is header:
+                self._toggle_adjust_weight()
+                return True
         return super().eventFilter(obj, event)
     
     def on_material_changed(self, index):
@@ -997,14 +1127,16 @@ class SidebarPanel(QWidget):
         header_layout.setSpacing(8)
         
         title_label = QLabel("Export as .ecto")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
+        title_font = make_font(size=14, bold=True)
         title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
+        title_label.setStyleSheet(
+            f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
+        )
         
         icon_label = QLabel("📦")
-        icon_label.setStyleSheet(f"color: {default_theme.icon_blue}; font-size: 16px;")
+        icon_label.setStyleSheet(
+            f"color: {default_theme.icon_blue}; font-size: 16px; background-color: transparent; background: transparent; border: none; padding: 0px;"
+        )
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(title_label)
@@ -1014,16 +1146,19 @@ class SidebarPanel(QWidget):
         
         # Description
         desc_label = QLabel("Export a single .ecto file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .ecto files.")
-        desc_font = QFont()
-        desc_font.setPointSize(11)
+        desc_font = make_font(size=11)
         desc_label.setFont(desc_font)
-        desc_label.setStyleSheet(f"color: {default_theme.text_secondary};")
+        desc_label.setStyleSheet(
+            f"color: {default_theme.text_secondary}; background-color: transparent; background: transparent; border: none;"
+        )
         desc_label.setWordWrap(True)
         card_layout.addWidget(desc_label)
         
         # Annotation count label
         self.annotation_count_label = QLabel("No annotations to export")
-        self.annotation_count_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-style: italic;")
+        self.annotation_count_label.setStyleSheet(
+            f"color: {default_theme.text_secondary}; font-style: italic; background-color: transparent; background: transparent; border: none;"
+        )
         card_layout.addWidget(self.annotation_count_label)
         
         # Export button
@@ -1033,7 +1168,7 @@ class SidebarPanel(QWidget):
         self.export_annotations_btn.setEnabled(False)
         self.export_annotations_btn.setStyleSheet(f"""
             QPushButton#exportAnnotationsBtn {{
-                background-color: #8B5CF6;
+                background-color: #5B21B6;
                 color: {default_theme.text_white};
                 border: none;
                 border-radius: 8px;
@@ -1042,14 +1177,16 @@ class SidebarPanel(QWidget):
                 font-weight: bold;
             }}
             QPushButton#exportAnnotationsBtn:hover {{
-                background-color: #7C3AED;
+                background-color: #4C1D95;
             }}
             QPushButton#exportAnnotationsBtn:pressed {{
-                background-color: #6D28D9;
+                background-color: #3B0764;
             }}
             QPushButton#exportAnnotationsBtn:disabled {{
-                background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
+                background-color: #171a1f;
+                color: {default_theme.text_secondary};
+                border: 1px solid #2a2e34;
+                border-radius: 8px;
             }}
         """)
         self.export_annotations_btn.clicked.connect(self.export_as_ecto)
@@ -1060,12 +1197,13 @@ class SidebarPanel(QWidget):
         footer_frame.setObjectName("exportAnnotationsFooter")
         footer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         footer_frame.setMinimumHeight(36)
-        footer_frame.setStyleSheet(f"""
-            QFrame#exportAnnotationsFooter {{
-                background-color: {default_theme.background};
-                border: 1px solid {default_theme.border_standard};
+        footer_frame.setAttribute(Qt.WA_StyledBackground, True)
+        footer_frame.setStyleSheet("""
+            QFrame#exportAnnotationsFooter {
+                background-color: #ffffff;
+                border: 1px solid #d0d0d0;
                 border-radius: 6px;
-            }}
+            }
         """)
         
         footer_layout = QHBoxLayout(footer_frame)
@@ -1073,15 +1211,16 @@ class SidebarPanel(QWidget):
         footer_layout.setSpacing(8)
         
         info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet(f"color: {default_theme.icon_info_gray}; font-size: 11px;")
+        info_icon.setStyleSheet(
+            "color: #000000; font-size: 11px; background: transparent; border: none;"
+        )
         info_icon.setFixedWidth(18)
         info_icon.setAlignment(Qt.AlignTop)
         
         disclaimer = QLabel("Single file contains: model + annotations + photos. Recipients open it directly in ECTOFORM.")
-        disclaimer_font = QFont()
-        disclaimer_font.setPointSize(9)
+        disclaimer_font = make_font(size=9)
         disclaimer.setFont(disclaimer_font)
-        disclaimer.setStyleSheet(f"color: {default_theme.icon_info_gray};")
+        disclaimer.setStyleSheet("color: #000000; background: transparent; border: none;")
         disclaimer.setWordWrap(True)
         
         footer_layout.addWidget(info_icon)
@@ -1090,8 +1229,7 @@ class SidebarPanel(QWidget):
         
         card_layout.addWidget(footer_frame)
         
-        # Add shadow effect
-        self._add_card_shadow(card)
+        self._style_section_card(card)
         
         return card
     
@@ -1282,278 +1420,3 @@ class SidebarPanel(QWidget):
         
         logger.info("reset_all_data: All sidebar data reset")
 
-    def create_converter_section(self):
-        """Create the file format converter section with smart format detection."""
-        card = QFrame()
-        card.setObjectName("converterCard")
-        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(16, 16, 16, 16)
-        card_layout.setSpacing(10)
-
-        # Card title
-        title_label = QLabel("🔄  Convert File")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(f"color: {default_theme.text_title}; margin-bottom: 4px;")
-        card_layout.addWidget(title_label)
-
-        # Subtitle
-        subtitle = QLabel("Select a STEP or 3DM file to see available conversions")
-        subtitle.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; margin-bottom: 6px;")
-        card_layout.addWidget(subtitle)
-
-        # Select file button
-        self._converter_select_btn = QPushButton("Select Source File…")
-        self._converter_select_btn.setObjectName("converterSelectBtn")
-        self._converter_select_btn.setMinimumHeight(40)
-        self._converter_select_btn.setCursor(Qt.PointingHandCursor)
-        self._converter_select_btn.setStyleSheet(f"""
-            QPushButton#converterSelectBtn {{
-                background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_light};
-                border-radius: 6px;
-                padding: 10px 16px;
-                font-size: 13px;
-                font-weight: 600;
-                text-align: left;
-            }}
-            QPushButton#converterSelectBtn:hover {{
-                background-color: {default_theme.row_bg_hover};
-                border-color: {default_theme.border_highlight};
-            }}
-            QPushButton#converterSelectBtn:pressed {{
-                background-color: {default_theme.row_bg_standard};
-            }}
-        """)
-        self._converter_select_btn.clicked.connect(self._select_converter_source)
-        card_layout.addWidget(self._converter_select_btn)
-
-        # Selected file label
-        self._converter_file_label = QLabel("")
-        self._converter_file_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px;")
-        self._converter_file_label.setWordWrap(True)
-        self._converter_file_label.hide()
-        card_layout.addWidget(self._converter_file_label)
-
-        # Conversion options dropdown
-        self._converter_combo = QComboBox()
-        self._converter_combo.setObjectName("converterCombo")
-        self._converter_combo.setMinimumHeight(40)
-        self._converter_combo.setPlaceholderText("Select conversion…")
-        self._converter_combo.setStyleSheet(f"""
-            QComboBox#converterCombo {{
-                background-color: {default_theme.input_bg};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.input_border};
-                border-radius: 6px;
-                padding: 10px 12px;
-                font-size: 13px;
-            }}
-            QComboBox#converterCombo:hover {{
-                border: 1px solid {default_theme.input_border_hover};
-            }}
-            QComboBox#converterCombo::drop-down {{
-                border: none;
-                border-left: 1px solid {default_theme.input_border};
-                width: 32px;
-            }}
-            QComboBox#converterCombo QAbstractItemView {{
-                background-color: {default_theme.input_bg};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.input_border};
-                border-radius: 6px;
-                selection-background-color: {default_theme.row_bg_standard};
-                selection-color: {default_theme.text_primary};
-                padding: 8px 12px;
-                outline: none;
-            }}
-        """)
-        self._converter_combo.hide()
-        card_layout.addWidget(self._converter_combo)
-
-        # Convert button
-        self._converter_run_btn = QPushButton("Convert")
-        self._converter_run_btn.setObjectName("converterRunBtn")
-        self._converter_run_btn.setMinimumHeight(40)
-        self._converter_run_btn.setCursor(Qt.PointingHandCursor)
-        self._converter_run_btn.setStyleSheet(f"""
-            QPushButton#converterRunBtn {{
-                background-color: {default_theme.button_primary};
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 16px;
-                font-size: 13px;
-                font-weight: 700;
-            }}
-            QPushButton#converterRunBtn:hover {{
-                background-color: {default_theme.button_primary_hover};
-            }}
-            QPushButton#converterRunBtn:disabled {{
-                background-color: {default_theme.border_standard};
-                color: {default_theme.text_secondary};
-            }}
-        """)
-        self._converter_run_btn.clicked.connect(self._run_selected_conversion)
-        self._converter_run_btn.hide()
-        card_layout.addWidget(self._converter_run_btn)
-
-        # Internal state
-        self._converter_source_path = None
-        self._conversion_blocked = False  # True when current model was loaded via drag/upload/toolbar
-
-        # Conversion map: source_ext -> list of (label, output_ext, conversion_type)
-        self._conversion_map = {
-            '.3dm': [
-                ("3DM → STEP", ".step", "3dm_to_step"),
-                ("3DM → STL", ".stl", "3dm_to_stl"),
-            ],
-            '.step': [
-                ("STEP → STL", ".stl", "step_to_stl"),
-            ],
-            '.stp': [
-                ("STEP → STL", ".stl", "step_to_stl"),
-            ],
-        }
-
-        self._add_card_shadow(card)
-        return card
-
-    def set_conversion_blocked(self, blocked: bool):
-        """Block or unblock the conversion feature. Block when loaded file is not 3DM/STEP."""
-        self._conversion_blocked = blocked
-        self._converter_select_btn.setEnabled(not blocked)
-        self._converter_select_btn.setVisible(True)
-        if blocked:
-            self._converter_file_label.hide()
-            self._converter_combo.hide()
-            self._converter_run_btn.hide()
-            self._converter_source_path = None
-
-    def reset_converter(self):
-        """Reset the converter section to its initial state (e.g. when model is cleared)."""
-        self._conversion_blocked = False
-        self._converter_select_btn.setEnabled(True)
-        self._converter_file_label.setText("")
-        self._converter_file_label.hide()
-        self._converter_combo.clear()
-        self._converter_combo.hide()
-        self._converter_run_btn.hide()
-        self._converter_source_path = None
-
-    def set_converter_source_from_file(self, file_path: str):
-        """Pre-populate converter with the given 3DM/STEP file (e.g. when loaded via upload)."""
-        if not file_path:
-            return
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext not in self._conversion_map:
-            return
-        self._conversion_blocked = False
-        self._converter_select_btn.setEnabled(True)
-        self._converter_source_path = file_path
-        filename = os.path.basename(file_path)
-        self._converter_file_label.setText(f"📄 {filename}")
-        self._converter_file_label.show()
-        options = self._conversion_map.get(ext, [])
-        self._converter_combo.clear()
-        for label, output_ext, conv_type in options:
-            self._converter_combo.addItem(label, (output_ext, conv_type))
-        if options:
-            self._converter_combo.setCurrentIndex(0)
-            self._converter_combo.show()
-            self._converter_run_btn.show()
-            self._converter_run_btn.setEnabled(True)
-
-    def _select_converter_source(self):
-        """Open file dialog to select source file for conversion."""
-        if self._conversion_blocked:
-            return
-        input_path, _ = QFileDialog.getOpenFileName(
-            self, "Select File to Convert", "",
-            "Supported Files (*.3dm *.step *.stp);;Rhino 3DM (*.3dm);;STEP Files (*.step *.stp)"
-        )
-        if not input_path:
-            return
-
-        ext = os.path.splitext(input_path)[1].lower()
-        options = self._conversion_map.get(ext, [])
-
-        self._converter_source_path = input_path
-        filename = os.path.basename(input_path)
-        self._converter_file_label.setText(f"📄 {filename}")
-        self._converter_file_label.show()
-
-        self._converter_combo.clear()
-        if options:
-            for label, output_ext, conv_type in options:
-                self._converter_combo.addItem(label, (output_ext, conv_type))
-            self._converter_combo.setCurrentIndex(0)
-            self._converter_combo.show()
-            self._converter_run_btn.show()
-            self._converter_run_btn.setEnabled(True)
-        else:
-            self._converter_combo.hide()
-            self._converter_run_btn.hide()
-            QMessageBox.warning(
-                self, "Unsupported Format",
-                f"No conversions available for '{ext}' files.\n\nSupported source formats: .3dm, .step, .stp"
-            )
-
-    def _run_selected_conversion(self):
-        """Run the conversion selected in the dropdown."""
-        if not self._converter_source_path or self._converter_combo.currentIndex() < 0:
-            return
-
-        data = self._converter_combo.currentData()
-        if not data:
-            return
-
-        output_ext, conversion_type = data
-        label = self._converter_combo.currentText()
-        default_output = os.path.splitext(self._converter_source_path)[0] + output_ext
-
-        # Map extensions to save dialog filters
-        ext_filters = {
-            ".step": "STEP Files (*.step *.stp)",
-            ".stl": "STL Files (*.stl)",
-        }
-
-        output_path, _ = QFileDialog.getSaveFileName(
-            self, f"Save {label} Output", default_output, ext_filters.get(output_ext, "All Files (*)")
-        )
-        if not output_path:
-            return
-
-        self._run_conversion(label, self._converter_source_path, output_path, conversion_type)
-
-    def _run_conversion(self, label, input_path, output_path, conversion_type):
-        """Run a file conversion with progress feedback."""
-        from core.file_converter import FileConverter
-
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            if conversion_type == "3dm_to_step":
-                FileConverter.convert_3dm_to_step(input_path, output_path)
-            elif conversion_type == "3dm_to_stl":
-                FileConverter.convert_3dm_to_stl(input_path, output_path)
-            elif conversion_type == "step_to_stl":
-                FileConverter.convert_step_to_stl(input_path, output_path)
-
-            QApplication.restoreOverrideCursor()
-            QMessageBox.information(
-                self, "Conversion Complete",
-                f"{label} conversion successful!\n\nSaved to:\n{output_path}"
-            )
-            self.conversion_complete.emit(output_path)
-        except Exception as e:
-            QApplication.restoreOverrideCursor()
-            logger.error(f"Conversion failed ({label}): {e}", exc_info=True)
-            QMessageBox.critical(
-                self, "Conversion Failed",
-                f"{label} conversion failed:\n\n{str(e)}"
-            )

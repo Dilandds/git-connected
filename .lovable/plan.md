@@ -1,77 +1,50 @@
 
-# Multi-Tab Support for ECTOFORM
 
-## Overview
-Add a tab bar to the main window so users can open multiple 3D files simultaneously, each in its own tab with independent viewer, sidebar data, and annotations.
+## Plan: Replace Fragile QPainter Fallback with Simple fillRect
 
-## Architecture
+### Problem
+`drawRoundedRect` has strict overload resolution on Windows PyQt5 that causes crashes regardless of int/float casting. The rounded corners on a 5px cell are invisible anyway.
 
-```text
-+----------------------------------------------------------+
-| ECTOFORM - Tab Bar                                        |
-| [Model1.stl  x] [Model2.step  x] [+]                    |
-+----------------------------------------------------------+
-| Sidebar  |  Toolbar                                       |
-|          |  Ruler Toolbar (if active)                     |
-|          +-----------------------------------------------+
-|          |  3D Viewer + Annotation Panel                  |
-|          |  (per-tab content)                             |
-+----------------------------------------------------------+
+### Fix — `ui/toolbar.py`, `_parts_menu_pixmap_fallback()`
+
+Replace the entire function body with a simpler approach that avoids `drawRoundedRect` completely:
+
+```python
+from PyQt5.QtCore import QRect
+
+def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
+    try:
+        if size <= 0:
+            size = 10
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(0, 0, 0))
+        cell = size // 2 - 1          # integer math only
+        gap = 1
+        for r in range(2):
+            for c in range(2):
+                x = gap + c * (cell + gap)
+                y = gap + r * (cell + gap)
+                p.fillRect(QRect(x, y, cell, cell), QColor(0, 0, 0))
+        p.end()
+        return pm
+    except Exception:
+        logger.warning("_parts_menu_pixmap_fallback failed", exc_info=True)
+        pm = QPixmap(max(size, 10), max(size, 10))
+        pm.fill(QColor(0, 0, 0))
+        return pm
 ```
 
-## Implementation Plan
+Key changes:
+- **All integer arithmetic** — no floats anywhere
+- **`fillRect(QRect, QColor)`** instead of `drawRoundedRect` — this overload exists in all PyQt5 versions and has no type ambiguity
+- **`QRect` constructed from ints** — guaranteed compatible
+- **Ultimate fallback**: if even `fillRect` fails, return a solid black square (still better than crashing)
 
-### 1. Create a Tab Data class to hold per-tab state
-- Create a dataclass or simple class (`TabState`) that stores:
-  - `file_path` -- the loaded file
-  - `viewer_widget` -- its own `STLViewerWidget` instance
-  - `annotation_panel` -- its own `AnnotationPanel` instance
-  - `sidebar_data` -- cached mesh data / dimensions for restoring sidebar
-  - `annotations` -- list of annotations
-  - `ruler_active` / `annotation_mode_active` -- mode flags
-  - `mesh` reference
+This produces the same 2×2 grid of black squares visible in the user's screenshot. The 1px rounded corners from `drawRoundedRect` were imperceptible at this size anyway.
 
-### 2. Add QTabBar to the right container
-- Insert a `QTabBar` above the toolbar in the right panel layout
-- Style it to match the dark ECTOFORM theme
-- Each tab shows the filename with a close button
-- A "+" button at the end to open a new file
-- When no files are loaded, show a single "Untitled" tab with the drop zone
+### Files changed
+- `ui/toolbar.py` — only `_parts_menu_pixmap_fallback()` function (lines 37-59)
 
-### 3. Refactor STLViewerWindow to manage multiple tabs
-- Replace the single `self.viewer_widget` with a `QStackedWidget` that holds one viewer per tab
-- Maintain a list of `TabState` objects (`self.tabs`)
-- Track `self.current_tab_index`
-- When switching tabs:
-  - Save current tab's mode states (ruler, annotation)
-  - Hide current viewer, show new tab's viewer
-  - Update sidebar panel with the new tab's mesh data
-  - Update toolbar state (loaded filename, enabled controls)
-  - Restore ruler/annotation mode if it was active on that tab
-
-### 4. Modify file loading to create new tabs
-- `upload_stl_file()` and `_load_dropped_file()`: instead of replacing the current model, create a new tab with a fresh `STLViewerWidget` and load the file into it
-- If the current tab is empty (no file loaded), reuse it instead of creating a new tab
-- Connect all signals (drag-drop, click-to-upload, etc.) for each new viewer widget
-
-### 5. Add tab close functionality
-- Close button on each tab removes the tab, destroys its viewer widget, and cleans up state
-- If the last tab is closed, create a new empty tab with the drop zone
-- Prompt to save unsaved annotations before closing a tab
-
-### 6. Update sidebar to reflect active tab
-- When switching tabs, call `self.sidebar_panel.update_dimensions()` with the active tab's cached mesh data
-- Clear sidebar if switching to an empty tab
-
-## Technical Details
-
-### Files to modify:
-- **`stl_viewer.py`** -- Major refactor: add `QTabBar`, `QStackedWidget`, `TabState` management, modify all file-loading and mode-toggling methods to be tab-aware
-- **`ui/styles.py`** -- Add tab bar styling to match the ECTOFORM theme
-
-### Key considerations:
-- Each tab gets its own `STLViewerWidget` instance (pygfx context), which may use significant GPU memory -- this is acceptable for a desktop app but worth noting
-- Annotation state is per-tab, so switching tabs must save/restore annotations
-- Ruler mode measurements are per-tab
-- The sidebar panel is shared but updates its content based on the active tab
-- Window title updates to show the active tab's filename
