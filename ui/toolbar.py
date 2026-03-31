@@ -173,26 +173,44 @@ def _toolbar_label_style(color: str, size: int = 10) -> str:
 class ToolbarButton(QPushButton):
     """A styled toolbar button with icon and text."""
     
-    def __init__(self, icon_text, label_text, tooltip, parent=None, icon_path=None):
+    def __init__(self, icon_text, label_text, tooltip, parent=None, icon_path=None, label_font_size=10):
         super().__init__(parent)
         self.icon_text = icon_text
         self.icon_path = icon_path
         self._preferred_icon_path = icon_path  # Kept when set_icon is called with emoji
         self.label_text = label_text
         self._is_active = False
+        self._label_font_size = label_font_size
+        # Larger label (e.g. Ruler on Windows): taller chip + more left room so emoji is not clipped
+        _win_large = sys.platform == 'win32' and label_font_size >= 12
         
         # Create layout for icon + text
         self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(6, 4, 8, 4)
+        if _win_large:
+            self._layout.setContentsMargins(8, 5, 10, 5)
+        else:
+            self._layout.setContentsMargins(6, 4, 8, 4)
         self._layout.setSpacing(4)
         
         # Icon (image or emoji)
         self.icon_label = QLabel()
-        self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: 12px; background: transparent;")
+        if icon_path:
+            self._icon_size = 24
+            _ih = 24
+            _icon_fs = 12
+        elif _win_large:
+            self._icon_size = 18
+            _ih = 18
+            _icon_fs = 14
+        else:
+            self._icon_size = 14
+            _ih = 14
+            _icon_fs = 12
+        self._icon_label_font_px = _icon_fs
+        self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: {_icon_fs}px; background: transparent;")
         self.icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_size = 24 if icon_path else 14
         self.icon_label.setFixedWidth(self._icon_size)
-        self.icon_label.setFixedHeight(24 if icon_path else 14)
+        self.icon_label.setFixedHeight(_ih)
         if icon_path:
             self._set_icon_pixmap(icon_path)
         else:
@@ -201,8 +219,8 @@ class ToolbarButton(QPushButton):
         
         # Text label
         self.text_label = QLabel(label_text)
-        self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, 10))
-        self.text_label.setFont(_toolbar_label_font(10))
+        self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, label_font_size))
+        self.text_label.setFont(_toolbar_label_font(label_font_size))
         self.text_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self._layout.addWidget(self.text_label)
         
@@ -210,8 +228,9 @@ class ToolbarButton(QPushButton):
         self.setToolTip(tooltip or "")
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.setMinimumHeight(28)
-        self.setMaximumHeight(28)
+        _btn_h = 32 if _win_large else 28
+        self.setMinimumHeight(_btn_h)
+        self.setMaximumHeight(_btn_h)
         
         self._apply_default_style()
         self._update_min_width()
@@ -303,8 +322,9 @@ class ToolbarButton(QPushButton):
                 border-radius: 6px;
             }}
         """)
-        self.icon_label.setStyleSheet(f"color: #888888; font-size: 12px; background: transparent;")
-        self.text_label.setStyleSheet(_toolbar_label_style('#888888', 10))
+        _ifs = getattr(self, '_icon_label_font_px', 12)
+        self.icon_label.setStyleSheet(f"color: #888888; font-size: {_ifs}px; background: transparent;")
+        self.text_label.setStyleSheet(_toolbar_label_style('#888888', self._label_font_size))
     
     def set_active(self, active):
         """Set the active state of the button."""
@@ -351,9 +371,10 @@ class ToolbarButton(QPushButton):
         super().setEnabled(enabled)
         if enabled:
             self._apply_default_style()
-            self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: 12px; background: transparent;")
-            self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, 10))
-            self.text_label.setFont(_toolbar_label_font(10))
+            _ifs = getattr(self, '_icon_label_font_px', 12)
+            self.icon_label.setStyleSheet(f"color: {_TB_FG}; font-size: {_ifs}px; background: transparent;")
+            self.text_label.setStyleSheet(_toolbar_label_style(_TB_FG, self._label_font_size))
+            self.text_label.setFont(_toolbar_label_font(self._label_font_size))
         else:
             self._apply_disabled_style()
 
@@ -518,7 +539,10 @@ class ViewControlsToolbar(QWidget):
         content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
         
         # === Utility Actions ===
-        self.ruler_btn = ToolbarButton("📏", "Ruler", "Measure distances on the model")
+        _ruler_label_px = 12 if sys.platform == 'win32' else 10
+        self.ruler_btn = ToolbarButton(
+            "📏", "Ruler", "Measure distances on the model", label_font_size=_ruler_label_px
+        )
         self.ruler_btn.clicked.connect(self._on_ruler_clicked)
         self.ruler_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.ruler_btn)
