@@ -150,7 +150,7 @@ class STLViewerWidget(QWidget):
         self.plotter = None  # Not used; kept for hasattr checks
         self._model_loaded = False
         self._initialized = False
-        self._render_mode = 'solid'
+        self._render_mode = 'shaded'  # Match toolbar default; Phong shading on load
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
         self._axes_labels = []  # X, Y, Z text labels on the corner axes

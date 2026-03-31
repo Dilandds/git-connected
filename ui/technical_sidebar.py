@@ -8,10 +8,24 @@ from PyQt5.QtWidgets import (
     QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QPalette, QColor
 from ui.styles import default_theme, make_font
 
 logger = logging.getLogger(__name__)
+
+# Input fields: white surface, black text (Technical Overview sidebar)
+_FIELD_BG = "#ffffff"
+_FIELD_TEXT = "#111827"
+_FIELD_BORDER = "#d1d5db"
+_FIELD_PLACEHOLDER = "#6b7280"
+
+
+def _apply_field_palette(widget):
+    """Ensure typed text is dark and placeholder is muted (global theme may use light-on-dark)."""
+    pal = widget.palette()
+    pal.setColor(QPalette.Text, QColor(_FIELD_TEXT))
+    pal.setColor(QPalette.PlaceholderText, QColor(_FIELD_PLACEHOLDER))
+    widget.setPalette(pal)
 
 
 def _section_label(text: str) -> QLabel:
@@ -26,17 +40,18 @@ def _line_edit(placeholder: str = "") -> QLineEdit:
     le.setFixedHeight(30)
     le.setStyleSheet(f"""
         QLineEdit {{
-            background-color: {default_theme.input_bg};
-            border: 1px solid {default_theme.input_border};
+            background-color: {_FIELD_BG};
+            border: 1px solid {_FIELD_BORDER};
             border-radius: 6px;
             padding: 4px 8px;
             font-size: 11px;
-            color: {default_theme.text_primary};
+            color: {_FIELD_TEXT};
         }}
         QLineEdit:focus {{
             border: 2px solid {default_theme.button_primary};
         }}
     """)
+    _apply_field_palette(le)
     return le
 
 
@@ -167,17 +182,18 @@ class TechnicalSidebar(QWidget):
         self.comments_edit.setMaximumHeight(250)
         self.comments_edit.setStyleSheet(f"""
             QTextEdit {{
-                background-color: {default_theme.input_bg};
-                border: 1px solid {default_theme.input_border};
+                background-color: {_FIELD_BG};
+                border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 8px;
                 font-size: 11px;
-                color: {default_theme.text_primary};
+                color: {_FIELD_TEXT};
             }}
             QTextEdit:focus {{
                 border: 2px solid {default_theme.button_primary};
             }}
         """)
+        _apply_field_palette(self.comments_edit)
         layout.addWidget(self.comments_edit)
 
         # Separator
@@ -275,12 +291,12 @@ class TechnicalSidebar(QWidget):
     def _style_date_edit(self, de: QDateEdit):
         de.setStyleSheet(f"""
             QDateEdit {{
-                background-color: {default_theme.input_bg};
-                border: 1px solid {default_theme.input_border};
+                background-color: {_FIELD_BG};
+                border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 4px 8px;
                 font-size: 11px;
-                color: {default_theme.text_primary};
+                color: {_FIELD_TEXT};
             }}
             QDateEdit:focus {{
                 border: 2px solid {default_theme.button_primary};
@@ -290,6 +306,7 @@ class TechnicalSidebar(QWidget):
                 width: 20px;
             }}
         """)
+        _apply_field_palette(de)
 
     def _on_annotate_toggled(self):
         self._annotation_mode = self.annotate_btn.isChecked()

@@ -6,16 +6,29 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
-    QDialog, QApplication, QLineEdit, QGridLayout
+    QDialog, QApplication, QLineEdit, QGridLayout,
 )
 from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QFont
-from ui.styles import default_theme, FONTS
+from PyQt5.QtGui import QPixmap
+from ui.styles import default_theme, make_font
+from ui.annotation_panel import (
+    _ANNO_CARD_BORDER,
+    _ANNO_CARD_BORDER_HOVER,
+    _ANNO_CARD_HOVER,
+    _ANNO_CARD_PENDING,
+)
 
 logger = logging.getLogger(__name__)
 
 GRID_COLUMNS = 2
+
+# Orange banner — same structure as annotation mode leather card (gradient + light rim)
+_SS_ORANGE_TOP = "#FFB74D"
+_SS_ORANGE_UPPER = "#FF9800"
+_SS_ORANGE_MID = "#F57C00"
+_SS_ORANGE_DEEP = "#E65100"
+_SS_ORANGE_BOTTOM = "#BF360C"
 
 
 class ScreenshotCard(QFrame):
@@ -29,16 +42,24 @@ class ScreenshotCard(QFrame):
         self.index = index
         self.pixmap = pixmap
         self.setObjectName("screenshotCard")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Same glassy gradient + light rim + hover as annotation list cards
         self.setStyleSheet(f"""
             QFrame#screenshotCard {{
-                background-color: {default_theme.row_bg_standard};
-                border-radius: 8px;
-                border: 1px solid {default_theme.border_standard};
+                background: {_ANNO_CARD_PENDING};
+                {_ANNO_CARD_BORDER}
             }}
             QFrame#screenshotCard:hover {{
-                border: 1px solid {default_theme.border_medium};
+                background: {_ANNO_CARD_HOVER};
+                {_ANNO_CARD_BORDER_HOVER}
+            }}
+            QFrame#screenshotCard QLabel {{
+                background-color: transparent;
+            }}
+            QFrame#screenshotCard QLineEdit {{
+                background-color: transparent;
             }}
         """)
 
@@ -92,7 +113,7 @@ class ScreenshotCard(QFrame):
                 padding: 0; min-width: 20px; min-height: 20px;
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background-color: rgba(255, 255, 255, 0.12);
                 color: {default_theme.text_primary};
             }}
         """)
@@ -268,42 +289,95 @@ class ScreenshotPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        # Header
-        header = QHBoxLayout()
-        title = QLabel("📷  Screenshots")
-        title.setStyleSheet(f"color: {default_theme.text_title}; font-weight: bold; font-size: 14px; background: transparent;")
-        header.addWidget(title)
-        header.addStretch()
+        # Header — same card pattern as annotation mode banner (gradient + rim + dashed rule), orange palette
+        banner = QFrame()
+        banner.setObjectName("screenshotModeBanner")
+        banner.setAttribute(Qt.WA_StyledBackground, True)
+        banner.setStyleSheet(f"""
+            QFrame#screenshotModeBanner {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {_SS_ORANGE_TOP},
+                    stop:0.12 {_SS_ORANGE_UPPER},
+                    stop:0.38 {_SS_ORANGE_MID},
+                    stop:0.72 {_SS_ORANGE_DEEP},
+                    stop:1 {_SS_ORANGE_BOTTOM});
+                border-top: 1px solid rgba(255, 255, 255, 0.52);
+                border-left: 1px solid rgba(255, 255, 255, 0.42);
+                border-right: 1px solid rgba(255, 255, 255, 0.38);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+                border-radius: 14px;
+            }}
+        """)
+        banner_layout = QVBoxLayout(banner)
+        banner_layout.setContentsMargins(16, 10, 16, 10)
+        banner_layout.setSpacing(0)
+
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(2, 0, 0, 0)
+        title_row.setSpacing(10)
+        cam_icon = QLabel("📷")
+        cam_icon.setFixedSize(22, 22)
+        cam_icon.setAlignment(Qt.AlignCenter)
+        cam_icon.setStyleSheet("background: transparent; border: none; font-size: 16px;")
+        title_row.addWidget(cam_icon)
+        title = QLabel("Screenshots")
+        title.setFont(make_font(size=12, bold=True))
+        title.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+        title_row.addWidget(title)
+        title_row.addStretch()
 
         exit_btn = QPushButton("✕")
         exit_btn.setObjectName("exitScreenshotBtn")
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.setFixedSize(28, 28)
-        exit_btn.setStyleSheet(f"""
-            QPushButton#exitScreenshotBtn {{
-                background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_secondary};
+        exit_btn.setStyleSheet("""
+            QPushButton#exitScreenshotBtn {
+                background-color: transparent;
                 border: none;
-                border-radius: 14px;
+                color: rgba(255, 255, 255, 0.92);
                 font-size: 16px;
                 font-weight: bold;
                 padding: 0; min-width: 28px; min-height: 28px;
-            }}
-            QPushButton#exitScreenshotBtn:hover {{
-                background-color: {default_theme.row_bg_hover};
-            }}
+            }
+            QPushButton#exitScreenshotBtn:hover {
+                color: #FFFFFF;
+                background-color: rgba(0, 0, 0, 0.18);
+                border-radius: 14px;
+            }
         """)
         exit_btn.clicked.connect(self.exit_screenshot_mode.emit)
-        header.addWidget(exit_btn)
-        layout.addLayout(header)
+        title_row.addWidget(exit_btn)
+        banner_layout.addLayout(title_row)
 
-        # Instruction
+        divider = QFrame()
+        divider.setObjectName("screenshotModeDivider")
+        divider.setFrameShape(QFrame.NoFrame)
+        divider.setMinimumHeight(3)
+        divider.setMaximumHeight(3)
+        divider.setStyleSheet("""
+            QFrame#screenshotModeDivider {
+                border: none;
+                border-top: 1px dashed rgba(255, 255, 255, 0.55);
+                margin-top: 8px;
+                margin-bottom: 8px;
+                margin-left: 0px;
+                margin-right: 0px;
+                background: transparent;
+            }
+        """)
+        banner_layout.addWidget(divider)
+        self._screenshot_banner_divider = divider
+
         self.instruction = QLabel(
             "Draw a square on the model to capture a screenshot."
         )
         self.instruction.setWordWrap(True)
-        self.instruction.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px; background: transparent;")
-        layout.addWidget(self.instruction)
+        self.instruction.setStyleSheet(
+            "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
+        )
+        banner_layout.addWidget(self.instruction)
+
+        layout.addWidget(banner)
 
         # Scroll area with grid
         scroll = QScrollArea()
@@ -374,7 +448,9 @@ class ScreenshotPanel(QWidget):
         self.grid_layout.addWidget(card, row, col)
 
         self.clear_btn.setVisible(len(self.screenshots) > 0)
-        self.instruction.setVisible(len(self.screenshots) == 0)
+        _show_hint = len(self.screenshots) == 0
+        self.instruction.setVisible(_show_hint)
+        self._screenshot_banner_divider.setVisible(_show_hint)
 
     def clear_all(self):
         """Remove all screenshots."""
@@ -385,6 +461,7 @@ class ScreenshotPanel(QWidget):
         self.screenshots.clear()
         self.clear_btn.hide()
         self.instruction.show()
+        self._screenshot_banner_divider.show()
 
     # ---- private slots ----
 
@@ -402,7 +479,9 @@ class ScreenshotPanel(QWidget):
                 c.update_index(i)
             self._rebuild_grid()
             self.clear_btn.setVisible(len(self.screenshots) > 0)
-            self.instruction.setVisible(len(self.screenshots) == 0)
+            _show_hint = len(self.screenshots) == 0
+            self.instruction.setVisible(_show_hint)
+            self._screenshot_banner_divider.setVisible(_show_hint)
             logger.info(f"Screenshot {index} deleted")
 
     def _on_save(self, index: int):

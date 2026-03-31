@@ -183,6 +183,7 @@ class ImageCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         if not self._pixmap:
+            painter.fillRect(self.rect(), QColor("#ffffff"))
             self._draw_drop_zone(painter)
             painter.end()
             return
@@ -209,31 +210,28 @@ class ImageCanvas(QWidget):
         painter.end()
 
     def _draw_drop_zone(self, painter: QPainter):
-        """Draw upload prompt when no image is loaded. Match 3D viewer drop zone styles."""
-        painter.setPen(QPen(QColor(default_theme.border_light), 2, Qt.DashLine))
+        """Draw upload prompt when no image is loaded — white area, black text, dashed border."""
+        _ink = "#111827"
         margin = 40
         r = self.rect().adjusted(margin, margin, -margin, -margin)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor("#94a3b8"), 2, Qt.DashLine))
         painter.drawRoundedRect(r, 12, 12)
 
-        # Primary text: same as 3D viewer (18px, weight 600, #1a1a2e)
-        font_primary = make_font(pixel_size=18, weight=600)
-        painter.setFont(font_primary)
-        painter.setPen(QColor("#1a1a2e"))
-        primary_height = painter.fontMetrics().height()
-        # Helper text: same as 3D viewer (11px, weight 400, #a0aec0)
-        font_helper = make_font(pixel_size=11, weight=400)
-        painter.setFont(font_helper)
-        helper_height = painter.fontMetrics().height()
+        font_primary = make_font(pixel_size=18, bold=True)
+        primary_height = QFontMetrics(font_primary).height()
+        font_helper = make_font(pixel_size=12, bold=True)
+        helper_height = QFontMetrics(font_helper).height()
         spacing = 12
         block_height = primary_height + spacing + helper_height
         start_y = r.top() + (r.height() - block_height) // 2
         primary_rect = QRectF(r.left(), start_y, r.width(), primary_height)
         helper_rect = QRectF(r.left(), start_y + primary_height + spacing, r.width(), helper_height)
         painter.setFont(font_primary)
-        painter.setPen(QColor("#1a1a2e"))
+        painter.setPen(QColor(_ink))
         painter.drawText(primary_rect, Qt.AlignCenter, "Click or drag to upload")
         painter.setFont(font_helper)
-        painter.setPen(QColor("#a0aec0"))
+        painter.setPen(QColor(_ink))
         painter.drawText(helper_rect, Qt.AlignCenter, "JPEG · PNG · PDF")
 
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):

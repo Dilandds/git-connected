@@ -1150,6 +1150,9 @@ class STLViewerWindow(QMainWindow):
             
             # Load any existing annotations for this file
             self._load_annotations_for_file(file_path)
+            
+            # Keep 3D view aligned with toolbar (default visual style is shaded)
+            self._set_render_mode(self.toolbar.render_mode)
     
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
@@ -2324,6 +2327,8 @@ class STLViewerWindow(QMainWindow):
             self.setWindowTitle(f"ECTOFORM - {display_name}")
             self.toolbar.set_loaded_filename(display_name)
             self.toolbar.set_stl_loaded(True)
+            
+            self._set_render_mode(self.toolbar.render_mode)
             
             if hasattr(vw, 'current_mesh'):
                 mesh = vw.current_mesh
