@@ -48,6 +48,7 @@ from ui.parts_panel import PartsPanel
 from ui.styles import get_global_stylesheet, default_theme
 from core.mesh_calculator import MeshCalculator
 from ui.screenshot_panel import ScreenshotPanel
+from ui.texture_panel import TexturePanel
 from ui.components import confirm_dialog
 from ui.technical_overview import TechnicalOverviewWidget
 from ui.technical_sidebar import TechnicalSidebar
@@ -97,6 +98,7 @@ class TabState:
     arrow_mode_active: bool = False
     parts_mode_active: bool = False
     screenshot_mode_active: bool = False
+    texture_mode_active: bool = False
     draw_mode_active: bool = False
     annotations_exported: bool = False
     ecto_temp_dir: Optional[str] = None
@@ -290,19 +292,25 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.addWidget(self.ruler_toolbar)
         logger.info("init_ui: Ruler toolbar created")
         
-        # ---- Stacked widgets for viewers and annotation/screenshot/arrow panels ----
+        # ---- Stacked widgets for viewers and annotation/screenshot/arrow/texture panels ----
         self.viewer_stack = QStackedWidget()
         self.annotation_stack = QStackedWidget()
         self.screenshot_stack = QStackedWidget()
         self.arrow_stack = QStackedWidget()
         self.parts_stack = QStackedWidget()
+        self.texture_stack = QStackedWidget()
         
         # Shared screenshot panel (one per window, not per tab)
         self.screenshot_panel = ScreenshotPanel()
         self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
         self.screenshot_stack.addWidget(self.screenshot_panel)
         
-        # Single right panel: only annotation OR screenshot OR arrow OR parts visible at a time
+        # Shared texture panel (one per window, not per tab)
+        self.texture_panel = TexturePanel()
+        self.texture_panel.exit_texture_mode.connect(self._exit_texture_mode_from_panel)
+        self.texture_stack.addWidget(self.texture_panel)
+        
+        # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture visible at a time
         self.right_panel_stack = QStackedWidget()
         self._right_panel_placeholder = QWidget()
         self._right_panel_placeholder.setFixedWidth(0)  # No space when neither mode active
@@ -311,6 +319,7 @@ class STLViewerWindow(QMainWindow):
         self.right_panel_stack.addWidget(self.screenshot_stack)
         self.right_panel_stack.addWidget(self.arrow_stack)
         self.right_panel_stack.addWidget(self.parts_stack)
+        self.right_panel_stack.addWidget(self.texture_stack)
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()  # No blank space when neither mode active
         
@@ -678,6 +687,10 @@ class STLViewerWindow(QMainWindow):
             self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
             self.right_panel_stack.show()
             self.screenshot_panel.show()
+        elif tab.texture_mode_active:
+            self.right_panel_stack.setCurrentWidget(self.texture_stack)
+            self.right_panel_stack.show()
+            self.texture_panel.show()
         else:
             tab.annotation_panel.hide()
             tab.arrow_panel.hide()
@@ -740,6 +753,14 @@ class STLViewerWindow(QMainWindow):
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
         
+        # Restore texture mode
+        if tab.texture_mode_active:
+            self.toolbar.texture_mode_enabled = True
+            self.toolbar.texture_btn.set_active(True)
+        else:
+            if self.toolbar.texture_mode_enabled:
+                self._exit_texture_mode()
+        
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
     
     def _save_current_tab_state(self):
@@ -752,6 +773,7 @@ class STLViewerWindow(QMainWindow):
         tab.arrow_mode_active = self.toolbar.arrow_mode_enabled
         tab.parts_mode_active = getattr(self.toolbar, 'parts_mode_enabled', False)
         tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
+        tab.texture_mode_active = getattr(self.toolbar, 'texture_mode_enabled', False)
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
     
     def _on_tab_close_requested(self, index: int):
@@ -925,6 +947,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.toggle_fullscreen.connect(self._toggle_fullscreen)
         self.toolbar.toggle_ruler.connect(self._toggle_ruler_mode)
         self.toolbar.toggle_screenshot.connect(self._toggle_screenshot_mode)
+        self.toolbar.toggle_texture.connect(self._toggle_texture_mode)
         self.toolbar.toggle_annotation.connect(self._toggle_annotation_mode)
         self.toolbar.toggle_arrow.connect(self._toggle_arrow_mode)
         self.toolbar.toggle_draw.connect(self._toggle_draw_mode)
@@ -1821,6 +1844,60 @@ class STLViewerWindow(QMainWindow):
             QTimer.singleShot(50, vw.reframe_for_viewport)
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+
+    # ========== Texture Mode Methods ==========
+
+    def _toggle_texture_mode(self):
+        """Toggle texture application mode."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        if self.toolbar.texture_mode_enabled:
+            # Exit other modes
+            if self.toolbar.annotation_mode_enabled:
+                self._exit_annotation_mode()
+            if self.toolbar.arrow_mode_enabled:
+                self._exit_arrow_mode()
+            if self.toolbar.ruler_mode_enabled:
+                self._exit_ruler_mode()
+            if self.toolbar.screenshot_mode_enabled:
+                self._exit_screenshot_mode()
+            if self.toolbar.draw_mode_enabled:
+                self._exit_draw_mode()
+            if self.toolbar.parts_mode_enabled:
+                self.toolbar.parts_mode_enabled = False
+                self._exit_parts_mode()
+            # Enable texture drop on viewer
+            if hasattr(vw, 'enable_texture_drop_mode'):
+                vw.enable_texture_drop_mode()
+            self.texture_panel.show()
+            self.right_panel_stack.setCurrentWidget(self.texture_stack)
+            self.right_panel_stack.show()
+            if hasattr(vw, 'reframe_for_viewport'):
+                QTimer.singleShot(50, vw.reframe_for_viewport)
+            logger.info("_toggle_texture_mode: Texture mode enabled")
+        else:
+            self._exit_texture_mode()
+
+    def _exit_texture_mode(self):
+        """Exit texture mode."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'disable_texture_drop_mode'):
+            vw.disable_texture_drop_mode()
+        self.texture_panel.hide()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        if vw and hasattr(vw, 'reframe_for_viewport'):
+            QTimer.singleShot(50, vw.reframe_for_viewport)
+        self.toolbar.reset_texture_state()
+        logger.info("_exit_texture_mode: Texture mode disabled")
+
+    def _exit_texture_mode_from_panel(self):
+        """Exit texture mode triggered from the panel close button."""
+        if self.toolbar.texture_mode_enabled:
+            self.toolbar.texture_mode_enabled = False
+            self.toolbar.reset_texture_state()
+        self._exit_texture_mode()
 
     # ========== Draw Mode Methods ==========
     

@@ -401,6 +401,7 @@ class ViewControlsToolbar(QWidget):
     toggle_arrow = pyqtSignal()
     toggle_parts = pyqtSignal()
     toggle_screenshot = pyqtSignal()
+    toggle_texture = pyqtSignal()
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
@@ -423,6 +424,7 @@ class ViewControlsToolbar(QWidget):
         self.arrow_mode_enabled = False
         self.parts_mode_enabled = False
         self.screenshot_mode_enabled = False
+        self.texture_mode_enabled = False
         self.draw_mode_enabled = False
         self._draw_color = '#FF0000'
         self.stl_loaded = False
@@ -563,6 +565,11 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.screenshot_btn)
         
+        self.texture_btn = ToolbarButton("🎨", "Texture", "Upload and apply textures to model parts")
+        self.texture_btn.clicked.connect(self._on_texture_clicked)
+        self.texture_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.texture_btn)
+        
         self.draw_btn = ToolbarButton("🖊", "Draw ▼", "Freehand draw on model surface")
         self.draw_btn.clicked.connect(self._show_draw_menu)
         self.draw_btn.setEnabled(False)  # Disabled until model is loaded
@@ -667,6 +674,7 @@ class ViewControlsToolbar(QWidget):
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
+        self.texture_btn.setEnabled(loaded)
         self.draw_btn.setEnabled(loaded)
         self.parts_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
@@ -1007,6 +1015,10 @@ class ViewControlsToolbar(QWidget):
                 self.annotation_mode_enabled = False
                 self.annotation_btn.set_active(False)
                 self.annotation_btn.set_icon("📝")
+            if self.texture_mode_enabled:
+                self.texture_mode_enabled = False
+                self.texture_btn.set_active(False)
+                self.toggle_texture.emit()
             if self.draw_mode_enabled:
                 self.draw_mode_enabled = False
                 self._eraser_active = False
@@ -1014,6 +1026,33 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_label("Draw ▼")
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
+
+    def _on_texture_clicked(self):
+        """Handle texture mode toggle."""
+        self.texture_mode_enabled = not self.texture_mode_enabled
+        if self.texture_mode_enabled:
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self.parts_btn.set_active(False)
+                self.toggle_parts.emit()
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.annotation_mode_enabled:
+                self.annotation_mode_enabled = False
+                self.annotation_btn.set_active(False)
+                self.annotation_btn.set_icon("📝")
+            if self.screenshot_mode_enabled:
+                self.screenshot_mode_enabled = False
+                self.screenshot_btn.set_active(False)
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self._eraser_active = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
+        self.texture_btn.set_active(self.texture_mode_enabled)
+        self.toggle_texture.emit()
     
     def _show_draw_menu(self):
         """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options."""
@@ -1185,6 +1224,11 @@ class ViewControlsToolbar(QWidget):
         """Reset screenshot button state (called when exiting screenshot mode externally)."""
         self.screenshot_mode_enabled = False
         self.screenshot_btn.set_active(False)
+
+    def reset_texture_state(self):
+        """Reset texture button state (called when exiting texture mode externally)."""
+        self.texture_mode_enabled = False
+        self.texture_btn.set_active(False)
     
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (disables annotation button)."""

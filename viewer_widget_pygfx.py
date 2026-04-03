@@ -3365,3 +3365,198 @@ class STLViewerWidget(QWidget):
             self.part_clicked.emit(best_part_id)
             return True
         return False
+
+    # ========== Texture Mode Methods ==========
+
+    def enable_texture_drop_mode(self):
+        """Enable texture drag-and-drop onto model parts."""
+        self._texture_drop_mode = True
+        if self._canvas is not None:
+            self._canvas.setAcceptDrops(True)
+            self.viewer_container.setAcceptDrops(True)
+            self.setAcceptDrops(True)
+        logger.info("enable_texture_drop_mode: Texture drop mode enabled")
+
+    def disable_texture_drop_mode(self):
+        """Disable texture drag-and-drop."""
+        self._texture_drop_mode = False
+        if self._canvas is not None:
+            self._canvas.setAcceptDrops(False)
+            self.viewer_container.setAcceptDrops(False)
+            self.setAcceptDrops(False)
+        logger.info("disable_texture_drop_mode: Texture drop mode disabled")
+
+    def dragEnterEvent(self, event):
+        """Accept drag events carrying texture data."""
+        if getattr(self, '_texture_drop_mode', False):
+            mime = event.mimeData()
+            if mime.hasFormat("application/x-ectoform-texture") or mime.hasText():
+                event.acceptProposedAction()
+                return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        """Accept drag move events."""
+        if getattr(self, '_texture_drop_mode', False):
+            mime = event.mimeData()
+            if mime.hasFormat("application/x-ectoform-texture") or mime.hasText():
+                event.acceptProposedAction()
+                return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        """Handle texture drop on model — raycast to find part, apply texture."""
+        if not getattr(self, '_texture_drop_mode', False):
+            super().dropEvent(event)
+            return
+
+        mime = event.mimeData()
+        if mime.hasFormat("application/x-ectoform-texture"):
+            image_path = bytes(mime.data("application/x-ectoform-texture")).decode('utf-8')
+        elif mime.hasText():
+            image_path = mime.text()
+        else:
+            event.ignore()
+            return
+
+        if not image_path or not os.path.isfile(image_path):
+            logger.warning(f"dropEvent: Invalid image path: {image_path}")
+            event.ignore()
+            return
+
+        # Raycast to find which part was dropped on
+        pos = event.pos()
+        # Map to canvas coordinates
+        canvas_pos = self._canvas.mapFrom(self, pos) if self._canvas else pos
+        part_id = self._raycast_part_at(canvas_pos.x(), canvas_pos.y())
+
+        if part_id is not None:
+            self.apply_texture_to_part(part_id, image_path)
+            event.acceptProposedAction()
+            logger.info(f"dropEvent: Applied texture to part {part_id}")
+        else:
+            # If single mesh (no parts), apply to the whole model
+            if self._mesh_obj is not None and len(self._mesh_parts) <= 1:
+                self._apply_texture_to_mesh(self._mesh_obj, self.current_mesh, image_path)
+                event.acceptProposedAction()
+                logger.info("dropEvent: Applied texture to entire model")
+            else:
+                logger.info("dropEvent: No part hit by raycast")
+                event.ignore()
+
+    def _raycast_part_at(self, x, y):
+        """Raycast to find which part is under screen position (x, y). Returns part_id or None."""
+        if not self._mesh_parts or self._camera is None:
+            return None
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return None
+
+        best_part_id = None
+        best_dist = float('inf')
+        cam_pos = np.array(self._camera.local.position)
+
+        for p in self._mesh_parts:
+            if not p.get('visible', True):
+                continue
+            tm = p.get('trimesh')
+            if tm is None:
+                continue
+            try:
+                locations, _, _ = tm.ray.intersects_location(
+                    ray_origins=[ray_origin],
+                    ray_directions=[ray_direction],
+                )
+                if len(locations) > 0:
+                    dists = np.linalg.norm(locations - cam_pos, axis=1)
+                    min_dist = np.min(dists)
+                    if min_dist < best_dist:
+                        best_dist = min_dist
+                        best_part_id = p['id']
+            except Exception as e:
+                logger.debug(f"_raycast_part_at: error for part {p['id']}: {e}")
+
+        return best_part_id
+
+    def apply_texture_to_part(self, part_id, image_path):
+        """Apply a texture image to a specific part mesh."""
+        part = None
+        for p in self._mesh_parts:
+            if p['id'] == part_id:
+                part = p
+                break
+        if part is None:
+            logger.warning(f"apply_texture_to_part: Part {part_id} not found")
+            return
+
+        mesh_obj = part.get('mesh_obj')
+        tm = part.get('trimesh')
+        if mesh_obj is None:
+            logger.warning(f"apply_texture_to_part: Part {part_id} has no mesh_obj")
+            return
+
+        self._apply_texture_to_mesh(mesh_obj, tm, image_path)
+
+    def _apply_texture_to_mesh(self, mesh_obj, tm, image_path):
+        """Apply texture to a pygfx mesh object, generating UVs if needed."""
+        import pygfx as gfx
+        from PIL import Image
+
+        try:
+            img = Image.open(image_path).convert("RGB")
+            tex_data = np.array(img, dtype=np.uint8)
+            texture = gfx.Texture(tex_data, dim=2)
+
+            # Generate UV coordinates via box projection if the geometry lacks them
+            geom = mesh_obj.geometry
+            if geom is not None:
+                positions = geom.positions
+                if positions is not None:
+                    uvs = self._generate_box_uvs(positions.data if hasattr(positions, 'data') else positions)
+                    geom.texcoords = gfx.Buffer(uvs)
+
+            material = gfx.MeshPhongMaterial(map=texture)
+            # Store original material for removal
+            if not hasattr(mesh_obj, '_original_material'):
+                mesh_obj._original_material = mesh_obj.material
+            mesh_obj.material = material
+
+            if self._canvas:
+                self._canvas.request_draw()
+            logger.info(f"_apply_texture_to_mesh: Texture applied from {image_path}")
+        except Exception as e:
+            logger.error(f"_apply_texture_to_mesh: Failed: {e}", exc_info=True)
+
+    def remove_texture_from_part(self, part_id):
+        """Revert a part to its original material (remove texture)."""
+        for p in self._mesh_parts:
+            if p['id'] == part_id:
+                mesh_obj = p.get('mesh_obj')
+                if mesh_obj and hasattr(mesh_obj, '_original_material'):
+                    mesh_obj.material = mesh_obj._original_material
+                    del mesh_obj._original_material
+                    if self._canvas:
+                        self._canvas.request_draw()
+                return
+
+    def _generate_box_uvs(self, vertices):
+        """Generate UV coordinates using box/planar projection from vertex positions."""
+        verts = np.asarray(vertices, dtype=np.float32)
+        if verts.ndim != 2 or verts.shape[1] < 3:
+            return np.zeros((len(verts), 2), dtype=np.float32)
+
+        mins = verts.min(axis=0)
+        maxs = verts.max(axis=0)
+        size = maxs - mins
+        size[size == 0] = 1.0
+
+        # Project onto the two axes with the largest span
+        spans = size[:3]
+        axes = np.argsort(spans)[-2:]  # Two largest axes
+        ax0, ax1 = sorted(axes)
+
+        uvs = np.zeros((len(verts), 2), dtype=np.float32)
+        uvs[:, 0] = (verts[:, ax0] - mins[ax0]) / size[ax0]
+        uvs[:, 1] = (verts[:, ax1] - mins[ax1]) / size[ax1]
+
+        return uvs
