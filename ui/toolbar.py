@@ -424,6 +424,7 @@ class ViewControlsToolbar(QWidget):
         self.arrow_mode_enabled = False
         self.parts_mode_enabled = False
         self.screenshot_mode_enabled = False
+        self.texture_mode_enabled = False
         self.draw_mode_enabled = False
         self._draw_color = '#FF0000'
         self.stl_loaded = False
