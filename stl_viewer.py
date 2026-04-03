@@ -753,6 +753,14 @@ class STLViewerWindow(QMainWindow):
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
         
+        # Restore texture mode
+        if tab.texture_mode_active:
+            self.toolbar.texture_mode_enabled = True
+            self.toolbar.texture_btn.set_active(True)
+        else:
+            if self.toolbar.texture_mode_enabled:
+                self._exit_texture_mode()
+        
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
     
     def _save_current_tab_state(self):
