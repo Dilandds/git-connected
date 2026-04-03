@@ -1845,6 +1845,60 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
 
+    # ========== Texture Mode Methods ==========
+
+    def _toggle_texture_mode(self):
+        """Toggle texture application mode."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        if self.toolbar.texture_mode_enabled:
+            # Exit other modes
+            if self.toolbar.annotation_mode_enabled:
+                self._exit_annotation_mode()
+            if self.toolbar.arrow_mode_enabled:
+                self._exit_arrow_mode()
+            if self.toolbar.ruler_mode_enabled:
+                self._exit_ruler_mode()
+            if self.toolbar.screenshot_mode_enabled:
+                self._exit_screenshot_mode()
+            if self.toolbar.draw_mode_enabled:
+                self._exit_draw_mode()
+            if self.toolbar.parts_mode_enabled:
+                self.toolbar.parts_mode_enabled = False
+                self._exit_parts_mode()
+            # Enable texture drop on viewer
+            if hasattr(vw, 'enable_texture_drop_mode'):
+                vw.enable_texture_drop_mode()
+            self.texture_panel.show()
+            self.right_panel_stack.setCurrentWidget(self.texture_stack)
+            self.right_panel_stack.show()
+            if hasattr(vw, 'reframe_for_viewport'):
+                QTimer.singleShot(50, vw.reframe_for_viewport)
+            logger.info("_toggle_texture_mode: Texture mode enabled")
+        else:
+            self._exit_texture_mode()
+
+    def _exit_texture_mode(self):
+        """Exit texture mode."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'disable_texture_drop_mode'):
+            vw.disable_texture_drop_mode()
+        self.texture_panel.hide()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        if vw and hasattr(vw, 'reframe_for_viewport'):
+            QTimer.singleShot(50, vw.reframe_for_viewport)
+        self.toolbar.reset_texture_state()
+        logger.info("_exit_texture_mode: Texture mode disabled")
+
+    def _exit_texture_mode_from_panel(self):
+        """Exit texture mode triggered from the panel close button."""
+        if self.toolbar.texture_mode_enabled:
+            self.toolbar.texture_mode_enabled = False
+            self.toolbar.reset_texture_state()
+        self._exit_texture_mode()
+
     # ========== Draw Mode Methods ==========
     
     def _toggle_draw_mode(self):
