@@ -292,19 +292,25 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.addWidget(self.ruler_toolbar)
         logger.info("init_ui: Ruler toolbar created")
         
-        # ---- Stacked widgets for viewers and annotation/screenshot/arrow panels ----
+        # ---- Stacked widgets for viewers and annotation/screenshot/arrow/texture panels ----
         self.viewer_stack = QStackedWidget()
         self.annotation_stack = QStackedWidget()
         self.screenshot_stack = QStackedWidget()
         self.arrow_stack = QStackedWidget()
         self.parts_stack = QStackedWidget()
+        self.texture_stack = QStackedWidget()
         
         # Shared screenshot panel (one per window, not per tab)
         self.screenshot_panel = ScreenshotPanel()
         self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
         self.screenshot_stack.addWidget(self.screenshot_panel)
         
-        # Single right panel: only annotation OR screenshot OR arrow OR parts visible at a time
+        # Shared texture panel (one per window, not per tab)
+        self.texture_panel = TexturePanel()
+        self.texture_panel.exit_texture_mode.connect(self._exit_texture_mode_from_panel)
+        self.texture_stack.addWidget(self.texture_panel)
+        
+        # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture visible at a time
         self.right_panel_stack = QStackedWidget()
         self._right_panel_placeholder = QWidget()
         self._right_panel_placeholder.setFixedWidth(0)  # No space when neither mode active
@@ -313,6 +319,7 @@ class STLViewerWindow(QMainWindow):
         self.right_panel_stack.addWidget(self.screenshot_stack)
         self.right_panel_stack.addWidget(self.arrow_stack)
         self.right_panel_stack.addWidget(self.parts_stack)
+        self.right_panel_stack.addWidget(self.texture_stack)
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()  # No blank space when neither mode active
         
