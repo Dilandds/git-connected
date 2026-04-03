@@ -773,6 +773,7 @@ class STLViewerWindow(QMainWindow):
         tab.arrow_mode_active = self.toolbar.arrow_mode_enabled
         tab.parts_mode_active = getattr(self.toolbar, 'parts_mode_enabled', False)
         tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
+        tab.texture_mode_active = getattr(self.toolbar, 'texture_mode_enabled', False)
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
     
     def _on_tab_close_requested(self, index: int):
