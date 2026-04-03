@@ -687,6 +687,10 @@ class STLViewerWindow(QMainWindow):
             self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
             self.right_panel_stack.show()
             self.screenshot_panel.show()
+        elif tab.texture_mode_active:
+            self.right_panel_stack.setCurrentWidget(self.texture_stack)
+            self.right_panel_stack.show()
+            self.texture_panel.show()
         else:
             tab.annotation_panel.hide()
             tab.arrow_panel.hide()
