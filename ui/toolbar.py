@@ -1015,6 +1015,10 @@ class ViewControlsToolbar(QWidget):
                 self.annotation_mode_enabled = False
                 self.annotation_btn.set_active(False)
                 self.annotation_btn.set_icon("📝")
+            if self.texture_mode_enabled:
+                self.texture_mode_enabled = False
+                self.texture_btn.set_active(False)
+                self.toggle_texture.emit()
             if self.draw_mode_enabled:
                 self.draw_mode_enabled = False
                 self._eraser_active = False
@@ -1022,6 +1026,33 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_label("Draw ▼")
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
+
+    def _on_texture_clicked(self):
+        """Handle texture mode toggle."""
+        self.texture_mode_enabled = not self.texture_mode_enabled
+        if self.texture_mode_enabled:
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self.parts_btn.set_active(False)
+                self.toggle_parts.emit()
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.annotation_mode_enabled:
+                self.annotation_mode_enabled = False
+                self.annotation_btn.set_active(False)
+                self.annotation_btn.set_icon("📝")
+            if self.screenshot_mode_enabled:
+                self.screenshot_mode_enabled = False
+                self.screenshot_btn.set_active(False)
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self._eraser_active = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
+        self.texture_btn.set_active(self.texture_mode_enabled)
+        self.toggle_texture.emit()
     
     def _show_draw_menu(self):
         """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options."""
