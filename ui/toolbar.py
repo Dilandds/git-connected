@@ -401,6 +401,7 @@ class ViewControlsToolbar(QWidget):
     toggle_arrow = pyqtSignal()
     toggle_parts = pyqtSignal()
     toggle_screenshot = pyqtSignal()
+    toggle_texture = pyqtSignal()
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
