@@ -1224,6 +1224,11 @@ class ViewControlsToolbar(QWidget):
         """Reset screenshot button state (called when exiting screenshot mode externally)."""
         self.screenshot_mode_enabled = False
         self.screenshot_btn.set_active(False)
+
+    def reset_texture_state(self):
+        """Reset texture button state (called when exiting texture mode externally)."""
+        self.texture_mode_enabled = False
+        self.texture_btn.set_active(False)
     
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (disables annotation button)."""
