@@ -674,6 +674,7 @@ class ViewControlsToolbar(QWidget):
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
+        self.texture_btn.setEnabled(loaded)
         self.draw_btn.setEnabled(loaded)
         self.parts_btn.setEnabled(loaded)
         self.reset_model_btn.setEnabled(loaded)
