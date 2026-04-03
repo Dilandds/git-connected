@@ -565,6 +565,11 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.screenshot_btn)
         
+        self.texture_btn = ToolbarButton("🎨", "Texture", "Upload and apply textures to model parts")
+        self.texture_btn.clicked.connect(self._on_texture_clicked)
+        self.texture_btn.setEnabled(False)  # Disabled until model is loaded
+        content_layout.addWidget(self.texture_btn)
+        
         self.draw_btn = ToolbarButton("🖊", "Draw ▼", "Freehand draw on model surface")
         self.draw_btn.clicked.connect(self._show_draw_menu)
         self.draw_btn.setEnabled(False)  # Disabled until model is loaded
