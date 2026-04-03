@@ -98,6 +98,7 @@ class TabState:
     arrow_mode_active: bool = False
     parts_mode_active: bool = False
     screenshot_mode_active: bool = False
+    texture_mode_active: bool = False
     draw_mode_active: bool = False
     annotations_exported: bool = False
     ecto_temp_dir: Optional[str] = None
