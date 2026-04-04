@@ -61,6 +61,7 @@ class ScaleSidebar(QWidget):
     scale_changed = pyqtSignal(float)  # ratio value
     ruler_toggled = pyqtSignal(bool)
     reset_requested = pyqtSignal()
+    export_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
