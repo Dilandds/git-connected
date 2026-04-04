@@ -629,6 +629,10 @@ class STLViewerWindow(QMainWindow):
     def _scale_ruler_toggled(self, enabled: bool):
         self.scale_canvas.set_ruler_mode(enabled)
 
+    def _scale_add_reference(self):
+        """Add a new reference line to the scale canvas."""
+        self.scale_canvas.add_reference_line()
+
     def _scale_reset(self):
         """Reset the drawing scale workspace."""
         self.scale_canvas.clear_image()
