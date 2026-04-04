@@ -465,6 +465,7 @@ class STLViewerWindow(QMainWindow):
         """
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
         self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
+        self._mode_scale_btn.setStyleSheet(active_style if self._current_mode == "scale" else inactive_style)
     
     def _switch_mode(self, mode: str):
         """Switch between '3d' and 'technical' workspace modes."""
