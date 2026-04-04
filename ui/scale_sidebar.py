@@ -1,6 +1,7 @@
 """
 Scale Sidebar — controls for the Drawing Scale Calibration mode.
-Upload, unit selection, scale ratio, ruler toggle, reset.
+Upload, unit selection, scale ratio, ruler toggle, add reference line, reset, export.
+White theme to match Technical Overview.
 """
 import logging
 from PyQt5.QtWidgets import (
@@ -9,17 +10,36 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
-from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
+from ui.styles import make_font
 
 logger = logging.getLogger(__name__)
 
 SIDEBAR_WIDTH = 220
 
+# White theme colors
+_BG = "#FFFFFF"
+_CARD_BG = "#F9F9F9"
+_BORDER = "#E0E0E0"
+_TEXT_TITLE = "#212121"
+_TEXT_PRIMARY = "#424242"
+_TEXT_SECONDARY = "#757575"
+_TEXT_SUBTEXT = "#9E9E9E"
+_INPUT_BG = "#FFFFFF"
+_INPUT_BORDER = "#BDBDBD"
+_INPUT_BORDER_HOVER = "#757575"
+_BTN_PRIMARY = "#1976D2"
+_BTN_PRIMARY_HOVER = "#1565C0"
+_BTN_PRIMARY_PRESSED = "#0D47A1"
+_BTN_DEFAULT_BG = "#FAFAFA"
+_BTN_DEFAULT_BORDER = "#E0E0E0"
+_ROW_HOVER = "#F5F5F5"
+_SEPARATOR = "#EEEEEE"
+
 
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setFont(make_font(size=10, bold=True))
-    lbl.setStyleSheet(f"color: {default_theme.text_title}; padding: 0; margin: 0;")
+    lbl.setStyleSheet(f"color: {_TEXT_TITLE}; padding: 0; margin: 0;")
     return lbl
 
 
@@ -29,39 +49,40 @@ def _styled_combo() -> QComboBox:
     combo.setCursor(Qt.PointingHandCursor)
     combo.setStyleSheet(f"""
         QComboBox {{
-            background: {default_theme.input_bg};
-            border: 1px solid {default_theme.input_border};
+            background: {_INPUT_BG};
+            border: 1px solid {_INPUT_BORDER};
             border-radius: 4px;
             padding: 2px 8px;
-            color: {default_theme.text_primary};
+            color: {_TEXT_PRIMARY};
             font-size: 11px;
         }}
         QComboBox:hover {{
-            border-color: {default_theme.input_border_hover};
+            border-color: {_INPUT_BORDER_HOVER};
         }}
         QComboBox::drop-down {{
             border: none;
             width: 20px;
         }}
         QComboBox QAbstractItemView {{
-            background: {default_theme.card_background};
-            color: {default_theme.text_primary};
-            selection-background-color: {default_theme.button_primary};
-            border: 1px solid {default_theme.border_light};
+            background: {_BG};
+            color: {_TEXT_PRIMARY};
+            selection-background-color: {_BTN_PRIMARY};
+            border: 1px solid {_BORDER};
         }}
     """)
     return combo
 
 
 class ScaleSidebar(QWidget):
-    """Sidebar controls for Drawing Scale mode."""
+    """Sidebar controls for Drawing Scale mode — white theme."""
 
     upload_requested = pyqtSignal()
-    unit_changed = pyqtSignal(str)  # "cm" | "mm" | "inches"
+    unit_changed = pyqtSignal(str)  # "cm" | "mm" | "inches" | "m"
     scale_changed = pyqtSignal(float)  # ratio value
     ruler_toggled = pyqtSignal(bool)
     reset_requested = pyqtSignal()
     export_requested = pyqtSignal()
+    add_reference_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,6 +92,8 @@ class ScaleSidebar(QWidget):
         self._init_ui()
 
     def _init_ui(self):
+        self.setStyleSheet(f"background-color: {_BG};")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -78,7 +101,7 @@ class ScaleSidebar(QWidget):
         # Title
         title = QLabel("📐 Drawing Scale")
         title.setFont(make_font(size=13, bold=True))
-        title.setStyleSheet(f"color: {default_theme.text_title};")
+        title.setStyleSheet(f"color: {_TEXT_TITLE};")
         layout.addWidget(title)
 
         # Upload button
@@ -88,8 +111,8 @@ class ScaleSidebar(QWidget):
         self.upload_btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {default_theme.button_primary},
-                    stop:1 {default_theme.button_primary_pressed});
+                    stop:0 {_BTN_PRIMARY},
+                    stop:1 {_BTN_PRIMARY_PRESSED});
                 color: white;
                 border: none;
                 border-radius: 6px;
@@ -97,7 +120,7 @@ class ScaleSidebar(QWidget):
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background: {default_theme.button_primary_hover};
+                background: {_BTN_PRIMARY_HOVER};
             }}
         """)
         self.upload_btn.clicked.connect(self.upload_requested.emit)
@@ -109,7 +132,12 @@ class ScaleSidebar(QWidget):
         # Unit selector
         layout.addWidget(_section_label("Unit"))
         self.unit_combo = _styled_combo()
-        self.unit_combo.addItems(["Centimeters (cm)", "Millimeters (mm)", "Inches (in)"])
+        self.unit_combo.addItems([
+            "Centimeters (cm)",
+            "Millimeters (mm)",
+            "Inches (in)",
+            "Meters (m)",
+        ])
         self.unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         layout.addWidget(self.unit_combo)
 
@@ -122,6 +150,27 @@ class ScaleSidebar(QWidget):
 
         # Separator
         layout.addWidget(self._separator())
+
+        # Add reference line button
+        self.add_ref_btn = QPushButton("➕  Add Reference Line")
+        self.add_ref_btn.setFixedHeight(30)
+        self.add_ref_btn.setCursor(Qt.PointingHandCursor)
+        self.add_ref_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {_BTN_DEFAULT_BG};
+                border: 1px solid {_BTN_DEFAULT_BORDER};
+                border-radius: 5px;
+                color: {_TEXT_PRIMARY};
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {_ROW_HOVER};
+                border-color: {_BTN_PRIMARY};
+                color: {_BTN_PRIMARY};
+            }}
+        """)
+        self.add_ref_btn.clicked.connect(self.add_reference_requested.emit)
+        layout.addWidget(self.add_ref_btn)
 
         # Ruler toggle
         self.ruler_btn = QPushButton("📏  Ruler Tool")
@@ -138,15 +187,15 @@ class ScaleSidebar(QWidget):
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {default_theme.button_default_bg};
-                border: 1px solid {default_theme.button_default_border};
+                background: {_BTN_DEFAULT_BG};
+                border: 1px solid {_BTN_DEFAULT_BORDER};
                 border-radius: 5px;
-                color: {default_theme.text_secondary};
+                color: {_TEXT_SECONDARY};
                 font-size: 11px;
             }}
             QPushButton:hover {{
-                background: {default_theme.row_bg_hover};
-                color: {default_theme.text_primary};
+                background: {_ROW_HOVER};
+                color: {_TEXT_PRIMARY};
             }}
         """)
         self.reset_btn.clicked.connect(self.reset_requested.emit)
@@ -182,13 +231,16 @@ class ScaleSidebar(QWidget):
             "1. Upload a drawing (PDF/image)\n"
             "2. Use scroll wheel to resize the\n"
             "   drawing proportionally\n"
-            "3. Align the drawing's reference\n"
-            "   dimension with the ruler frame\n"
-            "4. Enable Ruler Tool to measure"
+            "3. Align the reference line with\n"
+            "   the ruler frame graduations\n"
+            "4. Add more reference lines with ➕\n"
+            "5. Enable Ruler Tool to measure\n\n"
+            "Scale 1:2 → reference halved,\n"
+            "graduations doubled (for big plans)"
         )
         instructions.setWordWrap(True)
         instructions.setFont(make_font(size=9))
-        instructions.setStyleSheet(f"color: {default_theme.text_subtext}; line-height: 1.4;")
+        instructions.setStyleSheet(f"color: {_TEXT_SUBTEXT}; line-height: 1.4;")
         layout.addWidget(instructions)
 
         layout.addStretch()
@@ -197,11 +249,11 @@ class ScaleSidebar(QWidget):
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {default_theme.separator}; border: none;")
+        sep.setStyleSheet(f"background: {_SEPARATOR}; border: none;")
         return sep
 
     def _on_unit_changed(self, index: int):
-        units = ["cm", "mm", "inches"]
+        units = ["cm", "mm", "inches", "m"]
         if 0 <= index < len(units):
             self.unit_changed.emit(units[index])
 
@@ -219,7 +271,7 @@ class ScaleSidebar(QWidget):
         if active:
             self.ruler_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {default_theme.button_primary};
+                    background: {_BTN_PRIMARY};
                     color: white;
                     border: none;
                     border-radius: 5px;
@@ -227,21 +279,21 @@ class ScaleSidebar(QWidget):
                     font-weight: bold;
                 }}
                 QPushButton:hover {{
-                    background: {default_theme.button_primary_hover};
+                    background: {_BTN_PRIMARY_HOVER};
                 }}
             """)
         else:
             self.ruler_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {default_theme.button_default_bg};
-                    border: 1px solid {default_theme.button_default_border};
+                    background: {_BTN_DEFAULT_BG};
+                    border: 1px solid {_BTN_DEFAULT_BORDER};
                     border-radius: 5px;
-                    color: {default_theme.text_secondary};
+                    color: {_TEXT_SECONDARY};
                     font-size: 11px;
                 }}
                 QPushButton:hover {{
-                    background: {default_theme.row_bg_hover};
-                    color: {default_theme.text_primary};
+                    background: {_ROW_HOVER};
+                    color: {_TEXT_PRIMARY};
                 }}
             """)
 
