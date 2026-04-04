@@ -608,6 +608,31 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar.reset()
         self._tech_ecto_exported = False
 
+    # ======================== Drawing Scale Mode ========================
+
+    def _scale_upload(self):
+        """Upload a drawing file for scale calibration."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Drawing", "",
+            "Drawings (*.png *.jpg *.jpeg *.bmp *.pdf);;All Files (*)"
+        )
+        if path:
+            self.scale_canvas.load_file(path)
+
+    def _scale_unit_changed(self, unit: str):
+        self.scale_canvas.set_unit(unit)
+
+    def _scale_ratio_changed(self, ratio: float):
+        self.scale_canvas.set_scale_ratio(ratio)
+
+    def _scale_ruler_toggled(self, enabled: bool):
+        self.scale_canvas.set_ruler_mode(enabled)
+
+    def _scale_reset(self):
+        """Reset the drawing scale workspace."""
+        self.scale_canvas.clear_image()
+        self.scale_sidebar.reset()
+
     # ======================== Tab Management ========================
     
     def _create_new_tab(self, file_path: str = None) -> int:
