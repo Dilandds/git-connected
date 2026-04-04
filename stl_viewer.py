@@ -52,6 +52,8 @@ from ui.texture_panel import TexturePanel
 from ui.components import confirm_dialog
 from ui.technical_overview import TechnicalOverviewWidget
 from ui.technical_sidebar import TechnicalSidebar
+from ui.scale_canvas import ScaleCanvas
+from ui.scale_sidebar import ScaleSidebar
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +206,8 @@ class STLViewerWindow(QMainWindow):
         
         self._mode_3d_btn = QPushButton("🔲 3D Viewer")
         self._mode_tech_btn = QPushButton("📋 Technical Overview")
-        for btn in (self._mode_3d_btn, self._mode_tech_btn):
+        self._mode_scale_btn = QPushButton("📐 Drawing Scale")
+        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
@@ -215,9 +218,11 @@ class STLViewerWindow(QMainWindow):
         self._update_mode_btn_styles()
         self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
         self._mode_tech_btn.clicked.connect(lambda: self._switch_mode("technical"))
+        self._mode_scale_btn.clicked.connect(lambda: self._switch_mode("scale"))
         
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
+        mode_bar_layout.addWidget(self._mode_scale_btn)
         mode_bar_layout.addStretch()
         root_layout.addWidget(mode_bar)
         
@@ -362,6 +367,26 @@ class STLViewerWindow(QMainWindow):
         tech_layout.addWidget(self.technical_overview, 1)
         
         self._workspace_stack.addWidget(tech_workspace)
+        
+        # ==== Drawing Scale Workspace ====
+        scale_workspace = QWidget()
+        scale_layout = QHBoxLayout(scale_workspace)
+        scale_layout.setContentsMargins(0, 10, 10, 10)
+        scale_layout.setSpacing(10)
+        
+        self.scale_sidebar = ScaleSidebar()
+        self.scale_sidebar.upload_requested.connect(self._scale_upload)
+        self.scale_sidebar.unit_changed.connect(self._scale_unit_changed)
+        self.scale_sidebar.scale_changed.connect(self._scale_ratio_changed)
+        self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
+        self.scale_sidebar.reset_requested.connect(self._scale_reset)
+        scale_layout.addWidget(self.scale_sidebar)
+        
+        self.scale_canvas = ScaleCanvas()
+        self.scale_canvas.click_to_upload.connect(self._scale_upload)
+        scale_layout.addWidget(self.scale_canvas, 1)
+        
+        self._workspace_stack.addWidget(scale_workspace)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
         logger.info("init_ui: Applying styling...")
@@ -440,22 +465,27 @@ class STLViewerWindow(QMainWindow):
         """
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
         self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
+        self._mode_scale_btn.setStyleSheet(active_style if self._current_mode == "scale" else inactive_style)
     
     def _switch_mode(self, mode: str):
-        """Switch between '3d' and 'technical' workspace modes."""
+        """Switch between '3d', 'technical', and 'scale' workspace modes."""
         if mode == self._current_mode:
             return
         self._current_mode = mode
         self._mode_3d_btn.setChecked(mode == "3d")
         self._mode_tech_btn.setChecked(mode == "technical")
+        self._mode_scale_btn.setChecked(mode == "scale")
         self._update_mode_btn_styles()
         
         if mode == "3d":
             self._workspace_stack.setCurrentIndex(0)
             self.setWindowTitle(f"ECTOFORM - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "ECTOFORM")
-        else:
+        elif mode == "technical":
             self._workspace_stack.setCurrentIndex(1)
             self.setWindowTitle("ECTOFORM - Technical Overview")
+        elif mode == "scale":
+            self._workspace_stack.setCurrentIndex(2)
+            self.setWindowTitle("ECTOFORM - Drawing Scale")
         
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
@@ -577,6 +607,31 @@ class STLViewerWindow(QMainWindow):
         self.technical_overview.canvas.clear_image()
         self.technical_sidebar.reset()
         self._tech_ecto_exported = False
+
+    # ======================== Drawing Scale Mode ========================
+
+    def _scale_upload(self):
+        """Upload a drawing file for scale calibration."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Drawing", "",
+            "Drawings (*.png *.jpg *.jpeg *.bmp *.pdf);;All Files (*)"
+        )
+        if path:
+            self.scale_canvas.load_file(path)
+
+    def _scale_unit_changed(self, unit: str):
+        self.scale_canvas.set_unit(unit)
+
+    def _scale_ratio_changed(self, ratio: float):
+        self.scale_canvas.set_scale_ratio(ratio)
+
+    def _scale_ruler_toggled(self, enabled: bool):
+        self.scale_canvas.set_ruler_mode(enabled)
+
+    def _scale_reset(self):
+        """Reset the drawing scale workspace."""
+        self.scale_canvas.clear_image()
+        self.scale_sidebar.reset()
 
     # ======================== Tab Management ========================
     
