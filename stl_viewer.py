@@ -206,7 +206,8 @@ class STLViewerWindow(QMainWindow):
         
         self._mode_3d_btn = QPushButton("🔲 3D Viewer")
         self._mode_tech_btn = QPushButton("📋 Technical Overview")
-        for btn in (self._mode_3d_btn, self._mode_tech_btn):
+        self._mode_scale_btn = QPushButton("📐 Drawing Scale")
+        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
@@ -217,9 +218,11 @@ class STLViewerWindow(QMainWindow):
         self._update_mode_btn_styles()
         self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
         self._mode_tech_btn.clicked.connect(lambda: self._switch_mode("technical"))
+        self._mode_scale_btn.clicked.connect(lambda: self._switch_mode("scale"))
         
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
+        mode_bar_layout.addWidget(self._mode_scale_btn)
         mode_bar_layout.addStretch()
         root_layout.addWidget(mode_bar)
         
