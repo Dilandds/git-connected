@@ -367,6 +367,26 @@ class STLViewerWindow(QMainWindow):
         tech_layout.addWidget(self.technical_overview, 1)
         
         self._workspace_stack.addWidget(tech_workspace)
+        
+        # ==== Drawing Scale Workspace ====
+        scale_workspace = QWidget()
+        scale_layout = QHBoxLayout(scale_workspace)
+        scale_layout.setContentsMargins(0, 10, 10, 10)
+        scale_layout.setSpacing(10)
+        
+        self.scale_sidebar = ScaleSidebar()
+        self.scale_sidebar.upload_requested.connect(self._scale_upload)
+        self.scale_sidebar.unit_changed.connect(self._scale_unit_changed)
+        self.scale_sidebar.scale_changed.connect(self._scale_ratio_changed)
+        self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
+        self.scale_sidebar.reset_requested.connect(self._scale_reset)
+        scale_layout.addWidget(self.scale_sidebar)
+        
+        self.scale_canvas = ScaleCanvas()
+        self.scale_canvas.click_to_upload.connect(self._scale_upload)
+        scale_layout.addWidget(self.scale_canvas, 1)
+        
+        self._workspace_stack.addWidget(scale_workspace)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
         logger.info("init_ui: Applying styling...")
