@@ -152,6 +152,27 @@ class ScaleSidebar(QWidget):
         self.reset_btn.clicked.connect(self.reset_requested.emit)
         layout.addWidget(self.reset_btn)
 
+        # Export button
+        self.export_btn = QPushButton("💾  Export Scaled")
+        self.export_btn.setFixedHeight(32)
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #43A047, stop:1 #2E7D32);
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: #388E3C;
+            }}
+        """)
+        self.export_btn.clicked.connect(self.export_requested.emit)
+        layout.addWidget(self.export_btn)
+
         # Separator
         layout.addWidget(self._separator())
 
