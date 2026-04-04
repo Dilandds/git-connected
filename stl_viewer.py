@@ -52,6 +52,8 @@ from ui.texture_panel import TexturePanel
 from ui.components import confirm_dialog
 from ui.technical_overview import TechnicalOverviewWidget
 from ui.technical_sidebar import TechnicalSidebar
+from ui.scale_canvas import ScaleCanvas
+from ui.scale_sidebar import ScaleSidebar
 
 logger = logging.getLogger(__name__)
 
