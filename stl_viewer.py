@@ -760,8 +760,23 @@ class STLViewerWindow(QMainWindow):
             self.sidebar_panel.update_annotation_count(count)
         else:
             self.sidebar_panel.reset_all_data()
-            
-        
+
+    def _scale_export(self):
+        """Export the scaled drawing with measurements."""
+        if not self.scale_canvas.has_image():
+            return
+        from PyQt5.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Scaled Drawing", "",
+            "PNG Image (*.png);;JPEG Image (*.jpg);;PDF Document (*.pdf)"
+        )
+        if path:
+            success, result = self.scale_canvas.export_scaled(path)
+            if success:
+                logger.info(f"Scaled drawing exported to: {result}")
+            else:
+                logger.error(f"Export failed: {result}")
+
         # Update toolbar state
         has_file = tab.file_path is not None
         self.toolbar.set_stl_loaded(has_file)
