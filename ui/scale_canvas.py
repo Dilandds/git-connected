@@ -17,6 +17,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import (
     QPainter, QPixmap, QColor, QPen, QFont, QFontMetrics,
     QDragEnterEvent, QDropEvent, QWheelEvent, QMouseEvent, QPaintEvent,
+    QImage,
 )
 
 from ui.styles import default_theme
@@ -29,6 +30,9 @@ RULER_THICKNESS = 40
 # Supported image extensions
 _IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
 _PDF_EXTS = {'.pdf'}
+
+# Reference line hit tolerance
+_REF_HIT_TOLERANCE = 10
 
 
 @dataclass
@@ -53,6 +57,7 @@ class ScaleCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
+        self._source_path: Optional[str] = None  # original file path
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._panning = False
@@ -69,8 +74,11 @@ class ScaleCanvas(QWidget):
         self._pending_point: Optional[QPointF] = None  # first click in image coords
         self._mouse_pos: Optional[QPointF] = None
 
-        # Reference line (1 cm guide)
+        # Reference line (1 cm guide) — draggable
         self._show_reference_line = True
+        self._ref_line_pos = QPointF(0.0, 0.0)  # screen offset from default position
+        self._ref_line_dragging = False
+        self._ref_line_drag_offset = QPointF(0, 0)
 
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -81,21 +89,25 @@ class ScaleCanvas(QWidget):
 
     # ---- public API ----
 
-    def set_image(self, pixmap: QPixmap):
+    def set_image(self, pixmap: QPixmap, source_path: str = None):
         self._pixmap = pixmap
+        self._source_path = source_path
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._measurements.clear()
         self._pending_point = None
+        self._ref_line_pos = QPointF(0.0, 0.0)
         self._fit_image()
         self.update()
 
     def clear_image(self):
         self._pixmap = None
+        self._source_path = None
         self._measurements.clear()
         self._pending_point = None
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
+        self._ref_line_pos = QPointF(0.0, 0.0)
         self.update()
 
     def set_unit(self, unit: str):
@@ -138,10 +150,98 @@ class ScaleCanvas(QWidget):
         elif ext in _IMAGE_EXTS:
             pix = QPixmap(path)
             if not pix.isNull():
-                self.set_image(pix)
+                self.set_image(pix, source_path=path)
                 self.file_loaded.emit(path)
         else:
             logger.warning(f"Unsupported file type: {ext}")
+
+    def export_scaled(self, output_path: str) -> Tuple[bool, str]:
+        """Export the current view (drawing + measurements + reference line) as an image or PDF."""
+        if not self._pixmap:
+            return False, "No drawing loaded"
+
+        try:
+            ext = os.path.splitext(output_path)[1].lower()
+
+            # Render the canvas content to an image
+            canvas = self._canvas_rect()
+            cw, ch = int(canvas.width()), int(canvas.height())
+            if cw <= 0 or ch <= 0:
+                return False, "Canvas too small"
+
+            img = QImage(cw, ch, QImage.Format_ARGB32)
+            img.fill(QColor("#1a1e24"))
+
+            painter = QPainter(img)
+            painter.setRenderHint(QPainter.Antialiasing)
+
+            # Draw the image
+            ir = self._image_rect()
+            # Translate to canvas-local coordinates
+            offset_x = -canvas.x()
+            offset_y = -canvas.y()
+            target = QRectF(ir.x() + offset_x, ir.y() + offset_y, ir.width(), ir.height())
+            painter.drawPixmap(target.toRect(), self._pixmap)
+
+            # Draw measurements on the export
+            for m in self._measurements:
+                p1 = self._image_to_screen(m.x1, m.y1)
+                p2 = self._image_to_screen(m.x2, m.y2)
+                # Shift to canvas-local
+                p1 = QPointF(p1.x() + offset_x, p1.y() + offset_y)
+                p2 = QPointF(p2.x() + offset_x, p2.y() + offset_y)
+
+                pen = QPen(QColor("#00E676"), 2)
+                painter.setPen(pen)
+                painter.drawLine(p1.toPoint(), p2.toPoint())
+                painter.setBrush(QColor("#00E676"))
+                painter.drawEllipse(p1.toPoint(), 4, 4)
+                painter.drawEllipse(p2.toPoint(), 4, 4)
+
+                mid = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
+                dist_px = ((p2.x() - p1.x()) ** 2 + (p2.y() - p1.y()) ** 2) ** 0.5
+                dist_real = self._pixel_distance_to_real(dist_px)
+                unit_abbr = {"cm": "cm", "mm": "mm", "inches": "in"}.get(self._unit, "cm")
+                label = f"{dist_real:.2f} {unit_abbr}"
+
+                font = QFont("Segoe UI", 10, QFont.Bold)
+                painter.setFont(font)
+                fm = QFontMetrics(font)
+                tw = fm.horizontalAdvance(label) + 8
+                th = fm.height() + 4
+                bg_rect = QRectF(mid.x() - tw / 2, mid.y() - th - 4, tw, th)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(0, 0, 0, 180))
+                painter.drawRoundedRect(bg_rect, 4, 4)
+                painter.setPen(QColor("#00E676"))
+                painter.drawText(bg_rect, Qt.AlignCenter, label)
+
+            painter.end()
+
+            if ext == '.pdf':
+                # Save as PDF using QPrinter-like approach via image
+                try:
+                    import fitz
+                    # Create a PDF with the image
+                    doc = fitz.open()
+                    # A4-ish page that fits the image
+                    page = doc.new_page(width=cw, height=ch)
+                    img_bytes = QImage_to_bytes(img)
+                    page.insert_image(fitz.Rect(0, 0, cw, ch), stream=img_bytes)
+                    doc.save(output_path)
+                    doc.close()
+                except Exception:
+                    # Fallback: save as PNG
+                    output_path = output_path.rsplit('.', 1)[0] + '.png'
+                    img.save(output_path, "PNG")
+            else:
+                fmt = "PNG" if ext == '.png' else "JPEG"
+                img.save(output_path, fmt)
+
+            return True, output_path
+        except Exception as e:
+            logger.error(f"Export failed: {e}")
+            return False, str(e)
 
     # ---- coordinate helpers ----
 
@@ -194,7 +294,6 @@ class ScaleCanvas(QWidget):
         """Pixels per real-world unit (cm/mm/inch) at current scale ratio."""
         screen = QApplication.primaryScreen()
         dpi = screen.logicalDotsPerInch() if screen else 96.0
-        # pixels per inch on screen
         if self._unit == "inches":
             ppu = dpi / self._scale_ratio
         elif self._unit == "mm":
@@ -232,10 +331,26 @@ class ScaleCanvas(QWidget):
             qpix = QPixmap()
             qpix.loadFromData(img_data, "PNG")
             if not qpix.isNull():
-                self.set_image(qpix)
+                self.set_image(qpix, source_path=path)
                 self.file_loaded.emit(path)
         except Exception as e:
             logger.error(f"Failed to load PDF: {e}")
+
+    # ---- reference line helpers ----
+
+    def _ref_line_rect(self) -> QRectF:
+        """Return the bounding rect of the reference line in screen coords."""
+        ppu = self._pixels_per_unit()
+        line_len = ppu
+        canvas = self._canvas_rect()
+        # Default position: bottom-left of canvas, shifted by _ref_line_pos
+        x_start = canvas.x() + 20 + self._ref_line_pos.x()
+        y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
+        return QRectF(x_start - 4, y_pos - 24, line_len + 8, 48)
+
+    def _hit_ref_line(self, pos: QPointF) -> bool:
+        """Check if a screen position hits the reference line."""
+        return self._ref_line_rect().contains(pos)
 
     # ---- paint ----
 
@@ -257,11 +372,11 @@ class ScaleCanvas(QWidget):
         else:
             self._draw_drop_zone(painter, canvas)
 
-        # Reference line (1 cm guide on the drawing)
+        # Reference line (1 cm guide on the drawing) — draggable
         if self._show_reference_line and self._pixmap:
             self._draw_reference_line(painter, canvas)
 
-        # Measurements
+        # Measurements + projection lines
         self._draw_measurements(painter)
 
         # Live preview line (ruler mode, pending first click)
@@ -270,6 +385,9 @@ class ScaleCanvas(QWidget):
             pen = QPen(QColor("#00BFFF"), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), self._mouse_pos.toPoint())
+            # Live projection lines
+            self._draw_projection_lines(painter, p1)
+            self._draw_projection_lines(painter, self._mouse_pos)
 
         # Graduated ruler frame
         self._draw_ruler_frame(painter)
@@ -291,22 +409,28 @@ class ScaleCanvas(QWidget):
                          "Drop a drawing here\nor click Upload")
 
     def _draw_reference_line(self, painter: QPainter, canvas: QRectF):
-        """Draw a 1-unit reference line at the bottom of the canvas."""
+        """Draw a 1-unit reference line — draggable."""
         ppu = self._pixels_per_unit()
         line_len = ppu  # 1 unit worth of pixels
 
-        # Position at bottom-left of canvas
-        x_start = canvas.x() + 20
-        y_pos = canvas.bottom() - 20
+        # Position (default bottom-left, offset by drag)
+        x_start = canvas.x() + 20 + self._ref_line_pos.x()
+        y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         x_end = x_start + line_len
 
+        # Subtle background for visibility
+        bg_rect = QRectF(x_start - 4, y_pos - 22, line_len + 8, 40)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 100))
+        painter.drawRoundedRect(bg_rect, 4, 4)
+
         # Line
-        pen = QPen(QColor("#FF5722"), 2)
+        pen = QPen(QColor("#FF5722"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
         # End caps
-        painter.drawLine(int(x_start), int(y_pos - 6), int(x_start), int(y_pos + 6))
-        painter.drawLine(int(x_end), int(y_pos - 6), int(x_end), int(y_pos + 6))
+        painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
+        painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
 
         # Label
         unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
@@ -318,13 +442,48 @@ class ScaleCanvas(QWidget):
             Qt.AlignCenter, unit_label
         )
 
+        # Drag hint icon (move cursor area)
+        painter.setPen(QColor("#FF5722"))
+        hint_font = QFont("Segoe UI", 7)
+        painter.setFont(hint_font)
+        painter.drawText(
+            QRectF(x_start, y_pos + 10, line_len, 12),
+            Qt.AlignCenter, "⇔ drag to move"
+        )
+
+    def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
+        """Draw dashed projection lines from a point to the ruler edges."""
+        canvas = self._canvas_rect()
+        pen = QPen(QColor("#00BFFF"), 1, Qt.DotLine)
+        painter.setPen(pen)
+
+        sx, sy = screen_pt.x(), screen_pt.y()
+
+        # Horizontal line: point → left ruler edge
+        if sx > canvas.x():
+            painter.drawLine(int(canvas.x()), int(sy), int(sx), int(sy))
+        # Horizontal line: point → right ruler edge
+        if sx < canvas.right():
+            painter.drawLine(int(sx), int(sy), int(canvas.right()), int(sy))
+
+        # Vertical line: point → top ruler edge
+        if sy > canvas.y():
+            painter.drawLine(int(sx), int(canvas.y()), int(sx), int(sy))
+        # Vertical line: point → bottom ruler edge
+        if sy < canvas.bottom():
+            painter.drawLine(int(sx), int(sy), int(sx), int(canvas.bottom()))
+
     def _draw_measurements(self, painter: QPainter):
-        """Draw all measurement lines with distance labels."""
+        """Draw all measurement lines with distance labels and projection lines."""
         for m in self._measurements:
             p1 = self._image_to_screen(m.x1, m.y1)
             p2 = self._image_to_screen(m.x2, m.y2)
 
-            # Line
+            # Projection lines to ruler edges
+            self._draw_projection_lines(painter, p1)
+            self._draw_projection_lines(painter, p2)
+
+            # Measurement line
             pen = QPen(QColor("#00E676"), 2)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), p2.toPoint())
@@ -362,16 +521,12 @@ class ScaleCanvas(QWidget):
 
         # Ruler background
         ruler_color = QColor("#1e2228")
-        # Top ruler
         painter.fillRect(0, 0, w, RULER_THICKNESS, ruler_color)
-        # Bottom ruler
         painter.fillRect(0, h - RULER_THICKNESS, w, RULER_THICKNESS, ruler_color)
-        # Left ruler
         painter.fillRect(0, 0, RULER_THICKNESS, h, ruler_color)
-        # Right ruler
         painter.fillRect(w - RULER_THICKNESS, 0, RULER_THICKNESS, h, ruler_color)
 
-        # Corner squares (darker)
+        # Corner squares
         corner_color = QColor("#16191f")
         for cx, cy in [(0, 0), (w - RULER_THICKNESS, 0),
                         (0, h - RULER_THICKNESS), (w - RULER_THICKNESS, h - RULER_THICKNESS)]:
@@ -381,36 +536,30 @@ class ScaleCanvas(QWidget):
         tick_color = QColor(default_theme.text_secondary)
         label_color = QColor(default_theme.text_primary)
         pen_thin = QPen(tick_color, 1)
-        pen_medium = QPen(tick_color, 1)
 
         font = QFont("Segoe UI", 7)
         painter.setFont(font)
 
-        # Determine tick spacing in pixels
         if self._unit == "mm":
-            minor_px = ppu  # 1mm
-            major_px = ppu * 10  # 1cm
-            label_every = 10  # label every 10mm = 1cm
+            minor_px = ppu
+            major_px = ppu * 10
+            label_every = 10
         elif self._unit == "inches":
-            minor_px = ppu / 8  # 1/8 inch
-            major_px = ppu  # 1 inch
+            minor_px = ppu / 8
+            major_px = ppu
             label_every = 1
-        else:  # cm
-            minor_px = ppu / 10  # 1mm
-            major_px = ppu  # 1cm
+        else:
+            minor_px = ppu / 10
+            major_px = ppu
             label_every = 1
 
-        # Ensure a minimum pixel spacing to avoid visual clutter
         if minor_px < 2:
             minor_px = 2
 
-        # Horizontal rulers (top + bottom)
         self._draw_ruler_ticks_horizontal(painter, pen_thin, label_color, font,
                                            minor_px, major_px, label_every, top=True)
         self._draw_ruler_ticks_horizontal(painter, pen_thin, label_color, font,
                                            minor_px, major_px, label_every, top=False)
-
-        # Vertical rulers (left + right)
         self._draw_ruler_ticks_vertical(painter, pen_thin, label_color, font,
                                          minor_px, major_px, label_every, left=True)
         self._draw_ruler_ticks_vertical(painter, pen_thin, label_color, font,
@@ -436,7 +585,6 @@ class ScaleCanvas(QWidget):
         tick_idx = 0
         x = start_x
         while x <= end_x:
-            # Determine tick type
             if major_px > 0 and minor_px > 0:
                 ticks_per_major = max(1, round(major_px / minor_px))
             else:
@@ -459,7 +607,6 @@ class ScaleCanvas(QWidget):
             else:
                 painter.drawLine(ix, base_y, ix, base_y + tick_len)
 
-            # Label at major ticks
             if is_major and tick_idx > 0:
                 major_idx = tick_idx // ticks_per_major
                 if self._unit == "mm":
@@ -554,6 +701,20 @@ class ScaleCanvas(QWidget):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
+        pos = QPointF(event.pos())
+
+        # Check if clicking on the reference line (for dragging)
+        if event.button() == Qt.LeftButton and self._show_reference_line and self._pixmap:
+            if not self._ruler_mode and self._hit_ref_line(pos):
+                self._ref_line_dragging = True
+                ref_rect = self._ref_line_rect()
+                self._ref_line_drag_offset = QPointF(
+                    pos.x() - ref_rect.x(),
+                    pos.y() - ref_rect.y()
+                )
+                self.setCursor(Qt.SizeAllCursor)
+                return
+
         if event.button() == Qt.MiddleButton or (
             event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap
         ):
@@ -573,7 +734,6 @@ class ScaleCanvas(QWidget):
             if self._pending_point is None:
                 self._pending_point = img_pt
             else:
-                # Complete measurement
                 m = Measurement(
                     id=self._next_measurement_id,
                     x1=self._pending_point.x(),
@@ -592,15 +752,42 @@ class ScaleCanvas(QWidget):
                 self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        pos = QPointF(event.pos())
+
+        # Dragging reference line
+        if self._ref_line_dragging:
+            canvas = self._canvas_rect()
+            ref_rect = self._ref_line_rect()
+            new_x = pos.x() - self._ref_line_drag_offset.x() - (canvas.x() + 20 - self._ref_line_pos.x()) + 4
+            new_y = pos.y() - self._ref_line_drag_offset.y() - (canvas.bottom() - 20 - self._ref_line_pos.y()) + 24
+            self._ref_line_pos = QPointF(new_x, new_y)
+            self.update()
+            return
+
         if self._panning:
             self._pan_offset = QPointF(event.pos() - self._pan_start)
             self.update()
             return
+
         if self._ruler_mode and self._pending_point is not None:
             self._mouse_pos = QPointF(event.pos())
             self.update()
+            return
+
+        # Update cursor based on hover
+        if self._show_reference_line and self._pixmap and not self._ruler_mode:
+            if self._hit_ref_line(pos):
+                self.setCursor(Qt.SizeAllCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if self._ref_line_dragging:
+            self._ref_line_dragging = False
+            self.setCursor(Qt.ArrowCursor)
+            self.update()
+            return
+
         if self._panning:
             self._panning = False
             self.setCursor(Qt.CrossCursor if self._ruler_mode else Qt.ArrowCursor)
@@ -630,3 +817,12 @@ class ScaleCanvas(QWidget):
             if path:
                 self.load_file(path)
                 break
+
+
+def QImage_to_bytes(qimage: QImage) -> bytes:
+    """Convert QImage to PNG bytes."""
+    from PyQt5.QtCore import QBuffer, QIODevice
+    buf = QBuffer()
+    buf.open(QIODevice.WriteOnly)
+    qimage.save(buf, "PNG")
+    return bytes(buf.data())
