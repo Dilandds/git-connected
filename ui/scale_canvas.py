@@ -448,7 +448,7 @@ class ScaleCanvas(QWidget):
     def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
         """Draw dashed projection lines from a point to the ruler edges."""
         canvas = self._canvas_rect()
-        pen = QPen(QColor("#00BFFF"), 1, Qt.DotLine)
+        pen = QPen(QColor("#1976D2"), 1, Qt.DotLine)
         painter.setPen(pen)
 
         sx, sy = screen_pt.x(), screen_pt.y()
