@@ -905,11 +905,6 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
-        if self._ref_line_dragging:
-            self._ref_line_dragging = False
-            self.setCursor(Qt.ArrowCursor)
-            self.update()
-            return
 
         if self._panning:
             self._panning = False
