@@ -560,7 +560,7 @@ class ScaleCanvas(QWidget):
                                          minor_px, major_px, label_every, left=False)
 
         # Border lines
-        border_pen = QPen(QColor(default_theme.border_standard), 1)
+        border_pen = QPen(QColor("#bbbbbb"), 1)
         painter.setPen(border_pen)
         painter.drawRect(RULER_THICKNESS, RULER_THICKNESS,
                          w - 2 * RULER_THICKNESS, h - 2 * RULER_THICKNESS)
