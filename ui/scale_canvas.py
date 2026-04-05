@@ -513,22 +513,22 @@ class ScaleCanvas(QWidget):
         w, h = self.width(), self.height()
         ppu = self._pixels_per_unit()
 
-        # Ruler background
-        ruler_color = QColor("#1e2228")
+        # Ruler background — light grey
+        ruler_color = QColor("#e8e8e8")
         painter.fillRect(0, 0, w, RULER_THICKNESS, ruler_color)
         painter.fillRect(0, h - RULER_THICKNESS, w, RULER_THICKNESS, ruler_color)
         painter.fillRect(0, 0, RULER_THICKNESS, h, ruler_color)
         painter.fillRect(w - RULER_THICKNESS, 0, RULER_THICKNESS, h, ruler_color)
 
         # Corner squares
-        corner_color = QColor("#16191f")
+        corner_color = QColor("#d0d0d0")
         for cx, cy in [(0, 0), (w - RULER_THICKNESS, 0),
                         (0, h - RULER_THICKNESS), (w - RULER_THICKNESS, h - RULER_THICKNESS)]:
             painter.fillRect(int(cx), int(cy), RULER_THICKNESS, RULER_THICKNESS, corner_color)
 
-        # Tick parameters
-        tick_color = QColor(default_theme.text_secondary)
-        label_color = QColor(default_theme.text_primary)
+        # Tick parameters — dark for readability on light background
+        tick_color = QColor("#555555")
+        label_color = QColor("#222222")
         pen_thin = QPen(tick_color, 1)
 
         font = QFont("Segoe UI", 7)
