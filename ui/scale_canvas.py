@@ -101,6 +101,8 @@ class ScaleCanvas(QWidget):
         self._pending_point = None
         self._ref_line_pos = QPointF(0.0, 0.0)
         self._fit_image()
+        # Record the static border at initial load size
+        self._static_border_rect = QRectF(self._image_rect())
         self.update()
 
     def clear_image(self):
