@@ -85,7 +85,15 @@ class ScaleCanvas(QWidget):
         self._show_reference_line = True
         self._ref_line_pos = QPointF(0.0, 0.0)  # screen offset from default position
         self._ref_line_dragging = False
-        self._ref_line_drag_offset = QPointF(0, 0)
+        self._ref_line_drag_start = QPointF(0, 0)  # mouse pos at drag start
+        self._ref_line_pos_start = QPointF(0, 0)   # ref pos at drag start
+
+        # Extra user-placed reference lines
+        self._extra_ref_lines: List[ExtraRefLine] = []
+        self._next_extra_ref_id = 1
+        self._dragging_extra_ref: Optional[ExtraRefLine] = None
+        self._extra_ref_drag_start = QPointF(0, 0)
+        self._extra_ref_pos_start = QPointF(0, 0)
 
         # Static border: records the image rect at load time (doesn't move with zoom)
         self._static_border_rect: Optional[QRectF] = None
