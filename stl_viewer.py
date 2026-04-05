@@ -392,6 +392,10 @@ class STLViewerWindow(QMainWindow):
         scale_layout.addWidget(self.scale_canvas, 1)
         
         self._workspace_stack.addWidget(scale_workspace)
+        
+        # ==== Help Workspace ====
+        self.help_widget = HelpWidget()
+        self._workspace_stack.addWidget(self.help_widget)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
         logger.info("init_ui: Applying styling...")
