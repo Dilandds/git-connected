@@ -762,6 +762,61 @@ class STLViewerWindow(QMainWindow):
         else:
             self.sidebar_panel.reset_all_data()
 
+        has_file = tab.file_path is not None
+        self.toolbar.set_stl_loaded(has_file)
+        if has_file:
+            self.toolbar.set_loaded_filename(tab.filename)
+            self.setWindowTitle(f"ECTOFORM - {tab.filename}")
+        else:
+            self.toolbar.set_loaded_filename(None)
+            self.setWindowTitle("ECTOFORM")
+
+        # Restore ruler mode
+        if tab.ruler_active:
+            self.toolbar.ruler_mode_enabled = True
+            self.toolbar.ruler_btn.set_active(True)
+            self.toolbar.ruler_btn.set_icon("📐")
+            self.toolbar.ruler_btn.set_label("Ruler")
+            self.ruler_toolbar.show()
+        else:
+            if self.toolbar.ruler_mode_enabled:
+                self.toolbar.ruler_mode_enabled = False
+                self.toolbar.ruler_btn.set_active(False)
+                self.toolbar.ruler_btn.set_icon("📏")
+                self.ruler_toolbar.hide()
+
+        # Restore annotation mode
+        if tab.annotation_mode_active:
+            self.toolbar.annotation_mode_enabled = True
+        else:
+            if self.toolbar.annotation_mode_enabled:
+                self.toolbar.reset_annotation_state()
+
+        # Restore arrow mode
+        if tab.arrow_mode_active:
+            self.toolbar.arrow_mode_enabled = True
+        else:
+            if self.toolbar.arrow_mode_enabled:
+                self.toolbar.reset_arrow_state()
+
+        # Restore screenshot mode
+        if tab.screenshot_mode_active:
+            self.toolbar.screenshot_mode_enabled = True
+            self.toolbar.screenshot_btn.set_active(True)
+        else:
+            if self.toolbar.screenshot_mode_enabled:
+                self._exit_screenshot_mode()
+
+        # Restore texture mode
+        if tab.texture_mode_active:
+            self.toolbar.texture_mode_enabled = True
+            self.toolbar.texture_btn.set_active(True)
+        else:
+            if self.toolbar.texture_mode_enabled:
+                self._exit_texture_mode()
+
+        logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
+
     def _scale_export(self):
         """Export the scaled drawing with measurements."""
         if not self.scale_canvas.has_image():
@@ -782,61 +837,6 @@ class STLViewerWindow(QMainWindow):
         """Add an extra draggable reference line to the scale canvas."""
         self.scale_canvas.add_extra_ref_line()
 
-        has_file = tab.file_path is not None
-        self.toolbar.set_stl_loaded(has_file)
-        if has_file:
-            self.toolbar.set_loaded_filename(tab.filename)
-            self.setWindowTitle(f"ECTOFORM - {tab.filename}")
-        else:
-            self.toolbar.set_loaded_filename(None)
-            self.setWindowTitle("ECTOFORM")
-        
-        # Restore ruler mode
-        if tab.ruler_active:
-            self.toolbar.ruler_mode_enabled = True
-            self.toolbar.ruler_btn.set_active(True)
-            self.toolbar.ruler_btn.set_icon("📐")
-            self.toolbar.ruler_btn.set_label("Ruler")
-            self.ruler_toolbar.show()
-        else:
-            if self.toolbar.ruler_mode_enabled:
-                self.toolbar.ruler_mode_enabled = False
-                self.toolbar.ruler_btn.set_active(False)
-                self.toolbar.ruler_btn.set_icon("📏")
-                self.ruler_toolbar.hide()
-        
-        # Restore annotation mode
-        if tab.annotation_mode_active:
-            self.toolbar.annotation_mode_enabled = True
-        else:
-            if self.toolbar.annotation_mode_enabled:
-                self.toolbar.reset_annotation_state()
-        
-        # Restore arrow mode
-        if tab.arrow_mode_active:
-            self.toolbar.arrow_mode_enabled = True
-        else:
-            if self.toolbar.arrow_mode_enabled:
-                self.toolbar.reset_arrow_state()
-        
-        # Restore screenshot mode
-        if tab.screenshot_mode_active:
-            self.toolbar.screenshot_mode_enabled = True
-            self.toolbar.screenshot_btn.set_active(True)
-        else:
-            if self.toolbar.screenshot_mode_enabled:
-                self._exit_screenshot_mode()
-        
-        # Restore texture mode
-        if tab.texture_mode_active:
-            self.toolbar.texture_mode_enabled = True
-            self.toolbar.texture_btn.set_active(True)
-        else:
-            if self.toolbar.texture_mode_enabled:
-                self._exit_texture_mode()
-        
-        logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
-    
     def _save_current_tab_state(self):
         """Save mode flags from the current tab before switching."""
         tab = self._current_tab
