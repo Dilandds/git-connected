@@ -46,6 +46,13 @@ class Measurement:
     distance_real: float = 0.0  # real-world distance in current unit
 
 
+@dataclass
+class ExtraRefLine:
+    """A user-placed reference line that can be dragged anywhere."""
+    id: int
+    pos: QPointF  # absolute screen position (top-left of the line)
+
+
 class ScaleCanvas(QWidget):
     """
     Canvas with graduated ruler border, zoomable/pannable drawing display,
