@@ -166,6 +166,11 @@ class ScaleCanvas(QWidget):
         self._next_extra_ref_id += 1
         self.update()
 
+    def remove_extra_ref_line(self, ref_id: int):
+        """Remove an extra reference line by id."""
+        self._extra_ref_lines = [r for r in self._extra_ref_lines if r.id != ref_id]
+        self.update()
+
     def undo_last_measurement(self):
         if self._measurements:
             self._measurements.pop()
@@ -533,7 +538,7 @@ class ScaleCanvas(QWidget):
         )
 
     def _draw_extra_ref_line(self, painter: QPainter, ref: ExtraRefLine):
-        """Draw an extra user-placed reference line."""
+        """Draw an extra user-placed reference line with delete button."""
         ppu = self._pixels_per_unit()
         x_start = ref.pos.x()
         y_pos = ref.pos.y()
@@ -557,13 +562,25 @@ class ScaleCanvas(QWidget):
             Qt.AlignCenter, unit_label
         )
 
+        # Delete button (X) — drawn as a small circle with X at the right end
+        delete_x = int(x_end + 8)
+        delete_y = int(y_pos)
+        delete_r = 8
+        painter.setBrush(QColor("#E53935"))
+        painter.setPen(QPen(QColor("#B71C1C"), 1))
+        painter.drawEllipse(QPointF(delete_x, delete_y), delete_r, delete_r)
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.drawLine(delete_x - 4, delete_y - 4, delete_x + 4, delete_y + 4)
+        painter.drawLine(delete_x - 4, delete_y + 4, delete_x + 4, delete_y - 4)
+        painter.setBrush(Qt.NoBrush)
+
         # Drag hint
         painter.setPen(QColor("#999999"))
         hint_font = QFont("Segoe UI", 7)
         painter.setFont(hint_font)
         painter.drawText(
             QRectF(x_start, y_pos + 10, ppu, 12),
-            Qt.AlignCenter, "⇔ drag to move"
+            Qt.AlignCenter, "\u21d4 drag to move"
         )
 
     def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
@@ -819,7 +836,17 @@ class ScaleCanvas(QWidget):
         pos = QPointF(event.pos())
 
         if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode:
-            # Check extra ref lines first
+            # Check if clicking delete button on any extra ref line
+            for ref in self._extra_ref_lines:
+                ppu = self._pixels_per_unit()
+                delete_x = ref.pos.x() + ppu + 8
+                delete_y = ref.pos.y()
+                dist = ((pos.x() - delete_x) ** 2 + (pos.y() - delete_y) ** 2) ** 0.5
+                if dist <= 10:
+                    self.remove_extra_ref_line(ref.id)
+                    return
+
+            # Check extra ref lines for dragging
             hit_extra = self._hit_extra_ref(pos)
             if hit_extra is not None:
                 self._dragging_extra_ref = hit_extra
@@ -828,13 +855,7 @@ class ScaleCanvas(QWidget):
                 self.setCursor(Qt.SizeAllCursor)
                 return
 
-            # Check main reference line
-            if self._show_reference_line and self._hit_ref_line(pos):
-                self._ref_line_dragging = True
-                self._ref_line_drag_start = QPointF(pos)
-                self._ref_line_pos_start = QPointF(self._ref_line_pos)
-                self.setCursor(Qt.SizeAllCursor)
-                return
+            # Red reference line is static — no dragging
 
         if event.button() == Qt.MiddleButton or (
             event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap
@@ -885,15 +906,7 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
-        # Dragging main reference line — simple delta approach
-        if self._ref_line_dragging:
-            delta = pos - self._ref_line_drag_start
-            self._ref_line_pos = QPointF(
-                self._ref_line_pos_start.x() + delta.x(),
-                self._ref_line_pos_start.y() + delta.y()
-            )
-            self.update()
-            return
+        # (Red reference line is static — not draggable)
 
         if self._panning:
             self._pan_offset = QPointF(event.pos() - self._pan_start)
@@ -909,8 +922,6 @@ class ScaleCanvas(QWidget):
         if self._pixmap and not self._ruler_mode:
             if self._hit_extra_ref(pos) is not None:
                 self.setCursor(Qt.SizeAllCursor)
-            elif self._show_reference_line and self._hit_ref_line(pos):
-                self.setCursor(Qt.SizeAllCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
 
@@ -921,11 +932,6 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
-        if self._ref_line_dragging:
-            self._ref_line_dragging = False
-            self.setCursor(Qt.ArrowCursor)
-            self.update()
-            return
 
         if self._panning:
             self._panning = False
