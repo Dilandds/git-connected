@@ -380,6 +380,7 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.scale_changed.connect(self._scale_ratio_changed)
         self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
         self.scale_sidebar.export_requested.connect(self._scale_export)
+        self.scale_sidebar.add_ref_requested.connect(self._scale_add_ref)
         scale_layout.addWidget(self.scale_sidebar)
         
         self.scale_canvas = ScaleCanvas()
