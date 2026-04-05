@@ -80,6 +80,9 @@ class ScaleCanvas(QWidget):
         self._ref_line_dragging = False
         self._ref_line_drag_offset = QPointF(0, 0)
 
+        # Static border: records the image rect at load time (doesn't move with zoom)
+        self._static_border_rect: Optional[QRectF] = None
+
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
