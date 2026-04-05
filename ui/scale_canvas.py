@@ -836,7 +836,17 @@ class ScaleCanvas(QWidget):
         pos = QPointF(event.pos())
 
         if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode:
-            # Check extra ref lines first
+            # Check if clicking delete button on any extra ref line
+            for ref in self._extra_ref_lines:
+                ppu = self._pixels_per_unit()
+                delete_x = ref.pos.x() + ppu + 8
+                delete_y = ref.pos.y()
+                dist = ((pos.x() - delete_x) ** 2 + (pos.y() - delete_y) ** 2) ** 0.5
+                if dist <= 10:
+                    self.remove_extra_ref_line(ref.id)
+                    return
+
+            # Check extra ref lines for dragging
             hit_extra = self._hit_extra_ref(pos)
             if hit_extra is not None:
                 self._dragging_extra_ref = hit_extra
