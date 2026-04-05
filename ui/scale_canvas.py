@@ -538,7 +538,7 @@ class ScaleCanvas(QWidget):
         )
 
     def _draw_extra_ref_line(self, painter: QPainter, ref: ExtraRefLine):
-        """Draw an extra user-placed reference line."""
+        """Draw an extra user-placed reference line with delete button."""
         ppu = self._pixels_per_unit()
         x_start = ref.pos.x()
         y_pos = ref.pos.y()
@@ -562,13 +562,25 @@ class ScaleCanvas(QWidget):
             Qt.AlignCenter, unit_label
         )
 
+        # Delete button (X) — drawn as a small circle with X at the right end
+        delete_x = int(x_end + 8)
+        delete_y = int(y_pos)
+        delete_r = 8
+        painter.setBrush(QColor("#E53935"))
+        painter.setPen(QPen(QColor("#B71C1C"), 1))
+        painter.drawEllipse(QPointF(delete_x, delete_y), delete_r, delete_r)
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.drawLine(delete_x - 4, delete_y - 4, delete_x + 4, delete_y + 4)
+        painter.drawLine(delete_x - 4, delete_y + 4, delete_x + 4, delete_y - 4)
+        painter.setBrush(Qt.NoBrush)
+
         # Drag hint
         painter.setPen(QColor("#999999"))
         hint_font = QFont("Segoe UI", 7)
         painter.setFont(hint_font)
         painter.drawText(
             QRectF(x_start, y_pos + 10, ppu, 12),
-            Qt.AlignCenter, "⇔ drag to move"
+            Qt.AlignCenter, "\u21d4 drag to move"
         )
 
     def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
