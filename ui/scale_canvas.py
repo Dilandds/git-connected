@@ -46,6 +46,13 @@ class Measurement:
     distance_real: float = 0.0  # real-world distance in current unit
 
 
+@dataclass
+class ExtraRefLine:
+    """A user-placed reference line that can be dragged anywhere."""
+    id: int
+    pos: QPointF  # absolute screen position (top-left of the line)
+
+
 class ScaleCanvas(QWidget):
     """
     Canvas with graduated ruler border, zoomable/pannable drawing display,
@@ -78,7 +85,15 @@ class ScaleCanvas(QWidget):
         self._show_reference_line = True
         self._ref_line_pos = QPointF(0.0, 0.0)  # screen offset from default position
         self._ref_line_dragging = False
-        self._ref_line_drag_offset = QPointF(0, 0)
+        self._ref_line_drag_start = QPointF(0, 0)  # mouse pos at drag start
+        self._ref_line_pos_start = QPointF(0, 0)   # ref pos at drag start
+
+        # Extra user-placed reference lines
+        self._extra_ref_lines: List[ExtraRefLine] = []
+        self._next_extra_ref_id = 1
+        self._dragging_extra_ref: Optional[ExtraRefLine] = None
+        self._extra_ref_drag_start = QPointF(0, 0)
+        self._extra_ref_pos_start = QPointF(0, 0)
 
         # Static border: records the image rect at load time (doesn't move with zoom)
         self._static_border_rect: Optional[QRectF] = None
@@ -100,6 +115,7 @@ class ScaleCanvas(QWidget):
         self._measurements.clear()
         self._pending_point = None
         self._ref_line_pos = QPointF(0.0, 0.0)
+        self._extra_ref_lines.clear()
         self._fit_image()
         # Record the static border at initial load size
         self._static_border_rect = QRectF(self._image_rect())
@@ -113,6 +129,7 @@ class ScaleCanvas(QWidget):
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._ref_line_pos = QPointF(0.0, 0.0)
+        self._extra_ref_lines.clear()
         self.update()
 
     def set_unit(self, unit: str):
@@ -137,6 +154,16 @@ class ScaleCanvas(QWidget):
     def clear_measurements(self):
         self._measurements.clear()
         self._pending_point = None
+        self.update()
+
+    def add_extra_ref_line(self):
+        """Add a new draggable reference line at center of canvas."""
+        canvas = self._canvas_rect()
+        pos = QPointF(canvas.center().x() - self._pixels_per_unit() / 2,
+                      canvas.center().y())
+        ref = ExtraRefLine(id=self._next_extra_ref_id, pos=pos)
+        self._extra_ref_lines.append(ref)
+        self._next_extra_ref_id += 1
         self.update()
 
     def undo_last_measurement(self):
@@ -348,7 +375,6 @@ class ScaleCanvas(QWidget):
         ppu = self._pixels_per_unit()
         line_len = ppu
         canvas = self._canvas_rect()
-        # Default position: bottom-left of canvas, shifted by _ref_line_pos
         x_start = canvas.x() + 20 + self._ref_line_pos.x()
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         return QRectF(x_start - 4, y_pos - 24, line_len + 8, 48)
@@ -356,6 +382,18 @@ class ScaleCanvas(QWidget):
     def _hit_ref_line(self, pos: QPointF) -> bool:
         """Check if a screen position hits the reference line."""
         return self._ref_line_rect().contains(pos)
+
+    def _extra_ref_rect(self, ref: ExtraRefLine) -> QRectF:
+        """Return bounding rect of an extra reference line."""
+        ppu = self._pixels_per_unit()
+        return QRectF(ref.pos.x() - 4, ref.pos.y() - 24, ppu + 8, 48)
+
+    def _hit_extra_ref(self, pos: QPointF) -> Optional[ExtraRefLine]:
+        """Check if pos hits any extra reference line."""
+        for ref in self._extra_ref_lines:
+            if self._extra_ref_rect(ref).contains(pos):
+                return ref
+        return None
 
     # ---- paint ----
 
@@ -396,6 +434,11 @@ class ScaleCanvas(QWidget):
         # Reference line (1 cm guide on the drawing) — draggable
         if self._show_reference_line and self._pixmap:
             self._draw_reference_line(painter, canvas)
+
+        # Extra user-placed reference lines
+        if self._pixmap:
+            for ref in self._extra_ref_lines:
+                self._draw_extra_ref_line(painter, ref)
 
         # Measurements + projection lines
         self._draw_measurements(painter)
@@ -486,6 +529,40 @@ class ScaleCanvas(QWidget):
         painter.setFont(hint_font)
         painter.drawText(
             QRectF(x_start, y_pos + 10, line_len, 12),
+            Qt.AlignCenter, "⇔ drag to move"
+        )
+
+    def _draw_extra_ref_line(self, painter: QPainter, ref: ExtraRefLine):
+        """Draw an extra user-placed reference line."""
+        ppu = self._pixels_per_unit()
+        x_start = ref.pos.x()
+        y_pos = ref.pos.y()
+        x_end = x_start + ppu
+
+        # Line — blue to distinguish from the red default
+        pen = QPen(QColor("#1565C0"), 3)
+        painter.setPen(pen)
+        painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
+        # End caps
+        painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
+        painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
+
+        # Label
+        unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
+        font = QFont("Segoe UI", 9, QFont.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor("#1565C0"))
+        painter.drawText(
+            QRectF(x_start, y_pos - 20, ppu, 18),
+            Qt.AlignCenter, unit_label
+        )
+
+        # Drag hint
+        painter.setPen(QColor("#999999"))
+        hint_font = QFont("Segoe UI", 7)
+        painter.setFont(hint_font)
+        painter.drawText(
+            QRectF(x_start, y_pos + 10, ppu, 12),
             Qt.AlignCenter, "⇔ drag to move"
         )
 
@@ -741,15 +818,21 @@ class ScaleCanvas(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         pos = QPointF(event.pos())
 
-        # Check if clicking on the reference line (for dragging)
-        if event.button() == Qt.LeftButton and self._show_reference_line and self._pixmap:
-            if not self._ruler_mode and self._hit_ref_line(pos):
+        if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode:
+            # Check extra ref lines first
+            hit_extra = self._hit_extra_ref(pos)
+            if hit_extra is not None:
+                self._dragging_extra_ref = hit_extra
+                self._extra_ref_drag_start = QPointF(pos)
+                self._extra_ref_pos_start = QPointF(hit_extra.pos)
+                self.setCursor(Qt.SizeAllCursor)
+                return
+
+            # Check main reference line
+            if self._show_reference_line and self._hit_ref_line(pos):
                 self._ref_line_dragging = True
-                ref_rect = self._ref_line_rect()
-                self._ref_line_drag_offset = QPointF(
-                    pos.x() - ref_rect.x(),
-                    pos.y() - ref_rect.y()
-                )
+                self._ref_line_drag_start = QPointF(pos)
+                self._ref_line_pos_start = QPointF(self._ref_line_pos)
                 self.setCursor(Qt.SizeAllCursor)
                 return
 
@@ -792,13 +875,23 @@ class ScaleCanvas(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         pos = QPointF(event.pos())
 
-        # Dragging reference line
+        # Dragging extra reference line
+        if self._dragging_extra_ref is not None:
+            delta = pos - self._extra_ref_drag_start
+            self._dragging_extra_ref.pos = QPointF(
+                self._extra_ref_pos_start.x() + delta.x(),
+                self._extra_ref_pos_start.y() + delta.y()
+            )
+            self.update()
+            return
+
+        # Dragging main reference line — simple delta approach
         if self._ref_line_dragging:
-            canvas = self._canvas_rect()
-            ref_rect = self._ref_line_rect()
-            new_x = pos.x() - self._ref_line_drag_offset.x() - (canvas.x() + 20 - self._ref_line_pos.x()) + 4
-            new_y = pos.y() - self._ref_line_drag_offset.y() - (canvas.bottom() - 20 - self._ref_line_pos.y()) + 24
-            self._ref_line_pos = QPointF(new_x, new_y)
+            delta = pos - self._ref_line_drag_start
+            self._ref_line_pos = QPointF(
+                self._ref_line_pos_start.x() + delta.x(),
+                self._ref_line_pos_start.y() + delta.y()
+            )
             self.update()
             return
 
@@ -813,13 +906,21 @@ class ScaleCanvas(QWidget):
             return
 
         # Update cursor based on hover
-        if self._show_reference_line and self._pixmap and not self._ruler_mode:
-            if self._hit_ref_line(pos):
+        if self._pixmap and not self._ruler_mode:
+            if self._hit_extra_ref(pos) is not None:
+                self.setCursor(Qt.SizeAllCursor)
+            elif self._show_reference_line and self._hit_ref_line(pos):
                 self.setCursor(Qt.SizeAllCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if self._dragging_extra_ref is not None:
+            self._dragging_extra_ref = None
+            self.setCursor(Qt.ArrowCursor)
+            self.update()
+            return
+
         if self._ref_line_dragging:
             self._ref_line_dragging = False
             self.setCursor(Qt.ArrowCursor)

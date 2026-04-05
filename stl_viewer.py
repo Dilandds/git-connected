@@ -380,6 +380,7 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.scale_changed.connect(self._scale_ratio_changed)
         self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
         self.scale_sidebar.export_requested.connect(self._scale_export)
+        self.scale_sidebar.add_ref_requested.connect(self._scale_add_ref)
         scale_layout.addWidget(self.scale_sidebar)
         
         self.scale_canvas = ScaleCanvas()
@@ -777,7 +778,10 @@ class STLViewerWindow(QMainWindow):
             else:
                 logger.error(f"Export failed: {result}")
 
-        # Update toolbar state
+    def _scale_add_ref(self):
+        """Add an extra draggable reference line to the scale canvas."""
+        self.scale_canvas.add_extra_ref_line()
+
         has_file = tab.file_path is not None
         self.toolbar.set_stl_loaded(has_file)
         if has_file:
