@@ -78,13 +78,25 @@ class PasscodeDialog(QDialog):
         layout.addWidget(title)
 
         if self._mode == 'set':
-            hint = QLabel("This passcode will be required to edit the .ecto file.\nAnyone can still view the file without a passcode.")
+            hint = QLabel(
+                "This passcode will be required to edit the .ecto file.\n"
+                "Anyone can still view the file without a passcode.\n\n"
+                "⚠ Important: This passcode can only be reset from this\n"
+                "machine's application. Keep it safe."
+            )
         else:
             hint = QLabel("Enter the passcode to unlock editing.")
         hint.setAlignment(Qt.AlignCenter)
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px;")
         layout.addWidget(hint)
+
+        if self._mode == 'enter':
+            recovery_hint = QLabel("Lost passcode? Ask the file creator to reset it from their machine.")
+            recovery_hint.setAlignment(Qt.AlignCenter)
+            recovery_hint.setWordWrap(True)
+            recovery_hint.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px;")
+            layout.addWidget(recovery_hint)
 
         layout.addWidget(QLabel("Passcode:"))
         self._passcode_input = QLineEdit()
