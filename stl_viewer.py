@@ -317,6 +317,7 @@ class STLViewerWindow(QMainWindow):
         # Shared texture panel (one per window, not per tab)
         self.texture_panel = TexturePanel()
         self.texture_panel.exit_texture_mode.connect(self._exit_texture_mode_from_panel)
+        self.texture_panel.texture_settings_changed.connect(self._on_texture_settings_changed)
         self.texture_stack.addWidget(self.texture_panel)
         
         # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture visible at a time
@@ -1986,6 +1987,12 @@ class STLViewerWindow(QMainWindow):
             self.toolbar.texture_mode_enabled = False
             self.toolbar.reset_texture_state()
         self._exit_texture_mode()
+
+    def _on_texture_settings_changed(self, settings):
+        """Forward texture slider settings to the active viewer widget."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'update_texture_settings'):
+            vw.update_texture_settings(settings)
 
     # ========== Draw Mode Methods ==========
     
