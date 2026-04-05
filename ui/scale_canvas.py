@@ -170,7 +170,7 @@ class ScaleCanvas(QWidget):
                 return False, "Canvas too small"
 
             img = QImage(cw, ch, QImage.Format_ARGB32)
-            img.fill(QColor("#1a1e24"))
+            img.fill(QColor("#ffffff"))
 
             painter = QPainter(img)
             painter.setRenderHint(QPainter.Antialiasing)
