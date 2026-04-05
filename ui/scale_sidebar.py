@@ -133,6 +133,27 @@ class ScaleSidebar(QWidget):
         self.ruler_btn.clicked.connect(self._on_ruler_toggled)
         layout.addWidget(self.ruler_btn)
 
+        # Add Reference button
+        self.add_ref_btn = QPushButton("📌  Add Reference")
+        self.add_ref_btn.setFixedHeight(32)
+        self.add_ref_btn.setCursor(Qt.PointingHandCursor)
+        self.add_ref_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {default_theme.button_default_bg};
+                border: 1px solid #1565C0;
+                border-radius: 5px;
+                color: #1565C0;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: #E3F2FD;
+                color: #0D47A1;
+            }}
+        """)
+        self.add_ref_btn.clicked.connect(self.add_ref_requested.emit)
+        layout.addWidget(self.add_ref_btn)
+
         # Reset button
         self.reset_btn = QPushButton("🗑  Reset")
         self.reset_btn.setFixedHeight(30)
