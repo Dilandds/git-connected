@@ -475,15 +475,17 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
         self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
         self._mode_scale_btn.setStyleSheet(active_style if self._current_mode == "scale" else inactive_style)
+        self._mode_help_btn.setStyleSheet(active_style if self._current_mode == "help" else inactive_style)
     
     def _switch_mode(self, mode: str):
-        """Switch between '3d', 'technical', and 'scale' workspace modes."""
+        """Switch between '3d', 'technical', 'scale', and 'help' workspace modes."""
         if mode == self._current_mode:
             return
         self._current_mode = mode
         self._mode_3d_btn.setChecked(mode == "3d")
         self._mode_tech_btn.setChecked(mode == "technical")
         self._mode_scale_btn.setChecked(mode == "scale")
+        self._mode_help_btn.setChecked(mode == "help")
         self._update_mode_btn_styles()
         
         if mode == "3d":
@@ -495,6 +497,9 @@ class STLViewerWindow(QMainWindow):
         elif mode == "scale":
             self._workspace_stack.setCurrentIndex(2)
             self.setWindowTitle("ECTOFORM - Drawing Scale")
+        elif mode == "help":
+            self._workspace_stack.setCurrentIndex(3)
+            self.setWindowTitle("ECTOFORM - Help")
         
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
