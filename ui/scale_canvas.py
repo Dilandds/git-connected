@@ -418,32 +418,26 @@ class ScaleCanvas(QWidget):
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         x_end = x_start + line_len
 
-        # Subtle background for visibility
-        bg_rect = QRectF(x_start - 4, y_pos - 22, line_len + 8, 40)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 100))
-        painter.drawRoundedRect(bg_rect, 4, 4)
-
-        # Line
-        pen = QPen(QColor("#FF5722"), 3)
+        # Line — darker red for visibility on white
+        pen = QPen(QColor("#C62828"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
         # End caps
         painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
         painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
 
-        # Label
+        # Label — no background rectangle, just dark red text
         unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
-        painter.setPen(QColor("#FF5722"))
+        painter.setPen(QColor("#C62828"))
         painter.drawText(
             QRectF(x_start, y_pos - 20, line_len, 18),
             Qt.AlignCenter, unit_label
         )
 
-        # Drag hint icon (move cursor area)
-        painter.setPen(QColor("#FF5722"))
+        # Drag hint
+        painter.setPen(QColor("#999999"))
         hint_font = QFont("Segoe UI", 7)
         painter.setFont(hint_font)
         painter.drawText(
