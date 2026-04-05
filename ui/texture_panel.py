@@ -1,8 +1,10 @@
 """
-Texture panel — displays uploaded texture images in a 2-column grid.
-Textures can be dragged onto 3D model parts to apply as surface textures.
+Texture panel — displays uploaded texture images and predefined material
+presets in a 2-column grid.  Textures / materials can be dragged onto
+3D model parts to apply as surface textures or material finishes.
 """
 import os
+import json
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -10,7 +12,7 @@ from PyQt5.QtWidgets import (
     QGridLayout, QApplication,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint
-from PyQt5.QtGui import QPixmap, QDrag
+from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen
 from ui.styles import default_theme, make_font
 from ui.annotation_panel import (
     _ANNO_CARD_BORDER,
@@ -30,7 +32,146 @@ _TEX_TEAL_MID = "#00ACC1"
 _TEX_TEAL_DEEP = "#00838F"
 _TEX_TEAL_BOTTOM = "#006064"
 
+# ---------------------------------------------------------------------------
+# Material preset definitions
+# ---------------------------------------------------------------------------
+MATERIAL_PRESETS = [
+    {
+        "name": "Gold",
+        "color": "#D4AF37",
+        "highlight": "#FFF8DC",
+        "specular": "#FFD700",
+        "shininess": 250,
+    },
+    {
+        "name": "Silver",
+        "color": "#C0C0C0",
+        "highlight": "#FFFFFF",
+        "specular": "#FFFFFF",
+        "shininess": 300,
+    },
+    {
+        "name": "Leather Brown",
+        "color": "#8B4513",
+        "highlight": "#C4956A",
+        "specular": "#3D2B1F",
+        "shininess": 10,
+    },
+]
 
+
+def _generate_material_swatch(base_color: str, highlight_color: str, size: int = 80) -> QPixmap:
+    """Create a sphere-like swatch pixmap using radial gradient."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(QColor("#2a2a2a"))
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+
+    base = QColor(base_color)
+    highlight = QColor(highlight_color)
+
+    # Radial gradient — highlight at upper-left, darkened edges
+    gradient = QRadialGradient(size * 0.38, size * 0.32, size * 0.44)
+    gradient.setColorAt(0.0, highlight)
+    gradient.setColorAt(0.35, base.lighter(130))
+    gradient.setColorAt(0.7, base)
+    gradient.setColorAt(1.0, base.darker(250))
+
+    painter.setPen(QPen(Qt.NoPen))
+    painter.setBrush(gradient)
+    margin = int(size * 0.1)
+    painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
+    painter.end()
+    return pixmap
+
+
+# ---------------------------------------------------------------------------
+# Material preset card (permanent, no delete)
+# ---------------------------------------------------------------------------
+class MaterialPresetCard(QFrame):
+    """A compact card for a built-in material preset.  Supports drag so the
+    material can be dropped onto the 3D viewer."""
+
+    def __init__(self, preset: dict, parent=None):
+        super().__init__(parent)
+        self.preset = preset
+        self.setObjectName("materialPresetCard")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setCursor(Qt.OpenHandCursor)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setStyleSheet(f"""
+            QFrame#materialPresetCard {{
+                background: {_ANNO_CARD_PENDING};
+                {_ANNO_CARD_BORDER}
+            }}
+            QFrame#materialPresetCard:hover {{
+                background: {_ANNO_CARD_HOVER};
+                {_ANNO_CARD_BORDER_HOVER}
+            }}
+            QFrame#materialPresetCard QLabel {{
+                background-color: transparent;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+
+        # Sphere thumbnail
+        swatch = _generate_material_swatch(preset["color"], preset["highlight"])
+        self._swatch = swatch
+        thumb = QLabel()
+        thumb.setAlignment(Qt.AlignCenter)
+        thumb.setStyleSheet("background: transparent;")
+        thumb.setFixedHeight(70)
+        thumb.setPixmap(swatch.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        layout.addWidget(thumb)
+
+        # Name label
+        name_lbl = QLabel(preset["name"])
+        name_lbl.setAlignment(Qt.AlignCenter)
+        name_lbl.setStyleSheet(f"""
+            color: {default_theme.text_primary};
+            font-size: 10px;
+            font-weight: bold;
+            background: transparent;
+        """)
+        layout.addWidget(name_lbl)
+
+    # --- Drag support ---
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton):
+            return
+        if not hasattr(self, '_drag_start_pos'):
+            return
+        if (event.pos() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return
+        drag = QDrag(self)
+        mime = QMimeData()
+        payload = json.dumps({
+            "color": self.preset["color"],
+            "specular": self.preset["specular"],
+            "shininess": self.preset["shininess"],
+        })
+        mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
+        drag.setMimeData(mime)
+        thumb = self._swatch.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        drag.setPixmap(thumb)
+        drag.setHotSpot(QPoint(thumb.width() // 2, thumb.height() // 2))
+        self.setCursor(Qt.ClosedHandCursor)
+        drag.exec_(Qt.CopyAction)
+        self.setCursor(Qt.OpenHandCursor)
+
+
+# ---------------------------------------------------------------------------
+# Texture card (user-uploaded, deletable)
+# ---------------------------------------------------------------------------
 class TextureCard(QFrame):
     """A compact card displaying a texture thumbnail with a delete button.
     Supports drag-start so the texture can be dropped onto the 3D viewer.
@@ -141,7 +282,6 @@ class TextureCard(QFrame):
         mime.setText(self.image_path)
         mime.setData("application/x-ectoform-texture", self.image_path.encode('utf-8'))
         drag.setMimeData(mime)
-        # Set a small thumbnail as drag pixmap
         thumb = self.pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         drag.setPixmap(thumb)
         drag.setHotSpot(QPoint(thumb.width() // 2, thumb.height() // 2))
@@ -153,6 +293,9 @@ class TextureCard(QFrame):
         self.index = new_index
 
 
+# ---------------------------------------------------------------------------
+# Main texture panel
+# ---------------------------------------------------------------------------
 class TexturePanel(QWidget):
     """Right-side panel for uploading and managing textures for 3D model parts."""
 
@@ -261,7 +404,28 @@ class TexturePanel(QWidget):
 
         layout.addWidget(banner)
 
-        # Upload button
+        # ---- Materials section ----
+        mat_label = QLabel("Materials")
+        mat_label.setFont(make_font(size=11, bold=True))
+        mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(mat_label)
+
+        mat_grid = QGridLayout()
+        mat_grid.setContentsMargins(0, 0, 0, 0)
+        mat_grid.setSpacing(6)
+        mat_grid.setColumnStretch(0, 1)
+        mat_grid.setColumnStretch(1, 1)
+        for i, preset in enumerate(MATERIAL_PRESETS):
+            card = MaterialPresetCard(preset)
+            mat_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+        layout.addLayout(mat_grid)
+
+        # ---- Upload button ----
+        upload_label = QLabel("Custom Textures")
+        upload_label.setFont(make_font(size=11, bold=True))
+        upload_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(upload_label)
+
         self.upload_btn = QPushButton("📁  Upload Texture")
         self.upload_btn.setObjectName("uploadTextureBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
@@ -282,7 +446,7 @@ class TexturePanel(QWidget):
         self.upload_btn.clicked.connect(self._on_upload)
         layout.addWidget(self.upload_btn)
 
-        # Scroll area with grid
+        # Scroll area with grid for uploaded textures
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -344,7 +508,6 @@ class TexturePanel(QWidget):
 
     def add_texture(self, image_path: str):
         """Add a texture image to the panel."""
-        # Handle HEIC conversion
         try:
             from core.image_utils import ensure_image_readable
             readable = ensure_image_readable(image_path)
@@ -373,7 +536,6 @@ class TexturePanel(QWidget):
         self.grid_layout.addWidget(card, row, col)
 
         self.clear_btn.setVisible(len(self.textures) > 0)
-        self.instruction.setVisible(len(self.textures) == 0)
 
     def _on_delete(self, index: int):
         if 0 <= index < len(self.cards):
@@ -382,12 +544,10 @@ class TexturePanel(QWidget):
             card.deleteLater()
             self.cards.pop(index)
             self.textures.pop(index)
-            # Re-index remaining cards
             for i, c in enumerate(self.cards):
                 c.update_index(i)
             self._rebuild_grid()
             self.clear_btn.setVisible(len(self.textures) > 0)
-            self.instruction.setVisible(len(self.textures) == 0)
 
     def _on_clear_all(self):
         for card in self.cards:
@@ -396,7 +556,6 @@ class TexturePanel(QWidget):
         self.cards.clear()
         self.textures.clear()
         self.clear_btn.hide()
-        self.instruction.show()
 
     def clear_all(self):
         self._on_clear_all()
