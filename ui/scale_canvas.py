@@ -382,7 +382,7 @@ class ScaleCanvas(QWidget):
         # Live preview line (ruler mode, pending first click)
         if self._ruler_mode and self._pending_point is not None and self._mouse_pos is not None:
             p1 = self._image_to_screen(self._pending_point.x(), self._pending_point.y())
-            pen = QPen(QColor("#00BFFF"), 2, Qt.DashLine)
+            pen = QPen(QColor("#1976D2"), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), self._mouse_pos.toPoint())
             # Live projection lines
