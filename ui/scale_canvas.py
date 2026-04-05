@@ -71,7 +71,7 @@ class ScaleCanvas(QWidget):
         self._pan_start = QPointF()
 
         # Drawing scale
-        self._unit = "cm"  # cm | mm | inches
+        self._unit = "cm"  # cm | mm | inches | m
         self._scale_ratio = 1.0  # 1:1 → 1.0, 1:2 → 2.0
 
         # Ruler measurement tool
@@ -133,7 +133,7 @@ class ScaleCanvas(QWidget):
         self.update()
 
     def set_unit(self, unit: str):
-        """Set unit: 'cm', 'mm', or 'inches'."""
+        """Set unit: 'cm', 'mm', 'inches', or 'm'."""
         self._unit = unit
         self._recalc_measurements()
         self.update()
@@ -328,13 +328,15 @@ class ScaleCanvas(QWidget):
     # ---- DPI / unit helpers ----
 
     def _pixels_per_unit(self) -> float:
-        """Pixels per real-world unit (cm/mm/inch) at current scale ratio."""
+        """Pixels per real-world unit (cm/mm/inch/m) at current scale ratio."""
         screen = QApplication.primaryScreen()
         dpi = screen.logicalDotsPerInch() if screen else 96.0
         if self._unit == "inches":
             ppu = dpi / self._scale_ratio
         elif self._unit == "mm":
             ppu = (dpi / 25.4) / self._scale_ratio
+        elif self._unit == "m":
+            ppu = (dpi / 0.0254) / self._scale_ratio
         else:  # cm
             ppu = (dpi / 2.54) / self._scale_ratio
         return ppu
@@ -501,16 +503,28 @@ class ScaleCanvas(QWidget):
                          "Drop a drawing here\nor click Upload")
 
     def _draw_reference_line(self, painter: QPainter, canvas: QRectF):
-        """Draw a 1-unit reference line — draggable."""
-        ppu = self._pixels_per_unit()
-        line_len = ppu  # 1 unit worth of pixels
+        """Draw a 1-unit reference line (static, not draggable).
+        At scale ratios > 1 (e.g. 1:2), the line keeps its physical 1-unit
+        length but shows subdivision marks to indicate the scale."""
+        # Physical 1-unit at 1:1 scale (ignoring ratio for the ref line itself)
+        screen = QApplication.primaryScreen()
+        dpi = screen.logicalDotsPerInch() if screen else 96.0
+        if self._unit == "inches":
+            ppu_base = dpi
+        elif self._unit == "mm":
+            ppu_base = dpi / 25.4
+        elif self._unit == "m":
+            ppu_base = dpi / 0.0254
+        else:  # cm
+            ppu_base = dpi / 2.54
+        line_len = ppu_base  # always 1 physical unit regardless of ratio
 
-        # Position (default bottom-left, offset by drag)
+        # Position (default bottom-left, static)
         x_start = canvas.x() + 20 + self._ref_line_pos.x()
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         x_end = x_start + line_len
 
-        # Line — darker red for visibility on white
+        # Main line — darker red for visibility on white
         pen = QPen(QColor("#C62828"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
@@ -518,23 +532,28 @@ class ScaleCanvas(QWidget):
         painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
         painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
 
-        # Label — no background rectangle, just dark red text
-        unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
+        # Subdivision marks for scale ratios > 1
+        ratio = self._scale_ratio
+        if ratio > 1:
+            subdivisions = int(ratio)
+            sub_pen = QPen(QColor("#C62828"), 1.5)
+            painter.setPen(sub_pen)
+            for i in range(1, subdivisions):
+                sx = x_start + (line_len * i / subdivisions)
+                painter.drawLine(int(sx), int(y_pos - 5), int(sx), int(y_pos + 5))
+
+        # Label
+        unit_label = {
+            "cm": "1 cm", "mm": "10 mm", "inches": "1 inch", "m": "1 m"
+        }.get(self._unit, "1 cm")
+        if ratio > 1:
+            unit_label += f"  (1:{int(ratio)})"
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
         painter.setPen(QColor("#C62828"))
         painter.drawText(
             QRectF(x_start, y_pos - 20, line_len, 18),
             Qt.AlignCenter, unit_label
-        )
-
-        # Drag hint
-        painter.setPen(QColor("#999999"))
-        hint_font = QFont("Segoe UI", 7)
-        painter.setFont(hint_font)
-        painter.drawText(
-            QRectF(x_start, y_pos + 10, line_len, 12),
-            Qt.AlignCenter, "⇔ drag to move"
         )
 
     def _draw_extra_ref_line(self, painter: QPainter, ref: ExtraRefLine):
@@ -552,8 +571,20 @@ class ScaleCanvas(QWidget):
         painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
         painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
 
+        # Subdivision marks for scale ratios > 1
+        ratio = self._scale_ratio
+        if ratio > 1:
+            subdivisions = int(ratio)
+            sub_pen = QPen(QColor("#1565C0"), 1.5)
+            painter.setPen(sub_pen)
+            for i in range(1, subdivisions):
+                sx = x_start + (ppu * i / subdivisions)
+                painter.drawLine(int(sx), int(y_pos - 5), int(sx), int(y_pos + 5))
+
         # Label
-        unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
+        unit_label = {
+            "cm": "1 cm", "mm": "10 mm", "inches": "1 inch", "m": "1 m"
+        }.get(self._unit, "1 cm")
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
         painter.setPen(QColor("#1565C0"))
@@ -629,7 +660,7 @@ class ScaleCanvas(QWidget):
             mid = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
             dist_px = ((p2.x() - p1.x()) ** 2 + (p2.y() - p1.y()) ** 2) ** 0.5
             dist_real = self._pixel_distance_to_real(dist_px)
-            unit_abbr = {"cm": "cm", "mm": "mm", "inches": "in"}.get(self._unit, "cm")
+            unit_abbr = {"cm": "cm", "mm": "mm", "inches": "in", "m": "m"}.get(self._unit, "cm")
             label = f"{dist_real:.2f} {unit_abbr}"
 
             font = QFont("Segoe UI", 10, QFont.Bold)
@@ -680,7 +711,11 @@ class ScaleCanvas(QWidget):
             minor_px = ppu / 8
             major_px = ppu
             label_every = 1
-        else:
+        elif self._unit == "m":
+            minor_px = ppu / 100  # 1 cm subdivisions for meter
+            major_px = ppu / 10   # 10 cm major ticks
+            label_every = 10
+        else:  # cm
             minor_px = ppu / 10
             major_px = ppu
             label_every = 1
@@ -743,6 +778,8 @@ class ScaleCanvas(QWidget):
                 major_idx = tick_idx // ticks_per_major
                 if self._unit == "mm":
                     label_text = str(major_idx * 10)
+                elif self._unit == "m":
+                    label_text = f"{major_idx * 10}cm"
                 elif self._unit == "inches":
                     label_text = str(major_idx)
                 else:
@@ -800,6 +837,8 @@ class ScaleCanvas(QWidget):
                 major_idx = tick_idx // ticks_per_major
                 if self._unit == "mm":
                     label_text = str(major_idx * 10)
+                elif self._unit == "m":
+                    label_text = f"{major_idx * 10}cm"
                 elif self._unit == "inches":
                     label_text = str(major_idx)
                 else:
