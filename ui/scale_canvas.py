@@ -129,6 +129,7 @@ class ScaleCanvas(QWidget):
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._ref_line_pos = QPointF(0.0, 0.0)
+        self._extra_ref_lines.clear()
         self.update()
 
     def set_unit(self, unit: str):
