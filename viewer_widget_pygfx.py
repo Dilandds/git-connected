@@ -3387,10 +3387,12 @@ class STLViewerWidget(QWidget):
         logger.info("disable_texture_drop_mode: Texture drop mode disabled")
 
     def dragEnterEvent(self, event):
-        """Accept drag events carrying texture data."""
+        """Accept drag events carrying texture or material preset data."""
         if getattr(self, '_texture_drop_mode', False):
             mime = event.mimeData()
-            if mime.hasFormat("application/x-ectoform-texture") or mime.hasText():
+            if (mime.hasFormat("application/x-ectoform-texture")
+                    or mime.hasFormat("application/x-ectoform-material-preset")
+                    or mime.hasText()):
                 event.acceptProposedAction()
                 return
         super().dragEnterEvent(event)
@@ -3551,6 +3553,45 @@ class STLViewerWidget(QWidget):
             logger.info(f"_apply_texture_to_mesh: Texture applied from {image_path}")
         except Exception as e:
             logger.error(f"_apply_texture_to_mesh: Failed: {e}", exc_info=True)
+
+    def apply_material_preset_to_part(self, part_id, preset_data):
+        """Apply a material preset (color + specular + shininess) to a part."""
+        part = None
+        for p in self._mesh_parts:
+            if p['id'] == part_id:
+                part = p
+                break
+        if part is None:
+            logger.warning(f"apply_material_preset_to_part: Part {part_id} not found")
+            return
+        mesh_obj = part.get('mesh_obj')
+        if mesh_obj is None:
+            logger.warning(f"apply_material_preset_to_part: Part {part_id} has no mesh_obj")
+            return
+        self._apply_material_preset_to_mesh(mesh_obj, preset_data)
+
+    def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
+        """Apply a colored phong material with shininess to a mesh object."""
+        import pygfx as gfx
+        try:
+            color = preset_data.get("color", "#CCCCCC")
+            specular = preset_data.get("specular", "#FFFFFF")
+            shininess = preset_data.get("shininess", 100)
+
+            material = gfx.MeshPhongMaterial(
+                color=color,
+                specular_color=specular,
+                shininess=shininess,
+            )
+            if not hasattr(mesh_obj, '_original_material'):
+                mesh_obj._original_material = mesh_obj.material
+            mesh_obj.material = material
+
+            if self._canvas:
+                self._canvas.request_draw()
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} shininess={shininess}")
+        except Exception as e:
+            logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
     def remove_texture_from_part(self, part_id):
         """Revert a part to its original material (remove texture)."""
