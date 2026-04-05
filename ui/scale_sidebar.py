@@ -125,7 +125,7 @@ class ScaleSidebar(QWidget):
 
         layout.addWidget(_section_label("UNIT"))
         self.unit_combo = _styled_combo()
-        self.unit_combo.addItems(["Centimeters (cm)", "Millimeters (mm)", "Inches (in)"])
+        self.unit_combo.addItems(["Centimeters (cm)", "Millimeters (mm)", "Inches (in)", "Meters (m)"])
         self.unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         layout.addWidget(self.unit_combo)
 
@@ -241,7 +241,7 @@ class ScaleSidebar(QWidget):
         return sep
 
     def _on_unit_changed(self, index: int):
-        units = ["cm", "mm", "inches"]
+        units = ["cm", "mm", "inches", "m"]
         if 0 <= index < len(units):
             self.unit_changed.emit(units[index])
 
