@@ -9,7 +9,7 @@ import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
-    QGridLayout, QApplication,
+    QGridLayout, QApplication, QSlider,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint
 from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen
@@ -38,17 +38,19 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
-        "color": "#D4AF37",
-        "highlight": "#FFF8DC",
+        "color": "#B8860B",
+        "highlight": "#FFE066",
         "specular": "#FFD700",
-        "shininess": 250,
+        "shininess": 350,
+        "emissive": "#3D2B00",
     },
     {
         "name": "Silver",
         "color": "#C0C0C0",
         "highlight": "#FFFFFF",
         "specular": "#FFFFFF",
-        "shininess": 300,
+        "shininess": 400,
+        "emissive": "#1A1A1A",
     },
     {
         "name": "Leather Brown",
@@ -154,11 +156,14 @@ class MaterialPresetCard(QFrame):
             return
         drag = QDrag(self)
         mime = QMimeData()
-        payload = json.dumps({
+        payload_dict = {
             "color": self.preset["color"],
             "specular": self.preset["specular"],
             "shininess": self.preset["shininess"],
-        })
+        }
+        if "emissive" in self.preset:
+            payload_dict["emissive"] = self.preset["emissive"]
+        payload = json.dumps(payload_dict)
         mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         drag.setMimeData(mime)
         thumb = self._swatch.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -300,6 +305,7 @@ class TexturePanel(QWidget):
     """Right-side panel for uploading and managing textures for 3D model parts."""
 
     exit_texture_mode = pyqtSignal()
+    texture_settings_changed = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -309,6 +315,74 @@ class TexturePanel(QWidget):
         self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
         self._init_ui()
+
+    def _create_slider_row(self, label_text, min_val, max_val, default_val, suffix="", divisor=1):
+        """Helper to create a labeled slider row. Returns (container, slider, value_label)."""
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(container)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(6)
+
+        lbl = QLabel(label_text)
+        lbl.setFixedWidth(65)
+        lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px; background: transparent;")
+        h.addWidget(lbl)
+
+        slider = QSlider(Qt.Horizontal)
+        slider.setMinimum(min_val)
+        slider.setMaximum(max_val)
+        slider.setValue(default_val)
+        slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                background: {default_theme.button_default_bg};
+                height: 4px;
+                border-radius: 2px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #4DD0E1;
+                width: 12px;
+                height: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: #00ACC1;
+                border-radius: 2px;
+            }}
+        """)
+        h.addWidget(slider, 1)
+
+        if divisor > 1:
+            display = f"{default_val / divisor:.1f}{suffix}"
+        else:
+            display = f"{default_val}{suffix}"
+        val_lbl = QLabel(display)
+        val_lbl.setFixedWidth(40)
+        val_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        val_lbl.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
+        h.addWidget(val_lbl)
+
+        def _on_change(v):
+            if divisor > 1:
+                val_lbl.setText(f"{v / divisor:.1f}{suffix}")
+            else:
+                val_lbl.setText(f"{v}{suffix}")
+            self._emit_settings()
+
+        slider.valueChanged.connect(_on_change)
+        return container, slider, val_lbl
+
+    def _emit_settings(self):
+        """Emit current slider values as a dict."""
+        settings = {
+            "scale": self._slider_scale.value() / 10.0,
+            "rotation": self._slider_rotation.value(),
+            "roughness": self._slider_roughness.value() / 100.0,
+            "metalness": self._slider_metalness.value() / 100.0,
+            "opacity": self._slider_opacity.value() / 100.0,
+        }
+        self.texture_settings_changed.emit(settings)
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -484,6 +558,32 @@ class TexturePanel(QWidget):
         self.clear_btn.clicked.connect(self._on_clear_all)
         self.clear_btn.hide()
         layout.addWidget(self.clear_btn)
+
+        # ---- Texture Settings (sliders) ----
+        settings_label = QLabel("Texture Settings")
+        settings_label.setFont(make_font(size=11, bold=True))
+        settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(settings_label)
+
+        # Scale: 1-100 mapped to 0.1x–10.0x  (value / 10)
+        row, self._slider_scale, _ = self._create_slider_row("Scale", 1, 100, 10, "x", divisor=10)
+        layout.addWidget(row)
+
+        # Rotation: 0–360°
+        row, self._slider_rotation, _ = self._create_slider_row("Rotation", 0, 360, 0, "°")
+        layout.addWidget(row)
+
+        # Roughness: 0–100%
+        row, self._slider_roughness, _ = self._create_slider_row("Roughness", 0, 100, 50, "%")
+        layout.addWidget(row)
+
+        # Metalness: 0–100%
+        row, self._slider_metalness, _ = self._create_slider_row("Metalness", 0, 100, 0, "%")
+        layout.addWidget(row)
+
+        # Opacity: 0–100%
+        row, self._slider_opacity, _ = self._create_slider_row("Opacity", 0, 100, 100, "%")
+        layout.addWidget(row)
 
     def _rebuild_grid(self):
         while self.grid_layout.count():

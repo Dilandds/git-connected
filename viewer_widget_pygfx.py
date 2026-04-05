@@ -3571,27 +3571,122 @@ class STLViewerWidget(QWidget):
         self._apply_material_preset_to_mesh(mesh_obj, preset_data)
 
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
-        """Apply a colored phong material with shininess to a mesh object."""
+        """Apply a colored phong material with shininess and emissive to a mesh object."""
         import pygfx as gfx
         try:
             color = preset_data.get("color", "#CCCCCC")
             specular = preset_data.get("specular", "#FFFFFF")
             shininess = preset_data.get("shininess", 100)
+            emissive = preset_data.get("emissive", None)
 
-            material = gfx.MeshPhongMaterial(
+            mat_kwargs = dict(
                 color=color,
                 specular_color=specular,
                 shininess=shininess,
             )
+            if emissive:
+                mat_kwargs["emissive"] = gfx.Color(emissive)
+                mat_kwargs["emissive_intensity"] = 0.15
+
+            material = gfx.MeshPhongMaterial(**mat_kwargs)
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material
             mesh_obj.material = material
 
+            # Add accent lights for metallic presets
+            self._add_preset_accent_lights()
+
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} shininess={shininess}")
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} shininess={shininess} emissive={emissive}")
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
+
+    def _add_preset_accent_lights(self):
+        """Add extra directional lights for better metallic reflections."""
+        import pygfx as gfx
+        # Remove any existing accent lights first
+        self._remove_preset_accent_lights()
+        if self._scene is None:
+            return
+        self._preset_accent_lights = []
+        # Top-back fill light
+        light3 = gfx.DirectionalLight(color="white", intensity=0.3)
+        light3.local.position = (0, 1, -1)
+        light3.look_at((0, 0, 0))
+        self._scene.add(light3)
+        self._preset_accent_lights.append(light3)
+        # Side accent light
+        light4 = gfx.DirectionalLight(color="white", intensity=0.2)
+        light4.local.position = (-1, 0.5, 1)
+        light4.look_at((0, 0, 0))
+        self._scene.add(light4)
+        self._preset_accent_lights.append(light4)
+
+    def _remove_preset_accent_lights(self):
+        """Remove accent lights added for material presets."""
+        if not hasattr(self, '_preset_accent_lights') or not self._preset_accent_lights:
+            return
+        for light in self._preset_accent_lights:
+            if self._scene and light in self._scene.children:
+                self._scene.remove(light)
+        self._preset_accent_lights = []
+
+    def update_texture_settings(self, settings):
+        """Update material/texture properties based on slider values from the texture panel.
+        settings: dict with keys scale, rotation, roughness, metalness, opacity."""
+        import pygfx as gfx
+        import math
+
+        opacity = settings.get("opacity", 1.0)
+        roughness = settings.get("roughness", 0.5)
+        metalness = settings.get("metalness", 0.0)
+        scale = settings.get("scale", 1.0)
+        rotation_deg = settings.get("rotation", 0)
+
+        # Apply to all parts that have been textured/preset-applied
+        meshes = []
+        for p in self._mesh_parts:
+            mo = p.get('mesh_obj')
+            if mo and hasattr(mo, '_original_material'):
+                meshes.append(mo)
+        # Fallback: single mesh
+        if not meshes and self._mesh_obj and hasattr(self._mesh_obj, '_original_material'):
+            meshes = [self._mesh_obj]
+
+        for mesh_obj in meshes:
+            mat = mesh_obj.material
+            if mat is None:
+                continue
+            # Opacity
+            if hasattr(mat, 'opacity'):
+                mat.opacity = opacity
+                mat.transparent = opacity < 1.0
+            # Shininess modulation via roughness (invert: high roughness = low shininess)
+            if hasattr(mat, 'shininess'):
+                mat.shininess = max(1, int((1.0 - roughness) * 500))
+            # UV scale and rotation
+            geom = mesh_obj.geometry
+            if geom is not None and hasattr(geom, 'texcoords') and geom.texcoords is not None:
+                base_uvs = geom.texcoords.data if hasattr(geom.texcoords, 'data') else geom.texcoords
+                if base_uvs is not None:
+                    import numpy as _np
+                    uvs = _np.array(base_uvs, dtype=_np.float32).copy()
+                    # Scale
+                    uvs = uvs * scale
+                    # Rotation around UV center (0.5, 0.5)
+                    if rotation_deg != 0:
+                        rad = math.radians(rotation_deg)
+                        cos_r, sin_r = math.cos(rad), math.sin(rad)
+                        cx, cy = 0.5, 0.5
+                        u = uvs[:, 0] - cx
+                        v = uvs[:, 1] - cy
+                        uvs[:, 0] = u * cos_r - v * sin_r + cx
+                        uvs[:, 1] = u * sin_r + v * cos_r + cy
+                    geom.texcoords = gfx.Buffer(uvs)
+
+        if self._canvas:
+            self._canvas.request_draw()
 
     def remove_texture_from_part(self, part_id):
         """Revert a part to its original material (remove texture)."""
@@ -3603,6 +3698,13 @@ class STLViewerWidget(QWidget):
                     del mesh_obj._original_material
                     if self._canvas:
                         self._canvas.request_draw()
+                # Remove accent lights if no more presets active
+                has_presets = any(
+                    hasattr(pp.get('mesh_obj'), '_original_material')
+                    for pp in self._mesh_parts if pp.get('mesh_obj')
+                )
+                if not has_presets:
+                    self._remove_preset_accent_lights()
                 return
 
     def _generate_box_uvs(self, vertices):
