@@ -879,15 +879,7 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
-        # Dragging main reference line — simple delta approach
-        if self._ref_line_dragging:
-            delta = pos - self._ref_line_drag_start
-            self._ref_line_pos = QPointF(
-                self._ref_line_pos_start.x() + delta.x(),
-                self._ref_line_pos_start.y() + delta.y()
-            )
-            self.update()
-            return
+        # (Red reference line is static — not draggable)
 
         if self._panning:
             self._pan_offset = QPointF(event.pos() - self._pan_start)
