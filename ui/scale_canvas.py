@@ -435,6 +435,11 @@ class ScaleCanvas(QWidget):
         if self._show_reference_line and self._pixmap:
             self._draw_reference_line(painter, canvas)
 
+        # Extra user-placed reference lines
+        if self._pixmap:
+            for ref in self._extra_ref_lines:
+                self._draw_extra_ref_line(painter, ref)
+
         # Measurements + projection lines
         self._draw_measurements(painter)
 
