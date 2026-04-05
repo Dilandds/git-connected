@@ -54,6 +54,7 @@ from ui.technical_overview import TechnicalOverviewWidget
 from ui.technical_sidebar import TechnicalSidebar
 from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
+from ui.help_panel import HelpWidget
 
 logger = logging.getLogger(__name__)
 
