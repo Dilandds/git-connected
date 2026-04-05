@@ -477,13 +477,13 @@ class ScaleCanvas(QWidget):
             self._draw_projection_lines(painter, p1)
             self._draw_projection_lines(painter, p2)
 
-            # Measurement line
-            pen = QPen(QColor("#00E676"), 2)
+            # Measurement line — dark green on white
+            pen = QPen(QColor("#2E7D32"), 2)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), p2.toPoint())
 
             # End dots
-            painter.setBrush(QColor("#00E676"))
+            painter.setBrush(QColor("#2E7D32"))
             painter.drawEllipse(p1.toPoint(), 4, 4)
             painter.drawEllipse(p2.toPoint(), 4, 4)
 
@@ -502,10 +502,10 @@ class ScaleCanvas(QWidget):
 
             bg_rect = QRectF(mid.x() - tw / 2, mid.y() - th - 4, tw, th)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(0, 0, 0, 180))
+            painter.setBrush(QColor(255, 255, 255, 220))
             painter.drawRoundedRect(bg_rect, 4, 4)
 
-            painter.setPen(QColor("#00E676"))
+            painter.setPen(QColor("#2E7D32"))
             painter.drawText(bg_rect, Qt.AlignCenter, label)
 
     def _draw_ruler_frame(self, painter: QPainter):
