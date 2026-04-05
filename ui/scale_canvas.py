@@ -156,6 +156,16 @@ class ScaleCanvas(QWidget):
         self._pending_point = None
         self.update()
 
+    def add_extra_ref_line(self):
+        """Add a new draggable reference line at center of canvas."""
+        canvas = self._canvas_rect()
+        pos = QPointF(canvas.center().x() - self._pixels_per_unit() / 2,
+                      canvas.center().y())
+        ref = ExtraRefLine(id=self._next_extra_ref_id, pos=pos)
+        self._extra_ref_lines.append(ref)
+        self._next_extra_ref_id += 1
+        self.update()
+
     def undo_last_measurement(self):
         if self._measurements:
             self._measurements.pop()
