@@ -1,53 +1,62 @@
 
 
-# Add Material Presets + Keep Upload Textures
+# Fix Gold Material + Add Texture Adjustment Sliders
 
 ## Overview
-Add 3 predefined material preset cards (Gold, Silver, Leather Brown) to the texture panel in a "Materials" section, while keeping the existing "Upload Texture" functionality intact below it. Material presets are draggable onto model parts just like uploaded textures, but apply a colored phong material with shininess instead of an image texture.
+Two changes: (1) Make Gold look like real polished gold instead of flat yellow by using richer colors and emissive warmth. (2) Add adjustment sliders (Scale, Rotation, Roughness, Metalness, Opacity) to the texture panel so users can tweak how textures/materials appear on the model.
 
 ## What Changes
 
-### 1. Texture Panel — Materials Section (`ui/texture_panel.py`)
+### 1. Fix Gold & Silver Presets (`ui/texture_panel.py`)
 
-Add a **"Materials"** label and a 2-column grid of 3 preset cards between the banner and the "Upload Texture" button. Each card shows a programmatically generated sphere swatch (QPainter + QRadialGradient) with a label underneath.
+Update `MATERIAL_PRESETS` with richer values and add `emissive` field:
 
-**Presets:**
-- **Gold** — base `#D4AF37`, highlight `#FFF8DC`, shininess 250, specular `#FFD700`
-- **Silver** — base `#C0C0C0`, highlight `#FFFFFF`, shininess 300, specular `#FFFFFF`
-- **Leather Brown** — base `#8B4513`, highlight `#C4956A`, shininess 10, specular `#3D2B1F`
+- **Gold**: color `#B8860B` (DarkGoldenrod), highlight `#FFE066`, specular `#FFD700`, shininess 350, emissive `#3D2B00`
+- **Silver**: color `#C0C0C0`, shininess 400, emissive `#1A1A1A`
+- **Leather Brown**: unchanged
 
-New class `MaterialPresetCard(QFrame)` — similar styling to `TextureCard` but:
-- No delete button (presets are permanent)
-- Drag MIME type: `application/x-ectoform-material-preset` with JSON payload `{"color": "#D4AF37", "specular": "#FFD700", "shininess": 250}`
-- Generated sphere swatch as thumbnail (no external images needed)
+The `MaterialPresetCard` drag payload will include `emissive` when present.
 
-Panel layout order becomes: Banner → "Materials" label + preset grid → "Upload Texture" button → uploaded textures grid → Clear All button.
+### 2. Add Texture Settings Sliders (`ui/texture_panel.py`)
 
-### 2. Swatch Generation (`ui/texture_panel.py`)
+Add a "Texture Settings" section after the Clear All button with 5 labeled `QSlider` controls:
 
-Helper function `_generate_material_swatch(base_color, highlight_color, size=80)`:
-- Creates a `QPixmap` with dark `#2a2a2a` background
-- Draws a sphere using `QRadialGradient` with highlight at top-left, base color at middle, darkened base at edges
-- Returns the `QPixmap` for use in the card thumbnail
+| Slider | Range | Default | Purpose |
+|--------|-------|---------|---------|
+| Scale | 0.1x–10.0x | 1.0 | UV tiling repeat |
+| Rotation | 0–360° | 0 | UV rotation |
+| Roughness | 0–100% | 50 | Surface roughness |
+| Metalness | 0–100% | 0 | Metallic look |
+| Opacity | 0–100% | 100 | Transparency |
 
-### 3. Viewer Handles Material Presets (`viewer_widget_pygfx.py`)
+Each slider has a value label showing the current value. When any slider changes, emit a new `texture_settings_changed = pyqtSignal(dict)` signal with all current slider values.
 
-**New method: `apply_material_preset_to_part(part_id, color, specular, shininess)`**
-- Creates `MeshPhongMaterial` with the given `color`, `specular`, and `shininess`
-- Stores original material for revert (same pattern as `apply_texture_to_part`)
-- Requests canvas redraw
+A small helper `_create_slider_row(label, min_val, max_val, default, suffix)` keeps the code DRY.
 
-**Update `dropEvent`**: Check for `application/x-ectoform-material-preset` MIME type first. If present, parse JSON and call `apply_material_preset_to_part`. Otherwise fall through to existing image texture logic.
+### 3. Emissive + Accent Lights in Viewer (`viewer_widget_pygfx.py`)
+
+**Update `_apply_material_preset_to_mesh()`:**
+- Pass `emissive` and `emissive_intensity=0.15` to `MeshPhongMaterial` when preset includes `emissive` — this adds warm ambient glow to Gold in shadow areas.
+
+**Add accent lights on preset application:**
+- When a material preset is applied, add 2 extra directional lights to the scene (stored as `self._preset_accent_lights`) to create multiple specular highlight bands on curved surfaces.
+- Remove these lights when preset is cleared via `remove_texture_from_part`.
+
+**New method `update_texture_settings(settings_dict)`:**
+- For UV scale/rotation: re-transform UVs on the currently textured mesh using 2D matrix math.
+- For roughness/metalness/opacity: update the active material properties directly.
+- Request canvas redraw.
 
 ### 4. Wiring (`stl_viewer.py`)
 
-No new wiring needed — drag-and-drop already goes directly from card to viewer widget via Qt drag/drop. The viewer's `dropEvent` just needs to handle the new MIME type.
+Connect `TexturePanel.texture_settings_changed` → viewer's `update_texture_settings()`.
 
 ## Technical Details
 
 **Files modified:**
-- `ui/texture_panel.py` — add `MaterialPresetCard`, `_generate_material_swatch()`, preset grid in `_init_ui`
-- `viewer_widget_pygfx.py` — add `apply_material_preset_to_part()`, update `dropEvent` to check for material preset MIME
+- `ui/texture_panel.py` — update presets, add sliders section + signal
+- `viewer_widget_pygfx.py` — emissive support, accent lights, `update_texture_settings()`
+- `stl_viewer.py` — wire `texture_settings_changed` signal
 
-**No new dependencies.** Uses existing PyQt5 QPainter for swatches and pygfx `MeshPhongMaterial` for rendering.
+**No new dependencies.**
 
