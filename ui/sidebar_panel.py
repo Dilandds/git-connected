@@ -11,7 +11,10 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QSettings
 from PyQt5.QtGui import QFont, QColor, QDoubleValidator, QPalette
-from ui.components import DimensionRow, SurfaceAreaRow, WeightRow, Separator, ScaleResultRow, ReportCheckbox, confirm_dialog
+from ui.components import (
+    DimensionRow, SurfaceAreaRow, WeightRow, WeightDensityInputRow,
+    Separator, ScaleResultRow, ReportCheckbox, confirm_dialog,
+)
 from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
 
 logger = logging.getLogger(__name__)
@@ -423,12 +426,17 @@ class SidebarPanel(QWidget):
         
         # Weight rows using components
         self.weight_volume_row = WeightRow("Volume", "--", "standard", self)
-        self.weight_density_row = WeightRow("Density", "--", "standard", self)
+        self.weight_density_row = WeightDensityInputRow(self)
+        self.weight_density_row.densityChanged.connect(self.calculate_weight)
         self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self)
         
         card_layout.addWidget(self.weight_volume_row)
         card_layout.addWidget(self.weight_density_row)
         card_layout.addWidget(self.weight_result_row)
+        
+        if self.MATERIALS:
+            _, d0 = self.MATERIALS[self.material_combo.currentIndex()]
+            self.weight_density_row.set_density_silent(d0)
         
         self._style_section_card(card)
         
@@ -813,8 +821,23 @@ class SidebarPanel(QWidget):
             return
         
         material_name, density = self.MATERIALS[index]
-        self.weight_density_row.set_value(f"{density} g/cm³")
+        self.weight_density_row.set_density_silent(density)
         self.calculate_weight()
+    
+    def _effective_density_g_per_cm3(self):
+        """Density from the manual field if valid; otherwise from the material preset."""
+        text = self.weight_density_row.density_input.text().strip().replace(",", ".")
+        if text:
+            try:
+                v = float(text)
+                if v > 0:
+                    return v
+            except ValueError:
+                pass
+        index = self.material_combo.currentIndex()
+        if 0 <= index < len(self.MATERIALS):
+            return self.MATERIALS[index][1]
+        return None
     
     def calculate_weight(self, volume_mm3=None, density_g_per_cm3=None):
         """Calculate and update the estimated weight."""
@@ -824,10 +847,13 @@ class SidebarPanel(QWidget):
             volume_mm3 = self.current_volume_mm3
         
         if density_g_per_cm3 is None:
-            index = self.material_combo.currentIndex()
-            if index < 0 or index >= len(self.MATERIALS):
+            density_g_per_cm3 = self._effective_density_g_per_cm3()
+            if density_g_per_cm3 is None:
+                self.weight_result_row.set_value("--")
+                self.current_weight_grams = 0.0
+                self.calculate_scale_btn.setEnabled(False)
+                self.reset_scale_results()
                 return
-            _, density_g_per_cm3 = self.MATERIALS[index]
         
         result = MeshCalculator.estimate_weight(volume_mm3, density_g_per_cm3)
         self.weight_result_row.set_value(result['display'])
@@ -997,11 +1023,11 @@ class SidebarPanel(QWidget):
         self.current_volume_mm3 = mesh_data['volume_mm3']
         self.weight_volume_row.set_value(f"{mesh_data['volume_cm3']:.4f} cm³")
         
-        # Update density display
+        # Update density field from selected material preset
         index = self.material_combo.currentIndex()
         if index >= 0 and index < len(self.MATERIALS):
             _, density = self.MATERIALS[index]
-            self.weight_density_row.set_value(f"{density} g/cm³")
+            self.weight_density_row.set_density_silent(density)
         
         # Calculate weight
         self.calculate_weight()
@@ -1392,7 +1418,7 @@ class SidebarPanel(QWidget):
         
         # Reset weight
         self.weight_volume_row.set_value("--")
-        self.weight_density_row.set_value("--")
+        self.weight_density_row.clear_density_silent()
         self.weight_result_row.set_value("--")
         
         # Reset scale results

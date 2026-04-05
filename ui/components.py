@@ -4,10 +4,10 @@ Reusable UI components for the ECTOFORM application.
 from PyQt5.QtWidgets import (
     QFrame, QLabel, QHBoxLayout, QVBoxLayout,
     QSpacerItem, QSizePolicy, QCheckBox, QWidget,
-    QDialog, QPushButton, QGraphicsDropShadowEffect,
+    QDialog, QPushButton, QGraphicsDropShadowEffect, QLineEdit, QStyleFactory,
 )
-from PyQt5.QtCore import Qt, QEvent
-from PyQt5.QtGui import QFont, QPainter, QColor
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal
+from PyQt5.QtGui import QFont, QPainter, QColor, QDoubleValidator
 from ui.styles import default_theme
 
 
@@ -446,6 +446,121 @@ class WeightRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+
+class WeightDensityInputRow(QFrame):
+    """Density row with editable g/cm³ field (matches WeightRow card styling)."""
+
+    densityChanged = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setFixedHeight(44)
+
+        _wp = default_theme.weight_panel_bg
+        self.setObjectName("weightRowStandard")
+        self.setStyleSheet(f"""
+            QFrame#weightRowStandard {{
+                background-color: {_wp};
+                border-radius: 8px;
+                border: none;
+            }}
+        """)
+
+        row_layout = QHBoxLayout(self)
+        row_layout.setContentsMargins(14, 8, 14, 8)
+        row_layout.setSpacing(8)
+
+        label = QLabel("Density")
+        label.setObjectName("weightLabel")
+        label.setStyleSheet(
+            f"background-color: transparent; color: {default_theme.text_white};"
+        )
+        label_font = QFont()
+        label_font.setPointSize(11)
+        label_font.setBold(True)
+        label.setFont(label_font)
+        label.setMinimumWidth(label.fontMetrics().horizontalAdvance("Density") + 8)
+
+        self.density_input = QLineEdit()
+        self.density_input.setObjectName("densityInput")
+        self.density_input.setPlaceholderText("")
+        self.density_input.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.density_input.setMinimumWidth(72)
+        self.density_input.setMinimumHeight(28)
+        _df = QStyleFactory.create("Fusion")
+        if _df is not None:
+            self.density_input.setStyle(_df)
+        self.density_input.setAttribute(Qt.WA_StyledBackground, True)
+        _bd = default_theme.border_medium
+        _wph = default_theme.weight_panel_hover
+        self.density_input.setStyleSheet(f"""
+            QLineEdit#densityInput {{
+                background-color: {_wph};
+                border: 1px solid {_bd};
+                border-radius: 6px;
+                padding: 4px 8px;
+                font-size: 13px;
+                font-weight: bold;
+                color: {default_theme.text_primary};
+            }}
+            QLineEdit#densityInput:hover {{
+                border: 1px solid {default_theme.input_border_hover};
+            }}
+            QLineEdit#densityInput:focus {{
+                border: 1px solid {default_theme.border_highlight};
+            }}
+        """)
+        validator = QDoubleValidator(0.0, 999.0, 6)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.density_input.setValidator(validator)
+        self.density_input.textChanged.connect(self.densityChanged.emit)
+
+        unit_label = QLabel("g/cm³")
+        unit_label.setStyleSheet(
+            f"color: {default_theme.text_secondary}; font-size: 11px; "
+            f"background: transparent; border: none;"
+        )
+        unit_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        row_layout.addWidget(label)
+        row_layout.addWidget(self.density_input, 1)
+        row_layout.addWidget(unit_label)
+
+        self.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj == self:
+            _wp = default_theme.weight_panel_bg
+            _wph = default_theme.weight_panel_hover
+            if self.objectName() == "weightRowStandard":
+                if event.type() == QEvent.Enter:
+                    self.setStyleSheet(f"""
+                        QFrame#weightRowStandard {{
+                            background-color: {_wph};
+                            border-radius: 8px;
+                        }}
+                    """)
+                elif event.type() == QEvent.Leave:
+                    self.setStyleSheet(f"""
+                        QFrame#weightRowStandard {{
+                            background-color: {_wp};
+                            border-radius: 8px;
+                        }}
+                    """)
+        return super().eventFilter(obj, event)
+
+    def set_density_silent(self, density: float):
+        """Set numeric density without emitting densityChanged."""
+        self.density_input.blockSignals(True)
+        self.density_input.setText(f"{density:g}")
+        self.density_input.blockSignals(False)
+
+    def clear_density_silent(self):
+        self.density_input.blockSignals(True)
+        self.density_input.clear()
+        self.density_input.blockSignals(False)
 
 
 class InfoCard(QFrame):
