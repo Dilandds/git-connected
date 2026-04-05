@@ -396,7 +396,7 @@ class ScaleCanvas(QWidget):
 
     def _draw_drop_zone(self, painter: QPainter, canvas: QRectF):
         """Draw upload prompt when no image is loaded."""
-        painter.setPen(QPen(QColor(default_theme.border_medium), 2, Qt.DashLine))
+        painter.setPen(QPen(QColor("#cccccc"), 2, Qt.DashLine))
         margin = 40
         painter.drawRoundedRect(
             canvas.adjusted(margin, margin, -margin, -margin).toRect(),
@@ -404,7 +404,7 @@ class ScaleCanvas(QWidget):
         )
         font = QFont("Segoe UI", 14)
         painter.setFont(font)
-        painter.setPen(QColor(default_theme.text_secondary))
+        painter.setPen(QColor("#666666"))
         painter.drawText(canvas.toRect(), Qt.AlignCenter,
                          "Drop a drawing here\nor click Upload")
 
