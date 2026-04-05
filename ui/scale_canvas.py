@@ -359,11 +359,11 @@ class ScaleCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         # Background
-        painter.fillRect(self.rect(), QColor(default_theme.background))
+        painter.fillRect(self.rect(), QColor("#f5f5f5"))
 
-        # Draw canvas area (slightly lighter)
+        # Draw canvas area (white like Technical Overview)
         canvas = self._canvas_rect()
-        painter.fillRect(canvas, QColor("#1a1e24"))
+        painter.fillRect(canvas, QColor("#ffffff"))
 
         # Draw image
         if self._pixmap:
