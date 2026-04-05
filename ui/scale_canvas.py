@@ -85,7 +85,7 @@ class ScaleCanvas(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(500, 400)
         self.setAcceptDrops(True)
-        self.setStyleSheet(f"background-color: {default_theme.background};")
+        self.setStyleSheet("background-color: #ffffff;")
 
     # ---- public API ----
 
