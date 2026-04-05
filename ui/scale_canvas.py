@@ -828,13 +828,7 @@ class ScaleCanvas(QWidget):
                 self.setCursor(Qt.SizeAllCursor)
                 return
 
-            # Check main reference line
-            if self._show_reference_line and self._hit_ref_line(pos):
-                self._ref_line_dragging = True
-                self._ref_line_drag_start = QPointF(pos)
-                self._ref_line_pos_start = QPointF(self._ref_line_pos)
-                self.setCursor(Qt.SizeAllCursor)
-                return
+            # Red reference line is static — no dragging
 
         if event.button() == Qt.MiddleButton or (
             event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap
