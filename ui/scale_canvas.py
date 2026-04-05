@@ -166,6 +166,11 @@ class ScaleCanvas(QWidget):
         self._next_extra_ref_id += 1
         self.update()
 
+    def remove_extra_ref_line(self, ref_id: int):
+        """Remove an extra reference line by id."""
+        self._extra_ref_lines = [r for r in self._extra_ref_lines if r.id != ref_id]
+        self.update()
+
     def undo_last_measurement(self):
         if self._measurements:
             self._measurements.pop()
