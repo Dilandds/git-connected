@@ -197,21 +197,28 @@ class _AnswerPanel(QWidget):
         layout.setSpacing(16)
 
         self._question_label = QLabel()
+        self._question_label.setObjectName("helpAnswerTitle")
         self._question_label.setFont(make_font(size=14, bold=True))
         self._question_label.setWordWrap(True)
-        self._question_label.setStyleSheet(f"color: {default_theme.text_title};")
+        self._question_label.setStyleSheet(
+            f"color: {default_theme.text_on_light}; background: transparent; border: none;"
+        )
         layout.addWidget(self._question_label)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
         sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {default_theme.separator}; border: none;")
+        sep.setStyleSheet(f"background: {default_theme.separator_on_light}; border: none;")
         layout.addWidget(sep)
 
         self._answer_label = QLabel()
+        self._answer_label.setObjectName("helpAnswerBody")
         self._answer_label.setFont(make_font(size=11))
         self._answer_label.setWordWrap(True)
-        self._answer_label.setStyleSheet(f"color: {default_theme.text_primary}; line-height: 1.5;")
+        self._answer_label.setStyleSheet(
+            f"color: {default_theme.text_on_light_muted}; line-height: 1.5; "
+            f"background: transparent; border: none;"
+        )
         layout.addWidget(self._answer_label)
 
         self._image_label = QLabel()

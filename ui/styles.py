@@ -38,6 +38,10 @@ class Theme:
     text_title = '#F0F6FA'
     text_subtext = '#7A98AE'
     text_white = 'white'
+    # Dark text for light surfaces (e.g. Help FAQ answer pane on white)
+    text_on_light = '#1c2129'
+    text_on_light_muted = '#4a5568'
+    separator_on_light = '#d1d5db'
     
     # Button colors
     button_primary = '#2596BE'
@@ -220,6 +224,16 @@ def get_global_stylesheet(theme=None):
             border: none;
             padding: 0px;
             margin: 0px;
+        }}
+        QLabel#helpAnswerTitle {{
+            color: {theme.text_on_light};
+            background-color: transparent;
+            border: none;
+        }}
+        QLabel#helpAnswerBody {{
+            color: {theme.text_on_light_muted};
+            background-color: transparent;
+            border: none;
         }}
         /* General QLabel style - less specific, won't override named labels */
         QLabel {{
