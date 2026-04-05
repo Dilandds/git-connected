@@ -191,10 +191,10 @@ class ScaleCanvas(QWidget):
                 p1 = QPointF(p1.x() + offset_x, p1.y() + offset_y)
                 p2 = QPointF(p2.x() + offset_x, p2.y() + offset_y)
 
-                pen = QPen(QColor("#00E676"), 2)
+                pen = QPen(QColor("#2E7D32"), 2)
                 painter.setPen(pen)
                 painter.drawLine(p1.toPoint(), p2.toPoint())
-                painter.setBrush(QColor("#00E676"))
+                painter.setBrush(QColor("#2E7D32"))
                 painter.drawEllipse(p1.toPoint(), 4, 4)
                 painter.drawEllipse(p2.toPoint(), 4, 4)
 
@@ -211,9 +211,9 @@ class ScaleCanvas(QWidget):
                 th = fm.height() + 4
                 bg_rect = QRectF(mid.x() - tw / 2, mid.y() - th - 4, tw, th)
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor(0, 0, 0, 180))
+                painter.setBrush(QColor(255, 255, 255, 220))
                 painter.drawRoundedRect(bg_rect, 4, 4)
-                painter.setPen(QColor("#00E676"))
+                painter.setPen(QColor("#2E7D32"))
                 painter.drawText(bg_rect, Qt.AlignCenter, label)
 
             painter.end()
