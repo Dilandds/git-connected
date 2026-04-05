@@ -54,6 +54,7 @@ from ui.technical_overview import TechnicalOverviewWidget
 from ui.technical_sidebar import TechnicalSidebar
 from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
+from ui.help_panel import HelpWidget
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +208,8 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn = QPushButton("🔲 3D Viewer")
         self._mode_tech_btn = QPushButton("📋 Technical Overview")
         self._mode_scale_btn = QPushButton("📐 Drawing Scale")
-        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn):
+        self._mode_help_btn = QPushButton("❓ Help")
+        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn, self._mode_help_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
@@ -219,11 +221,13 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
         self._mode_tech_btn.clicked.connect(lambda: self._switch_mode("technical"))
         self._mode_scale_btn.clicked.connect(lambda: self._switch_mode("scale"))
+        self._mode_help_btn.clicked.connect(lambda: self._switch_mode("help"))
         
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
         mode_bar_layout.addStretch()
+        mode_bar_layout.addWidget(self._mode_help_btn)
         root_layout.addWidget(mode_bar)
         
         # ---- Workspace stack (3D vs Technical) ----
@@ -388,6 +392,10 @@ class STLViewerWindow(QMainWindow):
         scale_layout.addWidget(self.scale_canvas, 1)
         
         self._workspace_stack.addWidget(scale_workspace)
+        
+        # ==== Help Workspace ====
+        self.help_widget = HelpWidget()
+        self._workspace_stack.addWidget(self.help_widget)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
         logger.info("init_ui: Applying styling...")
@@ -467,15 +475,17 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
         self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
         self._mode_scale_btn.setStyleSheet(active_style if self._current_mode == "scale" else inactive_style)
+        self._mode_help_btn.setStyleSheet(active_style if self._current_mode == "help" else inactive_style)
     
     def _switch_mode(self, mode: str):
-        """Switch between '3d', 'technical', and 'scale' workspace modes."""
+        """Switch between '3d', 'technical', 'scale', and 'help' workspace modes."""
         if mode == self._current_mode:
             return
         self._current_mode = mode
         self._mode_3d_btn.setChecked(mode == "3d")
         self._mode_tech_btn.setChecked(mode == "technical")
         self._mode_scale_btn.setChecked(mode == "scale")
+        self._mode_help_btn.setChecked(mode == "help")
         self._update_mode_btn_styles()
         
         if mode == "3d":
@@ -487,6 +497,9 @@ class STLViewerWindow(QMainWindow):
         elif mode == "scale":
             self._workspace_stack.setCurrentIndex(2)
             self.setWindowTitle("ECTOFORM - Drawing Scale")
+        elif mode == "help":
+            self._workspace_stack.setCurrentIndex(3)
+            self.setWindowTitle("ECTOFORM - Help")
         
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
