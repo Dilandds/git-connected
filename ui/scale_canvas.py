@@ -85,7 +85,7 @@ class ScaleCanvas(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(500, 400)
         self.setAcceptDrops(True)
-        self.setStyleSheet(f"background-color: {default_theme.background};")
+        self.setStyleSheet("background-color: #ffffff;")
 
     # ---- public API ----
 
@@ -170,7 +170,7 @@ class ScaleCanvas(QWidget):
                 return False, "Canvas too small"
 
             img = QImage(cw, ch, QImage.Format_ARGB32)
-            img.fill(QColor("#1a1e24"))
+            img.fill(QColor("#ffffff"))
 
             painter = QPainter(img)
             painter.setRenderHint(QPainter.Antialiasing)
@@ -191,10 +191,10 @@ class ScaleCanvas(QWidget):
                 p1 = QPointF(p1.x() + offset_x, p1.y() + offset_y)
                 p2 = QPointF(p2.x() + offset_x, p2.y() + offset_y)
 
-                pen = QPen(QColor("#00E676"), 2)
+                pen = QPen(QColor("#2E7D32"), 2)
                 painter.setPen(pen)
                 painter.drawLine(p1.toPoint(), p2.toPoint())
-                painter.setBrush(QColor("#00E676"))
+                painter.setBrush(QColor("#2E7D32"))
                 painter.drawEllipse(p1.toPoint(), 4, 4)
                 painter.drawEllipse(p2.toPoint(), 4, 4)
 
@@ -211,9 +211,9 @@ class ScaleCanvas(QWidget):
                 th = fm.height() + 4
                 bg_rect = QRectF(mid.x() - tw / 2, mid.y() - th - 4, tw, th)
                 painter.setPen(Qt.NoPen)
-                painter.setBrush(QColor(0, 0, 0, 180))
+                painter.setBrush(QColor(255, 255, 255, 220))
                 painter.drawRoundedRect(bg_rect, 4, 4)
-                painter.setPen(QColor("#00E676"))
+                painter.setPen(QColor("#2E7D32"))
                 painter.drawText(bg_rect, Qt.AlignCenter, label)
 
             painter.end()
@@ -359,11 +359,11 @@ class ScaleCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         # Background
-        painter.fillRect(self.rect(), QColor(default_theme.background))
+        painter.fillRect(self.rect(), QColor("#f5f5f5"))
 
-        # Draw canvas area (slightly lighter)
+        # Draw canvas area (white like Technical Overview)
         canvas = self._canvas_rect()
-        painter.fillRect(canvas, QColor("#1a1e24"))
+        painter.fillRect(canvas, QColor("#ffffff"))
 
         # Draw image
         if self._pixmap:
@@ -382,7 +382,7 @@ class ScaleCanvas(QWidget):
         # Live preview line (ruler mode, pending first click)
         if self._ruler_mode and self._pending_point is not None and self._mouse_pos is not None:
             p1 = self._image_to_screen(self._pending_point.x(), self._pending_point.y())
-            pen = QPen(QColor("#00BFFF"), 2, Qt.DashLine)
+            pen = QPen(QColor("#1976D2"), 2, Qt.DashLine)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), self._mouse_pos.toPoint())
             # Live projection lines
@@ -396,7 +396,7 @@ class ScaleCanvas(QWidget):
 
     def _draw_drop_zone(self, painter: QPainter, canvas: QRectF):
         """Draw upload prompt when no image is loaded."""
-        painter.setPen(QPen(QColor(default_theme.border_medium), 2, Qt.DashLine))
+        painter.setPen(QPen(QColor("#cccccc"), 2, Qt.DashLine))
         margin = 40
         painter.drawRoundedRect(
             canvas.adjusted(margin, margin, -margin, -margin).toRect(),
@@ -404,7 +404,7 @@ class ScaleCanvas(QWidget):
         )
         font = QFont("Segoe UI", 14)
         painter.setFont(font)
-        painter.setPen(QColor(default_theme.text_secondary))
+        painter.setPen(QColor("#666666"))
         painter.drawText(canvas.toRect(), Qt.AlignCenter,
                          "Drop a drawing here\nor click Upload")
 
@@ -418,32 +418,26 @@ class ScaleCanvas(QWidget):
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         x_end = x_start + line_len
 
-        # Subtle background for visibility
-        bg_rect = QRectF(x_start - 4, y_pos - 22, line_len + 8, 40)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 100))
-        painter.drawRoundedRect(bg_rect, 4, 4)
-
-        # Line
-        pen = QPen(QColor("#FF5722"), 3)
+        # Line — darker red for visibility on white
+        pen = QPen(QColor("#C62828"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
         # End caps
         painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
         painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
 
-        # Label
+        # Label — no background rectangle, just dark red text
         unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
-        painter.setPen(QColor("#FF5722"))
+        painter.setPen(QColor("#C62828"))
         painter.drawText(
             QRectF(x_start, y_pos - 20, line_len, 18),
             Qt.AlignCenter, unit_label
         )
 
-        # Drag hint icon (move cursor area)
-        painter.setPen(QColor("#FF5722"))
+        # Drag hint
+        painter.setPen(QColor("#999999"))
         hint_font = QFont("Segoe UI", 7)
         painter.setFont(hint_font)
         painter.drawText(
@@ -454,7 +448,7 @@ class ScaleCanvas(QWidget):
     def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
         """Draw dashed projection lines from a point to the ruler edges."""
         canvas = self._canvas_rect()
-        pen = QPen(QColor("#00BFFF"), 1, Qt.DotLine)
+        pen = QPen(QColor("#1976D2"), 1, Qt.DotLine)
         painter.setPen(pen)
 
         sx, sy = screen_pt.x(), screen_pt.y()
@@ -483,13 +477,13 @@ class ScaleCanvas(QWidget):
             self._draw_projection_lines(painter, p1)
             self._draw_projection_lines(painter, p2)
 
-            # Measurement line
-            pen = QPen(QColor("#00E676"), 2)
+            # Measurement line — dark green on white
+            pen = QPen(QColor("#2E7D32"), 2)
             painter.setPen(pen)
             painter.drawLine(p1.toPoint(), p2.toPoint())
 
             # End dots
-            painter.setBrush(QColor("#00E676"))
+            painter.setBrush(QColor("#2E7D32"))
             painter.drawEllipse(p1.toPoint(), 4, 4)
             painter.drawEllipse(p2.toPoint(), 4, 4)
 
@@ -508,10 +502,10 @@ class ScaleCanvas(QWidget):
 
             bg_rect = QRectF(mid.x() - tw / 2, mid.y() - th - 4, tw, th)
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(0, 0, 0, 180))
+            painter.setBrush(QColor(255, 255, 255, 220))
             painter.drawRoundedRect(bg_rect, 4, 4)
 
-            painter.setPen(QColor("#00E676"))
+            painter.setPen(QColor("#2E7D32"))
             painter.drawText(bg_rect, Qt.AlignCenter, label)
 
     def _draw_ruler_frame(self, painter: QPainter):
@@ -519,22 +513,22 @@ class ScaleCanvas(QWidget):
         w, h = self.width(), self.height()
         ppu = self._pixels_per_unit()
 
-        # Ruler background
-        ruler_color = QColor("#1e2228")
+        # Ruler background — light grey
+        ruler_color = QColor("#e8e8e8")
         painter.fillRect(0, 0, w, RULER_THICKNESS, ruler_color)
         painter.fillRect(0, h - RULER_THICKNESS, w, RULER_THICKNESS, ruler_color)
         painter.fillRect(0, 0, RULER_THICKNESS, h, ruler_color)
         painter.fillRect(w - RULER_THICKNESS, 0, RULER_THICKNESS, h, ruler_color)
 
         # Corner squares
-        corner_color = QColor("#16191f")
+        corner_color = QColor("#d0d0d0")
         for cx, cy in [(0, 0), (w - RULER_THICKNESS, 0),
                         (0, h - RULER_THICKNESS), (w - RULER_THICKNESS, h - RULER_THICKNESS)]:
             painter.fillRect(int(cx), int(cy), RULER_THICKNESS, RULER_THICKNESS, corner_color)
 
-        # Tick parameters
-        tick_color = QColor(default_theme.text_secondary)
-        label_color = QColor(default_theme.text_primary)
+        # Tick parameters — dark for readability on light background
+        tick_color = QColor("#555555")
+        label_color = QColor("#222222")
         pen_thin = QPen(tick_color, 1)
 
         font = QFont("Segoe UI", 7)
@@ -566,7 +560,7 @@ class ScaleCanvas(QWidget):
                                          minor_px, major_px, label_every, left=False)
 
         # Border lines
-        border_pen = QPen(QColor(default_theme.border_standard), 1)
+        border_pen = QPen(QColor("#bbbbbb"), 1)
         painter.setPen(border_pen)
         painter.drawRect(RULER_THICKNESS, RULER_THICKNESS,
                          w - 2 * RULER_THICKNESS, h - 2 * RULER_THICKNESS)
