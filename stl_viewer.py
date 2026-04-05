@@ -385,6 +385,7 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
         self.scale_sidebar.export_requested.connect(self._scale_export)
         self.scale_sidebar.add_ref_requested.connect(self._scale_add_ref)
+        self.scale_sidebar.reset_requested.connect(self._scale_reset)
         scale_layout.addWidget(self.scale_sidebar)
         
         self.scale_canvas = ScaleCanvas()
@@ -643,8 +644,8 @@ class STLViewerWindow(QMainWindow):
         self.scale_canvas.set_ruler_mode(enabled)
 
     def _scale_reset(self):
-        """Reset the drawing scale workspace."""
-        self.scale_canvas.clear_image()
+        """Clear the drawing and reset all Drawing Scale controls (canvas + sidebar)."""
+        self.scale_canvas.reset_workspace()
         self.scale_sidebar.reset()
 
     # ======================== Tab Management ========================

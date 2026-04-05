@@ -287,9 +287,16 @@ class ScaleSidebar(QWidget):
             """)
 
     def reset(self):
-        """Reset controls to defaults."""
+        """Reset controls to defaults and notify listeners (ruler off, unit/ratio defaults)."""
+        self.unit_combo.blockSignals(True)
+        self.scale_combo.blockSignals(True)
         self.unit_combo.setCurrentIndex(0)
         self.scale_combo.setCurrentIndex(0)
+        self.unit_combo.blockSignals(False)
+        self.scale_combo.blockSignals(False)
+        self.unit_changed.emit("cm")
+        self.scale_changed.emit(1.0)
         self.ruler_btn.setChecked(False)
         self._ruler_active = False
         self._update_ruler_btn_style(False)
+        self.ruler_toggled.emit(False)

@@ -121,16 +121,35 @@ class ScaleCanvas(QWidget):
         self._static_border_rect = QRectF(self._image_rect())
         self.update()
 
-    def clear_image(self):
+    def reset_workspace(self):
+        """Remove the loaded drawing and reset calibration, ruler, measurements, and refs."""
         self._pixmap = None
         self._source_path = None
+        self._static_border_rect = None
         self._measurements.clear()
         self._pending_point = None
+        self._next_measurement_id = 1
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._ref_line_pos = QPointF(0.0, 0.0)
+        self._ref_line_dragging = False
+        self._ref_line_drag_start = QPointF(0, 0)
         self._extra_ref_lines.clear()
+        self._next_extra_ref_id = 1
+        self._dragging_extra_ref = None
+        self._extra_ref_drag_start = QPointF(0, 0)
+        self._extra_ref_pos_start = QPointF(0, 0)
+        self._ruler_mode = False
+        self._mouse_pos = None
+        self._panning = False
+        self._unit = "cm"
+        self._scale_ratio = 1.0
+        self.setCursor(Qt.ArrowCursor)
         self.update()
+
+    def clear_image(self):
+        """Clear the drawing; same as :meth:`reset_workspace`."""
+        self.reset_workspace()
 
     def set_unit(self, unit: str):
         """Set unit: 'cm', 'mm', 'inches', or 'm'."""
