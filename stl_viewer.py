@@ -778,7 +778,10 @@ class STLViewerWindow(QMainWindow):
             else:
                 logger.error(f"Export failed: {result}")
 
-        # Update toolbar state
+    def _scale_add_ref(self):
+        """Add an extra draggable reference line to the scale canvas."""
+        self.scale_canvas.add_extra_ref_line()
+
         has_file = tab.file_path is not None
         self.toolbar.set_stl_loaded(has_file)
         if has_file:
