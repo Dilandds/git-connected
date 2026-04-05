@@ -895,8 +895,6 @@ class ScaleCanvas(QWidget):
         if self._pixmap and not self._ruler_mode:
             if self._hit_extra_ref(pos) is not None:
                 self.setCursor(Qt.SizeAllCursor)
-            elif self._show_reference_line and self._hit_ref_line(pos):
-                self.setCursor(Qt.SizeAllCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
 
