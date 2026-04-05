@@ -380,7 +380,6 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.scale_changed.connect(self._scale_ratio_changed)
         self.scale_sidebar.ruler_toggled.connect(self._scale_ruler_toggled)
         self.scale_sidebar.export_requested.connect(self._scale_export)
-        self.scale_sidebar.add_reference_requested.connect(self._scale_add_reference)
         scale_layout.addWidget(self.scale_sidebar)
         
         self.scale_canvas = ScaleCanvas()
@@ -628,10 +627,6 @@ class STLViewerWindow(QMainWindow):
 
     def _scale_ruler_toggled(self, enabled: bool):
         self.scale_canvas.set_ruler_mode(enabled)
-
-    def _scale_add_reference(self):
-        """Add a new reference line to the scale canvas."""
-        self.scale_canvas.add_reference_line()
 
     def _scale_reset(self):
         """Reset the drawing scale workspace."""
