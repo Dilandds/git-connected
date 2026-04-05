@@ -1988,6 +1988,12 @@ class STLViewerWindow(QMainWindow):
             self.toolbar.reset_texture_state()
         self._exit_texture_mode()
 
+    def _on_texture_settings_changed(self, settings):
+        """Forward texture slider settings to the active viewer widget."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'update_texture_settings'):
+            vw.update_texture_settings(settings)
+
     # ========== Draw Mode Methods ==========
     
     def _toggle_draw_mode(self):
