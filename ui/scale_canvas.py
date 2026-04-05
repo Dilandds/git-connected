@@ -375,7 +375,6 @@ class ScaleCanvas(QWidget):
         ppu = self._pixels_per_unit()
         line_len = ppu
         canvas = self._canvas_rect()
-        # Default position: bottom-left of canvas, shifted by _ref_line_pos
         x_start = canvas.x() + 20 + self._ref_line_pos.x()
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         return QRectF(x_start - 4, y_pos - 24, line_len + 8, 48)
@@ -383,6 +382,18 @@ class ScaleCanvas(QWidget):
     def _hit_ref_line(self, pos: QPointF) -> bool:
         """Check if a screen position hits the reference line."""
         return self._ref_line_rect().contains(pos)
+
+    def _extra_ref_rect(self, ref: ExtraRefLine) -> QRectF:
+        """Return bounding rect of an extra reference line."""
+        ppu = self._pixels_per_unit()
+        return QRectF(ref.pos.x() - 4, ref.pos.y() - 24, ppu + 8, 48)
+
+    def _hit_extra_ref(self, pos: QPointF) -> Optional[ExtraRefLine]:
+        """Check if pos hits any extra reference line."""
+        for ref in self._extra_ref_lines:
+            if self._extra_ref_rect(ref).contains(pos):
+                return ref
+        return None
 
     # ---- paint ----
 
