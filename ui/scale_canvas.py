@@ -80,6 +80,9 @@ class ScaleCanvas(QWidget):
         self._ref_line_dragging = False
         self._ref_line_drag_offset = QPointF(0, 0)
 
+        # Static border: records the image rect at load time (doesn't move with zoom)
+        self._static_border_rect: Optional[QRectF] = None
+
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -98,6 +101,8 @@ class ScaleCanvas(QWidget):
         self._pending_point = None
         self._ref_line_pos = QPointF(0.0, 0.0)
         self._fit_image()
+        # Record the static border at initial load size
+        self._static_border_rect = QRectF(self._image_rect())
         self.update()
 
     def clear_image(self):
@@ -369,6 +374,22 @@ class ScaleCanvas(QWidget):
         if self._pixmap:
             ir = self._image_rect()
             painter.drawPixmap(ir.toRect(), self._pixmap)
+
+            # --- Image border (moving with zoom) ---
+            pen_moving = QPen(QColor("#333333"), 1.5, Qt.SolidLine)
+            painter.setPen(pen_moving)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(ir.toRect())
+
+            # --- Static border (original size, doesn't move with zoom) ---
+            if self._static_border_rect is not None:
+                pen_static = QPen(QColor("#333333"), 1.5, Qt.SolidLine)
+                painter.setPen(pen_static)
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRect(self._static_border_rect.toRect())
+
+            # --- Dashed projection lines from image corners to ruler edges ---
+            self._draw_image_projection_lines(painter, ir)
         else:
             self._draw_drop_zone(painter, canvas)
 
@@ -393,6 +414,29 @@ class ScaleCanvas(QWidget):
         self._draw_ruler_frame(painter)
 
         painter.end()
+
+    def _draw_image_projection_lines(self, painter: QPainter, ir: QRectF):
+        """Draw dashed projection lines from the 4 edges of the image to the ruler frame."""
+        canvas = self._canvas_rect()
+        pen = QPen(QColor("#333333"), 1.5, Qt.DashLine)
+        painter.setPen(pen)
+
+        left = ir.left()
+        right = ir.right()
+        top = ir.top()
+        bottom = ir.bottom()
+
+        # Vertical lines from image left & right edges → top and bottom rulers
+        painter.drawLine(int(left), int(canvas.y()), int(left), int(top))
+        painter.drawLine(int(left), int(bottom), int(left), int(canvas.bottom()))
+        painter.drawLine(int(right), int(canvas.y()), int(right), int(top))
+        painter.drawLine(int(right), int(bottom), int(right), int(canvas.bottom()))
+
+        # Horizontal lines from image top & bottom edges → left and right rulers
+        painter.drawLine(int(canvas.x()), int(top), int(left), int(top))
+        painter.drawLine(int(right), int(top), int(canvas.right()), int(top))
+        painter.drawLine(int(canvas.x()), int(bottom), int(left), int(bottom))
+        painter.drawLine(int(right), int(bottom), int(canvas.right()), int(bottom))
 
     def _draw_drop_zone(self, painter: QPainter, canvas: QRectF):
         """Draw upload prompt when no image is loaded."""
