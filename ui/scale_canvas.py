@@ -532,6 +532,40 @@ class ScaleCanvas(QWidget):
             Qt.AlignCenter, "⇔ drag to move"
         )
 
+    def _draw_extra_ref_line(self, painter: QPainter, ref: ExtraRefLine):
+        """Draw an extra user-placed reference line."""
+        ppu = self._pixels_per_unit()
+        x_start = ref.pos.x()
+        y_pos = ref.pos.y()
+        x_end = x_start + ppu
+
+        # Line — blue to distinguish from the red default
+        pen = QPen(QColor("#1565C0"), 3)
+        painter.setPen(pen)
+        painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
+        # End caps
+        painter.drawLine(int(x_start), int(y_pos - 8), int(x_start), int(y_pos + 8))
+        painter.drawLine(int(x_end), int(y_pos - 8), int(x_end), int(y_pos + 8))
+
+        # Label
+        unit_label = {"cm": "1 cm", "mm": "10 mm", "inches": "1 inch"}.get(self._unit, "1 cm")
+        font = QFont("Segoe UI", 9, QFont.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor("#1565C0"))
+        painter.drawText(
+            QRectF(x_start, y_pos - 20, ppu, 18),
+            Qt.AlignCenter, unit_label
+        )
+
+        # Drag hint
+        painter.setPen(QColor("#999999"))
+        hint_font = QFont("Segoe UI", 7)
+        painter.setFont(hint_font)
+        painter.drawText(
+            QRectF(x_start, y_pos + 10, ppu, 12),
+            Qt.AlignCenter, "⇔ drag to move"
+        )
+
     def _draw_projection_lines(self, painter: QPainter, screen_pt: QPointF):
         """Draw dashed projection lines from a point to the ruler edges."""
         canvas = self._canvas_rect()
