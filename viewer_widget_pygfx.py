@@ -3591,7 +3591,8 @@ class STLViewerWidget(QWidget):
                     mat_kwargs["emissive"] = emissive
                 material = gfx.MeshStandardMaterial(**mat_kwargs)
                 if emissive:
-                    material.emissive_intensity = 0.2
+                    ei = preset_data.get("emissive_intensity", 0.35)
+                    material.emissive_intensity = float(ei)
             else:
                 # Phong path for non-metallic presets (Leather)
                 specular = preset_data.get("specular", "#FFFFFF")
