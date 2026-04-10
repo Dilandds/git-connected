@@ -3631,22 +3631,12 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # Key light — warm gold top
-            {"color": "#FFE4A0", "intensity": 0.7, "pos": (0.5, 1, 0.5)},
-            # Top-back fill (warm chocolate tone)
-            {"color": "#FFD48A", "intensity": 0.6, "pos": (0, 1, -1)},
-            # Side accent (warm honey)
-            {"color": "#FFCC70", "intensity": 0.55, "pos": (-1, 0.5, 1)},
-            # Bottom fill (warm gold to kill green/dark patches)
-            {"color": "#FFD090", "intensity": 0.55, "pos": (0, -1, 0.5)},
-            # Front-high (bright warm)
-            {"color": "#FFE8B0", "intensity": 0.5, "pos": (1, 1, 1)},
-            # Opposite side fill
-            {"color": "#FFCC80", "intensity": 0.45, "pos": (1, -0.5, -1)},
-            # Back-bottom warm fill
-            {"color": "#FFC060", "intensity": 0.4, "pos": (-1, -1, -1)},
-            # Extra front-low for belly glow
-            {"color": "#FFD890", "intensity": 0.35, "pos": (0, -0.5, 1)},
+            # Key light — bright white-warm, dominant highlight band
+            {"color": "#FFFAF0", "intensity": 3.0, "pos": (5, 5, 5)},
+            # Rim light — opposing, second highlight band
+            {"color": "#FFF5E0", "intensity": 2.5, "pos": (-5, -2, 5)},
+            # Top accent — subtle top reflection
+            {"color": "#FFE8D0", "intensity": 1.5, "pos": (0, 6, -2)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
@@ -3655,8 +3645,8 @@ class STLViewerWidget(QWidget):
             self._scene.add(light)
             self._preset_accent_lights.append(light)
 
-        # Rich warm ambient to flood shadows with chocolate-gold tone
-        ambient = gfx.AmbientLight(color="#FFD080", intensity=0.5)
+        # Very dark warm ambient — keeps shadows chocolate, not black or green
+        ambient = gfx.AmbientLight(color="#120A00", intensity=0.15)
         self._scene.add(ambient)
         self._preset_accent_lights.append(ambient)
 
