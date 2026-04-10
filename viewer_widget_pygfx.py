@@ -326,14 +326,15 @@ class STLViewerWidget(QWidget):
             self._background = gfx.Background.from_color("#ffffff")
             self._scene.add(self._background)
 
-            # Lighting: low ambient + strong directional for immersive PBR metals
-            self._scene.add(gfx.AmbientLight(intensity=0.2))
-            light1 = gfx.DirectionalLight(color="white", intensity=3.0)
+            # Lighting: balanced ambient + directional for general viewing
+            # (metallic preset accent lights override when applied)
+            self._scene.add(gfx.AmbientLight(intensity=0.6))
+            light1 = gfx.DirectionalLight(color="white", intensity=1.5)
             light1.local.position = (5, 5, 5)
             light1.look_at((0, 0, 0))
             self._scene.add(light1)
-            light2 = gfx.DirectionalLight(color="white", intensity=0.4)
-            light2.local.position = (-1, -0.5, 0.5)
+            light2 = gfx.DirectionalLight(color="white", intensity=0.8)
+            light2.local.position = (-3, 2, 3)
             light2.look_at((0, 0, 0))
             self._scene.add(light2)
 
@@ -3630,18 +3631,31 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # Key light — strong, positioned high-right for sharp specular bands
-            {"color": "white", "intensity": 3.0, "pos": (5, 5, 5)},
-            # Rim light — opposite side for edge highlights
-            {"color": "white", "intensity": 2.5, "pos": (-5, 3, -3)},
-            # Top fill — soft overhead for smooth gradients
-            {"color": "white", "intensity": 1.5, "pos": (0, 6, 0)},
-            # Bottom warm fill — simulates gold environment bounce
-            {"color": "#FFF5E0", "intensity": 0.8, "pos": (0, -4, 2)},
-            # Front accent — subtle fill to prevent black shadows
-            {"color": "white", "intensity": 0.5, "pos": (3, 1, 5)},
-            # Back-side kick — adds depth on rear contours
-            {"color": "#FFE8C0", "intensity": 0.6, "pos": (-3, -1, -5)},
+            # === Primary triad — 3 strong lights for sharp specular bands ===
+            # Key light — high-right, main specular driver
+            {"color": "#FFFFFF", "intensity": 4.0, "pos": (5, 6, 5)},
+            # Counter key — opposite side, slightly lower intensity for asymmetry
+            {"color": "#FFFFFF", "intensity": 3.0, "pos": (-5, 4, 4)},
+            # Top-down — overhead wash for broad highlight on top surfaces
+            {"color": "#FFFFFF", "intensity": 2.5, "pos": (0, 8, 0)},
+
+            # === Fill lights — eliminate dark shadows while preserving depth ===
+            # Front fill — prevents black faces on camera-facing surfaces
+            {"color": "#FFF8E8", "intensity": 2.0, "pos": (0, 2, 8)},
+            # Back fill — illuminates rear contours and edges
+            {"color": "#FFF5E0", "intensity": 1.5, "pos": (0, 2, -8)},
+            # Bottom warm fill — simulates gold-tinted floor bounce
+            {"color": "#FFE8B0", "intensity": 1.8, "pos": (0, -6, 0)},
+
+            # === Rim / accent lights — edge definition and sparkle ===
+            # Left rim — edge highlight for silhouette definition
+            {"color": "#FFFFFF", "intensity": 1.5, "pos": (-8, 0, 0)},
+            # Right rim
+            {"color": "#FFFFFF", "intensity": 1.5, "pos": (8, 0, 0)},
+            # High-back kick — subtle top-rear glow
+            {"color": "#FFF0D0", "intensity": 1.0, "pos": (3, 6, -5)},
+            # Low-front accent — adds warmth to underside edges
+            {"color": "#FFD700", "intensity": 0.6, "pos": (-2, -3, 6)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
