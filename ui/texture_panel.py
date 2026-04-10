@@ -38,13 +38,13 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
-        "color": "#CFB53B",
+        "color": "#FFC356",          # true gold reflectance (1.0, 0.766, 0.336)
         "highlight": "#FFE066",
         "specular": "#FFD700",
         "shininess": 350,
         "emissive": "#3D2B00",
         "metalness": 1.0,
-        "roughness": 0.15,
+        "roughness": 0.1,            # polished mirror gold
     },
     {
         "name": "Silver",
