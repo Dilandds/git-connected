@@ -326,10 +326,10 @@ class STLViewerWidget(QWidget):
             self._background = gfx.Background.from_color("#ffffff")
             self._scene.add(self._background)
 
-            # PyVista-equivalent lighting: main (1,1,1) intensity 1.0, fill (-1,-0.5,0.5) intensity 0.4
-            self._scene.add(gfx.AmbientLight())
-            light1 = gfx.DirectionalLight(color="white", intensity=1.0)
-            light1.local.position = (1, 1, 1)
+            # Lighting: low ambient + strong directional for immersive PBR metals
+            self._scene.add(gfx.AmbientLight(intensity=0.2))
+            light1 = gfx.DirectionalLight(color="white", intensity=3.0)
+            light1.local.position = (5, 5, 5)
             light1.look_at((0, 0, 0))
             self._scene.add(light1)
             light2 = gfx.DirectionalLight(color="white", intensity=0.4)
@@ -3630,14 +3630,18 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # Top-back fill
-            {"color": "white", "intensity": 0.5, "pos": (0, 1, -1)},
-            # Side accent
-            {"color": "white", "intensity": 0.4, "pos": (-1, 0.5, 1)},
-            # Bottom fill (warm tint for gold reflections)
-            {"color": "#FFF5E0", "intensity": 0.3, "pos": (0, -1, 0.5)},
-            # Front-high
-            {"color": "white", "intensity": 0.3, "pos": (1, 1, 1)},
+            # Key light — strong, positioned high-right for sharp specular bands
+            {"color": "white", "intensity": 3.0, "pos": (5, 5, 5)},
+            # Rim light — opposite side for edge highlights
+            {"color": "white", "intensity": 2.5, "pos": (-5, 3, -3)},
+            # Top fill — soft overhead for smooth gradients
+            {"color": "white", "intensity": 1.5, "pos": (0, 6, 0)},
+            # Bottom warm fill — simulates gold environment bounce
+            {"color": "#FFF5E0", "intensity": 0.8, "pos": (0, -4, 2)},
+            # Front accent — subtle fill to prevent black shadows
+            {"color": "white", "intensity": 0.5, "pos": (3, 1, 5)},
+            # Back-side kick — adds depth on rear contours
+            {"color": "#FFE8C0", "intensity": 0.6, "pos": (-3, -1, -5)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
