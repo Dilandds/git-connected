@@ -1,62 +1,65 @@
 
 
-# Fix Gold Material + Add Texture Adjustment Sliders
+# Realistic Jewelry-Grade Gold Using PBR Material
 
-## Overview
-Two changes: (1) Make Gold look like real polished gold instead of flat yellow by using richer colors and emissive warmth. (2) Add adjustment sliders (Scale, Rotation, Roughness, Metalness, Opacity) to the texture panel so users can tweak how textures/materials appear on the model.
+## Problem
+The current gold uses `MeshPhongMaterial` which produces a flat, plasticky yellow. Real gold (like image-11) has tight mirror-like reflections, warm depth in shadows, and visible environment reflections on curved surfaces. Phong shading cannot achieve this — it lacks the physically-based metalness/roughness model needed for metals.
+
+## Solution
+Switch from `MeshPhongMaterial` to **`MeshStandardMaterial`** (pygfx's PBR material) for metallic presets. This material has `metalness` and `roughness` properties that simulate real-world metal behavior:
+- `metalness=1.0` makes the surface reflect like a metal (tints reflections with the base color, just like real gold)
+- `roughness=0.15` gives tight, mirror-like specular highlights with soft falloff
 
 ## What Changes
 
-### 1. Fix Gold & Silver Presets (`ui/texture_panel.py`)
+### 1. Update Gold & Silver Presets (`ui/texture_panel.py`)
 
-Update `MATERIAL_PRESETS` with richer values and add `emissive` field:
+Add `metalness` and `roughness` fields to preset definitions. Change Gold base color to a warmer, jewelry-accurate tone:
 
-- **Gold**: color `#B8860B` (DarkGoldenrod), highlight `#FFE066`, specular `#FFD700`, shininess 350, emissive `#3D2B00`
-- **Silver**: color `#C0C0C0`, shininess 400, emissive `#1A1A1A`
-- **Leather Brown**: unchanged
+| Preset | color | metalness | roughness | emissive |
+|--------|-------|-----------|-----------|----------|
+| Gold | `#CFB53B` (old gold) | 1.0 | 0.15 | `#3D2B00` |
+| Silver | `#C0C0C0` | 1.0 | 0.1 | `#1A1A1A` |
+| Leather | `#8B4513` | 0.0 | 0.8 | (none) |
 
-The `MaterialPresetCard` drag payload will include `emissive` when present.
+The `MaterialPresetCard` drag payload will include `metalness` and `roughness` when present.
 
-### 2. Add Texture Settings Sliders (`ui/texture_panel.py`)
+### 2. Switch to PBR Material in Viewer (`viewer_widget_pygfx.py`)
 
-Add a "Texture Settings" section after the Clear All button with 5 labeled `QSlider` controls:
+Update `_apply_material_preset_to_mesh()`:
+- When preset has `metalness` field, use `gfx.MeshStandardMaterial` instead of `MeshPhongMaterial`
+- Pass `metalness`, `roughness`, `emissive`, `emissive_intensity`
+- For non-metallic presets (Leather), fall back to `MeshPhongMaterial`
 
-| Slider | Range | Default | Purpose |
-|--------|-------|---------|---------|
-| Scale | 0.1x–10.0x | 1.0 | UV tiling repeat |
-| Rotation | 0–360° | 0 | UV rotation |
-| Roughness | 0–100% | 50 | Surface roughness |
-| Metalness | 0–100% | 0 | Metallic look |
-| Opacity | 0–100% | 100 | Transparency |
+```python
+# For metallic presets (Gold, Silver):
+material = gfx.MeshStandardMaterial(
+    color="#CFB53B",
+    metalness=1.0,
+    roughness=0.15,
+    emissive="#3D2B00",
+    emissive_intensity=0.2,
+)
+```
 
-Each slider has a value label showing the current value. When any slider changes, emit a new `texture_settings_changed = pyqtSignal(dict)` signal with all current slider values.
+### 3. Enhance Accent Lighting (`viewer_widget_pygfx.py`)
 
-A small helper `_create_slider_row(label, min_val, max_val, default, suffix)` keeps the code DRY.
+Increase accent light count from 2 to 4 and boost intensities for PBR materials (PBR responds differently to light than Phong). Add warm-tinted key light to simulate gold-toned environment reflections:
 
-### 3. Emissive + Accent Lights in Viewer (`viewer_widget_pygfx.py`)
+- Light 3: top-back, intensity 0.5
+- Light 4: side accent, intensity 0.4
+- Light 5: bottom fill (warm `#FFF5E0`), intensity 0.3
+- Light 6: front-high, intensity 0.3
 
-**Update `_apply_material_preset_to_mesh()`:**
-- Pass `emissive` and `emissive_intensity=0.15` to `MeshPhongMaterial` when preset includes `emissive` — this adds warm ambient glow to Gold in shadow areas.
+### 4. Update Swatch Generation (`ui/texture_panel.py`)
 
-**Add accent lights on preset application:**
-- When a material preset is applied, add 2 extra directional lights to the scene (stored as `self._preset_accent_lights`) to create multiple specular highlight bands on curved surfaces.
-- Remove these lights when preset is cleared via `remove_texture_from_part`.
-
-**New method `update_texture_settings(settings_dict)`:**
-- For UV scale/rotation: re-transform UVs on the currently textured mesh using 2D matrix math.
-- For roughness/metalness/opacity: update the active material properties directly.
-- Request canvas redraw.
-
-### 4. Wiring (`stl_viewer.py`)
-
-Connect `TexturePanel.texture_settings_changed` → viewer's `update_texture_settings()`.
+Adjust the Gold swatch thumbnail gradient to match the new warmer `#CFB53B` base so the card preview looks correct.
 
 ## Technical Details
 
 **Files modified:**
-- `ui/texture_panel.py` — update presets, add sliders section + signal
-- `viewer_widget_pygfx.py` — emissive support, accent lights, `update_texture_settings()`
-- `stl_viewer.py` — wire `texture_settings_changed` signal
+- `ui/texture_panel.py` — update preset values, include `metalness`/`roughness` in drag payload
+- `viewer_widget_pygfx.py` — use `MeshStandardMaterial` for metallic presets, enhance accent lights
 
-**No new dependencies.**
+**No new dependencies.** `MeshStandardMaterial` is already part of pygfx.
 
