@@ -3571,25 +3571,42 @@ class STLViewerWidget(QWidget):
         self._apply_material_preset_to_mesh(mesh_obj, preset_data)
 
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
-        """Apply a colored phong material with shininess and emissive to a mesh object."""
+        """Apply material preset to a mesh — uses PBR MeshStandardMaterial for
+        metallic presets (Gold/Silver) and MeshPhongMaterial for non-metallic."""
         import pygfx as gfx
         try:
             color = preset_data.get("color", "#CCCCCC")
-            specular = preset_data.get("specular", "#FFFFFF")
-            shininess = preset_data.get("shininess", 100)
             emissive = preset_data.get("emissive", None)
+            metalness = preset_data.get("metalness", None)
+            roughness = preset_data.get("roughness", None)
 
-            mat_kwargs = dict(
-                color=color,
-                specular=specular,
-                shininess=shininess,
-            )
-            if emissive:
-                mat_kwargs["emissive"] = emissive
+            if metalness is not None and metalness > 0:
+                # PBR path for metallic presets (Gold, Silver)
+                mat_kwargs = dict(
+                    color=color,
+                    metalness=float(metalness),
+                    roughness=float(roughness) if roughness is not None else 0.2,
+                )
+                if emissive:
+                    mat_kwargs["emissive"] = emissive
+                material = gfx.MeshStandardMaterial(**mat_kwargs)
+                if emissive:
+                    material.emissive_intensity = 0.2
+            else:
+                # Phong path for non-metallic presets (Leather)
+                specular = preset_data.get("specular", "#FFFFFF")
+                shininess = preset_data.get("shininess", 100)
+                mat_kwargs = dict(
+                    color=color,
+                    specular=specular,
+                    shininess=shininess,
+                )
+                if emissive:
+                    mat_kwargs["emissive"] = emissive
+                material = gfx.MeshPhongMaterial(**mat_kwargs)
+                if emissive:
+                    material.emissive_intensity = 0.15
 
-            material = gfx.MeshPhongMaterial(**mat_kwargs)
-            if emissive:
-                material.emissive_intensity = 0.15
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material
             mesh_obj.material = material
@@ -3599,30 +3616,35 @@ class STLViewerWidget(QWidget):
 
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} shininess={shininess} emissive={emissive}")
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness}")
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
     def _add_preset_accent_lights(self):
-        """Add extra directional lights for better metallic reflections."""
+        """Add extra directional lights for better metallic/PBR reflections."""
         import pygfx as gfx
         # Remove any existing accent lights first
         self._remove_preset_accent_lights()
         if self._scene is None:
             return
         self._preset_accent_lights = []
-        # Top-back fill light
-        light3 = gfx.DirectionalLight(color="white", intensity=0.3)
-        light3.local.position = (0, 1, -1)
-        light3.look_at((0, 0, 0))
-        self._scene.add(light3)
-        self._preset_accent_lights.append(light3)
-        # Side accent light
-        light4 = gfx.DirectionalLight(color="white", intensity=0.2)
-        light4.local.position = (-1, 0.5, 1)
-        light4.look_at((0, 0, 0))
-        self._scene.add(light4)
-        self._preset_accent_lights.append(light4)
+
+        light_configs = [
+            # Top-back fill
+            {"color": "white", "intensity": 0.5, "pos": (0, 1, -1)},
+            # Side accent
+            {"color": "white", "intensity": 0.4, "pos": (-1, 0.5, 1)},
+            # Bottom fill (warm tint for gold reflections)
+            {"color": "#FFF5E0", "intensity": 0.3, "pos": (0, -1, 0.5)},
+            # Front-high
+            {"color": "white", "intensity": 0.3, "pos": (1, 1, 1)},
+        ]
+        for cfg in light_configs:
+            light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
+            light.local.position = cfg["pos"]
+            light.look_at((0, 0, 0))
+            self._scene.add(light)
+            self._preset_accent_lights.append(light)
 
     def _remove_preset_accent_lights(self):
         """Remove accent lights added for material presets."""
