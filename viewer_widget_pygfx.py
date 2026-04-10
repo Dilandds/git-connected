@@ -3655,8 +3655,8 @@ class STLViewerWidget(QWidget):
             self._scene.add(light)
             self._preset_accent_lights.append(light)
 
-        # Add a warm ambient light to fill all dark areas with gold tone
-        ambient = gfx.AmbientLight(color="#FFE0A0", intensity=0.4)
+        # Rich warm ambient to flood shadows with chocolate-gold tone
+        ambient = gfx.AmbientLight(color="#FFD080", intensity=0.5)
         self._scene.add(ambient)
         self._preset_accent_lights.append(ambient)
 
