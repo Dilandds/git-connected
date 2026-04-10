@@ -3631,18 +3631,22 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # Top-back fill (warm)
-            {"color": "#FFF0D4", "intensity": 0.6, "pos": (0, 1, -1)},
-            # Side accent (warm)
-            {"color": "#FFE8C0", "intensity": 0.5, "pos": (-1, 0.5, 1)},
-            # Bottom fill (warm gold tint to eliminate green shadows)
-            {"color": "#FFE0A0", "intensity": 0.5, "pos": (0, -1, 0.5)},
-            # Front-high (warm)
-            {"color": "#FFF5E0", "intensity": 0.5, "pos": (1, 1, 1)},
-            # Opposite side fill (warm, reduces dark patches)
-            {"color": "#FFE8C0", "intensity": 0.4, "pos": (1, -0.5, -1)},
+            # Key light — warm gold top
+            {"color": "#FFE4A0", "intensity": 0.7, "pos": (0.5, 1, 0.5)},
+            # Top-back fill (warm chocolate tone)
+            {"color": "#FFD48A", "intensity": 0.6, "pos": (0, 1, -1)},
+            # Side accent (warm honey)
+            {"color": "#FFCC70", "intensity": 0.55, "pos": (-1, 0.5, 1)},
+            # Bottom fill (warm gold to kill green/dark patches)
+            {"color": "#FFD090", "intensity": 0.55, "pos": (0, -1, 0.5)},
+            # Front-high (bright warm)
+            {"color": "#FFE8B0", "intensity": 0.5, "pos": (1, 1, 1)},
+            # Opposite side fill
+            {"color": "#FFCC80", "intensity": 0.45, "pos": (1, -0.5, -1)},
             # Back-bottom warm fill
-            {"color": "#FFD080", "intensity": 0.3, "pos": (-1, -1, -1)},
+            {"color": "#FFC060", "intensity": 0.4, "pos": (-1, -1, -1)},
+            # Extra front-low for belly glow
+            {"color": "#FFD890", "intensity": 0.35, "pos": (0, -0.5, 1)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
