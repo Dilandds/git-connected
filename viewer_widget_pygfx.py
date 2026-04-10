@@ -3581,14 +3581,15 @@ class STLViewerWidget(QWidget):
 
             mat_kwargs = dict(
                 color=color,
-                specular_color=specular,
+                specular=specular,
                 shininess=shininess,
             )
             if emissive:
-                mat_kwargs["emissive"] = gfx.Color(emissive)
-                mat_kwargs["emissive_intensity"] = 0.15
+                mat_kwargs["emissive"] = emissive
 
             material = gfx.MeshPhongMaterial(**mat_kwargs)
+            if emissive:
+                material.emissive_intensity = 0.15
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material
             mesh_obj.material = material
