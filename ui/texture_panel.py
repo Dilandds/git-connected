@@ -38,11 +38,13 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
-        "color": "#B8860B",
+        "color": "#CFB53B",
         "highlight": "#FFE066",
         "specular": "#FFD700",
         "shininess": 350,
         "emissive": "#3D2B00",
+        "metalness": 1.0,
+        "roughness": 0.15,
     },
     {
         "name": "Silver",
@@ -51,6 +53,8 @@ MATERIAL_PRESETS = [
         "specular": "#FFFFFF",
         "shininess": 400,
         "emissive": "#1A1A1A",
+        "metalness": 1.0,
+        "roughness": 0.1,
     },
     {
         "name": "Leather Brown",
@@ -58,6 +62,8 @@ MATERIAL_PRESETS = [
         "highlight": "#C4956A",
         "specular": "#3D2B1F",
         "shininess": 10,
+        "metalness": 0.0,
+        "roughness": 0.8,
     },
 ]
 
@@ -163,6 +169,10 @@ class MaterialPresetCard(QFrame):
         }
         if "emissive" in self.preset:
             payload_dict["emissive"] = self.preset["emissive"]
+        if "metalness" in self.preset:
+            payload_dict["metalness"] = self.preset["metalness"]
+        if "roughness" in self.preset:
+            payload_dict["roughness"] = self.preset["roughness"]
         payload = json.dumps(payload_dict)
         mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         drag.setMimeData(mime)
