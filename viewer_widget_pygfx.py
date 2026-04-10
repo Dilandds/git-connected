@@ -3591,8 +3591,7 @@ class STLViewerWidget(QWidget):
                     mat_kwargs["emissive"] = emissive
                 material = gfx.MeshStandardMaterial(**mat_kwargs)
                 if emissive:
-                    ei = preset_data.get("emissive_intensity", 0.35)
-                    material.emissive_intensity = float(ei)
+                    material.emissive_intensity = 0.2
             else:
                 # Phong path for non-metallic presets (Leather)
                 specular = preset_data.get("specular", "#FFFFFF")
@@ -3631,12 +3630,14 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # Key light — bright white-warm, dominant highlight band
-            {"color": "#FFFAF0", "intensity": 3.0, "pos": (5, 5, 5)},
-            # Rim light — opposing, second highlight band
-            {"color": "#FFF5E0", "intensity": 2.5, "pos": (-5, -2, 5)},
-            # Top accent — subtle top reflection
-            {"color": "#FFE8D0", "intensity": 1.5, "pos": (0, 6, -2)},
+            # Top-back fill
+            {"color": "white", "intensity": 0.5, "pos": (0, 1, -1)},
+            # Side accent
+            {"color": "white", "intensity": 0.4, "pos": (-1, 0.5, 1)},
+            # Bottom fill (warm tint for gold reflections)
+            {"color": "#FFF5E0", "intensity": 0.3, "pos": (0, -1, 0.5)},
+            # Front-high
+            {"color": "white", "intensity": 0.3, "pos": (1, 1, 1)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
@@ -3644,11 +3645,6 @@ class STLViewerWidget(QWidget):
             light.look_at((0, 0, 0))
             self._scene.add(light)
             self._preset_accent_lights.append(light)
-
-        # Very dark warm ambient — keeps shadows chocolate, not black or green
-        ambient = gfx.AmbientLight(color="#120A00", intensity=0.15)
-        self._scene.add(ambient)
-        self._preset_accent_lights.append(ambient)
 
     def _remove_preset_accent_lights(self):
         """Remove accent lights added for material presets."""

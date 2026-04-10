@@ -1,51 +1,65 @@
 
 
-# Immersive Jewelry Gold — Ultra-Realistic Overhaul
+# Realistic Jewelry-Grade Gold Using PBR Material
 
 ## Problem
-Current gold is too bright/yellow with greenish shadows. The reference images show dark, high-contrast polished gold: a deep bronze base with white-hot specular bands and chocolate-brown shadows — not "golden yellow."
+The current gold uses `MeshPhongMaterial` which produces a flat, plasticky yellow. Real gold (like image-11) has tight mirror-like reflections, warm depth in shadows, and visible environment reflections on curved surfaces. Phong shading cannot achieve this — it lacks the physically-based metalness/roughness model needed for metals.
+
+## Solution
+Switch from `MeshPhongMaterial` to **`MeshStandardMaterial`** (pygfx's PBR material) for metallic presets. This material has `metalness` and `roughness` properties that simulate real-world metal behavior:
+- `metalness=1.0` makes the surface reflect like a metal (tints reflections with the base color, just like real gold)
+- `roughness=0.15` gives tight, mirror-like specular highlights with soft falloff
 
 ## What Changes
 
-### 1. Gold Preset Values (`ui/texture_panel.py`)
+### 1. Update Gold & Silver Presets (`ui/texture_panel.py`)
 
-Replace current Gold preset with the user's specified palette:
+Add `metalness` and `roughness` fields to preset definitions. Change Gold base color to a warmer, jewelry-accurate tone:
 
-| Property | Current | New | Why |
-|----------|---------|-----|-----|
-| color | `#BF9B30` | `#705421` | Deep bronze base — real gold is actually dark |
-| specular | `#FFD700` | `#FFF9E5` | Near-white cream highlights for sharp bands |
-| shininess | 400 | 95 | Tight but not mirror-flat — creates the "banded" look |
-| emissive | `#8B6914` | `#1A0F00` | Very dark brown — crevices glow warm, not green |
-| emissive_intensity | 0.45 | 0.15 | Subtle warmth, not flooding |
-| metalness | 1.0 | 1.0 | Keep |
-| roughness | 0.12 | 0.10 | Slightly tighter reflections |
-| highlight (swatch) | `#FEDD2B` | `#FFF9E5` | Match the new specular |
+| Preset | color | metalness | roughness | emissive |
+|--------|-------|-----------|-----------|----------|
+| Gold | `#CFB53B` (old gold) | 1.0 | 0.15 | `#3D2B00` |
+| Silver | `#C0C0C0` | 1.0 | 0.1 | `#1A1A1A` |
+| Leather | `#8B4513` | 0.0 | 0.8 | (none) |
 
-### 2. Lighting Rig (`viewer_widget_pygfx.py`)
+The `MaterialPresetCard` drag payload will include `metalness` and `roughness` when present.
 
-The "immersive" look needs **high-contrast** lighting — few intense lights with low ambient, not 8 warm floods. Replace current 8-light rig with:
+### 2. Switch to PBR Material in Viewer (`viewer_widget_pygfx.py`)
 
-- **Key light**: bright white-warm `#FFFAF0`, intensity **3.0**, position `(5, 5, 5)` — creates the dominant highlight band
-- **Rim light**: opposing `#FFF5E0`, intensity **2.5**, position `(-5, -2, 5)` — second highlight band
-- **Top accent**: `#FFE8D0`, intensity **1.5**, position `(0, 6, -2)` — top reflection
-- **Ambient**: `#120A00` (very dark brown), intensity **0.15** — keeps shadows chocolate, not black or green
+Update `_apply_material_preset_to_mesh()`:
+- When preset has `metalness` field, use `gfx.MeshStandardMaterial` instead of `MeshPhongMaterial`
+- Pass `metalness`, `roughness`, `emissive`, `emissive_intensity`
+- For non-metallic presets (Leather), fall back to `MeshPhongMaterial`
 
-This high-intensity / low-ambient combo creates the dark-base-with-bright-bands look from the references.
+```python
+# For metallic presets (Gold, Silver):
+material = gfx.MeshStandardMaterial(
+    color="#CFB53B",
+    metalness=1.0,
+    roughness=0.15,
+    emissive="#3D2B00",
+    emissive_intensity=0.2,
+)
+```
 
-### 3. PBR Material Application (`viewer_widget_pygfx.py`)
+### 3. Enhance Accent Lighting (`viewer_widget_pygfx.py`)
 
-Update `_apply_material_preset_to_mesh()` for Gold to also pass `specular` and `shininess` hints. Since we use `MeshStandardMaterial` for metallic presets, the key knobs are `metalness=1.0`, `roughness=0.10`, plus the dark emissive. The high-intensity directional lights do the heavy lifting for the "banded reflection" effect.
+Increase accent light count from 2 to 4 and boost intensities for PBR materials (PBR responds differently to light than Phong). Add warm-tinted key light to simulate gold-toned environment reflections:
 
-### 4. Swatch (`ui/texture_panel.py`)
+- Light 3: top-back, intensity 0.5
+- Light 4: side accent, intensity 0.4
+- Light 5: bottom fill (warm `#FFF5E0`), intensity 0.3
+- Light 6: front-high, intensity 0.3
 
-Update Gold swatch gradient: base `#705421`, highlight `#FFF9E5` — previews the dark-gold-with-bright-band look on the card.
+### 4. Update Swatch Generation (`ui/texture_panel.py`)
+
+Adjust the Gold swatch thumbnail gradient to match the new warmer `#CFB53B` base so the card preview looks correct.
 
 ## Technical Details
 
 **Files modified:**
-- `ui/texture_panel.py` — Gold preset colors + swatch
-- `viewer_widget_pygfx.py` — replace 8-light flood with 3-light high-contrast rig + dark ambient
+- `ui/texture_panel.py` — update preset values, include `metalness`/`roughness` in drag payload
+- `viewer_widget_pygfx.py` — use `MeshStandardMaterial` for metallic presets, enhance accent lights
 
-**Key insight**: The "immersive" look comes from contrast (dark base + intense highlights), not from warm ambient flooding.
+**No new dependencies.** `MeshStandardMaterial` is already part of pygfx.
 

@@ -38,14 +38,13 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
-        "color": "#705421",
-        "highlight": "#FFF9E5",
-        "specular": "#FFF9E5",
-        "shininess": 95,
-        "emissive": "#1A0F00",
-        "emissive_intensity": 0.15,
+        "color": "#CFB53B",
+        "highlight": "#FFE066",
+        "specular": "#FFD700",
+        "shininess": 350,
+        "emissive": "#3D2B00",
         "metalness": 1.0,
-        "roughness": 0.10,
+        "roughness": 0.15,
     },
     {
         "name": "Silver",
