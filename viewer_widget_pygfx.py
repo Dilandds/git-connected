@@ -684,11 +684,10 @@ class STLViewerWidget(QWidget):
             mesh_group = gfx.Group()
             self._mesh_parts = []
             for part_idx, (part_name, part_tri) in enumerate(sub_meshes):
-                flat_tri = _trimesh_to_flat_shaded(part_tri)
                 material = gfx.MeshPhongMaterial(
                     color="#ADD9E6", specular="#333333", shininess=20,
                 )
-                geometry = geometry_from_trimesh(flat_tri)
+                geometry = geometry_from_trimesh(part_tri)
                 part_mesh = gfx.Mesh(geometry, material)
                 mesh_group.add(part_mesh)
                 self._mesh_parts.append({
@@ -704,11 +703,8 @@ class STLViewerWidget(QWidget):
             self._scene.add(self._mesh_obj)
             self.set_render_mode(self._render_mode)
 
-            # Keep combined flat-shaded trimesh for annotation raycasting
-            mesh_tri = _trimesh_to_flat_shaded(mesh_tri)
-
             self.current_mesh = pv_mesh
-            self._annotation_trimesh = mesh_tri  # Keep trimesh for raycasting in annotation mode
+            self._annotation_trimesh = mesh_tri  # Keep original smooth trimesh for raycasting in annotation mode
             self._model_loaded = True
             self._show_overlay(False)
 
