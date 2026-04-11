@@ -392,6 +392,10 @@ class TexturePanel(QWidget):
             "metalness": self._slider_metalness.value() / 100.0,
             "opacity": self._slider_opacity.value() / 100.0,
         }
+        if hasattr(self, '_slider_smoothness'):
+            settings["smoothness"] = self._slider_smoothness.value() / 100.0
+        if hasattr(self, '_slider_crease_angle'):
+            settings["crease_angle"] = self._slider_crease_angle.value()
         self.texture_settings_changed.emit(settings)
 
     def _init_ui(self):
