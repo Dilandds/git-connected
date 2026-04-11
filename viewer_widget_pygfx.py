@@ -3617,8 +3617,8 @@ class STLViewerWidget(QWidget):
             _make_face(softbox_center, softbox_edge),   # -Z  back
         ]
 
-        # Stack into (6, 256, 256, 4) then reshape to (6*256, 256, 4) for pygfx
-        cube_data = np.concatenate(faces, axis=0)  # (6*size, size, 4)
+        # Shape must be (6, size, size, channels) per pygfx docs
+        cube_data = np.stack(faces, axis=0)  # (6, size, size, 4)
 
         try:
             self._studio_env_tex = gfx.Texture(cube_data, dim=2, size=(size, size, 6), generate_mipmaps=True)
@@ -3650,13 +3650,15 @@ class STLViewerWidget(QWidget):
                 if emissive:
                     mat_kwargs["emissive"] = emissive
 
-                # Attach procedural studio environment map for realistic reflections
+                material = gfx.MeshStandardMaterial(**mat_kwargs)
+
+                # env_map must be set as property, not constructor kwarg
                 env_tex = self._create_studio_env_map()
                 if env_tex is not None:
-                    mat_kwargs["env_map"] = env_tex
-                    mat_kwargs["env_map_intensity"] = 1.0
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 1.5
 
-                material = gfx.MeshStandardMaterial(**mat_kwargs)
                 if emissive:
                     material.emissive_intensity = 0.25
             else:
