@@ -1,65 +1,69 @@
 
 
-# Realistic Jewelry-Grade Gold Using PBR Material
+# Fix Gold Realism: Environment Map + Corrected Color
 
-## Problem
-The current gold uses `MeshPhongMaterial` which produces a flat, plasticky yellow. Real gold (like image-11) has tight mirror-like reflections, warm depth in shadows, and visible environment reflections on curved surfaces. Phong shading cannot achieve this — it lacks the physically-based metalness/roughness model needed for metals.
+## The Core Problem
+
+The gold looks like copper/dark bronze because **PBR metals without an environment map have nothing to reflect**. The pygfx docs explicitly state: "for best results you should always specify an environment map when using this material." Without it, `metalness=1.0` just makes the surface dark — it's reflecting black void.
+
+The current approach of adding more lights is a dead end. Real metallic appearance = **reflections**, not more direct lighting.
 
 ## Solution
-Switch from `MeshPhongMaterial` to **`MeshStandardMaterial`** (pygfx's PBR material) for metallic presets. This material has `metalness` and `roughness` properties that simulate real-world metal behavior:
-- `metalness=1.0` makes the surface reflect like a metal (tints reflections with the base color, just like real gold)
-- `roughness=0.15` gives tight, mirror-like specular highlights with soft falloff
 
-## What Changes
+Two changes that will transform the gold from "dark copper" to "bright polished jewelry gold":
 
-### 1. Update Gold & Silver Presets (`ui/texture_panel.py`)
+### 1. Generate a Procedural Studio Environment Map
 
-Add `metalness` and `roughness` fields to preset definitions. Change Gold base color to a warmer, jewelry-accurate tone:
+Instead of requiring an external HDRI file, create a programmatic warm studio environment texture directly in code. This simulates a jewelry photography light box — bright warm panels with soft gradients.
 
-| Preset | color | metalness | roughness | emissive |
-|--------|-------|-----------|-----------|----------|
-| Gold | `#CFB53B` (old gold) | 1.0 | 0.15 | `#3D2B00` |
-| Silver | `#C0C0C0` | 1.0 | 0.1 | `#1A1A1A` |
-| Leather | `#8B4513` | 0.0 | 0.8 | (none) |
+In `viewer_widget_pygfx.py`, add a method `_create_studio_env_map()` that:
+- Creates a 6-face cube texture (256x256 per face) using numpy
+- Fills each face with a warm white/cream gradient (simulating studio softboxes)
+- Top face: bright white, Bottom face: warm gold-tinted reflection floor
+- Side faces: gradient from warm white center to soft gray edges
+- Returns a `gfx.Texture(dim=2, size=(256, 256, 6))`
 
-The `MaterialPresetCard` drag payload will include `metalness` and `roughness` when present.
+### 2. Apply Environment Map to Metallic Materials
 
-### 2. Switch to PBR Material in Viewer (`viewer_widget_pygfx.py`)
+In `_apply_material_preset_to_mesh()`, after creating the `MeshStandardMaterial`:
+- Call `_create_studio_env_map()` (cached after first call)
+- Set `material.env_map = self._studio_env_tex`
+- Set `material.env_map_intensity = 1.0` (full reflection strength)
 
-Update `_apply_material_preset_to_mesh()`:
-- When preset has `metalness` field, use `gfx.MeshStandardMaterial` instead of `MeshPhongMaterial`
-- Pass `metalness`, `roughness`, `emissive`, `emissive_intensity`
-- For non-metallic presets (Leather), fall back to `MeshPhongMaterial`
+### 3. Fix Gold Base Color
 
-```python
-# For metallic presets (Gold, Silver):
-material = gfx.MeshStandardMaterial(
-    color="#CFB53B",
-    metalness=1.0,
-    roughness=0.15,
-    emissive="#3D2B00",
-    emissive_intensity=0.2,
-)
-```
+Change from `#FFC356` (too orange) to `#FFD700` (pure gold) — this is the actual gold hex color. With proper env map reflections, this will read as gold, not copper.
 
-### 3. Enhance Accent Lighting (`viewer_widget_pygfx.py`)
+Update in `MATERIAL_PRESETS`:
+- Gold color: `#FFD700`
+- Roughness: `0.05` (more mirror-like for jewelry)
+- Emissive: `#4A3500` (slightly warmer shadow fill)
 
-Increase accent light count from 2 to 4 and boost intensities for PBR materials (PBR responds differently to light than Phong). Add warm-tinted key light to simulate gold-toned environment reflections:
+### 4. Simplify Lighting
 
-- Light 3: top-back, intensity 0.5
-- Light 4: side accent, intensity 0.4
-- Light 5: bottom fill (warm `#FFF5E0`), intensity 0.3
-- Light 6: front-high, intensity 0.3
+Reduce the 10-light rig back to a cleaner 4-light setup. The environment map now handles reflections, so fewer direct lights are needed:
+- Key light: intensity 2.0
+- Fill light: intensity 1.0
+- Rim light: intensity 1.5
+- Bottom bounce: intensity 0.5 (warm tint)
 
-### 4. Update Swatch Generation (`ui/texture_panel.py`)
+Too many direct lights wash out the env map reflections.
 
-Adjust the Gold swatch thumbnail gradient to match the new warmer `#CFB53B` base so the card preview looks correct.
+## Why This Works
+
+The uploaded reference image shows gold with:
+- Bright specular bands (= environment reflections on curved surfaces)
+- Deep shadows between tubes (= controlled ambient, not washed out)
+- Warm golden tone throughout (= correct base color + warm env map)
+
+Current setup: 10% color + 0% reflections + 90% direct lights = copper
+New setup: 10% color + 80% reflections + 10% direct lights = real gold
 
 ## Technical Details
 
 **Files modified:**
-- `ui/texture_panel.py` — update preset values, include `metalness`/`roughness` in drag payload
-- `viewer_widget_pygfx.py` — use `MeshStandardMaterial` for metallic presets, enhance accent lights
+- `ui/texture_panel.py` — update Gold color to `#FFD700`, roughness to `0.05`
+- `viewer_widget_pygfx.py` — add `_create_studio_env_map()`, apply env map in preset method, simplify accent lights to 4
 
-**No new dependencies.** `MeshStandardMaterial` is already part of pygfx.
+**No new dependencies.** Uses numpy (already imported) for procedural texture generation and pygfx's built-in `env_map` support.
 
