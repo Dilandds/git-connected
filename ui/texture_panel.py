@@ -595,6 +595,20 @@ class TexturePanel(QWidget):
         row, self._slider_opacity, _ = self._create_slider_row("Opacity", 0, 100, 100, "%")
         layout.addWidget(row)
 
+        # ---- Shading Settings ----
+        shading_label = QLabel("Shading")
+        shading_label.setFont(make_font(size=11, bold=True))
+        shading_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(shading_label)
+
+        # Smoothness: 0% = flat shading, 100% = smooth shading
+        row, self._slider_smoothness, _ = self._create_slider_row("Smoothness", 0, 100, 100, "%")
+        layout.addWidget(row)
+
+        # Crease Angle: 0-180 degrees (edges sharper than this stay hard)
+        row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 30, u"\u00b0")
+        layout.addWidget(row)
+
     def _rebuild_grid(self):
         while self.grid_layout.count():
             self.grid_layout.takeAt(0)
