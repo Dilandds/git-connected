@@ -3598,23 +3598,23 @@ class STLViewerWidget(QWidget):
             return face
 
         # Build 6 faces: +X, -X, +Y, -Y, +Z, -Z
-        # Warm white softbox centers with soft gray edges
-        softbox_center = (255, 250, 235)   # warm white
-        softbox_edge = (180, 170, 155)     # soft warm gray
+        # High contrast between bright panels and darker edges = visible reflections
+        softbox_center = (255, 245, 220)   # warm cream-white (bright softbox)
+        softbox_edge = (120, 100, 70)      # dark warm — creates contrast bands
 
-        top_center = (255, 255, 250)       # bright white top (sky)
-        top_edge = (220, 215, 200)
+        top_center = (255, 255, 245)       # very bright top (overhead light)
+        top_edge = (200, 190, 160)
 
-        bottom_center = (255, 225, 160)    # warm gold-tinted floor bounce
-        bottom_edge = (200, 175, 120)
+        bottom_center = (180, 145, 80)     # warm amber floor bounce
+        bottom_edge = (80, 60, 35)         # dark warm floor
 
         faces = [
             _make_face(softbox_center, softbox_edge),   # +X  right
-            _make_face(softbox_center, softbox_edge),   # -X  left
+            _make_face(softbox_edge, softbox_center),    # -X  left (inverted = variety)
             _make_face(top_center, top_edge),            # +Y  top
             _make_face(bottom_center, bottom_edge),      # -Y  bottom
             _make_face(softbox_center, softbox_edge),   # +Z  front
-            _make_face(softbox_center, softbox_edge),   # -Z  back
+            _make_face(softbox_edge, softbox_center),   # -Z  back (inverted)
         ]
 
         # Shape must be (6, size, size, channels) per pygfx docs
