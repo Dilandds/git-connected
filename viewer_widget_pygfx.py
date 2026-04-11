@@ -3571,9 +3571,68 @@ class STLViewerWidget(QWidget):
             return
         self._apply_material_preset_to_mesh(mesh_obj, preset_data)
 
+    def _create_studio_env_map(self):
+        """Create a procedural warm studio environment cube texture for PBR reflections.
+        Simulates a jewelry photography light box with bright warm panels."""
+        import numpy as np
+        import pygfx as gfx
+
+        if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
+            return self._studio_env_tex
+
+        size = 256
+        # Helper: create a face with a radial gradient from center_color to edge_color
+        def _make_face(center_rgb, edge_rgb):
+            face = np.zeros((size, size, 4), dtype=np.uint8)
+            cy, cx = size / 2, size / 2
+            max_dist = (cx ** 2 + cy ** 2) ** 0.5
+            for y in range(size):
+                for x in range(size):
+                    d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                    t = min(d / max_dist, 1.0)
+                    # Smooth hermite interpolation
+                    t = t * t * (3 - 2 * t)
+                    for c in range(3):
+                        face[y, x, c] = int(center_rgb[c] * (1 - t) + edge_rgb[c] * t)
+                    face[y, x, 3] = 255
+            return face
+
+        # Build 6 faces: +X, -X, +Y, -Y, +Z, -Z
+        # Warm white softbox centers with soft gray edges
+        softbox_center = (255, 250, 235)   # warm white
+        softbox_edge = (180, 170, 155)     # soft warm gray
+
+        top_center = (255, 255, 250)       # bright white top (sky)
+        top_edge = (220, 215, 200)
+
+        bottom_center = (255, 225, 160)    # warm gold-tinted floor bounce
+        bottom_edge = (200, 175, 120)
+
+        faces = [
+            _make_face(softbox_center, softbox_edge),   # +X  right
+            _make_face(softbox_center, softbox_edge),   # -X  left
+            _make_face(top_center, top_edge),            # +Y  top
+            _make_face(bottom_center, bottom_edge),      # -Y  bottom
+            _make_face(softbox_center, softbox_edge),   # +Z  front
+            _make_face(softbox_center, softbox_edge),   # -Z  back
+        ]
+
+        # Stack into (6, 256, 256, 4) then reshape for pygfx cube texture
+        cube_data = np.stack(faces, axis=0)  # (6, 256, 256, 4)
+
+        try:
+            self._studio_env_tex = gfx.Texture(cube_data, dim=2)
+            logger.info("_create_studio_env_map: Created procedural studio env map")
+        except Exception as e:
+            logger.warning(f"_create_studio_env_map: Failed to create env texture: {e}")
+            self._studio_env_tex = None
+
+        return self._studio_env_tex
+
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
         """Apply material preset to a mesh — uses PBR MeshStandardMaterial for
-        metallic presets (Gold/Silver) and MeshPhongMaterial for non-metallic."""
+        metallic presets (Gold/Silver) with environment map, and MeshPhongMaterial
+        for non-metallic presets."""
         import pygfx as gfx
         try:
             color = preset_data.get("color", "#CCCCCC")
@@ -3590,9 +3649,16 @@ class STLViewerWidget(QWidget):
                 )
                 if emissive:
                     mat_kwargs["emissive"] = emissive
+
+                # Attach procedural studio environment map for realistic reflections
+                env_tex = self._create_studio_env_map()
+                if env_tex is not None:
+                    mat_kwargs["env_map"] = env_tex
+                    mat_kwargs["env_map_intensity"] = 1.0
+
                 material = gfx.MeshStandardMaterial(**mat_kwargs)
                 if emissive:
-                    material.emissive_intensity = 0.2
+                    material.emissive_intensity = 0.25
             else:
                 # Phong path for non-metallic presets (Leather)
                 specular = preset_data.get("specular", "#FFFFFF")
@@ -3617,12 +3683,13 @@ class STLViewerWidget(QWidget):
 
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness}")
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} env_map={'yes' if metalness and metalness > 0 else 'no'}")
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
     def _add_preset_accent_lights(self):
-        """Add extra directional lights for better metallic/PBR reflections."""
+        """Add clean 4-light rig — env map handles reflections, these add
+        controlled specular bands and prevent pitch-black shadows."""
         import pygfx as gfx
         # Remove any existing accent lights first
         self._remove_preset_accent_lights()
@@ -3631,31 +3698,14 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
         light_configs = [
-            # === Primary triad — 3 strong lights for sharp specular bands ===
-            # Key light — high-right, main specular driver
-            {"color": "#FFFFFF", "intensity": 4.0, "pos": (5, 6, 5)},
-            # Counter key — opposite side, slightly lower intensity for asymmetry
-            {"color": "#FFFFFF", "intensity": 3.0, "pos": (-5, 4, 4)},
-            # Top-down — overhead wash for broad highlight on top surfaces
-            {"color": "#FFFFFF", "intensity": 2.5, "pos": (0, 8, 0)},
-
-            # === Fill lights — eliminate dark shadows while preserving depth ===
-            # Front fill — prevents black faces on camera-facing surfaces
-            {"color": "#FFF8E8", "intensity": 2.0, "pos": (0, 2, 8)},
-            # Back fill — illuminates rear contours and edges
-            {"color": "#FFF5E0", "intensity": 1.5, "pos": (0, 2, -8)},
-            # Bottom warm fill — simulates gold-tinted floor bounce
-            {"color": "#FFE8B0", "intensity": 1.8, "pos": (0, -6, 0)},
-
-            # === Rim / accent lights — edge definition and sparkle ===
-            # Left rim — edge highlight for silhouette definition
-            {"color": "#FFFFFF", "intensity": 1.5, "pos": (-8, 0, 0)},
-            # Right rim
-            {"color": "#FFFFFF", "intensity": 1.5, "pos": (8, 0, 0)},
-            # High-back kick — subtle top-rear glow
-            {"color": "#FFF0D0", "intensity": 1.0, "pos": (3, 6, -5)},
-            # Low-front accent — adds warmth to underside edges
-            {"color": "#FFD700", "intensity": 0.6, "pos": (-2, -3, 6)},
+            # Key light — main specular band
+            {"color": "#FFFFFF", "intensity": 2.0, "pos": (5, 5, 5)},
+            # Fill light — front, prevents dark camera-facing surfaces
+            {"color": "#FFFFFF", "intensity": 1.0, "pos": (0, 2, 8)},
+            # Rim light — edge definition
+            {"color": "#FFFFFF", "intensity": 1.5, "pos": (-6, 3, -3)},
+            # Bottom bounce — warm, simulates floor reflection
+            {"color": "#FFF5E0", "intensity": 0.5, "pos": (0, -5, 0)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
