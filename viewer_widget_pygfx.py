@@ -3740,6 +3740,12 @@ class STLViewerWidget(QWidget):
         if not meshes and self._mesh_obj and hasattr(self._mesh_obj, '_original_material'):
             meshes = [self._mesh_obj]
 
+        smoothness = settings.get("smoothness", 1.0)
+        crease_angle = settings.get("crease_angle", 30)
+
+        # Rebuild geometry normals based on smoothness / crease angle
+        self._apply_shading_to_parts(smoothness, crease_angle)
+
         for mesh_obj in meshes:
             mat = mesh_obj.material
             if mat is None:
@@ -3773,6 +3779,166 @@ class STLViewerWidget(QWidget):
 
         if self._canvas:
             self._canvas.request_draw()
+
+    def _apply_shading_to_parts(self, smoothness, crease_angle_deg):
+        """Rebuild geometry normals for all mesh parts based on smoothness blend and crease angle.
+        smoothness: 0.0 = fully flat, 1.0 = fully smooth.
+        crease_angle_deg: edges sharper than this stay hard (only matters when smoothness > 0).
+        """
+        import numpy as np
+        import pygfx as gfx
+        import trimesh
+
+        if not self._mesh_parts:
+            return
+
+        for part in self._mesh_parts:
+            mesh_obj = part.get('mesh_obj')
+            tri = part.get('trimesh')
+            if mesh_obj is None or tri is None:
+                continue
+            if not isinstance(tri, trimesh.Trimesh) or len(tri.faces) == 0:
+                continue
+
+            verts = np.asarray(tri.vertices, dtype=np.float32)
+            faces = np.asarray(tri.faces, dtype=np.int32)
+
+            if smoothness <= 0.01:
+                # Fully flat: explode vertices so each face has unique normals
+                tris = verts[faces]  # (N, 3, 3)
+                flat_verts = tris.reshape(-1, 3)
+                flat_faces = np.arange(len(flat_verts), dtype=np.int32).reshape(-1, 3)
+                flat_tm = trimesh.Trimesh(vertices=flat_verts, faces=flat_faces, process=False)
+                flat_tm.fix_normals()
+                from pygfx.geometries import geometry_from_trimesh
+                mesh_obj.geometry = geometry_from_trimesh(flat_tm)
+            elif smoothness >= 0.99:
+                # Fully smooth with crease angle
+                smooth_tm = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+                smooth_tm.fix_normals()
+                # Apply crease: split vertices at edges exceeding crease_angle_deg
+                if crease_angle_deg < 180:
+                    try:
+                        face_normals = np.asarray(smooth_tm.face_normals, dtype=np.float32)
+                        vertex_normals = np.zeros_like(verts)
+                        face_areas = np.asarray(smooth_tm.area_faces, dtype=np.float32)
+                        for fi in range(len(faces)):
+                            for vi in faces[fi]:
+                                vertex_normals[vi] += face_normals[fi] * face_areas[fi]
+                        norms = np.linalg.norm(vertex_normals, axis=1, keepdims=True)
+                        norms[norms < 1e-10] = 1.0
+                        vertex_normals /= norms
+                        # For crease: explode vertices where adjacent face normals differ > crease_angle
+                        crease_rad = np.radians(crease_angle_deg)
+                        new_verts = []
+                        new_normals = []
+                        new_faces = faces.copy()
+                        vert_face_map = [[] for _ in range(len(verts))]
+                        for fi in range(len(faces)):
+                            for vi in faces[fi]:
+                                vert_face_map[vi].append(fi)
+                        next_idx = len(verts)
+                        verts_list = list(verts)
+                        normals_list = list(vertex_normals)
+                        for vi in range(len(verts)):
+                            face_indices = vert_face_map[vi]
+                            if len(face_indices) <= 1:
+                                continue
+                            # Group faces by similar normals
+                            groups = []
+                            assigned = set()
+                            for fi in face_indices:
+                                if fi in assigned:
+                                    continue
+                                group = [fi]
+                                assigned.add(fi)
+                                for fj in face_indices:
+                                    if fj in assigned:
+                                        continue
+                                    dot = np.dot(face_normals[fi], face_normals[fj])
+                                    if dot > np.cos(crease_rad):
+                                        group.append(fj)
+                                        assigned.add(fj)
+                                groups.append(group)
+                            if len(groups) <= 1:
+                                continue
+                            # First group keeps original vertex, rest get new vertices
+                            for group in groups[1:]:
+                                new_vi = len(verts_list)
+                                verts_list.append(verts[vi])
+                                # Compute smooth normal for this group
+                                grp_normal = np.zeros(3, dtype=np.float32)
+                                for fi in group:
+                                    grp_normal += face_normals[fi] * face_areas[fi]
+                                n = np.linalg.norm(grp_normal)
+                                if n > 1e-10:
+                                    grp_normal /= n
+                                normals_list.append(grp_normal)
+                                for fi in group:
+                                    for j in range(3):
+                                        if new_faces[fi, j] == vi:
+                                            new_faces[fi, j] = new_vi
+                            # Update normal for first group
+                            grp_normal = np.zeros(3, dtype=np.float32)
+                            for fi in groups[0]:
+                                grp_normal += face_normals[fi] * face_areas[fi]
+                            n = np.linalg.norm(grp_normal)
+                            if n > 1e-10:
+                                grp_normal /= n
+                            normals_list[vi] = grp_normal
+
+                        final_verts = np.array(verts_list, dtype=np.float32)
+                        final_normals = np.array(normals_list, dtype=np.float32)
+                        geom = gfx.Geometry(
+                            positions=gfx.Buffer(final_verts),
+                            normals=gfx.Buffer(final_normals),
+                            indices=gfx.Buffer(new_faces),
+                        )
+                        mesh_obj.geometry = geom
+                    except Exception as e:
+                        logger.warning(f"_apply_shading_to_parts: crease failed, using smooth: {e}")
+                        from pygfx.geometries import geometry_from_trimesh
+                        mesh_obj.geometry = geometry_from_trimesh(smooth_tm)
+                else:
+                    from pygfx.geometries import geometry_from_trimesh
+                    mesh_obj.geometry = geometry_from_trimesh(smooth_tm)
+            else:
+                # Blend: interpolate normals between flat and smooth
+                # Flat normals
+                tris_v = verts[faces]
+                flat_verts = tris_v.reshape(-1, 3)
+                flat_faces_arr = np.arange(len(flat_verts), dtype=np.int32).reshape(-1, 3)
+                flat_tm = trimesh.Trimesh(vertices=flat_verts, faces=flat_faces_arr, process=False)
+                flat_tm.fix_normals()
+                flat_normals = np.asarray(flat_tm.vertex_normals, dtype=np.float32)
+
+                # Smooth normals (area-weighted, mapped to exploded verts)
+                smooth_tm = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+                smooth_tm.fix_normals()
+                smooth_vn = np.zeros_like(verts)
+                face_normals = np.asarray(smooth_tm.face_normals, dtype=np.float32)
+                face_areas = np.asarray(smooth_tm.area_faces, dtype=np.float32)
+                for fi in range(len(faces)):
+                    for vi in faces[fi]:
+                        smooth_vn[vi] += face_normals[fi] * face_areas[fi]
+                norms = np.linalg.norm(smooth_vn, axis=1, keepdims=True)
+                norms[norms < 1e-10] = 1.0
+                smooth_vn /= norms
+                # Map smooth normals to exploded vertices
+                smooth_exploded = smooth_vn[faces.ravel()]
+
+                # Blend
+                blended = flat_normals * (1.0 - smoothness) + smooth_exploded * smoothness
+                bnorms = np.linalg.norm(blended, axis=1, keepdims=True)
+                bnorms[bnorms < 1e-10] = 1.0
+                blended /= bnorms
+
+                geom = gfx.Geometry(
+                    positions=gfx.Buffer(flat_verts.astype(np.float32)),
+                    normals=gfx.Buffer(blended.astype(np.float32)),
+                    indices=gfx.Buffer(flat_faces_arr),
+                )
+                mesh_obj.geometry = geom
 
     def remove_texture_from_part(self, part_id):
         """Revert a part to its original material (remove texture)."""
