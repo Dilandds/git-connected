@@ -3734,11 +3734,13 @@ class STLViewerWidget(QWidget):
         meshes = []
         for p in self._mesh_parts:
             mo = p.get('mesh_obj')
-            if mo and hasattr(mo, '_original_material'):
+            if mo:
                 meshes.append(mo)
-        # Fallback: single mesh
-        if not meshes and self._mesh_obj and hasattr(self._mesh_obj, '_original_material'):
-            meshes = [self._mesh_obj]
+        if not meshes and self._mesh_obj:
+            if hasattr(self._mesh_obj, 'material'):
+                meshes = [self._mesh_obj]
+            elif hasattr(self._mesh_obj, 'children'):
+                meshes = [c for c in self._mesh_obj.children if hasattr(c, 'material')]
 
         smoothness = settings.get("smoothness", 1.0)
         crease_angle = settings.get("crease_angle", 30)
@@ -3757,6 +3759,11 @@ class STLViewerWidget(QWidget):
             # Shininess modulation via roughness (invert: high roughness = low shininess)
             if hasattr(mat, 'shininess'):
                 mat.shininess = max(1, int((1.0 - roughness) * 500))
+            # PBR roughness / metalness for MeshStandardMaterial
+            if hasattr(mat, 'roughness'):
+                mat.roughness = roughness
+            if hasattr(mat, 'metalness'):
+                mat.metalness = metalness
             # UV scale and rotation
             geom = mesh_obj.geometry
             if geom is not None and hasattr(geom, 'texcoords') and geom.texcoords is not None:
