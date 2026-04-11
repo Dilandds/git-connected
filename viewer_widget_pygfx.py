@@ -3617,8 +3617,8 @@ class STLViewerWidget(QWidget):
             _make_face(softbox_center, softbox_edge),   # -Z  back
         ]
 
-        # Stack into (6, 256, 256, 4) then reshape to (6*256, 256, 4) for pygfx
-        cube_data = np.concatenate(faces, axis=0)  # (6*size, size, 4)
+        # Shape must be (6, size, size, channels) per pygfx docs
+        cube_data = np.stack(faces, axis=0)  # (6, size, size, 4)
 
         try:
             self._studio_env_tex = gfx.Texture(cube_data, dim=2, size=(size, size, 6), generate_mipmaps=True)
