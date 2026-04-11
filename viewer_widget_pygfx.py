@@ -3581,40 +3581,41 @@ class STLViewerWidget(QWidget):
             return self._studio_env_tex
 
         size = 256
-        # Helper: create a face with a radial gradient from center_color to edge_color
+        # Helper: create a smooth face with very gentle gradient (no sharp bands)
         def _make_face(center_rgb, edge_rgb):
             face = np.zeros((size, size, 4), dtype=np.uint8)
-            cy, cx = size / 2, size / 2
-            max_dist = (cx ** 2 + cy ** 2) ** 0.5
-            for y in range(size):
-                for x in range(size):
-                    d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-                    t = min(d / max_dist, 1.0)
-                    # Smooth hermite interpolation
-                    t = t * t * (3 - 2 * t)
-                    for c in range(3):
-                        face[y, x, c] = int(center_rgb[c] * (1 - t) + edge_rgb[c] * t)
-                    face[y, x, 3] = 255
+            # Vectorized radial gradient
+            y_coords = np.arange(size).reshape(-1, 1)
+            x_coords = np.arange(size).reshape(1, -1)
+            cy, cx = size / 2.0, size / 2.0
+            dist = np.sqrt((x_coords - cx) ** 2 + (y_coords - cy) ** 2)
+            max_dist = np.sqrt(cx ** 2 + cy ** 2)
+            t = np.clip(dist / max_dist, 0.0, 1.0)
+            # Very smooth quintic interpolation (smoother than hermite)
+            t = t * t * t * (t * (t * 6 - 15) + 10)
+            for c in range(3):
+                face[:, :, c] = (center_rgb[c] * (1 - t) + edge_rgb[c] * t).astype(np.uint8)
+            face[:, :, 3] = 255
             return face
 
-        # Build 6 faces: +X, -X, +Y, -Y, +Z, -Z
-        # High contrast between bright panels and darker edges = visible reflections
-        softbox_center = (255, 245, 220)   # warm cream-white (bright softbox)
-        softbox_edge = (120, 100, 70)      # dark warm — creates contrast bands
+        # Low-contrast, smooth gradients = no visible rectangular bands
+        # The key is SUBTLE variation, not sharp contrast
+        warm_bright = (245, 235, 210)    # soft warm white
+        warm_mid    = (210, 195, 160)    # gentle warm mid-tone
 
-        top_center = (255, 255, 245)       # very bright top (overhead light)
-        top_edge = (200, 190, 160)
+        top_bright  = (250, 248, 240)    # slightly brighter top
+        top_mid     = (220, 210, 185)
 
-        bottom_center = (180, 145, 80)     # warm amber floor bounce
-        bottom_edge = (80, 60, 35)         # dark warm floor
+        bottom_warm = (200, 175, 130)    # warm amber floor
+        bottom_dark = (160, 140, 100)    # slightly darker floor
 
         faces = [
-            _make_face(softbox_center, softbox_edge),   # +X  right
-            _make_face(softbox_edge, softbox_center),    # -X  left (inverted = variety)
-            _make_face(top_center, top_edge),            # +Y  top
-            _make_face(bottom_center, bottom_edge),      # -Y  bottom
-            _make_face(softbox_center, softbox_edge),   # +Z  front
-            _make_face(softbox_edge, softbox_center),   # -Z  back (inverted)
+            _make_face(warm_bright, warm_mid),     # +X  right
+            _make_face(warm_mid, warm_bright),     # -X  left
+            _make_face(top_bright, top_mid),       # +Y  top
+            _make_face(bottom_warm, bottom_dark),  # -Y  bottom
+            _make_face(warm_bright, warm_mid),     # +Z  front
+            _make_face(warm_mid, warm_bright),     # -Z  back
         ]
 
         # Shape must be (6, size, size, channels) per pygfx docs
