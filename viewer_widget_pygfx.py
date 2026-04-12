@@ -3704,7 +3704,7 @@ class STLViewerWidget(QWidget):
                 "env_map_intensity": base_env_map_intensity,
             }
 
-            self._add_preset_accent_lights()
+            self._add_preset_accent_lights(tone=preset_data.get("env_tone", "warm"))
 
             if base_metalness > 0:
                 self.material_preset_applied.emit({
@@ -3718,7 +3718,7 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
-    def _add_preset_accent_lights(self):
+    def _add_preset_accent_lights(self, tone="warm"):
         """Add clean 4-light rig — env map handles reflections, these add
         controlled specular bands and prevent pitch-black shadows."""
         import pygfx as gfx
@@ -3728,6 +3728,9 @@ class STLViewerWidget(QWidget):
             return
         self._preset_accent_lights = []
 
+        # Bottom bounce color: warm for gold, pure white for silver/chrome
+        bounce_color = "#FFF5E0" if tone == "warm" else "#FFFFFF"
+
         light_configs = [
             # Key light — main specular band
             {"color": "#FFFFFF", "intensity": 2.0, "pos": (5, 5, 5)},
@@ -3735,8 +3738,8 @@ class STLViewerWidget(QWidget):
             {"color": "#FFFFFF", "intensity": 1.0, "pos": (0, 2, 8)},
             # Rim light — edge definition
             {"color": "#FFFFFF", "intensity": 1.5, "pos": (-6, 3, -3)},
-            # Bottom bounce — warm, simulates floor reflection
-            {"color": "#FFF5E0", "intensity": 0.5, "pos": (0, -5, 0)},
+            # Bottom bounce — tone-aware floor reflection
+            {"color": bounce_color, "intensity": 0.5, "pos": (0, -5, 0)},
         ]
         for cfg in light_configs:
             light = gfx.DirectionalLight(color=cfg["color"], intensity=cfg["intensity"])
