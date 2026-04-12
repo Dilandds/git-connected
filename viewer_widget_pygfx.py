@@ -3648,6 +3648,25 @@ class STLViewerWidget(QWidget):
 
         return tex
 
+    def _resolve_env_tone(self, preset_data):
+        """Resolve environment tone robustly, even if older drag payloads omitted it."""
+        env_tone = preset_data.get("env_tone")
+        if env_tone in {"warm", "neutral"}:
+            return env_tone
+
+        color = str(preset_data.get("color", "")).strip().lstrip("#")
+        if len(color) == 6:
+            try:
+                r = int(color[0:2], 16)
+                g = int(color[2:4], 16)
+                b = int(color[4:6], 16)
+                if max(r, g, b) - min(r, g, b) <= 16:
+                    return "neutral"
+            except Exception:
+                pass
+
+        return "warm"
+
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
         """Apply material preset to a mesh — uses PBR MeshStandardMaterial for
         metallic presets (Gold/Silver) with environment map, and MeshPhongMaterial
@@ -3662,6 +3681,7 @@ class STLViewerWidget(QWidget):
             base_metalness = float(metalness) if metalness is not None else 0.0
             base_emissive_intensity = 0.25 if emissive else 0.0
             base_env_map_intensity = 1.5 if base_metalness > 0 else 1.0
+            env_tone = self._resolve_env_tone(preset_data)
 
             if base_metalness > 0:
                 material = gfx.MeshStandardMaterial(
@@ -3669,7 +3689,6 @@ class STLViewerWidget(QWidget):
                     metalness=base_metalness,
                     roughness=base_roughness,
                 )
-                env_tone = preset_data.get("env_tone", "warm")
                 env_tex = self._create_studio_env_map(tone=env_tone)
                 if env_tex is not None:
                     material.env_map = env_tex
@@ -3702,9 +3721,10 @@ class STLViewerWidget(QWidget):
                 "metalness": base_metalness,
                 "emissive_intensity": base_emissive_intensity,
                 "env_map_intensity": base_env_map_intensity,
+                "env_tone": env_tone,
             }
 
-            self._add_preset_accent_lights(tone=preset_data.get("env_tone", "warm"))
+            self._add_preset_accent_lights(tone=env_tone)
 
             if base_metalness > 0:
                 self.material_preset_applied.emit({
@@ -3799,8 +3819,10 @@ class STLViewerWidget(QWidget):
                     roughness=roughness if roughness is not None else 0.2,
                     metalness=metalness if metalness is not None else 0.0,
                 )
-                if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
-                    new_mat.env_map = self._studio_env_tex
+                env_tone = self._resolve_env_tone(preset_data or {})
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    new_mat.env_map = env_tex
                     new_mat.env_map_intensity = 1.5
                 if not hasattr(mesh_obj, '_original_material'):
                     mesh_obj._original_material = mat
@@ -3830,9 +3852,14 @@ class STLViewerWidget(QWidget):
                 base_env = preset_data.get("env_map_intensity", 1.5)
                 brightness_factor = float(brightness) / 50.0  # 0→0x, 50→1x (original), 100→2x
                 target_env_intensity = base_env * brightness_factor
+                env_tone = self._resolve_env_tone(preset_data)
 
                 mat.roughness = float(target_roughness)
                 mat.metalness = float(target_metalness)
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None and hasattr(mat, 'env_map'):
+                    mat.env_map = env_tex
+                    mat.env_mapping_mode = "CUBE-REFLECTION"
                 if preset_data.get("emissive"):
                     mat.emissive = preset_data["emissive"]
                     mat.emissive_intensity = float(target_emissive_intensity)
