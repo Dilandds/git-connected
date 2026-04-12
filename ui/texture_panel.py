@@ -69,9 +69,9 @@ MATERIAL_PRESETS = [
 
 
 def _generate_material_swatch(base_color: str, highlight_color: str, size: int = 80) -> QPixmap:
-    """Create a sphere-like swatch pixmap using radial gradient."""
+    """Create a sphere-like swatch pixmap using radial gradient with transparent background."""
     pixmap = QPixmap(size, size)
-    pixmap.fill(QColor("#2a2a2a"))
+    pixmap.fill(Qt.transparent)
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing, True)
@@ -82,9 +82,10 @@ def _generate_material_swatch(base_color: str, highlight_color: str, size: int =
     # Radial gradient — highlight at upper-left, darkened edges
     gradient = QRadialGradient(size * 0.38, size * 0.32, size * 0.44)
     gradient.setColorAt(0.0, highlight)
-    gradient.setColorAt(0.35, base.lighter(130))
-    gradient.setColorAt(0.7, base)
-    gradient.setColorAt(1.0, base.darker(250))
+    gradient.setColorAt(0.25, base.lighter(150))
+    gradient.setColorAt(0.5, base.lighter(110))
+    gradient.setColorAt(0.75, base)
+    gradient.setColorAt(1.0, base.darker(200))
 
     painter.setPen(QPen(Qt.NoPen))
     painter.setBrush(gradient)
