@@ -603,11 +603,11 @@ class TexturePanel(QWidget):
         layout.addWidget(row)
 
         # Roughness: 0–100%
-        row, self._slider_roughness, _ = self._create_slider_row("Roughness", 0, 100, 50, "%")
+        row, self._slider_roughness, self._lbl_roughness = self._create_slider_row("Roughness", 0, 100, 50, "%")
         layout.addWidget(row)
 
         # Metalness: 0–100%
-        row, self._slider_metalness, _ = self._create_slider_row("Metalness", 0, 100, 0, "%")
+        row, self._slider_metalness, self._lbl_metalness = self._create_slider_row("Metalness", 0, 100, 0, "%")
         layout.addWidget(row)
 
         # Opacity slider removed per user request
