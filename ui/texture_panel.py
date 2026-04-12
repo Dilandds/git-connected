@@ -395,6 +395,14 @@ class TexturePanel(QWidget):
         self._slider_shine.blockSignals(False)
         self._slider_shadow.blockSignals(False)
 
+        # Reset brightness to 50% (original) when a new preset is applied
+        if hasattr(self, '_slider_brightness'):
+            self._slider_brightness.blockSignals(True)
+            self._slider_brightness.setValue(50)
+            self._slider_brightness.blockSignals(False)
+            if hasattr(self, '_lbl_brightness'):
+                self._lbl_brightness.setText("50%")
+
         if hasattr(self, '_lbl_shine'):
             self._lbl_shine.setText(f"{shine}%")
         if hasattr(self, '_lbl_shadow'):
