@@ -3684,6 +3684,7 @@ class STLViewerWidget(QWidget):
             env_tone = self._resolve_env_tone(preset_data)
 
             if base_metalness > 0:
+                # Metallic PBR (Gold, Silver, Chrome…)
                 material = gfx.MeshStandardMaterial(
                     color=color,
                     metalness=base_metalness,
@@ -3698,18 +3699,23 @@ class STLViewerWidget(QWidget):
                     material.emissive = emissive
                     material.emissive_intensity = base_emissive_intensity
             else:
-                specular = preset_data.get("specular", "#FFFFFF")
-                shininess = preset_data.get("shininess", 100)
-                mat_kwargs = dict(
+                # Non-metallic: use PBR MeshStandardMaterial for realistic look
+                material = gfx.MeshStandardMaterial(
                     color=color,
-                    specular=specular,
-                    shininess=shininess,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
                 )
+                # Subtle environment reflections even for non-metals (leather has faint sheen)
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 0.3  # very subtle env for non-metal
+                    base_env_map_intensity = 0.3
                 if emissive:
-                    mat_kwargs["emissive"] = emissive
-                material = gfx.MeshPhongMaterial(**mat_kwargs)
-                if emissive:
-                    material.emissive_intensity = 0.15
+                    material.emissive = emissive
+                    material.emissive_intensity = 0.12
+                    base_emissive_intensity = 0.12
 
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material

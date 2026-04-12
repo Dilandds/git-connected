@@ -65,6 +65,8 @@ MATERIAL_PRESETS = [
         "shininess": 10,
         "metalness": 0.0,
         "roughness": 0.8,
+        "emissive": "#1A0A02",       # very dark warm shadow for depth
+        "env_tone": "warm",
     },
 ]
 
