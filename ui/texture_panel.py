@@ -48,13 +48,13 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Silver",
-        "color": "#D0D4D8",          # cool-toned polished silver — slightly blue-grey
+        "color": "#C0C0C0",          # true neutral silver — pure mid-gray, no warmth
         "highlight": "#FFFFFF",
         "specular": "#FFFFFF",
-        "shininess": 400,
-        "emissive": "#0A0E14",       # very dark cool blue-grey for shadows
+        "shininess": 500,
+        "emissive": "#060810",       # very dark blue-black for cold shadows
         "metalness": 1.0,
-        "roughness": 0.08,           # very smooth for mirror-like chrome finish
+        "roughness": 0.05,           # near-mirror chrome finish
         "env_tone": "neutral",       # use neutral env map, not warm
     },
     {

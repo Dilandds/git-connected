@@ -3610,13 +3610,13 @@ class STLViewerWidget(QWidget):
             return face
 
         if tone == "neutral":
-            # Cool neutral studio for silver/chrome — no warm tint
-            softbox_center = (245, 248, 255)
-            softbox_edge = (100, 105, 115)
-            top_center = (250, 252, 255)
-            top_edge = (180, 185, 195)
-            bottom_center = (140, 145, 155)
-            bottom_edge = (60, 65, 72)
+            # Pure cool studio for chrome/silver — zero warmth, blue-white tones
+            softbox_center = (235, 238, 250)   # blue-white highlights
+            softbox_edge = (85, 90, 110)        # cool steel shadows
+            top_center = (240, 242, 255)        # cool sky-like top
+            top_edge = (160, 165, 185)          # blue-grey mid
+            bottom_center = (120, 125, 145)     # cool dark floor
+            bottom_edge = (40, 45, 60)          # deep cool shadow
         else:
             # Warm studio for gold
             softbox_center = (255, 245, 220)
