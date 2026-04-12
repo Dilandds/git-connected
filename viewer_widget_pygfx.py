@@ -3669,7 +3669,8 @@ class STLViewerWidget(QWidget):
                     metalness=base_metalness,
                     roughness=base_roughness,
                 )
-                env_tex = self._create_studio_env_map()
+                env_tone = preset_data.get("env_tone", "warm")
+                env_tex = self._create_studio_env_map(tone=env_tone)
                 if env_tex is not None:
                     material.env_map = env_tex
                     material.env_mapping_mode = "CUBE-REFLECTION"
