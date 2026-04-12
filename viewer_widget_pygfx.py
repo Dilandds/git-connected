@@ -3752,28 +3752,47 @@ class STLViewerWidget(QWidget):
             mat = mesh_obj.material
             if mat is None:
                 continue
-            # Opacity
-            if hasattr(mat, 'opacity'):
-                mat.opacity = opacity
-                mat.transparent = opacity < 1.0
-            # Shininess modulation via roughness (invert: high roughness = low shininess)
-            if hasattr(mat, 'shininess'):
-                mat.shininess = max(1, int((1.0 - roughness) * 500))
-            # PBR roughness / metalness for MeshStandardMaterial
-            if hasattr(mat, 'roughness'):
+
+            # If material is MeshPhongMaterial and user wants PBR control,
+            # upgrade to MeshStandardMaterial
+            is_phong = type(mat).__name__ == 'MeshPhongMaterial'
+            is_standard = type(mat).__name__ == 'MeshStandardMaterial'
+
+            if is_phong and (roughness != 0.5 or metalness != 0.0):
+                # Convert Phong → Standard for PBR control
+                color = getattr(mat, 'color', (0.68, 0.85, 0.90))
+                new_mat = gfx.MeshStandardMaterial(
+                    color=color,
+                    roughness=roughness,
+                    metalness=metalness,
+                )
+                # Preserve env map if available
+                if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
+                    new_mat.env_map = self._studio_env_tex
+                    new_mat.env_map_intensity = 1.5
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mat
+                mesh_obj.material = new_mat
+                mat = new_mat
+                is_standard = True
+                is_phong = False
+
+            if is_standard:
                 mat.roughness = roughness
-            if hasattr(mat, 'metalness'):
                 mat.metalness = metalness
-            # UV scale and rotation
+
+            if is_phong:
+                # Modulate shininess as roughness proxy
+                mat.shininess = max(1, int((1.0 - roughness) * 500))
+
+            # UV scale and rotation (for image textures)
             geom = mesh_obj.geometry
             if geom is not None and hasattr(geom, 'texcoords') and geom.texcoords is not None:
                 base_uvs = geom.texcoords.data if hasattr(geom.texcoords, 'data') else geom.texcoords
                 if base_uvs is not None:
                     import numpy as _np
                     uvs = _np.array(base_uvs, dtype=_np.float32).copy()
-                    # Scale
                     uvs = uvs * scale
-                    # Rotation around UV center (0.5, 0.5)
                     if rotation_deg != 0:
                         rad = math.radians(rotation_deg)
                         cos_r, sin_r = math.cos(rad), math.sin(rad)

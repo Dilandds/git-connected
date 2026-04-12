@@ -390,7 +390,7 @@ class TexturePanel(QWidget):
             "rotation": self._slider_rotation.value(),
             "roughness": self._slider_roughness.value() / 100.0,
             "metalness": self._slider_metalness.value() / 100.0,
-            "opacity": self._slider_opacity.value() / 100.0,
+            "opacity": 1.0,
         }
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
@@ -595,9 +595,7 @@ class TexturePanel(QWidget):
         row, self._slider_metalness, _ = self._create_slider_row("Metalness", 0, 100, 0, "%")
         layout.addWidget(row)
 
-        # Opacity: 0–100%
-        row, self._slider_opacity, _ = self._create_slider_row("Opacity", 0, 100, 100, "%")
-        layout.addWidget(row)
+        # Opacity slider removed per user request
 
         # ---- Shading Settings ----
         shading_label = QLabel("Shading")
