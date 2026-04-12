@@ -383,6 +383,21 @@ class TexturePanel(QWidget):
         slider.valueChanged.connect(_on_change)
         return container, slider, val_lbl
 
+    def sync_preset_values(self, roughness: float, metalness: float):
+        """Sync roughness/metalness sliders to match an applied preset,
+        without emitting settings (to avoid feedback loop)."""
+        self._slider_roughness.blockSignals(True)
+        self._slider_metalness.blockSignals(True)
+        self._slider_roughness.setValue(int(roughness * 100))
+        self._slider_metalness.setValue(int(metalness * 100))
+        self._slider_roughness.blockSignals(False)
+        self._slider_metalness.blockSignals(False)
+        # Update display labels
+        if hasattr(self, '_lbl_roughness'):
+            self._lbl_roughness.setText(f"{roughness:.1f}")
+        if hasattr(self, '_lbl_metalness'):
+            self._lbl_metalness.setText(f"{metalness:.1f}")
+
     def _emit_settings(self):
         """Emit current slider values as a dict."""
         settings = {
@@ -588,11 +603,11 @@ class TexturePanel(QWidget):
         layout.addWidget(row)
 
         # Roughness: 0–100%
-        row, self._slider_roughness, _ = self._create_slider_row("Roughness", 0, 100, 50, "%")
+        row, self._slider_roughness, self._lbl_roughness = self._create_slider_row("Roughness", 0, 100, 50, "%")
         layout.addWidget(row)
 
         # Metalness: 0–100%
-        row, self._slider_metalness, _ = self._create_slider_row("Metalness", 0, 100, 0, "%")
+        row, self._slider_metalness, self._lbl_metalness = self._create_slider_row("Metalness", 0, 100, 0, "%")
         layout.addWidget(row)
 
         # Opacity slider removed per user request

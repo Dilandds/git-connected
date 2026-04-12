@@ -3753,8 +3753,6 @@ class STLViewerWidget(QWidget):
             if mat is None:
                 continue
 
-            # If material is MeshPhongMaterial and user wants PBR control,
-            # upgrade to MeshStandardMaterial
             is_phong = type(mat).__name__ == 'MeshPhongMaterial'
             is_standard = type(mat).__name__ == 'MeshStandardMaterial'
 
@@ -3766,7 +3764,6 @@ class STLViewerWidget(QWidget):
                     roughness=roughness,
                     metalness=metalness,
                 )
-                # Preserve env map if available
                 if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
                     new_mat.env_map = self._studio_env_tex
                     new_mat.env_map_intensity = 1.5
@@ -3778,8 +3775,14 @@ class STLViewerWidget(QWidget):
                 is_phong = False
 
             if is_standard:
-                mat.roughness = roughness
-                mat.metalness = metalness
+                # Preserve current material values when only scale/rotation changed.
+                # Only override if user explicitly moved the roughness/metalness sliders
+                # away from defaults (0.5 / 0.0).
+                user_changed_pbr = (roughness != 0.5 or metalness != 0.0)
+                if user_changed_pbr:
+                    mat.roughness = roughness
+                    mat.metalness = metalness
+                # else: keep current mat.roughness / mat.metalness (e.g. from preset)
 
             if is_phong:
                 # Modulate shininess as roughness proxy
