@@ -216,6 +216,8 @@ class MaterialPresetCard(QFrame):
             payload_dict["metalness"] = self.preset["metalness"]
         if "roughness" in self.preset:
             payload_dict["roughness"] = self.preset["roughness"]
+        if "env_tone" in self.preset:
+            payload_dict["env_tone"] = self.preset["env_tone"]
         payload = json.dumps(payload_dict)
         mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         drag.setMimeData(mime)
