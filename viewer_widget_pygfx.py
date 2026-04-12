@@ -3584,17 +3584,17 @@ class STLViewerWidget(QWidget):
         emissive_intensity = max(0.05, min(0.45, float(emissive_intensity)))
         return int(round(((emissive_intensity - 0.05) / 0.40) * 100))
 
-    def _create_studio_env_map(self):
-        """Create a procedural warm studio environment cube texture for PBR reflections.
-        Simulates a jewelry photography light box with bright warm panels."""
+    def _create_studio_env_map(self, tone="warm"):
+        """Create a procedural studio environment cube texture for PBR reflections.
+        tone='warm' for gold, tone='neutral' for silver/chrome."""
         import numpy as np
         import pygfx as gfx
 
-        if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
-            return self._studio_env_tex
+        cache_attr = f'_studio_env_tex_{tone}'
+        if hasattr(self, cache_attr) and getattr(self, cache_attr) is not None:
+            return getattr(self, cache_attr)
 
         size = 512
-        # Vectorized face creation — smooth radial gradient, no per-pixel loop
         def _make_face(center_rgb, edge_rgb):
             y_coords = np.arange(size, dtype=np.float32) - size / 2.0
             x_coords = np.arange(size, dtype=np.float32) - size / 2.0
@@ -3602,7 +3602,6 @@ class STLViewerWidget(QWidget):
             max_dist = (((size / 2.0) ** 2) * 2) ** 0.5
             dist = np.sqrt(xx * xx + yy * yy)
             t = np.clip(dist / max_dist, 0.0, 1.0)
-            # Smooth hermite interpolation
             t = t * t * (3.0 - 2.0 * t)
             face = np.zeros((size, size, 4), dtype=np.uint8)
             for c in range(3):
@@ -3610,13 +3609,22 @@ class STLViewerWidget(QWidget):
             face[:, :, 3] = 255
             return face
 
-        # 6 faces with warm studio lighting contrast
-        softbox_center = (255, 245, 220)
-        softbox_edge = (120, 100, 70)
-        top_center = (255, 255, 245)
-        top_edge = (200, 190, 160)
-        bottom_center = (180, 145, 80)
-        bottom_edge = (80, 60, 35)
+        if tone == "neutral":
+            # Cool neutral studio for silver/chrome — no warm tint
+            softbox_center = (245, 248, 255)
+            softbox_edge = (100, 105, 115)
+            top_center = (250, 252, 255)
+            top_edge = (180, 185, 195)
+            bottom_center = (140, 145, 155)
+            bottom_edge = (60, 65, 72)
+        else:
+            # Warm studio for gold
+            softbox_center = (255, 245, 220)
+            softbox_edge = (120, 100, 70)
+            top_center = (255, 255, 245)
+            top_edge = (200, 190, 160)
+            bottom_center = (180, 145, 80)
+            bottom_edge = (80, 60, 35)
 
         faces = [
             _make_face(softbox_center, softbox_edge),
@@ -3627,17 +3635,18 @@ class STLViewerWidget(QWidget):
             _make_face(softbox_edge, softbox_center),
         ]
 
-        # Shape must be (6, size, size, channels) per pygfx docs
-        cube_data = np.stack(faces, axis=0)  # (6, size, size, 4)
+        cube_data = np.stack(faces, axis=0)
 
         try:
-            self._studio_env_tex = gfx.Texture(cube_data, dim=2, size=(size, size, 6), generate_mipmaps=True)
-            logger.info("_create_studio_env_map: Created procedural studio env map")
+            tex = gfx.Texture(cube_data, dim=2, size=(size, size, 6), generate_mipmaps=True)
+            setattr(self, cache_attr, tex)
+            logger.info(f"_create_studio_env_map: Created {tone} studio env map")
         except Exception as e:
             logger.warning(f"_create_studio_env_map: Failed to create env texture: {e}")
-            self._studio_env_tex = None
+            setattr(self, cache_attr, None)
+            tex = None
 
-        return self._studio_env_tex
+        return tex
 
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
         """Apply material preset to a mesh — uses PBR MeshStandardMaterial for

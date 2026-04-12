@@ -48,13 +48,14 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Silver",
-        "color": "#C0C0C0",
+        "color": "#D0D4D8",          # cool-toned polished silver — slightly blue-grey
         "highlight": "#FFFFFF",
         "specular": "#FFFFFF",
         "shininess": 400,
-        "emissive": "#1A1A1A",
+        "emissive": "#0A0E14",       # very dark cool blue-grey for shadows
         "metalness": 1.0,
-        "roughness": 0.1,
+        "roughness": 0.08,           # very smooth for mirror-like chrome finish
+        "env_tone": "neutral",       # use neutral env map, not warm
     },
     {
         "name": "Leather Brown",
