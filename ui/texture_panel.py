@@ -64,9 +64,13 @@ MATERIAL_PRESETS = [
         "specular": "#3D2B1F",
         "shininess": 10,
         "metalness": 0.0,
-        "roughness": 0.8,
+        "roughness": 1.0,            # base roughness multiplied by roughness map
         "emissive": "#1A0A02",       # very dark warm shadow for depth
         "env_tone": "warm",
+        "use_texture_maps": True,    # triggers procedural leather texture generation
+        "albedo_map": "procedural_leather",
+        "normal_map": "procedural_leather",
+        "roughness_map": "procedural_leather",
     },
 ]
 
@@ -220,6 +224,10 @@ class MaterialPresetCard(QFrame):
             payload_dict["roughness"] = self.preset["roughness"]
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
+        # Texture map keys for PBR texture-mapped presets (e.g. Leather)
+        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map"):
+            if map_key in self.preset:
+                payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)
         mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         drag.setMimeData(mime)
