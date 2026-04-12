@@ -1,69 +1,83 @@
 
 
-# Fix Gold Realism: Environment Map + Corrected Color
+# Add Texture-Mapped Leather with Reference Images
 
-## The Core Problem
+## Summary
 
-The gold looks like copper/dark bronze because **PBR metals without an environment map have nothing to reflect**. The pygfx docs explicitly state: "for best results you should always specify an environment map when using this material." Without it, `metalness=1.0` just makes the surface dark — it's reflecting black void.
+Replace the current solid-color Leather Brown preset with a texture-mapped approach using bundled leather texture images (albedo, normal map, roughness map). This will give leather a realistic grain, pores, and wear patterns instead of a flat color.
 
-The current approach of adding more lights is a dead end. Real metallic appearance = **reflections**, not more direct lighting.
+## What Changes
 
-## Solution
+### 1. Bundle Leather Texture Images
 
-Two changes that will transform the gold from "dark copper" to "bright polished jewelry gold":
+Add three texture images to an `assets/textures/leather/` directory:
+- `leather_albedo.jpg` — base color with patchy tan/brown variations
+- `leather_normal.jpg` — purple/blue normal map encoding surface grain and wrinkles
+- `leather_roughness.jpg` — grayscale map (dark = shiny pore peaks, light = matte valleys)
 
-### 1. Generate a Procedural Studio Environment Map
+These can be generated procedurally with numpy/PIL if we want zero external dependencies, or sourced from a CC0 texture library like ambientCG.
 
-Instead of requiring an external HDRI file, create a programmatic warm studio environment texture directly in code. This simulates a jewelry photography light box — bright warm panels with soft gradients.
+### 2. Update Material Application in `viewer_widget_pygfx.py`
 
-In `viewer_widget_pygfx.py`, add a method `_create_studio_env_map()` that:
-- Creates a 6-face cube texture (256x256 per face) using numpy
-- Fills each face with a warm white/cream gradient (simulating studio softboxes)
-- Top face: bright white, Bottom face: warm gold-tinted reflection floor
-- Side faces: gradient from warm white center to soft gray edges
-- Returns a `gfx.Texture(dim=2, size=(256, 256, 6))`
+In `_apply_material_preset_to_mesh`, add a texture-mapped path for presets that include texture file references:
 
-### 2. Apply Environment Map to Metallic Materials
+```python
+# When preset has texture maps (e.g. Leather)
+if preset_data.get("albedo_map"):
+    from PIL import Image
+    albedo = np.array(Image.open(albedo_path).convert("RGB"), dtype=np.uint8)
+    material.map = gfx.Texture(albedo, dim=2)
+    
+    # Generate UVs via box projection (reuse existing _generate_box_uvs)
+    geom = mesh_obj.geometry
+    uvs = self._generate_box_uvs(positions)
+    geom.texcoords = gfx.Buffer(uvs)
 
-In `_apply_material_preset_to_mesh()`, after creating the `MeshStandardMaterial`:
-- Call `_create_studio_env_map()` (cached after first call)
-- Set `material.env_map = self._studio_env_tex`
-- Set `material.env_map_intensity = 1.0` (full reflection strength)
+if preset_data.get("normal_map"):
+    normal = np.array(Image.open(normal_path).convert("RGB"), dtype=np.uint8)
+    material.normal_map = gfx.Texture(normal, dim=2)
+    material.normal_scale = (1.0, 1.0)
 
-### 3. Fix Gold Base Color
+if preset_data.get("roughness_map"):
+    rough = np.array(Image.open(rough_path), dtype=np.uint8)
+    material.roughness_map = gfx.Texture(rough, dim=2)
+```
 
-Change from `#FFC356` (too orange) to `#FFD700` (pure gold) — this is the actual gold hex color. With proper env map reflections, this will read as gold, not copper.
+### 3. Update Leather Preset in `ui/texture_panel.py`
 
-Update in `MATERIAL_PRESETS`:
-- Gold color: `#FFD700`
-- Roughness: `0.05` (more mirror-like for jewelry)
-- Emissive: `#4A3500` (slightly warmer shadow fill)
+Add texture map paths to the Leather Brown preset definition:
 
-### 4. Simplify Lighting
+```python
+{
+    "name": "Leather Brown",
+    "color": "#8B4513",
+    "metalness": 0.0,
+    "roughness": 1.0,        # base roughness multiplied by map
+    "emissive": "#1A0A02",
+    "env_tone": "warm",
+    "albedo_map": "leather/leather_albedo.jpg",
+    "normal_map": "leather/leather_normal.jpg",
+    "roughness_map": "leather/leather_roughness.jpg",
+}
+```
 
-Reduce the 10-light rig back to a cleaner 4-light setup. The environment map now handles reflections, so fewer direct lights are needed:
-- Key light: intensity 2.0
-- Fill light: intensity 1.0
-- Rim light: intensity 1.5
-- Bottom bounce: intensity 0.5 (warm tint)
+### 4. Include Texture Map Paths in Drag Payload
 
-Too many direct lights wash out the env map reflections.
+Update `MaterialPresetCard` drag payload in `texture_panel.py` to include the `*_map` keys so the viewer receives them during drop.
 
-## Why This Works
+### 5. Generate Procedural Leather Textures (fallback)
 
-The uploaded reference image shows gold with:
-- Bright specular bands (= environment reflections on curved surfaces)
-- Deep shadows between tubes (= controlled ambient, not washed out)
-- Warm golden tone throughout (= correct base color + warm env map)
-
-Current setup: 10% color + 0% reflections + 90% direct lights = copper
-New setup: 10% color + 80% reflections + 10% direct lights = real gold
+Add a helper in `viewer_widget_pygfx.py` that generates leather-like textures procedurally using numpy/Perlin noise if the image files aren't found. This ensures it works in PyInstaller bundles without external files.
 
 ## Technical Details
 
-**Files modified:**
-- `ui/texture_panel.py` — update Gold color to `#FFD700`, roughness to `0.05`
-- `viewer_widget_pygfx.py` — add `_create_studio_env_map()`, apply env map in preset method, simplify accent lights to 4
+- **Files modified**: `viewer_widget_pygfx.py`, `ui/texture_panel.py`
+- **Files added**: `assets/textures/leather/` (3 images, or procedural generation)
+- **PyInstaller**: Update `.spec` files to bundle `assets/textures/` directory
+- **No new dependencies** — uses PIL (already imported) and numpy for procedural fallback
+- **Existing UV generation** (`_generate_box_uvs`) is reused for texture coordinate mapping
 
-**No new dependencies.** Uses numpy (already imported) for procedural texture generation and pygfx's built-in `env_map` support.
+## Open Question
+
+Do you want to use bundled CC0 texture images from a library like ambientCG, or should we generate all leather textures procedurally with numpy so there are zero external image files to manage?
 
