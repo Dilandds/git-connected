@@ -69,7 +69,7 @@ MATERIAL_PRESETS = [
 
 
 def _generate_material_swatch(base_color: str, highlight_color: str, size: int = 80) -> QPixmap:
-    """Create a sphere-like swatch pixmap using radial gradient with transparent background."""
+    """Create a photo-realistic metallic sphere swatch with specular highlight and shadow."""
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
 
@@ -79,18 +79,59 @@ def _generate_material_swatch(base_color: str, highlight_color: str, size: int =
     base = QColor(base_color)
     highlight = QColor(highlight_color)
 
-    # Radial gradient — highlight at upper-left, darkened edges
-    gradient = QRadialGradient(size * 0.38, size * 0.32, size * 0.44)
-    gradient.setColorAt(0.0, highlight)
-    gradient.setColorAt(0.25, base.lighter(150))
-    gradient.setColorAt(0.5, base.lighter(110))
-    gradient.setColorAt(0.75, base)
-    gradient.setColorAt(1.0, base.darker(200))
+    cx, cy = size * 0.5, size * 0.52          # sphere centre (slightly low for shadow room)
+    radius = size * 0.40
 
+    # --- 1) Ambient-occlusion / ground shadow (soft dark ellipse below sphere) ---
+    shadow_grad = QRadialGradient(cx, size * 0.88, size * 0.28)
+    shadow_grad.setColorAt(0.0, QColor(0, 0, 0, 80))
+    shadow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
     painter.setPen(QPen(Qt.NoPen))
-    painter.setBrush(gradient)
-    margin = int(size * 0.1)
-    painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
+    painter.setBrush(shadow_grad)
+    painter.drawEllipse(int(cx - size * 0.28), int(size * 0.82), int(size * 0.56), int(size * 0.12))
+
+    # --- 2) Base sphere body gradient (main gold/metal colour) ---
+    body_grad = QRadialGradient(cx * 0.78, cy * 0.65, radius * 1.35)
+    body_grad.setColorAt(0.00, highlight.lighter(160))        # bright hotspot
+    body_grad.setColorAt(0.18, highlight.lighter(130))
+    body_grad.setColorAt(0.35, base.lighter(125))
+    body_grad.setColorAt(0.55, base)
+    body_grad.setColorAt(0.72, base.darker(130))
+    body_grad.setColorAt(0.88, base.darker(200))
+    body_grad.setColorAt(1.00, base.darker(280))
+
+    painter.setBrush(body_grad)
+    painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+
+    # --- 3) Warm reflection band (lower half, mimics environment reflection) ---
+    refl_grad = QRadialGradient(cx, cy + radius * 0.45, radius * 0.7)
+    warm = QColor(base.lighter(140))
+    warm.setAlpha(90)
+    refl_grad.setColorAt(0.0, warm)
+    refl_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+    painter.setBrush(refl_grad)
+    painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+
+    # --- 4) Specular highlight (small bright oval, upper-left) ---
+    spec_cx = cx - radius * 0.22
+    spec_cy = cy - radius * 0.32
+    spec_r = radius * 0.38
+    spec_grad = QRadialGradient(spec_cx, spec_cy, spec_r)
+    spec_grad.setColorAt(0.0, QColor(255, 255, 255, 210))
+    spec_grad.setColorAt(0.35, QColor(255, 255, 255, 90))
+    spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+    painter.setBrush(spec_grad)
+    painter.drawEllipse(int(spec_cx - spec_r), int(spec_cy - spec_r), int(spec_r * 2), int(spec_r * 2))
+
+    # --- 5) Rim light (subtle bright edge on the right) ---
+    rim_grad = QRadialGradient(cx + radius * 0.85, cy - radius * 0.1, radius * 0.35)
+    rim_col = QColor(highlight.lighter(170))
+    rim_col.setAlpha(55)
+    rim_grad.setColorAt(0.0, rim_col)
+    rim_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+    painter.setBrush(rim_grad)
+    painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+
     painter.end()
     return pixmap
 
