@@ -395,6 +395,14 @@ class TexturePanel(QWidget):
         self._slider_shine.blockSignals(False)
         self._slider_shadow.blockSignals(False)
 
+        # Reset brightness to 50% (original) when a new preset is applied
+        if hasattr(self, '_slider_brightness'):
+            self._slider_brightness.blockSignals(True)
+            self._slider_brightness.setValue(50)
+            self._slider_brightness.blockSignals(False)
+            if hasattr(self, '_lbl_brightness'):
+                self._lbl_brightness.setText("50%")
+
         if hasattr(self, '_lbl_shine'):
             self._lbl_shine.setText(f"{shine}%")
         if hasattr(self, '_lbl_shadow'):
@@ -403,10 +411,9 @@ class TexturePanel(QWidget):
     def _emit_settings(self):
         """Emit current slider values as a dict."""
         settings = {
-            "scale": self._slider_scale.value() / 10.0,
-            "rotation": self._slider_rotation.value(),
             "shine": self._slider_shine.value(),
             "shadow_depth": self._slider_shadow.value(),
+            "brightness": self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50,
         }
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
@@ -595,20 +602,16 @@ class TexturePanel(QWidget):
         settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(settings_label)
 
-        # Scale: 1-100 mapped to 0.1x–10.0x  (value / 10)
-        row, self._slider_scale, _ = self._create_slider_row("Scale", 1, 100, 10, "x", divisor=10)
-        layout.addWidget(row)
-
-        # Rotation: 0–360°
-        row, self._slider_rotation, _ = self._create_slider_row("Rotation", 0, 360, 0, "°")
-        layout.addWidget(row)
-
         # Shine: simpler control for metallic highlights
         row, self._slider_shine, self._lbl_shine = self._create_slider_row("Shine", 0, 100, 70, "%")
         layout.addWidget(row)
 
         # Shadow: controls the warm dark depth in the gold preset
         row, self._slider_shadow, self._lbl_shadow = self._create_slider_row("Shadow", 0, 100, 50, "%")
+        layout.addWidget(row)
+
+        # Brightness: controls environment lighting intensity (50% = original preset)
+        row, self._slider_brightness, self._lbl_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
         layout.addWidget(row)
 
         # Opacity slider removed per user request

@@ -3751,10 +3751,9 @@ class STLViewerWidget(QWidget):
 
         shine = settings.get("shine", None)
         shadow_depth = settings.get("shadow_depth", None)
+        brightness = settings.get("brightness", 50)
         roughness = settings.get("roughness", None)
         metalness = settings.get("metalness", None)
-        scale = settings.get("scale", 1.0)
-        rotation_deg = settings.get("rotation", 0)
 
         meshes = []
         for p in self._mesh_parts:
@@ -3813,7 +3812,11 @@ class STLViewerWidget(QWidget):
 
                 if shadow_depth is not None:
                     target_emissive_intensity = self._shadow_to_emissive_intensity(shadow_depth)
-                    target_env_intensity = preset_data.get("env_map_intensity", 1.5) * (0.9 + (float(shadow_depth) / 100.0) * 0.2)
+
+                # Brightness slider: 50 = original preset value, 0 = dark, 100 = bright
+                base_env = preset_data.get("env_map_intensity", 1.5)
+                brightness_factor = float(brightness) / 50.0  # 0→0x, 50→1x (original), 100→2x
+                target_env_intensity = base_env * brightness_factor
 
                 mat.roughness = float(target_roughness)
                 mat.metalness = float(target_metalness)
@@ -3832,22 +3835,7 @@ class STLViewerWidget(QWidget):
             if is_phong and roughness is not None:
                 mat.shininess = max(1, int((1.0 - roughness) * 500))
 
-            geom = mesh_obj.geometry
-            if geom is not None and hasattr(geom, 'texcoords') and geom.texcoords is not None:
-                base_uvs = geom.texcoords.data if hasattr(geom.texcoords, 'data') else geom.texcoords
-                if base_uvs is not None:
-                    import numpy as _np
-                    uvs = _np.array(base_uvs, dtype=_np.float32).copy()
-                    uvs = uvs * scale
-                    if rotation_deg != 0:
-                        rad = math.radians(rotation_deg)
-                        cos_r, sin_r = math.cos(rad), math.sin(rad)
-                        cx, cy = 0.5, 0.5
-                        u = uvs[:, 0] - cx
-                        v = uvs[:, 1] - cy
-                        uvs[:, 0] = u * cos_r - v * sin_r + cx
-                        uvs[:, 1] = u * sin_r + v * cos_r + cy
-                    geom.texcoords = gfx.Buffer(uvs)
+            # UV scale/rotation removed – no longer needed
 
         if self._canvas:
             self._canvas.request_draw()
