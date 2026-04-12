@@ -383,6 +383,21 @@ class TexturePanel(QWidget):
         slider.valueChanged.connect(_on_change)
         return container, slider, val_lbl
 
+    def sync_preset_values(self, roughness: float, metalness: float):
+        """Sync roughness/metalness sliders to match an applied preset,
+        without emitting settings (to avoid feedback loop)."""
+        self._slider_roughness.blockSignals(True)
+        self._slider_metalness.blockSignals(True)
+        self._slider_roughness.setValue(int(roughness * 100))
+        self._slider_metalness.setValue(int(metalness * 100))
+        self._slider_roughness.blockSignals(False)
+        self._slider_metalness.blockSignals(False)
+        # Update display labels
+        if hasattr(self, '_lbl_roughness'):
+            self._lbl_roughness.setText(f"{roughness:.1f}")
+        if hasattr(self, '_lbl_metalness'):
+            self._lbl_metalness.setText(f"{metalness:.1f}")
+
     def _emit_settings(self):
         """Emit current slider values as a dict."""
         settings = {
