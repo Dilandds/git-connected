@@ -383,29 +383,30 @@ class TexturePanel(QWidget):
         slider.valueChanged.connect(_on_change)
         return container, slider, val_lbl
 
-    def sync_preset_values(self, roughness: float, metalness: float):
-        """Sync roughness/metalness sliders to match an applied preset,
-        without emitting settings (to avoid feedback loop)."""
-        self._slider_roughness.blockSignals(True)
-        self._slider_metalness.blockSignals(True)
-        self._slider_roughness.setValue(int(roughness * 100))
-        self._slider_metalness.setValue(int(metalness * 100))
-        self._slider_roughness.blockSignals(False)
-        self._slider_metalness.blockSignals(False)
-        # Update display labels
-        if hasattr(self, '_lbl_roughness'):
-            self._lbl_roughness.setText(f"{roughness:.1f}")
-        if hasattr(self, '_lbl_metalness'):
-            self._lbl_metalness.setText(f"{metalness:.1f}")
+    def sync_material_controls(self, preset_data: dict):
+        """Sync the simple material sliders to match an applied metallic preset."""
+        shine = int(preset_data.get("shine", self._slider_shine.value()))
+        shadow_depth = int(preset_data.get("shadow_depth", self._slider_shadow.value()))
+
+        self._slider_shine.blockSignals(True)
+        self._slider_shadow.blockSignals(True)
+        self._slider_shine.setValue(shine)
+        self._slider_shadow.setValue(shadow_depth)
+        self._slider_shine.blockSignals(False)
+        self._slider_shadow.blockSignals(False)
+
+        if hasattr(self, '_lbl_shine'):
+            self._lbl_shine.setText(f"{shine}%")
+        if hasattr(self, '_lbl_shadow'):
+            self._lbl_shadow.setText(f"{shadow_depth}%")
 
     def _emit_settings(self):
         """Emit current slider values as a dict."""
         settings = {
             "scale": self._slider_scale.value() / 10.0,
             "rotation": self._slider_rotation.value(),
-            "roughness": self._slider_roughness.value() / 100.0,
-            "metalness": self._slider_metalness.value() / 100.0,
-            "opacity": 1.0,
+            "shine": self._slider_shine.value(),
+            "shadow_depth": self._slider_shadow.value(),
         }
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
@@ -602,12 +603,12 @@ class TexturePanel(QWidget):
         row, self._slider_rotation, _ = self._create_slider_row("Rotation", 0, 360, 0, "°")
         layout.addWidget(row)
 
-        # Roughness: 0–100%
-        row, self._slider_roughness, self._lbl_roughness = self._create_slider_row("Roughness", 0, 100, 50, "%")
+        # Shine: simpler control for metallic highlights
+        row, self._slider_shine, self._lbl_shine = self._create_slider_row("Shine", 0, 100, 70, "%")
         layout.addWidget(row)
 
-        # Metalness: 0–100%
-        row, self._slider_metalness, self._lbl_metalness = self._create_slider_row("Metalness", 0, 100, 0, "%")
+        # Shadow: controls the warm dark depth in the gold preset
+        row, self._slider_shadow, self._lbl_shadow = self._create_slider_row("Shadow", 0, 100, 50, "%")
         layout.addWidget(row)
 
         # Opacity slider removed per user request
