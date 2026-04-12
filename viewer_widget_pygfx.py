@@ -3670,7 +3670,7 @@ class STLViewerWidget(QWidget):
     def _apply_material_preset_to_mesh(self, mesh_obj, preset_data):
         """Apply material preset to a mesh — uses PBR MeshStandardMaterial for
         metallic presets (Gold/Silver) with environment map, and MeshPhongMaterial
-        for non-metallic presets."""
+        for non-metallic presets. Supports texture-mapped presets (e.g. Leather)."""
         import pygfx as gfx
         try:
             color = preset_data.get("color", "#CCCCCC")
@@ -3682,6 +3682,7 @@ class STLViewerWidget(QWidget):
             base_emissive_intensity = 0.25 if emissive else 0.0
             base_env_map_intensity = 1.5 if base_metalness > 0 else 1.0
             env_tone = self._resolve_env_tone(preset_data)
+            use_texture_maps = preset_data.get("use_texture_maps", False)
 
             if base_metalness > 0:
                 # Metallic PBR (Gold, Silver, Chrome…)
@@ -3717,6 +3718,13 @@ class STLViewerWidget(QWidget):
                     material.emissive_intensity = 0.12
                     base_emissive_intensity = 0.12
 
+            # --- Apply texture maps for texture-mapped presets (e.g. Leather) ---
+            if use_texture_maps:
+                try:
+                    self._apply_pbr_texture_maps(mesh_obj, material, preset_data)
+                except Exception as tex_err:
+                    logger.warning(f"Failed to apply texture maps, falling back to solid color: {tex_err}")
+
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material
             mesh_obj.material = material
@@ -3740,9 +3748,52 @@ class STLViewerWidget(QWidget):
 
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} env_map={'yes' if metalness and metalness > 0 else 'no'}")
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} texture_maps={use_texture_maps}")
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
+
+    def _apply_pbr_texture_maps(self, mesh_obj, material, preset_data):
+        """Apply procedural PBR texture maps (albedo, normal, roughness) to a mesh.
+        Currently supports procedural leather textures generated via numpy."""
+        import pygfx as gfx
+        from core.procedural_textures import get_leather_textures
+
+        albedo_key = preset_data.get("albedo_map", "")
+        if "procedural_leather" not in albedo_key:
+            logger.info("_apply_pbr_texture_maps: No procedural leather key, skipping.")
+            return
+
+        albedo, normal, roughness_tex = get_leather_textures(size=512)
+
+        # Generate UVs for the mesh geometry
+        geom = mesh_obj.geometry
+        positions = geom.positions
+        if positions is not None:
+            pos_data = positions.data if hasattr(positions, 'data') else positions
+            uvs = self._generate_box_uvs(pos_data)
+            geom.texcoords = gfx.Buffer(uvs)
+
+        # Albedo (base color) map
+        tex_albedo = gfx.Texture(albedo, dim=2)
+        albedo_view = tex_albedo.get_view(address_mode="repeat")
+        material.map = albedo_view
+
+        # Normal map — surface grain and wrinkles
+        tex_normal = gfx.Texture(normal, dim=2)
+        normal_view = tex_normal.get_view(address_mode="repeat")
+        material.normal_map = normal_view
+        material.normal_scale = (1.5, 1.5)  # emphasize the grain
+
+        # Roughness map — gloss variation across surface
+        # pygfx roughness_map expects a texture; convert grayscale to RGBA
+        rough_rgba = np.stack([roughness_tex, roughness_tex, roughness_tex,
+                               np.full_like(roughness_tex, 255)], axis=-1)
+        tex_rough = gfx.Texture(rough_rgba, dim=2)
+        rough_view = tex_rough.get_view(address_mode="repeat")
+        material.roughness_map = rough_view
+
+        logger.info("_apply_pbr_texture_maps: Applied procedural leather textures (albedo + normal + roughness)")
+
 
     def _add_preset_accent_lights(self, tone="warm"):
         """Add clean 4-light rig — env map handles reflections, these add
