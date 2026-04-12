@@ -3775,13 +3775,14 @@ class STLViewerWidget(QWidget):
                 is_phong = False
 
             if is_standard:
-                # Only update roughness/metalness if the user explicitly changed
-                # the sliders (not still at defaults). This preserves preset values
-                # when only scale/rotation are adjusted.
+                # Preserve current material values when only scale/rotation changed.
+                # Only override if user explicitly moved the roughness/metalness sliders
+                # away from defaults (0.5 / 0.0).
                 user_changed_pbr = (roughness != 0.5 or metalness != 0.0)
                 if user_changed_pbr:
                     mat.roughness = roughness
                     mat.metalness = metalness
+                # else: keep current mat.roughness / mat.metalness (e.g. from preset)
 
             if is_phong:
                 # Modulate shininess as roughness proxy
