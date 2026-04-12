@@ -968,6 +968,8 @@ class STLViewerWindow(QMainWindow):
             viewer.click_to_upload.connect(self.upload_stl_file)
         if hasattr(viewer, 'drop_error'):
             viewer.drop_error.connect(self._show_drop_error)
+        if hasattr(viewer, 'material_preset_applied'):
+            viewer.material_preset_applied.connect(self._on_material_preset_applied)
     
     def _connect_annotation_panel_signals_for(self, tab: TabState):
         """Connect annotation panel signals for a specific tab."""
@@ -1993,6 +1995,11 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'update_texture_settings'):
             vw.update_texture_settings(settings)
+
+    def _on_material_preset_applied(self, preset_data):
+        """Sync simplified material sliders when a preset is dropped onto the model."""
+        if self.texture_panel and hasattr(self.texture_panel, 'sync_material_controls'):
+            self.texture_panel.sync_material_controls(preset_data)
 
     # ========== Draw Mode Methods ==========
     

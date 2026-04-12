@@ -115,6 +115,7 @@ class STLViewerWidget(QWidget):
     click_to_upload = pyqtSignal()
     drop_error = pyqtSignal(str)
     part_clicked = pyqtSignal(int)  # emitted when user clicks a part in parts mode
+    material_preset_applied = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         _debug_print("STLViewerWidget (pygfx): Initializing...")
@@ -3567,6 +3568,22 @@ class STLViewerWidget(QWidget):
             return
         self._apply_material_preset_to_mesh(mesh_obj, preset_data)
 
+    def _shine_to_roughness(self, shine_pct):
+        shine = max(0.0, min(100.0, float(shine_pct)))
+        return 0.45 - (shine / 100.0) * 0.42
+
+    def _roughness_to_shine(self, roughness):
+        roughness = max(0.03, min(0.45, float(roughness)))
+        return int(round(((0.45 - roughness) / 0.42) * 100))
+
+    def _shadow_to_emissive_intensity(self, shadow_pct):
+        shadow = max(0.0, min(100.0, float(shadow_pct)))
+        return 0.05 + (shadow / 100.0) * 0.40
+
+    def _emissive_intensity_to_shadow(self, emissive_intensity):
+        emissive_intensity = max(0.05, min(0.45, float(emissive_intensity)))
+        return int(round(((emissive_intensity - 0.05) / 0.40) * 100))
+
     def _create_studio_env_map(self):
         """Create a procedural warm studio environment cube texture for PBR reflections.
         Simulates a jewelry photography light box with bright warm panels."""
@@ -3632,30 +3649,26 @@ class STLViewerWidget(QWidget):
             emissive = preset_data.get("emissive", None)
             metalness = preset_data.get("metalness", None)
             roughness = preset_data.get("roughness", None)
+            base_roughness = float(roughness) if roughness is not None else 0.2
+            base_metalness = float(metalness) if metalness is not None else 0.0
+            base_emissive_intensity = 0.25 if emissive else 0.0
+            base_env_map_intensity = 1.5 if base_metalness > 0 else 1.0
 
-            if metalness is not None and metalness > 0:
-                # PBR path for metallic presets (Gold, Silver)
-                mat_kwargs = dict(
+            if base_metalness > 0:
+                material = gfx.MeshStandardMaterial(
                     color=color,
-                    metalness=float(metalness),
-                    roughness=float(roughness) if roughness is not None else 0.2,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
                 )
-                if emissive:
-                    mat_kwargs["emissive"] = emissive
-
-                material = gfx.MeshStandardMaterial(**mat_kwargs)
-
-                # env_map must be set as property, not constructor kwarg
                 env_tex = self._create_studio_env_map()
                 if env_tex is not None:
                     material.env_map = env_tex
                     material.env_mapping_mode = "CUBE-REFLECTION"
-                    material.env_map_intensity = 1.5
-
+                    material.env_map_intensity = base_env_map_intensity
                 if emissive:
-                    material.emissive_intensity = 0.25
+                    material.emissive = emissive
+                    material.emissive_intensity = base_emissive_intensity
             else:
-                # Phong path for non-metallic presets (Leather)
                 specular = preset_data.get("specular", "#FFFFFF")
                 shininess = preset_data.get("shininess", 100)
                 mat_kwargs = dict(
@@ -3672,9 +3685,22 @@ class STLViewerWidget(QWidget):
             if not hasattr(mesh_obj, '_original_material'):
                 mesh_obj._original_material = mesh_obj.material
             mesh_obj.material = material
+            mesh_obj._material_preset_data = {
+                "color": color,
+                "emissive": emissive,
+                "roughness": base_roughness,
+                "metalness": base_metalness,
+                "emissive_intensity": base_emissive_intensity,
+                "env_map_intensity": base_env_map_intensity,
+            }
 
-            # Add accent lights for metallic presets
             self._add_preset_accent_lights()
+
+            if base_metalness > 0:
+                self.material_preset_applied.emit({
+                    "shine": self._roughness_to_shine(base_roughness),
+                    "shadow_depth": self._emissive_intensity_to_shadow(base_emissive_intensity),
+                })
 
             if self._canvas:
                 self._canvas.request_draw()
@@ -3719,18 +3745,17 @@ class STLViewerWidget(QWidget):
         self._preset_accent_lights = []
 
     def update_texture_settings(self, settings):
-        """Update material/texture properties based on slider values from the texture panel.
-        settings: dict with keys scale, rotation, roughness, metalness, opacity."""
+        """Update texture UVs plus simple metallic material controls from the texture panel."""
         import pygfx as gfx
         import math
 
-        opacity = settings.get("opacity", 1.0)
-        roughness = settings.get("roughness", 0.5)
-        metalness = settings.get("metalness", 0.0)
+        shine = settings.get("shine", None)
+        shadow_depth = settings.get("shadow_depth", None)
+        roughness = settings.get("roughness", None)
+        metalness = settings.get("metalness", None)
         scale = settings.get("scale", 1.0)
         rotation_deg = settings.get("rotation", 0)
 
-        # Apply to all parts that have been textured/preset-applied
         meshes = []
         for p in self._mesh_parts:
             mo = p.get('mesh_obj')
@@ -3744,8 +3769,6 @@ class STLViewerWidget(QWidget):
 
         smoothness = settings.get("smoothness", 1.0)
         crease_angle = settings.get("crease_angle", 30)
-
-        # Rebuild geometry normals based on smoothness / crease angle
         self._apply_shading_to_parts(smoothness, crease_angle)
 
         for mesh_obj in meshes:
@@ -3753,16 +3776,16 @@ class STLViewerWidget(QWidget):
             if mat is None:
                 continue
 
+            preset_data = getattr(mesh_obj, '_material_preset_data', None)
             is_phong = type(mat).__name__ == 'MeshPhongMaterial'
             is_standard = type(mat).__name__ == 'MeshStandardMaterial'
 
-            if is_phong and (roughness != 0.5 or metalness != 0.0):
-                # Convert Phong → Standard for PBR control
+            if is_phong and (roughness is not None or metalness is not None):
                 color = getattr(mat, 'color', (0.68, 0.85, 0.90))
                 new_mat = gfx.MeshStandardMaterial(
                     color=color,
-                    roughness=roughness,
-                    metalness=metalness,
+                    roughness=roughness if roughness is not None else 0.2,
+                    metalness=metalness if metalness is not None else 0.0,
                 )
                 if hasattr(self, '_studio_env_tex') and self._studio_env_tex is not None:
                     new_mat.env_map = self._studio_env_tex
@@ -3774,21 +3797,41 @@ class STLViewerWidget(QWidget):
                 is_standard = True
                 is_phong = False
 
-            if is_standard:
-                # Preserve current material values when only scale/rotation changed.
-                # Only override if user explicitly moved the roughness/metalness sliders
-                # away from defaults (0.5 / 0.0).
-                user_changed_pbr = (roughness != 0.5 or metalness != 0.0)
-                if user_changed_pbr:
-                    mat.roughness = roughness
-                    mat.metalness = metalness
-                # else: keep current mat.roughness / mat.metalness (e.g. from preset)
+            if is_standard and preset_data is not None:
+                target_roughness = preset_data.get("roughness", getattr(mat, 'roughness', 0.2))
+                target_metalness = preset_data.get("metalness", getattr(mat, 'metalness', 1.0))
+                target_env_intensity = preset_data.get("env_map_intensity", getattr(mat, 'env_map_intensity', 1.5))
+                target_emissive_intensity = preset_data.get("emissive_intensity", getattr(mat, 'emissive_intensity', 0.25))
 
-            if is_phong:
-                # Modulate shininess as roughness proxy
+                if roughness is not None:
+                    target_roughness = roughness
+                elif shine is not None:
+                    target_roughness = self._shine_to_roughness(shine)
+
+                if metalness is not None:
+                    target_metalness = metalness
+
+                if shadow_depth is not None:
+                    target_emissive_intensity = self._shadow_to_emissive_intensity(shadow_depth)
+                    target_env_intensity = preset_data.get("env_map_intensity", 1.5) * (0.9 + (float(shadow_depth) / 100.0) * 0.2)
+
+                mat.roughness = float(target_roughness)
+                mat.metalness = float(target_metalness)
+                if preset_data.get("emissive"):
+                    mat.emissive = preset_data["emissive"]
+                    mat.emissive_intensity = float(target_emissive_intensity)
+                if hasattr(mat, 'env_map_intensity'):
+                    mat.env_map_intensity = float(target_env_intensity)
+
+            elif is_standard:
+                if roughness is not None:
+                    mat.roughness = roughness
+                if metalness is not None:
+                    mat.metalness = metalness
+
+            if is_phong and roughness is not None:
                 mat.shininess = max(1, int((1.0 - roughness) * 500))
 
-            # UV scale and rotation (for image textures)
             geom = mesh_obj.geometry
             if geom is not None and hasattr(geom, 'texcoords') and geom.texcoords is not None:
                 base_uvs = geom.texcoords.data if hasattr(geom.texcoords, 'data') else geom.texcoords
