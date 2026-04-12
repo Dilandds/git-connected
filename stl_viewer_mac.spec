@@ -96,6 +96,7 @@ a = Analysis(
         'core.mesh_calculator',
         'core.license_validator',
         'core.image_utils',
+        'core.procedural_textures',
         # HEIC (iPhone) to JPEG conversion in annotation mode
         'PIL',
         'PIL.Image',
