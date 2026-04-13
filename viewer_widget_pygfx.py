@@ -3725,9 +3725,21 @@ class STLViewerWidget(QWidget):
                 except Exception as tex_err:
                     logger.warning(f"Failed to apply texture maps, falling back to solid color: {tex_err}")
 
-            if not hasattr(mesh_obj, '_original_material'):
-                mesh_obj._original_material = mesh_obj.material
-            mesh_obj.material = material
+            # Apply material — handle both single Mesh and Group with children
+            if hasattr(mesh_obj, 'geometry') and mesh_obj.geometry is not None:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
+            elif hasattr(mesh_obj, 'children'):
+                for child in mesh_obj.children:
+                    if hasattr(child, 'material'):
+                        if not hasattr(child, '_original_material'):
+                            child._original_material = child.material
+                        child.material = material
+            else:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
             mesh_obj._material_preset_data = {
                 "color": color,
                 "emissive": emissive,
