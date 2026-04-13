@@ -75,6 +75,19 @@ MATERIAL_PRESETS = [
         "normal_map": "procedural_leather",
         "roughness_map": "procedural_leather",
     },
+    {
+        "name": "Glass",
+        "category": "glass",
+        "color": "#D4E8F0",          # very pale blue tint
+        "highlight": "#FFFFFF",
+        "specular": "#FFFFFF",
+        "shininess": 500,
+        "metalness": 0.0,
+        "roughness": 0.02,           # near-perfect smooth surface
+        "emissive": None,
+        "env_tone": "neutral",
+        "opacity": 0.3,              # transparent by default
+    },
 ]
 
 
@@ -443,14 +456,17 @@ class TexturePanel(QWidget):
 
     def sync_material_controls(self, preset_data: dict):
         """Sync the simple material sliders to match an applied preset.
-        Switches between metal and fabric slider groups based on preset category."""
+        Switches between metal, fabric, and glass slider groups based on preset category."""
         category = preset_data.get("category", "metal")
         self._active_category = category
 
         # Show/hide slider groups
         is_metal = (category == "metal")
+        is_glass = (category == "glass")
+        is_fabric = (category == "fabric")
         self._metal_sliders_container.setVisible(is_metal)
-        self._fabric_sliders_container.setVisible(not is_metal)
+        self._fabric_sliders_container.setVisible(is_fabric)
+        self._glass_sliders_container.setVisible(is_glass)
 
         if is_metal:
             shine = int(preset_data.get("shine", self._slider_shine.value()))
@@ -474,6 +490,23 @@ class TexturePanel(QWidget):
                 self._lbl_shine.setText(f"{shine}%")
             if hasattr(self, '_lbl_shadow'):
                 self._lbl_shadow.setText(f"{shadow_depth}%")
+        elif is_glass:
+            # Glass: reset sliders to defaults
+            self._slider_opacity.blockSignals(True)
+            self._slider_clarity.blockSignals(True)
+            self._slider_tint.blockSignals(True)
+            self._slider_opacity.setValue(30)    # 30% opacity default
+            self._slider_clarity.setValue(98)    # near-perfect clarity
+            self._slider_tint.setValue(0)        # no tint
+            self._slider_opacity.blockSignals(False)
+            self._slider_clarity.blockSignals(False)
+            self._slider_tint.blockSignals(False)
+            if hasattr(self, '_lbl_opacity'):
+                self._lbl_opacity.setText("30%")
+            if hasattr(self, '_lbl_clarity'):
+                self._lbl_clarity.setText("98%")
+            if hasattr(self, '_lbl_tint'):
+                self._lbl_tint.setText("0%")
         else:
             # Fabric: reset sliders to defaults
             self._slider_grain.blockSignals(True)
@@ -501,6 +534,10 @@ class TexturePanel(QWidget):
             settings["shine"] = self._slider_shine.value()
             settings["shadow_depth"] = self._slider_shadow.value()
             settings["brightness"] = self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50
+        elif category == "glass":
+            settings["opacity"] = self._slider_opacity.value()
+            settings["clarity"] = self._slider_clarity.value()
+            settings["tint"] = self._slider_tint.value()
         else:
             settings["grain"] = self._slider_grain.value()
             settings["softness"] = self._slider_softness.value()
@@ -725,6 +762,23 @@ class TexturePanel(QWidget):
 
         self._fabric_sliders_container.hide()  # Default to metal sliders
         layout.addWidget(self._fabric_sliders_container)
+
+        # --- Glass sliders container ---
+        self._glass_sliders_container = QWidget()
+        self._glass_sliders_container.setStyleSheet("background: transparent;")
+        glass_layout = QVBoxLayout(self._glass_sliders_container)
+        glass_layout.setContentsMargins(0, 0, 0, 0)
+        glass_layout.setSpacing(4)
+
+        row, self._slider_opacity, self._lbl_opacity = self._create_slider_row("Opacity", 0, 100, 30, "%")
+        glass_layout.addWidget(row)
+        row, self._slider_clarity, self._lbl_clarity = self._create_slider_row("Clarity", 0, 100, 98, "%")
+        glass_layout.addWidget(row)
+        row, self._slider_tint, self._lbl_tint = self._create_slider_row("Tint", 0, 100, 0, "%")
+        glass_layout.addWidget(row)
+
+        self._glass_sliders_container.hide()  # Default hidden
+        layout.addWidget(self._glass_sliders_container)
 
         self._active_category = "metal"
 

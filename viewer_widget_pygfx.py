@@ -3684,7 +3684,24 @@ class STLViewerWidget(QWidget):
             env_tone = self._resolve_env_tone(preset_data)
             use_texture_maps = preset_data.get("use_texture_maps", False)
 
-            if base_metalness > 0:
+            preset_opacity = preset_data.get("opacity", None)
+            is_glass = preset_data.get("category", "") == "glass"
+
+            if is_glass:
+                # Glass: transparent PBR material
+                material = gfx.MeshStandardMaterial(
+                    color=color,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
+                    opacity=float(preset_opacity) if preset_opacity is not None else 0.3,
+                )
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 2.0  # strong reflections for glass
+                    base_env_map_intensity = 2.0
+            elif base_metalness > 0:
                 # Metallic PBR (Gold, Silver, Chrome…)
                 material = gfx.MeshStandardMaterial(
                     color=color,
@@ -3748,6 +3765,8 @@ class STLViewerWidget(QWidget):
                 "emissive_intensity": base_emissive_intensity,
                 "env_map_intensity": base_env_map_intensity,
                 "env_tone": env_tone,
+                "category": preset_data.get("category", "metal"),
+                "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
             }
 
             self._add_preset_accent_lights(tone=env_tone)
@@ -3758,6 +3777,10 @@ class STLViewerWidget(QWidget):
                     "category": "metal",
                     "shine": self._roughness_to_shine(base_roughness),
                     "shadow_depth": self._emissive_intensity_to_shadow(base_emissive_intensity),
+                })
+            elif preset_category == "glass":
+                self.material_preset_applied.emit({
+                    "category": "glass",
                 })
             else:
                 self.material_preset_applied.emit({
@@ -3889,6 +3912,11 @@ class STLViewerWidget(QWidget):
         softness = settings.get("softness", None)
         wear = settings.get("wear", None)
 
+        # Glass-specific settings
+        glass_opacity = settings.get("opacity", None)
+        glass_clarity = settings.get("clarity", None)
+        glass_tint = settings.get("tint", None)
+
         meshes = []
         for p in self._mesh_parts:
             mo = p.get('mesh_obj')
@@ -3962,6 +3990,40 @@ class STLViewerWidget(QWidget):
                             mat.roughness = float(base_roughness * (1.0 - wear_factor * 0.3))
 
                     continue  # Skip metal logic for fabric
+
+            # --- Glass category: Opacity / Clarity / Tint ---
+            if category == "glass" and is_standard and preset_data is not None:
+                preset_cat = preset_data.get("category", "")
+                if preset_cat == "glass":
+                    # Opacity: 0% = fully transparent, 100% = fully opaque
+                    if glass_opacity is not None:
+                        mat.opacity = float(glass_opacity / 100.0)
+
+                    # Clarity: controls roughness (100% = crystal clear, 0% = frosted)
+                    if glass_clarity is not None:
+                        mat.roughness = float(1.0 - glass_clarity / 100.0)  # 100→0.0, 0→1.0
+
+                    # Tint: blends color from neutral to blue-tinted
+                    if glass_tint is not None:
+                        tint_factor = glass_tint / 100.0
+                        base_color = preset_data.get("color", "#D4E8F0")
+                        # Interpolate toward a deeper blue tint
+                        import colorsys
+                        # Parse base color
+                        bc = base_color.lstrip('#')
+                        br, bg, bb = int(bc[0:2], 16), int(bc[2:4], 16), int(bc[4:6], 16)
+                        # Target tint color: deeper blue
+                        tr, tg, tb = 100, 160, 220
+                        nr = int(br + (tr - br) * tint_factor)
+                        ng = int(bg + (tg - bg) * tint_factor)
+                        nb = int(bb + (tb - bb) * tint_factor)
+                        mat.color = f"#{nr:02x}{ng:02x}{nb:02x}"
+
+                    # Adjust env map intensity based on clarity
+                    if glass_clarity is not None and hasattr(mat, 'env_map_intensity'):
+                        mat.env_map_intensity = float(1.0 + glass_clarity / 100.0)  # 1.0→2.0
+
+                    continue  # Skip metal logic for glass
 
             # --- Metal category: Shine / Shadow / Brightness ---
             if is_standard and preset_data is not None:
