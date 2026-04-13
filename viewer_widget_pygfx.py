@@ -3911,17 +3911,38 @@ class STLViewerWidget(QWidget):
                 target_env_intensity = base_env * brightness_factor
                 env_tone = self._resolve_env_tone(preset_data)
 
-                mat.roughness = float(target_roughness)
-                mat.metalness = float(target_metalness)
-                env_tex = self._create_studio_env_map(tone=env_tone)
-                if env_tex is not None and hasattr(mat, 'env_map'):
-                    mat.env_map = env_tex
-                    mat.env_mapping_mode = "CUBE-REFLECTION"
-                if preset_data.get("emissive"):
-                    mat.emissive = preset_data["emissive"]
-                    mat.emissive_intensity = float(target_emissive_intensity)
-                if hasattr(mat, 'env_map_intensity'):
-                    mat.env_map_intensity = float(target_env_intensity)
+                # BUG: Recreate material from scratch when shine changes on non-metallic presets
+                # This drops texture maps (albedo, normal, roughness) causing leather to reset
+                base_metalness = preset_data.get("metalness", 0.0)
+                if shine is not None and base_metalness < 0.5:
+                    color = preset_data.get("color", "#8B4513")
+                    new_mat = gfx.MeshStandardMaterial(
+                        color=color,
+                        roughness=float(target_roughness),
+                        metalness=float(target_metalness),
+                    )
+                    env_tex = self._create_studio_env_map(tone=env_tone)
+                    if env_tex is not None:
+                        new_mat.env_map = env_tex
+                        new_mat.env_mapping_mode = "CUBE-REFLECTION"
+                        new_mat.env_map_intensity = float(target_env_intensity)
+                    if preset_data.get("emissive"):
+                        new_mat.emissive = preset_data["emissive"]
+                        new_mat.emissive_intensity = float(target_emissive_intensity)
+                    mesh_obj.material = new_mat
+                    mat = new_mat
+                else:
+                    mat.roughness = float(target_roughness)
+                    mat.metalness = float(target_metalness)
+                    env_tex = self._create_studio_env_map(tone=env_tone)
+                    if env_tex is not None and hasattr(mat, 'env_map'):
+                        mat.env_map = env_tex
+                        mat.env_mapping_mode = "CUBE-REFLECTION"
+                    if preset_data.get("emissive"):
+                        mat.emissive = preset_data["emissive"]
+                        mat.emissive_intensity = float(target_emissive_intensity)
+                    if hasattr(mat, 'env_map_intensity'):
+                        mat.env_map_intensity = float(target_env_intensity)
 
             elif is_standard:
                 if roughness is not None:
