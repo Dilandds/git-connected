@@ -88,6 +88,23 @@ MATERIAL_PRESETS = [
         "env_tone": "neutral",
         "opacity": 0.3,              # transparent by default
     },
+    {
+        "name": "Lapis Lazuli",
+        "category": "fabric",        # reuse Grain/Softness/Wear sliders
+        "color": "#1A3A8F",          # deep royal blue base
+        "highlight": "#4A6FCF",
+        "specular": "#2B4DA0",
+        "shininess": 80,
+        "metalness": 0.0,
+        "roughness": 0.7,
+        "emissive": "#0A1540",       # deep blue shadow
+        "env_tone": "neutral",
+        "use_texture_maps": True,
+        "albedo_map": "image_file",
+        "albedo_map_path": "assets/textures/lapis_lazuli.png",
+        "normal_map": None,
+        "roughness_map": None,
+    },
 ]
 
 
