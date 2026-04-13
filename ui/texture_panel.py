@@ -593,21 +593,39 @@ class TexturePanel(QWidget):
 
         layout.addWidget(banner)
 
-        # ---- Materials section ----
-        mat_label = QLabel("Materials")
-        mat_label.setFont(make_font(size=11, bold=True))
-        mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
-        layout.addWidget(mat_label)
+        # ---- Materials section: Metals ----
+        metals_label = QLabel("Metals")
+        metals_label.setFont(make_font(size=11, bold=True))
+        metals_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(metals_label)
 
-        mat_grid = QGridLayout()
-        mat_grid.setContentsMargins(0, 0, 0, 0)
-        mat_grid.setSpacing(6)
-        mat_grid.setColumnStretch(0, 1)
-        mat_grid.setColumnStretch(1, 1)
-        for i, preset in enumerate(MATERIAL_PRESETS):
+        metals_grid = QGridLayout()
+        metals_grid.setContentsMargins(0, 0, 0, 0)
+        metals_grid.setSpacing(6)
+        metals_grid.setColumnStretch(0, 1)
+        metals_grid.setColumnStretch(1, 1)
+        metal_presets = [p for p in MATERIAL_PRESETS if p.get("group") == "metals"]
+        for i, preset in enumerate(metal_presets):
             card = MaterialPresetCard(preset)
-            mat_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
-        layout.addLayout(mat_grid)
+            metals_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+        layout.addLayout(metals_grid)
+
+        # ---- Materials section: Fabrics ----
+        fabrics_label = QLabel("Fabrics")
+        fabrics_label.setFont(make_font(size=11, bold=True))
+        fabrics_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(fabrics_label)
+
+        fabrics_grid = QGridLayout()
+        fabrics_grid.setContentsMargins(0, 0, 0, 0)
+        fabrics_grid.setSpacing(6)
+        fabrics_grid.setColumnStretch(0, 1)
+        fabrics_grid.setColumnStretch(1, 1)
+        fabric_presets = [p for p in MATERIAL_PRESETS if p.get("group") == "fabrics"]
+        for i, preset in enumerate(fabric_presets):
+            card = MaterialPresetCard(preset)
+            fabrics_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+        layout.addLayout(fabrics_grid)
 
         # ---- Upload button ----
         upload_label = QLabel("Custom Textures")
@@ -692,7 +710,29 @@ class TexturePanel(QWidget):
         row, self._slider_brightness, self._lbl_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
         layout.addWidget(row)
 
-        # Opacity slider removed per user request
+        # ---- Fabric-specific controls (hidden by default) ----
+        self._fabric_controls = QWidget()
+        self._fabric_controls.setStyleSheet("background: transparent;")
+        fabric_layout = QVBoxLayout(self._fabric_controls)
+        fabric_layout.setContentsMargins(0, 0, 0, 0)
+        fabric_layout.setSpacing(4)
+
+        fabric_settings_label = QLabel("Fabric Settings")
+        fabric_settings_label.setFont(make_font(size=11, bold=True))
+        fabric_settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        fabric_layout.addWidget(fabric_settings_label)
+
+        # Grain Depth: controls normal map intensity (0=flat, 50=default 1.5, 100=heavy 3.0)
+        row, self._slider_grain_depth, self._lbl_grain_depth = self._create_slider_row("Grain Depth", 0, 100, 50, "%")
+        fabric_layout.addWidget(row)
+
+        # Texture Scale: UV tiling multiplier (1–10, default 3)
+        row, self._slider_texture_scale, self._lbl_texture_scale = self._create_slider_row("Tex. Scale", 1, 10, 3, "×")
+        fabric_layout.addWidget(row)
+
+        self._fabric_controls.hide()
+        self._active_group = "metals"
+        layout.addWidget(self._fabric_controls)
 
         # ---- Shading Settings ----
         shading_label = QLabel("Shading")
