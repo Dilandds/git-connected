@@ -3894,17 +3894,10 @@ class STLViewerWidget(QWidget):
                 target_env_intensity = preset_data.get("env_map_intensity", getattr(mat, 'env_map_intensity', 1.5))
                 target_emissive_intensity = preset_data.get("emissive_intensity", getattr(mat, 'emissive_intensity', 0.25))
 
-                has_roughness_map = getattr(mat, 'roughness_map', None) is not None
-
                 if roughness is not None:
                     target_roughness = roughness
                 elif shine is not None:
-                    if has_roughness_map:
-                        # For texture-mapped materials (e.g. Leather), use shine as
-                        # a multiplier factor: 0%→1.0 (full matte), 100%→0.1 (glossy)
-                        target_roughness = self._shine_to_roughness(shine)
-                    else:
-                        target_roughness = self._shine_to_roughness(shine)
+                    target_roughness = self._shine_to_roughness(shine)
 
                 if metalness is not None:
                     target_metalness = metalness
@@ -3929,27 +3922,6 @@ class STLViewerWidget(QWidget):
                     mat.emissive_intensity = float(target_emissive_intensity)
                 if hasattr(mat, 'env_map_intensity'):
                     mat.env_map_intensity = float(target_env_intensity)
-
-                # --- Fabric-specific controls ---
-                grain_depth = settings.get("grain_depth", None)
-                texture_scale = settings.get("texture_scale", None)
-
-                if grain_depth is not None and hasattr(mat, 'normal_scale'):
-                    # Map 0–100 to 0.0–3.0 normal scale
-                    ns = grain_depth * 0.03
-                    try:
-                        mat.normal_scale = (ns, ns)
-                    except Exception:
-                        pass
-
-                if texture_scale is not None and has_roughness_map:
-                    # Regenerate UVs with tiling multiplier
-                    import numpy as np
-                    geom = mesh_obj.geometry
-                    positions = geom.positions.data if hasattr(geom.positions, 'data') else geom.positions
-                    base_uvs = self._generate_box_uvs(np.asarray(positions))
-                    scaled_uvs = base_uvs * float(texture_scale)
-                    geom.texcoords = gfx.Buffer(scaled_uvs.astype(np.float32))
 
             elif is_standard:
                 if roughness is not None:
