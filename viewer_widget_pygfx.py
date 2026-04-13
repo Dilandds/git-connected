@@ -3684,7 +3684,24 @@ class STLViewerWidget(QWidget):
             env_tone = self._resolve_env_tone(preset_data)
             use_texture_maps = preset_data.get("use_texture_maps", False)
 
-            if base_metalness > 0:
+            preset_opacity = preset_data.get("opacity", None)
+            is_glass = preset_data.get("category", "") == "glass"
+
+            if is_glass:
+                # Glass: transparent PBR material
+                material = gfx.MeshStandardMaterial(
+                    color=color,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
+                    opacity=float(preset_opacity) if preset_opacity is not None else 0.3,
+                )
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 2.0  # strong reflections for glass
+                    base_env_map_intensity = 2.0
+            elif base_metalness > 0:
                 # Metallic PBR (Gold, Silver, Chrome…)
                 material = gfx.MeshStandardMaterial(
                     color=color,
