@@ -3765,6 +3765,8 @@ class STLViewerWidget(QWidget):
                 "emissive_intensity": base_emissive_intensity,
                 "env_map_intensity": base_env_map_intensity,
                 "env_tone": env_tone,
+                "category": preset_data.get("category", "metal"),
+                "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
             }
 
             self._add_preset_accent_lights(tone=env_tone)
@@ -3775,6 +3777,10 @@ class STLViewerWidget(QWidget):
                     "category": "metal",
                     "shine": self._roughness_to_shine(base_roughness),
                     "shadow_depth": self._emissive_intensity_to_shadow(base_emissive_intensity),
+                })
+            elif preset_category == "glass":
+                self.material_preset_applied.emit({
+                    "category": "glass",
                 })
             else:
                 self.material_preset_applied.emit({
