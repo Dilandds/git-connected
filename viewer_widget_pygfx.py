@@ -3725,9 +3725,21 @@ class STLViewerWidget(QWidget):
                 except Exception as tex_err:
                     logger.warning(f"Failed to apply texture maps, falling back to solid color: {tex_err}")
 
-            if not hasattr(mesh_obj, '_original_material'):
-                mesh_obj._original_material = mesh_obj.material
-            mesh_obj.material = material
+            # Apply material — handle both single Mesh and Group with children
+            if hasattr(mesh_obj, 'geometry') and mesh_obj.geometry is not None:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
+            elif hasattr(mesh_obj, 'children'):
+                for child in mesh_obj.children:
+                    if hasattr(child, 'material'):
+                        if not hasattr(child, '_original_material'):
+                            child._original_material = child.material
+                        child.material = material
+            else:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
             mesh_obj._material_preset_data = {
                 "color": color,
                 "emissive": emissive,
@@ -3771,13 +3783,22 @@ class STLViewerWidget(QWidget):
 
         albedo, normal, roughness_tex = get_leather_textures(size=512)
 
-        # Generate UVs for the mesh geometry
-        geom = mesh_obj.geometry
-        positions = geom.positions
-        if positions is not None:
-            pos_data = positions.data if hasattr(positions, 'data') else positions
-            uvs = self._generate_box_uvs(pos_data)
-            geom.texcoords = gfx.Buffer(uvs)
+        # Generate UVs for the mesh geometry — handle both single mesh and Group
+        geom = getattr(mesh_obj, 'geometry', None)
+        if geom is None:
+            # mesh_obj might be a Group; try to get geometry from first child
+            if hasattr(mesh_obj, 'children'):
+                for child in mesh_obj.children:
+                    child_geom = getattr(child, 'geometry', None)
+                    if child_geom is not None:
+                        self._ensure_texcoords(child_geom, gfx)
+            else:
+                logger.warning("_apply_pbr_texture_maps: No geometry found, skipping texture maps.")
+                return
+        else:
+            if not self._ensure_texcoords(geom, gfx):
+                logger.warning("_apply_pbr_texture_maps: No positions for UV generation, skipping texture maps.")
+                return
 
         # Albedo (base color) map
         tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
@@ -3796,6 +3817,20 @@ class STLViewerWidget(QWidget):
         material.roughness_map = gfx.TextureMap(tex_rough, wrap="repeat")
 
         logger.info("_apply_pbr_texture_maps: Applied procedural leather textures (albedo + normal + roughness)")
+
+    def _ensure_texcoords(self, geom, gfx):
+        """Ensure geometry has texcoords (UVs). Returns True if successful."""
+        positions = getattr(geom, 'positions', None)
+        if positions is None:
+            return False
+        # Check if texcoords already exist
+        existing = getattr(geom, 'texcoords', None)
+        if existing is not None:
+            return True
+        pos_data = positions.data if hasattr(positions, 'data') else positions
+        uvs = self._generate_box_uvs(pos_data)
+        geom.texcoords = gfx.Buffer(uvs)
+        return True
 
 
     def _add_preset_accent_lights(self, tone="warm"):
