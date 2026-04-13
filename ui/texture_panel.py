@@ -693,19 +693,40 @@ class TexturePanel(QWidget):
         settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(settings_label)
 
-        # Shine: simpler control for metallic highlights
+        # --- Metal sliders container ---
+        self._metal_sliders_container = QWidget()
+        self._metal_sliders_container.setStyleSheet("background: transparent;")
+        metal_layout = QVBoxLayout(self._metal_sliders_container)
+        metal_layout.setContentsMargins(0, 0, 0, 0)
+        metal_layout.setSpacing(4)
+
         row, self._slider_shine, self._lbl_shine = self._create_slider_row("Shine", 0, 100, 70, "%")
-        layout.addWidget(row)
-
-        # Shadow: controls the warm dark depth in the gold preset
+        metal_layout.addWidget(row)
         row, self._slider_shadow, self._lbl_shadow = self._create_slider_row("Shadow", 0, 100, 50, "%")
-        layout.addWidget(row)
-
-        # Brightness: controls environment lighting intensity (50% = original preset)
+        metal_layout.addWidget(row)
         row, self._slider_brightness, self._lbl_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
-        layout.addWidget(row)
+        metal_layout.addWidget(row)
 
-        # Opacity slider removed per user request
+        layout.addWidget(self._metal_sliders_container)
+
+        # --- Fabric sliders container ---
+        self._fabric_sliders_container = QWidget()
+        self._fabric_sliders_container.setStyleSheet("background: transparent;")
+        fabric_layout = QVBoxLayout(self._fabric_sliders_container)
+        fabric_layout.setContentsMargins(0, 0, 0, 0)
+        fabric_layout.setSpacing(4)
+
+        row, self._slider_grain, self._lbl_grain = self._create_slider_row("Grain", 0, 100, 50, "%")
+        fabric_layout.addWidget(row)
+        row, self._slider_softness, self._lbl_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
+        fabric_layout.addWidget(row)
+        row, self._slider_wear, self._lbl_wear = self._create_slider_row("Wear", 0, 100, 0, "%")
+        fabric_layout.addWidget(row)
+
+        self._fabric_sliders_container.hide()  # Default to metal sliders
+        layout.addWidget(self._fabric_sliders_container)
+
+        self._active_category = "metal"
 
         # ---- Shading Settings ----
         shading_label = QLabel("Shading")
