@@ -3836,11 +3836,17 @@ class STLViewerWidget(QWidget):
         import pygfx as gfx
         import math
 
+        category = settings.get("category", "metal")
         shine = settings.get("shine", None)
         shadow_depth = settings.get("shadow_depth", None)
         brightness = settings.get("brightness", 50)
         roughness = settings.get("roughness", None)
         metalness = settings.get("metalness", None)
+
+        # Fabric-specific settings
+        grain = settings.get("grain", None)
+        softness = settings.get("softness", None)
+        wear = settings.get("wear", None)
 
         meshes = []
         for p in self._mesh_parts:
@@ -3885,6 +3891,38 @@ class STLViewerWidget(QWidget):
                 is_standard = True
                 is_phong = False
 
+            # --- Fabric category: Grain / Softness / Wear ---
+            if category == "fabric" and is_standard and preset_data is not None:
+                base_metalness = preset_data.get("metalness", 0.0)
+                if base_metalness < 0.5:
+                    # Grain: controls normal map intensity (bump strength)
+                    # 0% = flat (no grain), 100% = maximum grain detail
+                    if grain is not None:
+                        grain_strength = grain / 50.0  # 0→0x, 50→1x (default), 100→2x
+                        if hasattr(mat, 'normal_scale'):
+                            mat.normal_scale = (grain_strength, grain_strength)
+
+                    # Softness: controls roughness (0% = rough matte, 100% = smooth/polished)
+                    if softness is not None:
+                        base_roughness = preset_data.get("roughness", 1.0)
+                        # Invert: high softness = low roughness
+                        softness_factor = 1.0 - (softness / 100.0) * 0.7  # range: 1.0 → 0.3
+                        mat.roughness = float(base_roughness * softness_factor)
+
+                    # Wear: adds aging/fading effect by blending emissive and lightening color
+                    if wear is not None:
+                        wear_factor = wear / 100.0
+                        # Increase emissive to simulate faded/worn patches
+                        base_emissive_intensity = preset_data.get("emissive_intensity", 0.25)
+                        mat.emissive_intensity = float(base_emissive_intensity + wear_factor * 0.5)
+                        # Slightly reduce roughness for worn shiny patches
+                        if softness is None:
+                            base_roughness = preset_data.get("roughness", 1.0)
+                            mat.roughness = float(base_roughness * (1.0 - wear_factor * 0.3))
+
+                    continue  # Skip metal logic for fabric
+
+            # --- Metal category: Shine / Shadow / Brightness ---
             if is_standard and preset_data is not None:
                 target_roughness = preset_data.get("roughness", getattr(mat, 'roughness', 0.2))
                 target_metalness = preset_data.get("metalness", getattr(mat, 'metalness', 1.0))
