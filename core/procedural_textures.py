@@ -57,8 +57,8 @@ def generate_leather_albedo(size=512):
     Returns uint8 RGB array of shape (size, size, 3).
     Brown leather with patchy color variation.
     """
-    # Base leather color (warm saddle brown)
-    base_r, base_g, base_b = 139, 69, 19  # #8B4513
+    # Base leather color (dark chocolate brown, matching reference)
+    base_r, base_g, base_b = 95, 60, 30  # dark warm brown
 
     # Large-scale color variation (patches)
     patches = _fbm((size, size), octaves=3, base_scale=64, seed=100)
@@ -70,10 +70,10 @@ def generate_leather_albedo(size=512):
     # Combine: patches shift hue, grain adds darkness in creases
     variation = patches * 0.6 + grain * 0.3 + fine * 0.1
 
-    # Map to color channels with warm brown palette
-    r = base_r + (variation - 0.5) * 60  # ±30
-    g = base_g + (variation - 0.5) * 40  # ±20
-    b = base_b + (variation - 0.5) * 20  # ±10
+    # Map to color channels with dark brown palette
+    r = base_r + (variation - 0.5) * 40  # ±20
+    g = base_g + (variation - 0.5) * 30  # ±15
+    b = base_b + (variation - 0.5) * 16  # ±8
 
     # Add darker crease lines using high-frequency noise
     creases = _fbm((size, size), octaves=5, base_scale=8, seed=400)
