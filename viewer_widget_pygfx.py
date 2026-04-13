@@ -3794,22 +3794,15 @@ class STLViewerWidget(QWidget):
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
     def _apply_pbr_texture_maps(self, mesh_obj, material, preset_data):
-        """Apply procedural PBR texture maps (albedo, normal, roughness) to a mesh.
-        Currently supports procedural leather textures generated via numpy."""
+        """Apply PBR texture maps (albedo, normal, roughness) to a mesh.
+        Supports procedural leather textures and image-file-based textures."""
         import pygfx as gfx
-        from core.procedural_textures import get_leather_textures
 
-        albedo_key = preset_data.get("albedo_map", "")
-        if "procedural_leather" not in albedo_key:
-            logger.info("_apply_pbr_texture_maps: No procedural leather key, skipping.")
-            return
+        albedo_key = preset_data.get("albedo_map", "") or ""
 
-        albedo, normal, roughness_tex = get_leather_textures(size=512)
-
-        # Generate UVs for the mesh geometry — handle both single mesh and Group
+        # --- Ensure UVs on geometry first ---
         geom = getattr(mesh_obj, 'geometry', None)
         if geom is None:
-            # mesh_obj might be a Group; try to get geometry from first child
             if hasattr(mesh_obj, 'children'):
                 for child in mesh_obj.children:
                     child_geom = getattr(child, 'geometry', None)
@@ -3823,23 +3816,70 @@ class STLViewerWidget(QWidget):
                 logger.warning("_apply_pbr_texture_maps: No positions for UV generation, skipping texture maps.")
                 return
 
-        # Albedo (base color) map
+        # --- Image-file based texture (e.g. Lapis Lazuli) ---
+        if albedo_key == "image_file":
+            albedo_path = preset_data.get("albedo_map_path", "")
+            if albedo_path:
+                albedo = self._load_texture_image(albedo_path)
+                if albedo is not None:
+                    tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
+                    material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
+                    logger.info(f"_apply_pbr_texture_maps: Applied image texture from {albedo_path}")
+                else:
+                    logger.warning(f"_apply_pbr_texture_maps: Failed to load image {albedo_path}")
+            return
+
+        # --- Procedural leather textures ---
+        if "procedural_leather" not in albedo_key:
+            logger.info("_apply_pbr_texture_maps: Unknown texture key, skipping.")
+            return
+
+        from core.procedural_textures import get_leather_textures
+        albedo, normal, roughness_tex = get_leather_textures(size=512)
+
         tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
         material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
 
-        # Normal map — surface grain and wrinkles
         tex_normal = gfx.Texture(normal, dim=2, generate_mipmaps=True)
         material.normal_map = gfx.TextureMap(tex_normal, wrap="repeat")
-        material.normal_scale = (1.5, 1.5)  # emphasize the grain
+        material.normal_scale = (1.5, 1.5)
 
-        # Roughness map — gloss variation across surface
-        # pygfx roughness_map expects a texture; convert grayscale to RGBA
         rough_rgba = np.stack([roughness_tex, roughness_tex, roughness_tex,
                                np.full_like(roughness_tex, 255)], axis=-1)
         tex_rough = gfx.Texture(rough_rgba, dim=2, generate_mipmaps=True)
         material.roughness_map = gfx.TextureMap(tex_rough, wrap="repeat")
 
         logger.info("_apply_pbr_texture_maps: Applied procedural leather textures (albedo + normal + roughness)")
+
+    def _load_texture_image(self, rel_path):
+        """Load an image file as a numpy array (H, W, 3 or 4) for use as a texture."""
+        import os
+        # Resolve path relative to app root or PyInstaller bundle
+        if hasattr(sys, '_MEIPASS'):
+            base = sys._MEIPASS
+        else:
+            base = os.path.dirname(os.path.abspath(__file__))
+        full_path = os.path.join(base, rel_path)
+        if not os.path.isfile(full_path):
+            logger.warning(f"_load_texture_image: File not found: {full_path}")
+            return None
+        try:
+            from PIL import Image
+            img = Image.open(full_path).convert("RGB")
+            img = img.resize((512, 512), Image.LANCZOS)
+            return np.array(img, dtype=np.uint8)
+        except ImportError:
+            # Fallback: use Qt to load
+            from PyQt5.QtGui import QImage
+            qimg = QImage(full_path)
+            if qimg.isNull():
+                return None
+            qimg = qimg.scaled(512, 512, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            qimg = qimg.convertToFormat(QImage.Format_RGB888)
+            ptr = qimg.bits()
+            ptr.setsize(qimg.byteCount())
+            arr = np.array(ptr).reshape(512, 512, 3).copy()
+            return arr
 
     def _ensure_texcoords(self, geom, gfx):
         """Ensure geometry has texcoords (UVs). Returns True if successful."""
