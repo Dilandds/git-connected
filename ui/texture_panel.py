@@ -228,7 +228,7 @@ class MaterialPresetCard(QFrame):
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
         # Texture map keys for PBR texture-mapped presets (e.g. Leather)
-        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map"):
+        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map", "category"):
             if map_key in self.preset:
                 payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)
