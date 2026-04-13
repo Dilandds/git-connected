@@ -3822,9 +3822,12 @@ class STLViewerWidget(QWidget):
             if albedo_path:
                 albedo = self._load_texture_image(albedo_path)
                 if albedo is not None:
+                    # Scale UVs for tiling (repeat the texture across the surface)
+                    tile_repeat = preset_data.get("tile_repeat", 4.0)
+                    self._scale_texcoords(mesh_obj, gfx, tile_repeat)
                     tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
                     material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
-                    logger.info(f"_apply_pbr_texture_maps: Applied image texture from {albedo_path}")
+                    logger.info(f"_apply_pbr_texture_maps: Applied tiled image texture from {albedo_path} (repeat={tile_repeat})")
                 else:
                     logger.warning(f"_apply_pbr_texture_maps: Failed to load image {albedo_path}")
             return
@@ -3894,6 +3897,24 @@ class STLViewerWidget(QWidget):
         uvs = self._generate_box_uvs(pos_data)
         geom.texcoords = gfx.Buffer(uvs)
         return True
+
+    def _scale_texcoords(self, mesh_obj, gfx, scale_factor):
+        """Multiply existing UV coordinates by scale_factor to tile textures."""
+        def _scale_geom_uvs(geom):
+            tc = getattr(geom, 'texcoords', None)
+            if tc is not None:
+                uv_data = tc.data if hasattr(tc, 'data') else tc
+                scaled = np.asarray(uv_data, dtype=np.float32) * float(scale_factor)
+                geom.texcoords = gfx.Buffer(scaled)
+
+        geom = getattr(mesh_obj, 'geometry', None)
+        if geom is not None:
+            _scale_geom_uvs(geom)
+        elif hasattr(mesh_obj, 'children'):
+            for child in mesh_obj.children:
+                child_geom = getattr(child, 'geometry', None)
+                if child_geom is not None:
+                    _scale_geom_uvs(child_geom)
 
 
     def _add_preset_accent_lights(self, tone="warm"):
