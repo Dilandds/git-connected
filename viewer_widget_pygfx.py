@@ -4191,13 +4191,6 @@ class STLViewerWidget(QWidget):
             if had_texture_maps:
                 self._ensure_texcoords(mesh_obj.geometry, gfx)
 
-                geom = gfx.Geometry(
-                    positions=gfx.Buffer(flat_verts.astype(np.float32)),
-                    normals=gfx.Buffer(blended.astype(np.float32)),
-                    indices=gfx.Buffer(flat_faces_arr),
-                )
-                mesh_obj.geometry = geom
-
     def remove_texture_from_part(self, part_id):
         """Revert a part to its original material (remove texture)."""
         for p in self._mesh_parts:
