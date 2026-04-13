@@ -466,6 +466,20 @@ class TexturePanel(QWidget):
         if hasattr(self, '_lbl_shadow'):
             self._lbl_shadow.setText(f"{shadow_depth}%")
 
+        # Show/hide fabric-specific controls based on group
+        group = preset_data.get("group", "metals")
+        self._active_group = group
+        if hasattr(self, '_fabric_controls'):
+            self._fabric_controls.setVisible(group == "fabrics")
+            if group == "fabrics":
+                # Reset fabric sliders to defaults
+                self._slider_grain_depth.blockSignals(True)
+                self._slider_texture_scale.blockSignals(True)
+                self._slider_grain_depth.setValue(50)
+                self._slider_texture_scale.setValue(3)
+                self._slider_grain_depth.blockSignals(False)
+                self._slider_texture_scale.blockSignals(False)
+
     def _emit_settings(self):
         """Emit current slider values as a dict."""
         settings = {
@@ -477,6 +491,12 @@ class TexturePanel(QWidget):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
         if hasattr(self, '_slider_crease_angle'):
             settings["crease_angle"] = self._slider_crease_angle.value()
+        # Include fabric-specific settings only when fabrics group is active
+        if getattr(self, '_active_group', 'metals') == 'fabrics':
+            if hasattr(self, '_slider_grain_depth'):
+                settings["grain_depth"] = self._slider_grain_depth.value()
+            if hasattr(self, '_slider_texture_scale'):
+                settings["texture_scale"] = self._slider_texture_scale.value()
         self.texture_settings_changed.emit(settings)
 
     def _init_ui(self):
