@@ -554,6 +554,14 @@ class TexturePanel(QWidget):
                 self._lbl_softness.setText("50%")
             if hasattr(self, '_lbl_wear'):
                 self._lbl_wear.setText("0%")
+            # Reset tile density
+            if hasattr(self, '_slider_tile_density'):
+                tile_default = int(preset_data.get("tile_repeat", 200))
+                self._slider_tile_density.blockSignals(True)
+                self._slider_tile_density.setValue(tile_default)
+                self._slider_tile_density.blockSignals(False)
+                if hasattr(self, '_lbl_tile_density'):
+                    self._lbl_tile_density.setText(f"{tile_default}x")
 
     def _emit_settings(self):
         """Emit current slider values as a dict."""
@@ -572,6 +580,8 @@ class TexturePanel(QWidget):
             settings["grain"] = self._slider_grain.value()
             settings["softness"] = self._slider_softness.value()
             settings["wear"] = self._slider_wear.value()
+            if hasattr(self, '_slider_tile_density'):
+                settings["tile_density"] = self._slider_tile_density.value()
 
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
@@ -788,6 +798,8 @@ class TexturePanel(QWidget):
         row, self._slider_softness, self._lbl_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
         fabric_layout.addWidget(row)
         row, self._slider_wear, self._lbl_wear = self._create_slider_row("Wear", 0, 100, 0, "%")
+        fabric_layout.addWidget(row)
+        row, self._slider_tile_density, self._lbl_tile_density = self._create_slider_row("Tile Density", 1, 500, 200, "x")
         fabric_layout.addWidget(row)
 
         self._fabric_sliders_container.hide()  # Default to metal sliders
