@@ -38,6 +38,7 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
+        "group": "metals",
         "color": "#D4A843",          # real 24K polished gold — warm amber, NOT bright yellow
         "highlight": "#F5E6B8",
         "specular": "#D4A843",
@@ -48,6 +49,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Silver",
+        "group": "metals",
         "color": "#C0C0C0",          # true neutral silver — pure mid-gray, no warmth
         "highlight": "#FFFFFF",
         "specular": "#FFFFFF",
@@ -59,6 +61,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Leather Brown",
+        "group": "fabrics",
         "color": "#8B4513",
         "highlight": "#C4956A",
         "specular": "#3D2B1F",
@@ -225,7 +228,7 @@ class MaterialPresetCard(QFrame):
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
         # Texture map keys for PBR texture-mapped presets (e.g. Leather)
-        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map"):
+        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map", "group"):
             if map_key in self.preset:
                 payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)
