@@ -104,6 +104,7 @@ MATERIAL_PRESETS = [
         "albedo_map_path": "assets/textures/lapis_lazuli.png",
         "normal_map": None,
         "roughness_map": None,
+        "swatch_image": "assets/textures/lapis_lazuli.png",
     },
 ]
 
