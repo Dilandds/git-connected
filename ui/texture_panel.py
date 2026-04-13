@@ -763,6 +763,23 @@ class TexturePanel(QWidget):
         self._fabric_sliders_container.hide()  # Default to metal sliders
         layout.addWidget(self._fabric_sliders_container)
 
+        # --- Glass sliders container ---
+        self._glass_sliders_container = QWidget()
+        self._glass_sliders_container.setStyleSheet("background: transparent;")
+        glass_layout = QVBoxLayout(self._glass_sliders_container)
+        glass_layout.setContentsMargins(0, 0, 0, 0)
+        glass_layout.setSpacing(4)
+
+        row, self._slider_opacity, self._lbl_opacity = self._create_slider_row("Opacity", 0, 100, 30, "%")
+        glass_layout.addWidget(row)
+        row, self._slider_clarity, self._lbl_clarity = self._create_slider_row("Clarity", 0, 100, 98, "%")
+        glass_layout.addWidget(row)
+        row, self._slider_tint, self._lbl_tint = self._create_slider_row("Tint", 0, 100, 0, "%")
+        glass_layout.addWidget(row)
+
+        self._glass_sliders_container.hide()  # Default hidden
+        layout.addWidget(self._glass_sliders_container)
+
         self._active_category = "metal"
 
         # ---- Shading Settings ----
