@@ -38,6 +38,7 @@ _TEX_TEAL_BOTTOM = "#006064"
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
+        "category": "metal",
         "color": "#D4A843",          # real 24K polished gold — warm amber, NOT bright yellow
         "highlight": "#F5E6B8",
         "specular": "#D4A843",
@@ -48,6 +49,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Silver",
+        "category": "metal",
         "color": "#C0C0C0",          # true neutral silver — pure mid-gray, no warmth
         "highlight": "#FFFFFF",
         "specular": "#FFFFFF",
@@ -59,6 +61,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Leather Brown",
+        "category": "fabric",
         "color": "#8B4513",
         "highlight": "#C4956A",
         "specular": "#3D2B1F",
@@ -225,7 +228,7 @@ class MaterialPresetCard(QFrame):
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
         # Texture map keys for PBR texture-mapped presets (e.g. Leather)
-        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map"):
+        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map", "category"):
             if map_key in self.preset:
                 payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)
@@ -439,37 +442,70 @@ class TexturePanel(QWidget):
         return container, slider, val_lbl
 
     def sync_material_controls(self, preset_data: dict):
-        """Sync the simple material sliders to match an applied metallic preset."""
-        shine = int(preset_data.get("shine", self._slider_shine.value()))
-        shadow_depth = int(preset_data.get("shadow_depth", self._slider_shadow.value()))
+        """Sync the simple material sliders to match an applied preset.
+        Switches between metal and fabric slider groups based on preset category."""
+        category = preset_data.get("category", "metal")
+        self._active_category = category
 
-        self._slider_shine.blockSignals(True)
-        self._slider_shadow.blockSignals(True)
-        self._slider_shine.setValue(shine)
-        self._slider_shadow.setValue(shadow_depth)
-        self._slider_shine.blockSignals(False)
-        self._slider_shadow.blockSignals(False)
+        # Show/hide slider groups
+        is_metal = (category == "metal")
+        self._metal_sliders_container.setVisible(is_metal)
+        self._fabric_sliders_container.setVisible(not is_metal)
 
-        # Reset brightness to 50% (original) when a new preset is applied
-        if hasattr(self, '_slider_brightness'):
+        if is_metal:
+            shine = int(preset_data.get("shine", self._slider_shine.value()))
+            shadow_depth = int(preset_data.get("shadow_depth", self._slider_shadow.value()))
+
+            self._slider_shine.blockSignals(True)
+            self._slider_shadow.blockSignals(True)
+            self._slider_shine.setValue(shine)
+            self._slider_shadow.setValue(shadow_depth)
+            self._slider_shine.blockSignals(False)
+            self._slider_shadow.blockSignals(False)
+
+            # Reset brightness to 50% (original) when a new preset is applied
             self._slider_brightness.blockSignals(True)
             self._slider_brightness.setValue(50)
             self._slider_brightness.blockSignals(False)
             if hasattr(self, '_lbl_brightness'):
                 self._lbl_brightness.setText("50%")
 
-        if hasattr(self, '_lbl_shine'):
-            self._lbl_shine.setText(f"{shine}%")
-        if hasattr(self, '_lbl_shadow'):
-            self._lbl_shadow.setText(f"{shadow_depth}%")
+            if hasattr(self, '_lbl_shine'):
+                self._lbl_shine.setText(f"{shine}%")
+            if hasattr(self, '_lbl_shadow'):
+                self._lbl_shadow.setText(f"{shadow_depth}%")
+        else:
+            # Fabric: reset sliders to defaults
+            self._slider_grain.blockSignals(True)
+            self._slider_softness.blockSignals(True)
+            self._slider_wear.blockSignals(True)
+            self._slider_grain.setValue(50)
+            self._slider_softness.setValue(50)
+            self._slider_wear.setValue(0)
+            self._slider_grain.blockSignals(False)
+            self._slider_softness.blockSignals(False)
+            self._slider_wear.blockSignals(False)
+            if hasattr(self, '_lbl_grain'):
+                self._lbl_grain.setText("50%")
+            if hasattr(self, '_lbl_softness'):
+                self._lbl_softness.setText("50%")
+            if hasattr(self, '_lbl_wear'):
+                self._lbl_wear.setText("0%")
 
     def _emit_settings(self):
         """Emit current slider values as a dict."""
-        settings = {
-            "shine": self._slider_shine.value(),
-            "shadow_depth": self._slider_shadow.value(),
-            "brightness": self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50,
-        }
+        category = getattr(self, '_active_category', 'metal')
+        settings = {"category": category}
+
+        if category == "metal":
+            settings["shine"] = self._slider_shine.value()
+            settings["shadow_depth"] = self._slider_shadow.value()
+            settings["brightness"] = self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50
+        else:
+            settings["grain"] = self._slider_grain.value()
+            settings["softness"] = self._slider_softness.value()
+            settings["wear"] = self._slider_wear.value()
+
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
         if hasattr(self, '_slider_crease_angle'):
@@ -657,19 +693,40 @@ class TexturePanel(QWidget):
         settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(settings_label)
 
-        # Shine: simpler control for metallic highlights
+        # --- Metal sliders container ---
+        self._metal_sliders_container = QWidget()
+        self._metal_sliders_container.setStyleSheet("background: transparent;")
+        metal_layout = QVBoxLayout(self._metal_sliders_container)
+        metal_layout.setContentsMargins(0, 0, 0, 0)
+        metal_layout.setSpacing(4)
+
         row, self._slider_shine, self._lbl_shine = self._create_slider_row("Shine", 0, 100, 70, "%")
-        layout.addWidget(row)
-
-        # Shadow: controls the warm dark depth in the gold preset
+        metal_layout.addWidget(row)
         row, self._slider_shadow, self._lbl_shadow = self._create_slider_row("Shadow", 0, 100, 50, "%")
-        layout.addWidget(row)
-
-        # Brightness: controls environment lighting intensity (50% = original preset)
+        metal_layout.addWidget(row)
         row, self._slider_brightness, self._lbl_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
-        layout.addWidget(row)
+        metal_layout.addWidget(row)
 
-        # Opacity slider removed per user request
+        layout.addWidget(self._metal_sliders_container)
+
+        # --- Fabric sliders container ---
+        self._fabric_sliders_container = QWidget()
+        self._fabric_sliders_container.setStyleSheet("background: transparent;")
+        fabric_layout = QVBoxLayout(self._fabric_sliders_container)
+        fabric_layout.setContentsMargins(0, 0, 0, 0)
+        fabric_layout.setSpacing(4)
+
+        row, self._slider_grain, self._lbl_grain = self._create_slider_row("Grain", 0, 100, 50, "%")
+        fabric_layout.addWidget(row)
+        row, self._slider_softness, self._lbl_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
+        fabric_layout.addWidget(row)
+        row, self._slider_wear, self._lbl_wear = self._create_slider_row("Wear", 0, 100, 0, "%")
+        fabric_layout.addWidget(row)
+
+        self._fabric_sliders_container.hide()  # Default to metal sliders
+        layout.addWidget(self._fabric_sliders_container)
+
+        self._active_category = "metal"
 
         # ---- Shading Settings ----
         shading_label = QLabel("Shading")
