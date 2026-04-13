@@ -4056,6 +4056,11 @@ class STLViewerWidget(QWidget):
 
             verts = np.asarray(tri.vertices, dtype=np.float32)
             faces = np.asarray(tri.faces, dtype=np.int32)
+            had_texture_maps = bool(
+                getattr(getattr(mesh_obj, 'material', None), 'map', None)
+                or getattr(getattr(mesh_obj, 'material', None), 'normal_map', None)
+                or getattr(getattr(mesh_obj, 'material', None), 'roughness_map', None)
+            )
 
             if smoothness <= 0.01:
                 # Fully flat: explode vertices so each face has unique normals
@@ -4084,21 +4089,17 @@ class STLViewerWidget(QWidget):
                         vertex_normals /= norms
                         # For crease: explode vertices where adjacent face normals differ > crease_angle
                         crease_rad = np.radians(crease_angle_deg)
-                        new_verts = []
-                        new_normals = []
                         new_faces = faces.copy()
                         vert_face_map = [[] for _ in range(len(verts))]
                         for fi in range(len(faces)):
                             for vi in faces[fi]:
                                 vert_face_map[vi].append(fi)
-                        next_idx = len(verts)
                         verts_list = list(verts)
                         normals_list = list(vertex_normals)
                         for vi in range(len(verts)):
                             face_indices = vert_face_map[vi]
                             if len(face_indices) <= 1:
                                 continue
-                            # Group faces by similar normals
                             groups = []
                             assigned = set()
                             for fi in face_indices:
@@ -4116,11 +4117,9 @@ class STLViewerWidget(QWidget):
                                 groups.append(group)
                             if len(groups) <= 1:
                                 continue
-                            # First group keeps original vertex, rest get new vertices
                             for group in groups[1:]:
                                 new_vi = len(verts_list)
                                 verts_list.append(verts[vi])
-                                # Compute smooth normal for this group
                                 grp_normal = np.zeros(3, dtype=np.float32)
                                 for fi in group:
                                     grp_normal += face_normals[fi] * face_areas[fi]
@@ -4132,7 +4131,6 @@ class STLViewerWidget(QWidget):
                                     for j in range(3):
                                         if new_faces[fi, j] == vi:
                                             new_faces[fi, j] = new_vi
-                            # Update normal for first group
                             grp_normal = np.zeros(3, dtype=np.float32)
                             for fi in groups[0]:
                                 grp_normal += face_normals[fi] * face_areas[fi]
@@ -4158,7 +4156,6 @@ class STLViewerWidget(QWidget):
                     mesh_obj.geometry = geometry_from_trimesh(smooth_tm)
             else:
                 # Blend: interpolate normals between flat and smooth
-                # Flat normals
                 tris_v = verts[faces]
                 flat_verts = tris_v.reshape(-1, 3)
                 flat_faces_arr = np.arange(len(flat_verts), dtype=np.int32).reshape(-1, 3)
@@ -4166,7 +4163,6 @@ class STLViewerWidget(QWidget):
                 flat_tm.fix_normals()
                 flat_normals = np.asarray(flat_tm.vertex_normals, dtype=np.float32)
 
-                # Smooth normals (area-weighted, mapped to exploded verts)
                 smooth_tm = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
                 smooth_tm.fix_normals()
                 smooth_vn = np.zeros_like(verts)
@@ -4178,14 +4174,22 @@ class STLViewerWidget(QWidget):
                 norms = np.linalg.norm(smooth_vn, axis=1, keepdims=True)
                 norms[norms < 1e-10] = 1.0
                 smooth_vn /= norms
-                # Map smooth normals to exploded vertices
                 smooth_exploded = smooth_vn[faces.ravel()]
 
-                # Blend
                 blended = flat_normals * (1.0 - smoothness) + smooth_exploded * smoothness
                 bnorms = np.linalg.norm(blended, axis=1, keepdims=True)
                 bnorms[bnorms < 1e-10] = 1.0
                 blended /= bnorms
+
+                geom = gfx.Geometry(
+                    positions=gfx.Buffer(flat_verts),
+                    normals=gfx.Buffer(blended.astype(np.float32)),
+                    indices=gfx.Buffer(flat_faces_arr),
+                )
+                mesh_obj.geometry = geom
+
+            if had_texture_maps:
+                self._ensure_texcoords(mesh_obj.geometry, gfx)
 
                 geom = gfx.Geometry(
                     positions=gfx.Buffer(flat_verts.astype(np.float32)),
