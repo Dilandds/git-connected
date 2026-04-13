@@ -61,7 +61,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Leather Brown",
-        "category": "fabric",
+        "category": "metal",
         "color": "#8B4513",
         "highlight": "#C4956A",
         "specular": "#3D2B1F",
@@ -442,69 +442,41 @@ class TexturePanel(QWidget):
         return container, slider, val_lbl
 
     def sync_material_controls(self, preset_data: dict):
-        """Sync the simple material sliders to match an applied preset.
-        Switches between metal and fabric slider groups based on preset category."""
-        category = preset_data.get("category", "metal")
-        self._active_category = category
+        """Sync the simple material sliders to match an applied preset."""
+        self._active_category = "metal"
 
-        # Show/hide slider groups
-        is_metal = (category == "metal")
-        self._metal_sliders_container.setVisible(is_metal)
-        self._fabric_sliders_container.setVisible(not is_metal)
+        # Always show metal sliders
+        self._metal_sliders_container.setVisible(True)
+        self._fabric_sliders_container.setVisible(False)
 
-        if is_metal:
-            shine = int(preset_data.get("shine", self._slider_shine.value()))
-            shadow_depth = int(preset_data.get("shadow_depth", self._slider_shadow.value()))
+        shine = int(preset_data.get("shine", self._slider_shine.value()))
+        shadow_depth = int(preset_data.get("shadow_depth", self._slider_shadow.value()))
 
-            self._slider_shine.blockSignals(True)
-            self._slider_shadow.blockSignals(True)
-            self._slider_shine.setValue(shine)
-            self._slider_shadow.setValue(shadow_depth)
-            self._slider_shine.blockSignals(False)
-            self._slider_shadow.blockSignals(False)
+        self._slider_shine.blockSignals(True)
+        self._slider_shadow.blockSignals(True)
+        self._slider_shine.setValue(shine)
+        self._slider_shadow.setValue(shadow_depth)
+        self._slider_shine.blockSignals(False)
+        self._slider_shadow.blockSignals(False)
 
-            # Reset brightness to 50% (original) when a new preset is applied
-            self._slider_brightness.blockSignals(True)
-            self._slider_brightness.setValue(50)
-            self._slider_brightness.blockSignals(False)
-            if hasattr(self, '_lbl_brightness'):
-                self._lbl_brightness.setText("50%")
+        # Reset brightness to 50% (original) when a new preset is applied
+        self._slider_brightness.blockSignals(True)
+        self._slider_brightness.setValue(50)
+        self._slider_brightness.blockSignals(False)
+        if hasattr(self, '_lbl_brightness'):
+            self._lbl_brightness.setText("50%")
 
-            if hasattr(self, '_lbl_shine'):
-                self._lbl_shine.setText(f"{shine}%")
-            if hasattr(self, '_lbl_shadow'):
-                self._lbl_shadow.setText(f"{shadow_depth}%")
-        else:
-            # Fabric: reset sliders to defaults
-            self._slider_grain.blockSignals(True)
-            self._slider_softness.blockSignals(True)
-            self._slider_wear.blockSignals(True)
-            self._slider_grain.setValue(50)
-            self._slider_softness.setValue(50)
-            self._slider_wear.setValue(0)
-            self._slider_grain.blockSignals(False)
-            self._slider_softness.blockSignals(False)
-            self._slider_wear.blockSignals(False)
-            if hasattr(self, '_lbl_grain'):
-                self._lbl_grain.setText("50%")
-            if hasattr(self, '_lbl_softness'):
-                self._lbl_softness.setText("50%")
-            if hasattr(self, '_lbl_wear'):
-                self._lbl_wear.setText("0%")
+        if hasattr(self, '_lbl_shine'):
+            self._lbl_shine.setText(f"{shine}%")
+        if hasattr(self, '_lbl_shadow'):
+            self._lbl_shadow.setText(f"{shadow_depth}%")
 
     def _emit_settings(self):
         """Emit current slider values as a dict."""
-        category = getattr(self, '_active_category', 'metal')
-        settings = {"category": category}
-
-        if category == "metal":
-            settings["shine"] = self._slider_shine.value()
-            settings["shadow_depth"] = self._slider_shadow.value()
-            settings["brightness"] = self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50
-        else:
-            settings["grain"] = self._slider_grain.value()
-            settings["softness"] = self._slider_softness.value()
-            settings["wear"] = self._slider_wear.value()
+        settings = {"category": "metal"}
+        settings["shine"] = self._slider_shine.value()
+        settings["shadow_depth"] = self._slider_shadow.value()
+        settings["brightness"] = self._slider_brightness.value() if hasattr(self, '_slider_brightness') else 50
 
         if hasattr(self, '_slider_smoothness'):
             settings["smoothness"] = self._slider_smoothness.value() / 100.0
