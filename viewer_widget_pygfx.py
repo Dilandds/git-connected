@@ -3822,9 +3822,12 @@ class STLViewerWidget(QWidget):
             if albedo_path:
                 albedo = self._load_texture_image(albedo_path)
                 if albedo is not None:
+                    # Scale UVs for tiling (repeat the texture across the surface)
+                    tile_repeat = preset_data.get("tile_repeat", 4.0)
+                    self._scale_texcoords(mesh_obj, gfx, tile_repeat)
                     tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
                     material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
-                    logger.info(f"_apply_pbr_texture_maps: Applied image texture from {albedo_path}")
+                    logger.info(f"_apply_pbr_texture_maps: Applied tiled image texture from {albedo_path} (repeat={tile_repeat})")
                 else:
                     logger.warning(f"_apply_pbr_texture_maps: Failed to load image {albedo_path}")
             return
