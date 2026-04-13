@@ -3774,23 +3774,20 @@ class STLViewerWidget(QWidget):
             geom.texcoords = gfx.Buffer(uvs)
 
         # Albedo (base color) map
-        tex_albedo = gfx.Texture(albedo, dim=2)
-        albedo_view = tex_albedo.get_view(address_mode="repeat")
-        material.map = albedo_view
+        tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
+        material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
 
         # Normal map — surface grain and wrinkles
-        tex_normal = gfx.Texture(normal, dim=2)
-        normal_view = tex_normal.get_view(address_mode="repeat")
-        material.normal_map = normal_view
+        tex_normal = gfx.Texture(normal, dim=2, generate_mipmaps=True)
+        material.normal_map = gfx.TextureMap(tex_normal, wrap="repeat")
         material.normal_scale = (1.5, 1.5)  # emphasize the grain
 
         # Roughness map — gloss variation across surface
         # pygfx roughness_map expects a texture; convert grayscale to RGBA
         rough_rgba = np.stack([roughness_tex, roughness_tex, roughness_tex,
                                np.full_like(roughness_tex, 255)], axis=-1)
-        tex_rough = gfx.Texture(rough_rgba, dim=2)
-        rough_view = tex_rough.get_view(address_mode="repeat")
-        material.roughness_map = rough_view
+        tex_rough = gfx.Texture(rough_rgba, dim=2, generate_mipmaps=True)
+        material.roughness_map = gfx.TextureMap(tex_rough, wrap="repeat")
 
         logger.info("_apply_pbr_texture_maps: Applied procedural leather textures (albedo + normal + roughness)")
 
