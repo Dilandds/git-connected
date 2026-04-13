@@ -3822,12 +3822,14 @@ class STLViewerWidget(QWidget):
             if albedo_path:
                 albedo = self._load_texture_image(albedo_path)
                 if albedo is not None:
+                    # Make texture seamlessly tileable by blending edges
+                    albedo = self._make_seamless(albedo)
                     # Scale UVs for tiling (repeat the texture across the surface)
-                    tile_repeat = preset_data.get("tile_repeat", 10.0)
+                    tile_repeat = preset_data.get("tile_repeat", 200.0)
                     self._scale_texcoords(mesh_obj, gfx, tile_repeat)
                     tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
                     material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
-                    logger.info(f"_apply_pbr_texture_maps: Applied tiled image texture from {albedo_path} (repeat={tile_repeat})")
+                    logger.info(f"_apply_pbr_texture_maps: Applied seamless tiled image texture from {albedo_path} (repeat={tile_repeat})")
                 else:
                     logger.warning(f"_apply_pbr_texture_maps: Failed to load image {albedo_path}")
             return
@@ -3853,6 +3855,31 @@ class STLViewerWidget(QWidget):
         material.roughness_map = gfx.TextureMap(tex_rough, wrap="repeat")
 
         logger.info("_apply_pbr_texture_maps: Applied procedural leather textures (albedo + normal + roughness)")
+
+    def _make_seamless(self, img_array, blend_width=64):
+        """Make a texture image seamlessly tileable by cross-fading its edges."""
+        h, w = img_array.shape[:2]
+        result = img_array.astype(np.float32)
+        bw = min(blend_width, h // 4, w // 4)
+        if bw < 2:
+            return img_array
+
+        # Create blend weights
+        ramp = np.linspace(0.0, 1.0, bw, dtype=np.float32)
+
+        # Horizontal seam: blend left edge with right edge
+        for i in range(bw):
+            alpha = ramp[i]
+            result[:, i] = (1 - alpha) * (result[:, i] * 0.5 + result[:, w - 1 - i] * 0.5) + alpha * result[:, i]
+            result[:, w - 1 - i] = (1 - alpha) * (result[:, w - 1 - i] * 0.5 + result[:, i] * 0.5) + alpha * result[:, w - 1 - i]
+
+        # Vertical seam: blend top edge with bottom edge
+        for j in range(bw):
+            alpha = ramp[j]
+            result[j, :] = (1 - alpha) * (result[j, :] * 0.5 + result[h - 1 - j, :] * 0.5) + alpha * result[j, :]
+            result[h - 1 - j, :] = (1 - alpha) * (result[h - 1 - j, :] * 0.5 + result[j, :] * 0.5) + alpha * result[h - 1 - j, :]
+
+        return np.clip(result, 0, 255).astype(np.uint8)
 
     def _load_texture_image(self, rel_path):
         """Load an image file as a numpy array (H, W, 3 or 4) for use as a texture."""
