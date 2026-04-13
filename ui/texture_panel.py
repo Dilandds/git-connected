@@ -104,6 +104,7 @@ MATERIAL_PRESETS = [
         "albedo_map_path": "assets/textures/lapis_lazuli.png",
         "normal_map": None,
         "roughness_map": None,
+        "swatch_image": "assets/textures/lapis_lazuli.png",
     },
 ]
 
@@ -208,12 +209,24 @@ class MaterialPresetCard(QFrame):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        # Sphere thumbnail
-        swatch = _generate_material_swatch(preset["color"], preset["highlight"])
+        # Sphere thumbnail or image-based swatch
+        swatch_image_path = preset.get("swatch_image")
+        if swatch_image_path:
+            import sys as _sys
+            if hasattr(_sys, '_MEIPASS'):
+                _base = _sys._MEIPASS
+            else:
+                _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            full_swatch = os.path.join(_base, swatch_image_path)
+            swatch = QPixmap(full_swatch)
+            if swatch.isNull():
+                swatch = _generate_material_swatch(preset["color"], preset["highlight"])
+        else:
+            swatch = _generate_material_swatch(preset["color"], preset["highlight"])
         self._swatch = swatch
         thumb = QLabel()
         thumb.setAlignment(Qt.AlignCenter)
-        thumb.setStyleSheet("background: transparent;")
+        thumb.setStyleSheet("background: transparent; border-radius: 6px;")
         thumb.setFixedHeight(70)
         thumb.setPixmap(swatch.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(thumb)
@@ -257,8 +270,8 @@ class MaterialPresetCard(QFrame):
             payload_dict["roughness"] = self.preset["roughness"]
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
-        # Texture map keys for PBR texture-mapped presets (e.g. Leather)
-        for map_key in ("use_texture_maps", "albedo_map", "normal_map", "roughness_map", "category"):
+        # Texture map keys for PBR texture-mapped presets
+        for map_key in ("use_texture_maps", "albedo_map", "albedo_map_path", "normal_map", "roughness_map", "category"):
             if map_key in self.preset:
                 payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)
