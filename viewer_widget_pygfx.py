@@ -3991,6 +3991,40 @@ class STLViewerWidget(QWidget):
 
                     continue  # Skip metal logic for fabric
 
+            # --- Glass category: Opacity / Clarity / Tint ---
+            if category == "glass" and is_standard and preset_data is not None:
+                preset_cat = preset_data.get("category", "")
+                if preset_cat == "glass":
+                    # Opacity: 0% = fully transparent, 100% = fully opaque
+                    if glass_opacity is not None:
+                        mat.opacity = float(glass_opacity / 100.0)
+
+                    # Clarity: controls roughness (100% = crystal clear, 0% = frosted)
+                    if glass_clarity is not None:
+                        mat.roughness = float(1.0 - glass_clarity / 100.0)  # 100→0.0, 0→1.0
+
+                    # Tint: blends color from neutral to blue-tinted
+                    if glass_tint is not None:
+                        tint_factor = glass_tint / 100.0
+                        base_color = preset_data.get("color", "#D4E8F0")
+                        # Interpolate toward a deeper blue tint
+                        import colorsys
+                        # Parse base color
+                        bc = base_color.lstrip('#')
+                        br, bg, bb = int(bc[0:2], 16), int(bc[2:4], 16), int(bc[4:6], 16)
+                        # Target tint color: deeper blue
+                        tr, tg, tb = 100, 160, 220
+                        nr = int(br + (tr - br) * tint_factor)
+                        ng = int(bg + (tg - bg) * tint_factor)
+                        nb = int(bb + (tb - bb) * tint_factor)
+                        mat.color = f"#{nr:02x}{ng:02x}{nb:02x}"
+
+                    # Adjust env map intensity based on clarity
+                    if glass_clarity is not None and hasattr(mat, 'env_map_intensity'):
+                        mat.env_map_intensity = float(1.0 + glass_clarity / 100.0)  # 1.0→2.0
+
+                    continue  # Skip metal logic for glass
+
             # --- Metal category: Shine / Shadow / Brightness ---
             if is_standard and preset_data is not None:
                 target_roughness = preset_data.get("roughness", getattr(mat, 'roughness', 0.2))
