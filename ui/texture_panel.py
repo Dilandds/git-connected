@@ -61,7 +61,7 @@ MATERIAL_PRESETS = [
     },
     {
         "name": "Leather Brown",
-        "category": "metal",
+        "category": "fabric",
         "color": "#8B4513",
         "highlight": "#C4956A",
         "specular": "#3D2B1F",
