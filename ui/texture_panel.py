@@ -75,6 +75,19 @@ MATERIAL_PRESETS = [
         "normal_map": "procedural_leather",
         "roughness_map": "procedural_leather",
     },
+    {
+        "name": "Glass",
+        "category": "glass",
+        "color": "#D4E8F0",          # very pale blue tint
+        "highlight": "#FFFFFF",
+        "specular": "#FFFFFF",
+        "shininess": 500,
+        "metalness": 0.0,
+        "roughness": 0.02,           # near-perfect smooth surface
+        "emissive": None,
+        "env_tone": "neutral",
+        "opacity": 0.3,              # transparent by default
+    },
 ]
 
 
