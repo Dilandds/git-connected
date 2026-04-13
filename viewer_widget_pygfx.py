@@ -3898,6 +3898,24 @@ class STLViewerWidget(QWidget):
         geom.texcoords = gfx.Buffer(uvs)
         return True
 
+    def _scale_texcoords(self, mesh_obj, gfx, scale_factor):
+        """Multiply existing UV coordinates by scale_factor to tile textures."""
+        def _scale_geom_uvs(geom):
+            tc = getattr(geom, 'texcoords', None)
+            if tc is not None:
+                uv_data = tc.data if hasattr(tc, 'data') else tc
+                scaled = np.asarray(uv_data, dtype=np.float32) * float(scale_factor)
+                geom.texcoords = gfx.Buffer(scaled)
+
+        geom = getattr(mesh_obj, 'geometry', None)
+        if geom is not None:
+            _scale_geom_uvs(geom)
+        elif hasattr(mesh_obj, 'children'):
+            for child in mesh_obj.children:
+                child_geom = getattr(child, 'geometry', None)
+                if child_geom is not None:
+                    _scale_geom_uvs(child_geom)
+
 
     def _add_preset_accent_lights(self, tone="warm"):
         """Add clean 4-light rig — env map handles reflections, these add
