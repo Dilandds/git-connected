@@ -3912,6 +3912,11 @@ class STLViewerWidget(QWidget):
         softness = settings.get("softness", None)
         wear = settings.get("wear", None)
 
+        # Glass-specific settings
+        glass_opacity = settings.get("opacity", None)
+        glass_clarity = settings.get("clarity", None)
+        glass_tint = settings.get("tint", None)
+
         meshes = []
         for p in self._mesh_parts:
             mo = p.get('mesh_obj')
