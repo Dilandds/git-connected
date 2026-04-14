@@ -106,7 +106,7 @@ MATERIAL_PRESETS = [
         "roughness_map": None,
         "swatch_image": "assets/textures/lapis_lazuli.png",
         "image_file": True,
-        "tile_repeat": 200,
+        "tile_repeat": 1,
     },
 ]
 
@@ -496,9 +496,13 @@ class TexturePanel(QWidget):
         is_metal = (category == "metal")
         is_glass = (category == "glass")
         is_fabric = (category == "fabric")
-        self._metal_sliders_container.setVisible(is_metal)
-        self._fabric_sliders_container.setVisible(is_fabric)
+        is_image = preset_data.get("image_file", False)
+        self._metal_sliders_container.setVisible(is_metal and not is_image)
+        self._fabric_sliders_container.setVisible(is_fabric and not is_image)
         self._glass_sliders_container.setVisible(is_glass)
+        self._image_sliders_container.setVisible(is_image)
+        if is_image:
+            self._active_category = "image"
 
         if is_metal:
             shine = int(preset_data.get("shine", self._slider_shine.value()))
@@ -539,6 +543,29 @@ class TexturePanel(QWidget):
                 self._lbl_clarity.setText("98%")
             if hasattr(self, '_lbl_tint'):
                 self._lbl_tint.setText("0%")
+        elif is_image:
+            # Image preset: reset image-specific sliders
+            tile_default = int(preset_data.get("tile_repeat", 1))
+            self._slider_img_tile_density.blockSignals(True)
+            self._slider_img_tile_density.setValue(tile_default)
+            self._slider_img_tile_density.blockSignals(False)
+            if hasattr(self, '_lbl_img_tile_density'):
+                self._lbl_img_tile_density.setText(f"{tile_default}x")
+            self._slider_img_softness.blockSignals(True)
+            self._slider_img_softness.setValue(50)
+            self._slider_img_softness.blockSignals(False)
+            if hasattr(self, '_lbl_img_softness'):
+                self._lbl_img_softness.setText("50%")
+            self._slider_img_brightness.blockSignals(True)
+            self._slider_img_brightness.setValue(50)
+            self._slider_img_brightness.blockSignals(False)
+            if hasattr(self, '_lbl_img_brightness'):
+                self._lbl_img_brightness.setText("50%")
+            self._slider_img_contrast.blockSignals(True)
+            self._slider_img_contrast.setValue(50)
+            self._slider_img_contrast.blockSignals(False)
+            if hasattr(self, '_lbl_img_contrast'):
+                self._lbl_img_contrast.setText("50%")
         else:
             # Fabric: reset sliders to defaults
             self._slider_grain.blockSignals(True)
@@ -578,6 +605,11 @@ class TexturePanel(QWidget):
             settings["opacity"] = self._slider_opacity.value()
             settings["clarity"] = self._slider_clarity.value()
             settings["tint"] = self._slider_tint.value()
+        elif category == "image":
+            settings["tile_density"] = self._slider_img_tile_density.value()
+            settings["softness"] = self._slider_img_softness.value()
+            settings["img_brightness"] = self._slider_img_brightness.value()
+            settings["img_contrast"] = self._slider_img_contrast.value()
         else:
             settings["grain"] = self._slider_grain.value()
             settings["softness"] = self._slider_softness.value()
@@ -806,6 +838,25 @@ class TexturePanel(QWidget):
 
         self._fabric_sliders_container.hide()  # Default to metal sliders
         layout.addWidget(self._fabric_sliders_container)
+
+        # --- Image sliders container (for image-based presets) ---
+        self._image_sliders_container = QWidget()
+        self._image_sliders_container.setStyleSheet("background: transparent;")
+        image_layout = QVBoxLayout(self._image_sliders_container)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setSpacing(4)
+
+        row, self._slider_img_softness, self._lbl_img_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
+        image_layout.addWidget(row)
+        row, self._slider_img_tile_density, self._lbl_img_tile_density = self._create_slider_row("Tile Density", 1, 500, 1, "x")
+        image_layout.addWidget(row)
+        row, self._slider_img_brightness, self._lbl_img_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
+        image_layout.addWidget(row)
+        row, self._slider_img_contrast, self._lbl_img_contrast = self._create_slider_row("Contrast", 0, 100, 50, "%")
+        image_layout.addWidget(row)
+
+        self._image_sliders_container.hide()
+        layout.addWidget(self._image_sliders_container)
 
         # --- Glass sliders container ---
         self._glass_sliders_container = QWidget()
