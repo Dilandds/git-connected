@@ -539,6 +539,21 @@ class STLViewerWindow(QMainWindow):
         
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
+    def _toggle_language(self):
+        """Toggle between English and French."""
+        from PyQt5.QtCore import QSettings
+        new_lang = "fr" if get_language() == "en" else "en"
+        QSettings("ECTOFORM", "App").setValue("language", new_lang)
+        set_language(new_lang)
+    
+    def _retranslate_ui(self):
+        """Update all mode bar texts when language changes."""
+        self._mode_3d_btn.setText(t("mode_bar.viewer_3d"))
+        self._mode_tech_btn.setText(t("mode_bar.technical"))
+        self._mode_scale_btn.setText(t("mode_bar.drawing_scale"))
+        self._mode_help_btn.setText(t("mode_bar.help"))
+        self._lang_btn.setText("FR" if get_language() == "en" else "EN")
+    
     def _tech_upload_image(self):
         """Handle upload request from technical sidebar — supports images, PDFs, and .ecto files."""
         from PyQt5.QtWidgets import QFileDialog
