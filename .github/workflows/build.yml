@@ -247,7 +247,19 @@ jobs:
     # ---- Education Edition ----
     - name: Build Education edition
       run: |
+        Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
         powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
+
+    - name: Verify Education EXE exists
+      run: |
+        $exePath = "dist\ECTOFORM-Education.exe"
+        if (-not (Test-Path $exePath)) {
+          Write-Host "Error: Education EXE not found at $exePath" -ForegroundColor Red
+          exit 1
+        }
+        Write-Host "✓ Education EXE created successfully: $exePath" -ForegroundColor Green
+        $fileInfo = Get-Item $exePath
+        Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Cyan
 
     - name: Upload Education ZIP as artifact
       if: always()
@@ -256,3 +268,10 @@ jobs:
         name: ECTOFORM-Education-Windows.zip
         path: ECTOFORM-Education-Windows.zip
         retention-days: 30
+
+    - name: Education build summary
+      run: |
+        echo "## Build Summary (Education)" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Education EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Education ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Education build completed on Windows" >> $env:GITHUB_STEP_SUMMARY
