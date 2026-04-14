@@ -5,7 +5,7 @@ before saving. Opens as a modal dialog from the screenshot panel.
 import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QApplication, QInputDialog, QWidget, QFileDialog
+    QApplication, QInputDialog, QWidget, QFileDialog, QSlider, QSpinBox
 )
 from PyQt5.QtCore import Qt, QPoint, QPointF, pyqtSignal
 from PyQt5.QtGui import (
