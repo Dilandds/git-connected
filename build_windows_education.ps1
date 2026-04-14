@@ -8,9 +8,11 @@ Write-Host "  ECTOFORM Education - Windows Build" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
 # Ensure PyInstaller is installed
-try { pyinstaller --version | Out-Null } catch {
+try {
+    pyinstaller --version | Out-Null
+} catch {
     Write-Host "Installing PyInstaller..."
-    pip install pyinstaller>=6.0.0
+    pip install "pyinstaller>=6.0.0"
 }
 
 # Icon generation (reuse commercial icons)
@@ -25,7 +27,10 @@ Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 # Build
 Write-Host "Building ECTOFORM Education EXE..."
 pyinstaller stl_viewer_windows_education.spec --clean --noconfirm
-if ($LASTEXITCODE -ne 0) { Write-Host "Build FAILED" -ForegroundColor Red; exit 1 }
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Build FAILED" -ForegroundColor Red
+    exit 1
+}
 
 $exePath = "dist\ECTOFORM-Education.exe"
 if (-not (Test-Path $exePath)) {
@@ -39,9 +44,11 @@ Write-Host ("EXE created: {0} ({1} MB)" -f $exePath, $sizeMB) -ForegroundColor G
 
 # Create ZIP
 $zipPath = "ECTOFORM-Education-Windows.zip"
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+if (Test-Path $zipPath) {
+    Remove-Item $zipPath -Force
+}
 Compress-Archive -Path "dist\*" -DestinationPath $zipPath -Force
-Write-Host "✓ ZIP created: $zipPath" -ForegroundColor Green
+Write-Host ("ZIP created: {0}" -f $zipPath) -ForegroundColor Green
 
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
