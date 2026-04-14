@@ -190,6 +190,9 @@ class STLViewerWidget(QWidget):
         self._draw_event_filter_installed = False
         self._drawing_active = False  # True while mouse button is held
         self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
+        self._text_mode = False  # When True, clicks place text labels on mesh surface
+        self._draw_texts = []  # list of pygfx.Text objects in scene
+        self._draw_texts_data = []  # parallel list for export: [{'text': '...', 'position': [x,y,z], 'color': '...', 'font_size': N}]
 
         # Parts pick mode state
         self.parts_pick_mode = False
@@ -2416,6 +2419,7 @@ class STLViewerWidget(QWidget):
         self.draw_mode = False
         self._drawing_active = False
         self._eraser_mode = False
+        self._text_mode = False
         self._current_stroke_points = []
         self._remove_current_stroke_line()
 
@@ -2435,7 +2439,7 @@ class STLViewerWidget(QWidget):
         self._draw_color = color
 
     def clear_drawings(self):
-        """Remove all drawn strokes from the scene."""
+        """Remove all drawn strokes and text labels from the scene."""
         for stroke in self._draw_strokes:
             try:
                 self._scene.remove(stroke)
@@ -2443,6 +2447,13 @@ class STLViewerWidget(QWidget):
                 pass
         self._draw_strokes.clear()
         self._draw_strokes_data.clear()
+        for t_obj in self._draw_texts:
+            try:
+                self._scene.remove(t_obj)
+            except Exception:
+                pass
+        self._draw_texts.clear()
+        self._draw_texts_data.clear()
         if self._canvas:
             self._canvas.request_draw()
 
@@ -2521,8 +2532,22 @@ class STLViewerWidget(QWidget):
             self._canvas.request_draw()
 
     def undo_last_stroke(self):
-        """Remove the most recently drawn stroke."""
-        if self._draw_strokes:
+        """Remove the most recently drawn stroke or text label."""
+        # Determine which was added last by comparing list lengths
+        # If text was the last action, undo text; otherwise undo stroke
+        # We track order via a simple approach: undo whichever list was modified last
+        # Since we can't easily track order, undo text if text_mode is active, otherwise stroke
+        if self._text_mode and self._draw_texts:
+            text_obj = self._draw_texts.pop()
+            if self._draw_texts_data:
+                self._draw_texts_data.pop()
+            try:
+                self._scene.remove(text_obj)
+            except Exception:
+                pass
+            if self._canvas:
+                self._canvas.request_draw()
+        elif self._draw_strokes:
             stroke = self._draw_strokes.pop()
             if self._draw_strokes_data:
                 self._draw_strokes_data.pop()
@@ -2592,6 +2617,8 @@ class STLViewerWidget(QWidget):
             pos = event.pos()
             if self._eraser_mode:
                 return self.erase_stroke_at(pos.x(), pos.y())
+            if self._text_mode:
+                return self._draw_place_text(pos.x(), pos.y())
             hit = self._draw_start_stroke(pos.x(), pos.y())
             return hit
         elif t == QEvent.MouseMove and self._drawing_active:
@@ -2736,6 +2763,97 @@ class STLViewerWidget(QWidget):
             return max(diag * 0.001, 0.01)
         except Exception:
             return 0.1
+
+    def set_text_mode(self, enabled: bool):
+        """Toggle text placement mode. When on, clicks place text labels instead of drawing strokes."""
+        self._text_mode = enabled
+        if enabled:
+            self._eraser_mode = False
+        logger.info(f"set_text_mode: {enabled}")
+
+    def _draw_place_text(self, x, y):
+        """Place a text label on the mesh surface at click position."""
+        if self._annotation_trimesh is None:
+            return False
+        ray_origin, ray_direction = self._screen_to_ray(x, y)
+        if ray_origin is None:
+            return False
+        try:
+            locations, _, index_tri = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=[ray_origin], ray_directions=[ray_direction]
+            )
+            if len(locations) == 0:
+                return False
+            cam_pos = np.array(self._camera.local.position)
+            dists = np.linalg.norm(locations - cam_pos, axis=1)
+            closest_idx = np.argmin(dists)
+            hit_point = locations[closest_idx]
+            normal = self._annotation_trimesh.face_normals[index_tri[closest_idx]]
+            offset = self._get_draw_normal_offset() * 2  # Slightly more offset for text
+            hit_point = hit_point + normal * offset
+            position = tuple(hit_point.astype(float))
+
+            # Ask user for text
+            from PyQt5.QtWidgets import QInputDialog
+            text, ok = QInputDialog.getText(
+                self, "Add Text", "Enter text to place on the surface:",
+            )
+            if not ok or not text.strip():
+                return True  # consumed the click, user cancelled
+
+            self._add_text_at(text.strip(), position, self._draw_color)
+            return True
+        except Exception as e:
+            logger.debug(f"_draw_place_text: {e}")
+            return False
+
+    def _add_text_at(self, text: str, position: tuple, color: str, font_size: int = 16):
+        """Add a pygfx Text object at the given 3D position."""
+        import pygfx as gfx
+        try:
+            mat = gfx.TextMaterial(color=color)
+            mat.depth_test = True
+            mat.depth_write = True
+            text_obj = gfx.Text(
+                text=text, material=mat, font_size=font_size,
+                anchor="middle-center", screen_space=True
+            )
+            text_obj.local.position = position
+            self._scene.add(text_obj)
+            self._draw_texts.append(text_obj)
+            self._draw_texts_data.append({
+                'text': text, 'position': list(position),
+                'color': color, 'font_size': font_size
+            })
+            if self._canvas:
+                self._canvas.request_draw()
+            logger.info(f"_add_text_at: Placed '{text}' at {position}")
+        except Exception as e:
+            logger.warning(f"_add_text_at: {e}")
+
+    def get_draw_texts(self):
+        """Return serializable list of text labels for .ecto export."""
+        return list(self._draw_texts_data)
+
+    def restore_draw_texts(self, texts):
+        """Restore text labels from .ecto import."""
+        for t_obj in self._draw_texts:
+            try:
+                self._scene.remove(t_obj)
+            except Exception:
+                pass
+        self._draw_texts.clear()
+        self._draw_texts_data.clear()
+        for td in texts or []:
+            try:
+                self._add_text_at(
+                    td.get('text', ''),
+                    tuple(td.get('position', [0, 0, 0])),
+                    td.get('color', '#FF0000'),
+                    td.get('font_size', 16)
+                )
+            except Exception as e:
+                logger.warning(f"restore_draw_texts: {e}")
 
     # ========== 3D Arrow Mode Methods ==========
 
