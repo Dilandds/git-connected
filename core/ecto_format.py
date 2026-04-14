@@ -264,24 +264,18 @@ class EctoFormat:
                     logger.warning(f"export: Failed to cleanup temp directory: {e}")
     
     @staticmethod
-    def import_ecto(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str, Optional[List[dict]]]:
+    def import_ecto(ecto_path: str):
         """Open an .ecto bundle and extract its contents.
         
-        Extracts the bundle to a temporary directory and returns paths to the contents.
-        The caller is responsible for cleaning up the temp directory when done.
-        
-        Args:
-            ecto_path: Path to the .ecto file
-            
         Returns:
-            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings)
-                   On failure: (None, None, False, error_message, None)
+            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings, texture_data)
+                   On failure: (None, None, False, error_message, None, None)
         """
         if not os.path.exists(ecto_path):
-            return None, None, False, f"File not found: {ecto_path}", None
+            return None, None, False, f"File not found: {ecto_path}", None, None
         
         if not EctoFormat.is_ecto_file(ecto_path):
-            return None, None, False, "Invalid .ecto file format", None
+            return None, None, False, "Invalid .ecto file format", None, None
         
         temp_dir = None
         try:
@@ -303,7 +297,7 @@ class EctoFormat:
             model_path = os.path.join(temp_dir, model_filename)
             
             if not os.path.exists(model_path):
-                return None, None, False, f"Model file not found in bundle: {model_filename}", None
+                return None, None, False, f"Model file not found in bundle: {model_filename}", None, None
             
             # Sender vs reader: if creator_token is in local registry, this machine created the file
             creator_token = manifest.get('creator_token')
@@ -355,12 +349,38 @@ class EctoFormat:
                     logger.info(f"import_ecto: Loaded {len(drawings)} drawing strokes")
                 except Exception as e:
                     logger.warning(f"import_ecto: Could not read drawings.json: {e}")
+
+            # Read texture/material data (optional)
+            texture_data = None
+            texture_json_path = os.path.join(temp_dir, 'texture.json')
+            if os.path.exists(texture_json_path):
+                try:
+                    with open(texture_json_path, 'r', encoding='utf-8') as f:
+                        tex_json = json.load(f)
+                    texture_data = tex_json.get('material', {})
+                    # Resolve relative texture paths to absolute paths in temp dir
+                    albedo_rel = texture_data.get('albedo_map_path', '')
+                    if albedo_rel and not os.path.isabs(albedo_rel):
+                        abs_path = os.path.join(temp_dir, albedo_rel)
+                        if os.path.exists(abs_path):
+                            texture_data['albedo_map_path'] = abs_path
+                    # Resolve per-part texture paths
+                    for pt in texture_data.get('parts_textures', []):
+                        pt_rel = pt.get('albedo_map_path', '')
+                        if pt_rel and not os.path.isabs(pt_rel):
+                            abs_path = os.path.join(temp_dir, pt_rel)
+                            if os.path.exists(abs_path):
+                                pt['albedo_map_path'] = abs_path
+                    logger.info(f"import_ecto: Loaded texture data (image_file={texture_data.get('image_file', False)})")
+                except Exception as e:
+                    logger.warning(f"import_ecto: Could not read texture.json: {e}")
             
             logger.info(f"import_ecto: Successfully extracted. Model: {model_path}, "
                        f"Annotations: {len(annotations) if annotations else 0}, "
-                       f"Drawings: {len(drawings)}, Reader mode: {reader_mode}")
+                       f"Drawings: {len(drawings)}, Reader mode: {reader_mode}, "
+                       f"Has texture: {texture_data is not None}")
             
-            return model_path, annotations, reader_mode, temp_dir, drawings
+            return model_path, annotations, reader_mode, temp_dir, drawings, texture_data
             
         except Exception as e:
             logger.error(f"import_ecto: Failed to import .ecto file: {e}", exc_info=True)
