@@ -1410,6 +1410,15 @@ class SidebarPanel(QWidget):
 
     def _get_texture_data(self):
         """Get current material/texture preset data from the viewer widget for .ecto export."""
+        # Use direct reference to main window (set by stl_viewer.py)
+        main_win = getattr(self, '_main_window', None)
+        if main_win is not None:
+            vw = getattr(main_win, 'viewer_widget', None)
+            if vw is not None and hasattr(vw, 'get_texture_data'):
+                data = vw.get_texture_data()
+                logger.info(f"_get_texture_data: Got texture data: {data is not None}")
+                return data
+        # Fallback: walk parent chain
         parent = self.parent()
         while parent is not None:
             if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
@@ -1417,6 +1426,7 @@ class SidebarPanel(QWidget):
                 if hasattr(vw, 'get_texture_data'):
                     return vw.get_texture_data()
             parent = parent.parent()
+        logger.warning("_get_texture_data: Could not find viewer widget")
         return None
 
     def reset_all_data(self):

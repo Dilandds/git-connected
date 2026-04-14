@@ -248,6 +248,7 @@ class STLViewerWindow(QMainWindow):
         
         logger.info("init_ui: Creating sidebar panel...")
         self.sidebar_panel = SidebarPanel()
+        self.sidebar_panel._main_window = self  # Direct reference for texture data access
         self.sidebar_panel.upload_btn.clicked.connect(self.upload_stl_file)
         self.sidebar_panel.export_scaled_stl.connect(self.export_scaled_stl)
         self.sidebar_panel.annotations_exported.connect(self._on_annotations_exported)
