@@ -869,7 +869,7 @@ class TextureCard(QFrame):
         close_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
-                color: {default_theme.text_secondary};
+                color: #FFFFFF;
                 border: none;
                 border-radius: 3px;
                 font-size: 11px;
@@ -877,8 +877,8 @@ class TextureCard(QFrame):
                 padding: 0; min-width: 20px; min-height: 20px;
             }}
             QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.12);
-                color: {default_theme.text_primary};
+                background-color: rgba(255, 255, 255, 0.20);
+                color: #FFFFFF;
             }}
         """)
         close_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))

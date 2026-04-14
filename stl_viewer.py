@@ -168,15 +168,19 @@ class STLViewerWindow(QMainWindow):
         _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
         self.setWindowTitle(_title)
         if sys.platform == 'win32':
-            min_w, min_h = 1600, 1000
+            min_w, min_h = 1200, 750
         else:
-            min_w, min_h = 1400, 900
+            min_w, min_h = 1200, 750
         self.setMinimumSize(min_w, min_h)
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
-        self.resize(min_w, min_h)
+        # Start at a comfortable size but allow shrinking
+        if sys.platform == 'win32':
+            self.resize(1600, 1000)
+        else:
+            self.resize(1400, 900)
         
         # Position window on left side of screen (align with toolbar/content)
         screen = QApplication.primaryScreen().availableGeometry()
@@ -217,7 +221,7 @@ class STLViewerWindow(QMainWindow):
         """)
         mode_bar_layout = QHBoxLayout(mode_bar)
         mode_bar_layout.setContentsMargins(12, 4, 12, 4)
-        mode_bar_layout.setSpacing(4)
+        mode_bar_layout.setSpacing(8)
         
         self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
         self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
@@ -480,6 +484,7 @@ class STLViewerWindow(QMainWindow):
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
         # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
+        _mode_font_size = '13px' if sys.platform == 'win32' else '11px'
         active_style = f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -495,7 +500,7 @@ class STLViewerWindow(QMainWindow):
                 border-bottom: 1px solid #252830;
                 border-radius: 5px;
                 padding: 5px 14px;
-                font-size: 11px;
+                font-size: {_mode_font_size};
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -530,7 +535,7 @@ class STLViewerWindow(QMainWindow):
                 border-top: 1px solid #454a58;
                 border-radius: 5px;
                 padding: 5px 14px;
-                font-size: 11px;
+                font-size: {_mode_font_size};
                 color: {default_theme.text_secondary};
             }}
             QPushButton:hover {{
