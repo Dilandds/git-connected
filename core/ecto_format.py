@@ -72,7 +72,8 @@ class EctoFormat:
     @staticmethod
     def export(mesh, annotations: List[dict], output_path: str,
                source_format: str = 'stl', original_filename: str = None,
-               drawings: Optional[List[dict]] = None) -> Tuple[bool, str, Optional[str]]:
+               drawings: Optional[List[dict]] = None,
+               texture_data: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[str]]:
         """Create an .ecto bundle containing the model, annotations, images, and drawings.
         
         Args:
