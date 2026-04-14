@@ -884,19 +884,78 @@ class TextureCard(QFrame):
         header.addWidget(close_btn)
         layout.addLayout(header)
 
-        # Square thumbnail
+        # Sphere thumbnail (matching material preset cards)
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
         self.thumb_label.setStyleSheet("background: transparent;")
         self.thumb_label.setFixedHeight(90)
         self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._update_thumbnail()
+        self._sphere_swatch = self._make_sphere_swatch()
+        self.thumb_label.setPixmap(self._sphere_swatch.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(self.thumb_label)
 
+    def _make_sphere_swatch(self) -> QPixmap:
+        """Render the uploaded texture onto a 3D sphere."""
+        size = 80
+        src = self.pixmap.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        if src.width() > size or src.height() > size:
+            x = (src.width() - size) // 2
+            y = (src.height() - size) // 2
+            src = src.copy(x, y, size, size)
+
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        cx, cy = size * 0.5, size * 0.52
+        radius = size * 0.40
+
+        from PyQt5.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+
+        # Texture clipped to circle
+        painter.setClipPath(clip)
+        painter.drawPixmap(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2), src)
+        painter.setClipping(False)
+
+        # Shadow
+        shadow_grad = QRadialGradient(cx, size * 0.88, size * 0.28)
+        shadow_grad.setColorAt(0.0, QColor(0, 0, 0, 80))
+        shadow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setPen(QPen(Qt.NoPen))
+        painter.setBrush(shadow_grad)
+        painter.drawEllipse(int(cx - size * 0.28), int(size * 0.82), int(size * 0.56), int(size * 0.12))
+
+        # Edge darkening
+        edge_grad = QRadialGradient(cx * 0.85, cy * 0.75, radius * 1.1)
+        edge_grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+        edge_grad.setColorAt(0.55, QColor(0, 0, 0, 0))
+        edge_grad.setColorAt(0.85, QColor(0, 0, 0, 90))
+        edge_grad.setColorAt(1.0, QColor(0, 0, 0, 180))
+        painter.setClipPath(clip)
+        painter.setBrush(edge_grad)
+        painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+        painter.setClipping(False)
+
+        # Specular highlight
+        spec_cx = cx - radius * 0.22
+        spec_cy = cy - radius * 0.32
+        spec_r = radius * 0.38
+        spec_grad = QRadialGradient(spec_cx, spec_cy, spec_r)
+        spec_grad.setColorAt(0.0, QColor(255, 255, 255, 160))
+        spec_grad.setColorAt(0.35, QColor(255, 255, 255, 60))
+        spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setClipPath(clip)
+        painter.setBrush(spec_grad)
+        painter.drawEllipse(int(spec_cx - spec_r), int(spec_cy - spec_r), int(spec_r * 2), int(spec_r * 2))
+
+        painter.end()
+        return pixmap
+
     def _update_thumbnail(self):
-        card_w = max(self.width() - 16, 80)
-        scaled = self.pixmap.scaled(card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.thumb_label.setPixmap(scaled)
+        self.thumb_label.setPixmap(self._sphere_swatch.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -916,8 +975,20 @@ class TextureCard(QFrame):
             return
         drag = QDrag(self)
         mime = QMimeData()
+        # Use same material-preset MIME as built-in image presets
+        payload_dict = {
+            "category": "fabric",
+            "image_file": True,
+            "use_texture_maps": True,
+            "albedo_map": "image_file",
+            "albedo_map_path": self.image_path,
+            "tile_repeat": 1,
+            "metalness": 0.0,
+            "roughness": 0.7,
+        }
+        payload = json.dumps(payload_dict)
+        mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         mime.setText(self.image_path)
-        mime.setData("application/x-ectoform-texture", self.image_path.encode('utf-8'))
         drag.setMimeData(mime)
         thumb = self.pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         drag.setPixmap(thumb)
@@ -1285,6 +1356,15 @@ class TexturePanel(QWidget):
         upload_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(upload_label)
 
+        # Size hint
+        size_hint = QLabel("Recommended: 1–15 MB · JPG/PNG · min 1024×1024 px")
+        size_hint.setWordWrap(True)
+        size_hint.setStyleSheet(
+            f"color: {default_theme.text_secondary}; font-size: 9px; "
+            f"background: transparent; border: none; padding: 0 0 2px 0;"
+        )
+        layout.addWidget(size_hint)
+
         self.upload_btn = QPushButton("📁  Upload Texture")
         self.upload_btn.setObjectName("uploadTextureBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
@@ -1304,6 +1384,15 @@ class TexturePanel(QWidget):
         """)
         self.upload_btn.clicked.connect(self._on_upload)
         layout.addWidget(self.upload_btn)
+
+        # Upload status label (warnings/errors)
+        self._upload_status = QLabel("")
+        self._upload_status.setWordWrap(True)
+        self._upload_status.setStyleSheet(
+            "color: #F59E0B; font-size: 9px; background: transparent; border: none;"
+        )
+        self._upload_status.hide()
+        layout.addWidget(self._upload_status)
 
         # Scroll area with grid for uploaded textures
         scroll = QScrollArea()
@@ -1449,7 +1538,7 @@ class TexturePanel(QWidget):
             self.grid_layout.addWidget(card, row, col)
 
     def _on_upload(self):
-        """Open file dialog to add texture images."""
+        """Open file dialog to add texture images with size validation."""
         paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Texture Images",
@@ -1459,6 +1548,28 @@ class TexturePanel(QWidget):
         if not paths:
             return
         for path in paths:
+            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+            if file_size_mb > 30:
+                self._upload_status.setText(
+                    f"⚠ '{os.path.basename(path)}' is {file_size_mb:.0f} MB — "
+                    f"max 30 MB. Please compress or resize."
+                )
+                self._upload_status.setStyleSheet(
+                    "color: #EF4444; font-size: 9px; background: transparent; border: none;"
+                )
+                self._upload_status.show()
+                continue
+            if file_size_mb < 0.1:
+                self._upload_status.setText(
+                    f"⚠ '{os.path.basename(path)}' is only {file_size_mb * 1024:.0f} KB — "
+                    f"may appear low quality as a texture."
+                )
+                self._upload_status.setStyleSheet(
+                    "color: #F59E0B; font-size: 9px; background: transparent; border: none;"
+                )
+                self._upload_status.show()
+            else:
+                self._upload_status.hide()
             self.add_texture(path)
 
     def add_texture(self, image_path: str):
@@ -1491,6 +1602,22 @@ class TexturePanel(QWidget):
         self.grid_layout.addWidget(card, row, col)
 
         self.clear_btn.setVisible(len(self.textures) > 0)
+
+        # Switch slider group to image controls
+        self._active_category = "image"
+        self._metal_sliders_container.hide()
+        self._fabric_sliders_container.hide()
+        self._glass_sliders_container.hide()
+        self._image_sliders_container.show()
+        self._slider_img_softness.blockSignals(True)
+        self._slider_img_softness.setValue(50)
+        self._slider_img_softness.blockSignals(False)
+        self._slider_img_brightness.blockSignals(True)
+        self._slider_img_brightness.setValue(50)
+        self._slider_img_brightness.blockSignals(False)
+        self._slider_img_contrast.blockSignals(True)
+        self._slider_img_contrast.setValue(50)
+        self._slider_img_contrast.blockSignals(False)
 
     def _on_delete(self, index: int):
         if 0 <= index < len(self.cards):
