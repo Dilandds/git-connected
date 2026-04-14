@@ -2457,7 +2457,7 @@ class STLViewerWindow(QMainWindow):
                 self._load_technical_ecto(ecto_path)
                 return
             
-            model_path, annotations, reader_mode, temp_dir, drawings = EctoFormat.import_ecto(ecto_path)
+            model_path, annotations, reader_mode, temp_dir, drawings, texture_data = EctoFormat.import_ecto(ecto_path)
             
             if model_path is None:
                 QMessageBox.critical(
