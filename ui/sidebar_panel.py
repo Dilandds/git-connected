@@ -1288,9 +1288,10 @@ class SidebarPanel(QWidget):
             )
             return
         
-        # Get annotations and drawings
+        # Get annotations, drawings, and texture data
         annotations = self._get_annotations()
         drawings = self._get_drawings()
+        texture_data = self._get_texture_data()
         
         if not annotations and not drawings:
             if not confirm_dialog(
@@ -1324,14 +1325,15 @@ class SidebarPanel(QWidget):
             self.export_annotations_btn.setText("Exporting...")
             QApplication.processEvents()
             
-            # Export as .ecto bundle (includes annotations and drawings)
+            # Export as .ecto bundle (includes annotations, drawings, and texture)
             success, result, creator_token = EctoFormat.export(
                 mesh=mesh,
                 annotations=annotations,
                 output_path=file_path,
                 source_format='stl',
                 original_filename=self.current_stl_filename,
-                drawings=drawings
+                drawings=drawings,
+                texture_data=texture_data
             )
             
             # Restore button
@@ -1351,7 +1353,7 @@ class SidebarPanel(QWidget):
                 
                 # Build success message
                 msg = f"Export complete!\n\nCreated: {os.path.basename(file_path)}"
-                if annotations or drawings:
+                if annotations or drawings or texture_data:
                     msg += f"\n\n📦 Bundle contains:"
                     msg += f"\n• 3D Model (STL)"
                     if annotations:
@@ -1361,6 +1363,8 @@ class SidebarPanel(QWidget):
                             msg += f"\n• {image_count} attached photo{'s' if image_count != 1 else ''}"
                     if drawings:
                         msg += f"\n• {len(drawings)} drawing stroke{'s' if len(drawings) != 1 else ''}"
+                    if texture_data:
+                        msg += f"\n• Material/texture preset"
                 else:
                     msg += f"\n\n📦 Bundle contains: 3D Model only"
                 
@@ -1403,7 +1407,18 @@ class SidebarPanel(QWidget):
                     return vw.get_draw_strokes()
             parent = parent.parent()
         return []
-    
+
+    def _get_texture_data(self):
+        """Get current material/texture preset data from the viewer widget for .ecto export."""
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
+                vw = parent.viewer_widget
+                if hasattr(vw, 'get_texture_data'):
+                    return vw.get_texture_data()
+            parent = parent.parent()
+        return None
+
     def reset_all_data(self):
         """Reset all data displays to initial state."""
         # Reset dimensions

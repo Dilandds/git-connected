@@ -2457,7 +2457,7 @@ class STLViewerWindow(QMainWindow):
                 self._load_technical_ecto(ecto_path)
                 return
             
-            model_path, annotations, reader_mode, temp_dir, drawings = EctoFormat.import_ecto(ecto_path)
+            model_path, annotations, reader_mode, temp_dir, drawings, texture_data = EctoFormat.import_ecto(ecto_path)
             
             if model_path is None:
                 QMessageBox.critical(
@@ -2547,6 +2547,16 @@ class STLViewerWindow(QMainWindow):
             if drawings and vw and hasattr(vw, 'restore_draw_strokes'):
                 vw.restore_draw_strokes(drawings)
                 logger.info(f"_load_ecto_file: Restored {len(drawings)} drawing strokes")
+            
+            # Restore material/texture if saved in bundle
+            if texture_data and vw and hasattr(vw, '_apply_material_preset_to_mesh'):
+                try:
+                    mesh_obj = getattr(vw, '_mesh_obj', None)
+                    if mesh_obj is not None:
+                        vw._apply_material_preset_to_mesh(mesh_obj, texture_data)
+                        logger.info(f"_load_ecto_file: Restored material/texture (image_file={texture_data.get('image_file', False)})")
+                except Exception as tex_err:
+                    logger.warning(f"_load_ecto_file: Failed to restore texture: {tex_err}")
             
             logger.info(f"_load_ecto_file: Successfully loaded .ecto file")
             

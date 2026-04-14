@@ -72,7 +72,8 @@ class EctoFormat:
     @staticmethod
     def export(mesh, annotations: List[dict], output_path: str,
                source_format: str = 'stl', original_filename: str = None,
-               drawings: Optional[List[dict]] = None) -> Tuple[bool, str, Optional[str]]:
+               drawings: Optional[List[dict]] = None,
+               texture_data: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[str]]:
         """Create an .ecto bundle containing the model, annotations, images, and drawings.
         
         Args:
@@ -168,7 +169,40 @@ class EctoFormat:
                     json.dump({'version': '1.0', 'strokes': drawings_data}, f, indent=2, ensure_ascii=False)
                 logger.info(f"export: Created drawings.json with {len(drawings_data)} strokes")
 
-            # 5. Create manifest.json (creator_token identifies sender for reopen-as-editor)
+            # 5. Bundle texture/material data if present
+            texture_json_data = None
+            has_texture = False
+            if texture_data:
+                texture_json_data = dict(texture_data)
+                # Copy texture image files into bundle
+                textures_dir = os.path.join(temp_dir, 'textures')
+                # Handle main albedo_map_path
+                albedo_path = texture_data.get('albedo_map_path', '')
+                if albedo_path and os.path.exists(albedo_path):
+                    os.makedirs(textures_dir, exist_ok=True)
+                    _, ext = os.path.splitext(albedo_path)
+                    tex_filename = f"texture_albedo{ext}"
+                    shutil.copy2(albedo_path, os.path.join(textures_dir, tex_filename))
+                    texture_json_data['albedo_map_path'] = f"textures/{tex_filename}"
+                    has_texture = True
+                    logger.info(f"export: Copied texture image to bundle: {tex_filename}")
+                # Handle per-part textures
+                for pt in texture_json_data.get('parts_textures', []):
+                    pt_path = pt.get('albedo_map_path', '')
+                    if pt_path and os.path.exists(pt_path):
+                        os.makedirs(textures_dir, exist_ok=True)
+                        _, ext = os.path.splitext(pt_path)
+                        pt_filename = f"texture_part_{pt.get('part_id', 0)}{ext}"
+                        shutil.copy2(pt_path, os.path.join(textures_dir, pt_filename))
+                        pt['albedo_map_path'] = f"textures/{pt_filename}"
+                        has_texture = True
+                if texture_json_data:
+                    tex_json_path = os.path.join(temp_dir, 'texture.json')
+                    with open(tex_json_path, 'w', encoding='utf-8') as f:
+                        json.dump({'version': '1.0', 'material': texture_json_data}, f, indent=2, ensure_ascii=False)
+                    logger.info(f"export: Created texture.json (has_texture_image={has_texture})")
+
+            # 6. Create manifest.json (creator_token identifies sender for reopen-as-editor)
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'created_by': 'ECTOFORM',
@@ -180,14 +214,15 @@ class EctoFormat:
                 'creator_token': creator_token,
                 'annotation_count': len(processed_annotations),
                 'has_images': has_images,
-                'drawing_count': len(drawings_data)
+                'drawing_count': len(drawings_data),
+                'has_texture': has_texture,
             }
             manifest_path = os.path.join(temp_dir, 'manifest.json')
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
             logger.info(f"export: Created manifest.json")
 
-            # 6. Create the .ecto ZIP file
+            # 7. Create the .ecto ZIP file
             with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 # Add manifest
                 zf.write(manifest_path, 'manifest.json')
@@ -203,6 +238,14 @@ class EctoFormat:
                     for img_file in os.listdir(images_dir):
                         img_path = os.path.join(images_dir, img_file)
                         zf.write(img_path, f'images/{img_file}')
+                # Add texture data if any
+                if texture_json_data:
+                    tex_json_path = os.path.join(temp_dir, 'texture.json')
+                    zf.write(tex_json_path, 'texture.json')
+                    if os.path.exists(textures_dir):
+                        for tex_file in os.listdir(textures_dir):
+                            tex_path = os.path.join(textures_dir, tex_file)
+                            zf.write(tex_path, f'textures/{tex_file}')
             
             logger.info(f"export: Created .ecto bundle at {output_path}")
             return True, output_path, creator_token
@@ -221,24 +264,18 @@ class EctoFormat:
                     logger.warning(f"export: Failed to cleanup temp directory: {e}")
     
     @staticmethod
-    def import_ecto(ecto_path: str) -> Tuple[Optional[str], Optional[List[dict]], bool, str, Optional[List[dict]]]:
+    def import_ecto(ecto_path: str):
         """Open an .ecto bundle and extract its contents.
         
-        Extracts the bundle to a temporary directory and returns paths to the contents.
-        The caller is responsible for cleaning up the temp directory when done.
-        
-        Args:
-            ecto_path: Path to the .ecto file
-            
         Returns:
-            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings)
-                   On failure: (None, None, False, error_message, None)
+            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings, texture_data)
+                   On failure: (None, None, False, error_message, None, None)
         """
         if not os.path.exists(ecto_path):
-            return None, None, False, f"File not found: {ecto_path}", None
+            return None, None, False, f"File not found: {ecto_path}", None, None
         
         if not EctoFormat.is_ecto_file(ecto_path):
-            return None, None, False, "Invalid .ecto file format", None
+            return None, None, False, "Invalid .ecto file format", None, None
         
         temp_dir = None
         try:
@@ -260,7 +297,7 @@ class EctoFormat:
             model_path = os.path.join(temp_dir, model_filename)
             
             if not os.path.exists(model_path):
-                return None, None, False, f"Model file not found in bundle: {model_filename}", None
+                return None, None, False, f"Model file not found in bundle: {model_filename}", None, None
             
             # Sender vs reader: if creator_token is in local registry, this machine created the file
             creator_token = manifest.get('creator_token')
@@ -312,12 +349,38 @@ class EctoFormat:
                     logger.info(f"import_ecto: Loaded {len(drawings)} drawing strokes")
                 except Exception as e:
                     logger.warning(f"import_ecto: Could not read drawings.json: {e}")
+
+            # Read texture/material data (optional)
+            texture_data = None
+            texture_json_path = os.path.join(temp_dir, 'texture.json')
+            if os.path.exists(texture_json_path):
+                try:
+                    with open(texture_json_path, 'r', encoding='utf-8') as f:
+                        tex_json = json.load(f)
+                    texture_data = tex_json.get('material', {})
+                    # Resolve relative texture paths to absolute paths in temp dir
+                    albedo_rel = texture_data.get('albedo_map_path', '')
+                    if albedo_rel and not os.path.isabs(albedo_rel):
+                        abs_path = os.path.join(temp_dir, albedo_rel)
+                        if os.path.exists(abs_path):
+                            texture_data['albedo_map_path'] = abs_path
+                    # Resolve per-part texture paths
+                    for pt in texture_data.get('parts_textures', []):
+                        pt_rel = pt.get('albedo_map_path', '')
+                        if pt_rel and not os.path.isabs(pt_rel):
+                            abs_path = os.path.join(temp_dir, pt_rel)
+                            if os.path.exists(abs_path):
+                                pt['albedo_map_path'] = abs_path
+                    logger.info(f"import_ecto: Loaded texture data (image_file={texture_data.get('image_file', False)})")
+                except Exception as e:
+                    logger.warning(f"import_ecto: Could not read texture.json: {e}")
             
             logger.info(f"import_ecto: Successfully extracted. Model: {model_path}, "
                        f"Annotations: {len(annotations) if annotations else 0}, "
-                       f"Drawings: {len(drawings)}, Reader mode: {reader_mode}")
+                       f"Drawings: {len(drawings)}, Reader mode: {reader_mode}, "
+                       f"Has texture: {texture_data is not None}")
             
-            return model_path, annotations, reader_mode, temp_dir, drawings
+            return model_path, annotations, reader_mode, temp_dir, drawings, texture_data
             
         except Exception as e:
             logger.error(f"import_ecto: Failed to import .ecto file: {e}", exc_info=True)
@@ -327,7 +390,7 @@ class EctoFormat:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            return None, None, False, str(e), None
+            return None, None, False, str(e), None, None
     
     @staticmethod
     def get_manifest(ecto_path: str) -> Optional[Dict[str, Any]]:

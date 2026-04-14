@@ -2452,7 +2452,30 @@ class STLViewerWidget(QWidget):
         return [{'points': [p.tolist() if hasattr(p, 'tolist') else list(p) for p in s['points']], 'color': s['color']}
                 for s in self._draw_strokes_data]
 
-    def restore_draw_strokes(self, strokes):
+    def get_texture_data(self):
+        """Return the current material/texture preset data for .ecto export.
+        Returns dict with material properties and image path, or None if no preset applied."""
+        if self._mesh_obj is None:
+            return None
+        preset_data = getattr(self._mesh_obj, '_material_preset_data', None)
+        if preset_data is None:
+            return None
+        # Return a copy with all relevant fields
+        result = dict(preset_data)
+        # Also check per-part textures
+        if self._mesh_parts and len(self._mesh_parts) > 1:
+            parts_textures = []
+            for part in self._mesh_parts:
+                mesh_obj = part.get('mesh_obj')
+                if mesh_obj:
+                    part_data = getattr(mesh_obj, '_material_preset_data', None)
+                    if part_data:
+                        parts_textures.append({"part_id": part.get("id"), **dict(part_data)})
+            if parts_textures:
+                result["parts_textures"] = parts_textures
+        return result
+
+
         """Restore strokes from .ecto import. Each stroke: {'points': [[x,y,z],...], 'color': '#RRGGBB'}."""
         import pygfx as gfx
         for stroke in self._draw_strokes:
@@ -3781,6 +3804,10 @@ class STLViewerWidget(QWidget):
                 "category": preset_data.get("category", "metal"),
                 "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
                 "image_file": is_image_file,
+                "use_texture_maps": use_texture_maps,
+                "albedo_map": preset_data.get("albedo_map", ""),
+                "albedo_map_path": preset_data.get("albedo_map_path", ""),
+                "tile_repeat": preset_data.get("tile_repeat", 1.0),
             }
 
             if not is_image_file:
