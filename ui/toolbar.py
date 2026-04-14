@@ -408,6 +408,7 @@ class ViewControlsToolbar(QWidget):
     toggle_draw = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
+    draw_text_toggled = pyqtSignal(bool)  # True = text mode on
     draw_undo_requested = pyqtSignal()
     draw_clear_requested = pyqtSignal()
     load_file = pyqtSignal()
@@ -430,6 +431,7 @@ class ViewControlsToolbar(QWidget):
         self.texture_mode_enabled = False
         self.draw_mode_enabled = False
         self._draw_color = '#FF0000'
+        self._draw_text_active = False
         self.stl_loaded = False
         
         # Load saved state
