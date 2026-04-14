@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont
 from ui.styles import default_theme
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 

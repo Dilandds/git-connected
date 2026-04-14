@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 from ui.technical_sidebar import (
     _FIELD_BG,
     _FIELD_TEXT,

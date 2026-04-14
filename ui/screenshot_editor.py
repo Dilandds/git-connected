@@ -13,6 +13,7 @@ from PyQt5.QtGui import (
     QCursor, QFontMetrics
 )
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 from ui.draw_color_picker import DrawColorPicker
 
 logger = logging.getLogger(__name__)

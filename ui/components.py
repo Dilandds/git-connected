@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal
 from PyQt5.QtGui import QFont, QPainter, QColor, QDoubleValidator
 from ui.styles import default_theme
+from i18n import t
 
 
 def confirm_dialog(parent, title: str, message: str) -> bool:

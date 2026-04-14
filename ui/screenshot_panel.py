@@ -12,6 +12,7 @@ from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 from ui.annotation_panel import (
     _ANNO_CARD_BORDER,
     _ANNO_CARD_BORDER_HOVER,

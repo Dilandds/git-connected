@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint
 from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen
+from i18n import t, on_language_changed
 from ui.styles import default_theme, make_font
 from ui.annotation_panel import (
     _ANNO_CARD_BORDER,
