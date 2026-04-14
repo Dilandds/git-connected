@@ -168,15 +168,19 @@ class STLViewerWindow(QMainWindow):
         _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
         self.setWindowTitle(_title)
         if sys.platform == 'win32':
-            min_w, min_h = 1600, 1000
+            min_w, min_h = 1200, 750
         else:
-            min_w, min_h = 1400, 900
+            min_w, min_h = 1200, 750
         self.setMinimumSize(min_w, min_h)
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
-        self.resize(min_w, min_h)
+        # Start at a comfortable size but allow shrinking
+        if sys.platform == 'win32':
+            self.resize(1600, 1000)
+        else:
+            self.resize(1400, 900)
         
         # Position window on left side of screen (align with toolbar/content)
         screen = QApplication.primaryScreen().availableGeometry()
