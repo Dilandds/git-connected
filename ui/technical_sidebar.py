@@ -11,6 +11,7 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
 from ui.styles import default_theme, make_font
 from i18n import t, on_language_changed
+from core.edition import is_education
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +247,7 @@ class TechnicalSidebar(QWidget):
         self.export_btn.clicked.connect(lambda: self.export_requested.emit())
         layout.addWidget(self.export_btn)
 
-        # Export PDF button
+        # Export PDF button (hidden in Education edition)
         self.export_pdf_btn = QPushButton("📄 Export PDF Report")
         self.export_pdf_btn.setFixedHeight(34)
         self.export_pdf_btn.setCursor(Qt.PointingHandCursor)
@@ -262,6 +263,8 @@ class TechnicalSidebar(QWidget):
             }}
         """)
         self.export_pdf_btn.clicked.connect(lambda: self.export_pdf_requested.emit())
+        if is_education():
+            self.export_pdf_btn.hide()
         layout.addWidget(self.export_pdf_btn)
 
         layout.addSpacing(12)
