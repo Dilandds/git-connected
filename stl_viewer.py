@@ -1145,6 +1145,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.toggle_parts.connect(self._toggle_parts_mode)
         self.toolbar.draw_color_changed.connect(self._on_draw_color_changed)
         self.toolbar.draw_eraser_toggled.connect(self._on_draw_eraser_toggled)
+        self.toolbar.draw_text_toggled.connect(self._on_draw_text_toggled)
         self.toolbar.draw_undo_requested.connect(self._on_draw_undo)
         self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
         self.toolbar.load_file.connect(self.upload_stl_file)
