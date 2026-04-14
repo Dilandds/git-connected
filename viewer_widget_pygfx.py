@@ -2419,6 +2419,7 @@ class STLViewerWidget(QWidget):
         self.draw_mode = False
         self._drawing_active = False
         self._eraser_mode = False
+        self._text_mode = False
         self._current_stroke_points = []
         self._remove_current_stroke_line()
 
@@ -2438,7 +2439,7 @@ class STLViewerWidget(QWidget):
         self._draw_color = color
 
     def clear_drawings(self):
-        """Remove all drawn strokes from the scene."""
+        """Remove all drawn strokes and text labels from the scene."""
         for stroke in self._draw_strokes:
             try:
                 self._scene.remove(stroke)
@@ -2446,6 +2447,13 @@ class STLViewerWidget(QWidget):
                 pass
         self._draw_strokes.clear()
         self._draw_strokes_data.clear()
+        for t_obj in self._draw_texts:
+            try:
+                self._scene.remove(t_obj)
+            except Exception:
+                pass
+        self._draw_texts.clear()
+        self._draw_texts_data.clear()
         if self._canvas:
             self._canvas.request_draw()
 
