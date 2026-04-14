@@ -484,6 +484,7 @@ class STLViewerWindow(QMainWindow):
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
         # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
+        _mode_font_size = '13px' if sys.platform == 'win32' else '11px'
         active_style = f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -499,7 +500,7 @@ class STLViewerWindow(QMainWindow):
                 border-bottom: 1px solid #252830;
                 border-radius: 5px;
                 padding: 5px 14px;
-                font-size: 11px;
+                font-size: {_mode_font_size};
                 font-weight: bold;
             }}
             QPushButton:hover {{
@@ -534,7 +535,7 @@ class STLViewerWindow(QMainWindow):
                 border-top: 1px solid #454a58;
                 border-radius: 5px;
                 padding: 5px 14px;
-                font-size: 11px;
+                font-size: {_mode_font_size};
                 color: {default_theme.text_secondary};
             }}
             QPushButton:hover {{
