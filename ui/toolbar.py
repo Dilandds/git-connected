@@ -176,13 +176,15 @@ def _toolbar_label_style(color: str, size: int = 10) -> str:
 class ToolbarButton(QPushButton):
     """A styled toolbar button with icon and text."""
     
-    def __init__(self, icon_text, label_text, tooltip, parent=None, icon_path=None, label_font_size=10):
+    def __init__(self, icon_text, label_text, tooltip, parent=None, icon_path=None, label_font_size=None):
         super().__init__(parent)
         self.icon_text = icon_text
         self.icon_path = icon_path
         self._preferred_icon_path = icon_path  # Kept when set_icon is called with emoji
         self.label_text = label_text
         self._is_active = False
+        if label_font_size is None:
+            label_font_size = 12 if sys.platform == 'win32' else 10
         self._label_font_size = label_font_size
         # Larger label (e.g. Ruler on Windows): taller chip + more left room so emoji is not clipped
         _win_large = sys.platform == 'win32' and label_font_size >= 12
