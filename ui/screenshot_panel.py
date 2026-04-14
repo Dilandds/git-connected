@@ -18,6 +18,7 @@ from ui.annotation_panel import (
     _ANNO_CARD_HOVER,
     _ANNO_CARD_PENDING,
 )
+from ui.screenshot_editor import ScreenshotEditorDialog
 
 logger = logging.getLogger(__name__)
 
