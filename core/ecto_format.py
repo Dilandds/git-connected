@@ -176,6 +176,7 @@ class EctoFormat:
                 texture_json_data = dict(texture_data)
                 # Copy texture image files into bundle
                 textures_dir = os.path.join(temp_dir, 'textures')
+                has_texture = True
                 # Handle main albedo_map_path
                 albedo_path = texture_data.get('albedo_map_path', '')
                 if albedo_path and os.path.exists(albedo_path):
