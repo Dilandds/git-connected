@@ -2149,6 +2149,12 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'set_eraser_mode'):
             vw.set_eraser_mode(enabled)
 
+    def _on_draw_text_toggled(self, enabled: bool):
+        """Handle text placement mode toggle."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_text_mode'):
+            vw.set_text_mode(enabled)
+
     def _on_draw_undo(self):
         """Undo last drawn stroke."""
         vw = self.viewer_widget
