@@ -4118,14 +4118,8 @@ class STLViewerWidget(QWidget):
                 is_standard = True
                 is_phong = False
 
-            # --- Image category: Softness / Tile Density / Brightness / Contrast ---
+            # --- Image category: Softness / Brightness / Contrast ---
             if category == "image" and is_standard and preset_data is not None and preset_data.get("image_file", False):
-                # Tile Density: re-scale UVs for image-based textures
-                tile_density = settings.get("tile_density", None)
-                if tile_density is not None:
-                    self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_density))
-                    if self._canvas:
-                        self._canvas.request_draw()
 
                 # Softness: controls roughness (0% = rough matte, 100% = smooth/polished)
                 img_softness = settings.get("softness", None)

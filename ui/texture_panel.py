@@ -545,12 +545,6 @@ class TexturePanel(QWidget):
                 self._lbl_tint.setText("0%")
         elif is_image:
             # Image preset: reset image-specific sliders
-            tile_default = int(preset_data.get("tile_repeat", 1))
-            self._slider_img_tile_density.blockSignals(True)
-            self._slider_img_tile_density.setValue(tile_default)
-            self._slider_img_tile_density.blockSignals(False)
-            if hasattr(self, '_lbl_img_tile_density'):
-                self._lbl_img_tile_density.setText(f"{tile_default}x")
             self._slider_img_softness.blockSignals(True)
             self._slider_img_softness.setValue(50)
             self._slider_img_softness.blockSignals(False)
@@ -606,7 +600,6 @@ class TexturePanel(QWidget):
             settings["clarity"] = self._slider_clarity.value()
             settings["tint"] = self._slider_tint.value()
         elif category == "image":
-            settings["tile_density"] = self._slider_img_tile_density.value()
             settings["softness"] = self._slider_img_softness.value()
             settings["img_brightness"] = self._slider_img_brightness.value()
             settings["img_contrast"] = self._slider_img_contrast.value()
@@ -847,8 +840,6 @@ class TexturePanel(QWidget):
         image_layout.setSpacing(4)
 
         row, self._slider_img_softness, self._lbl_img_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
-        image_layout.addWidget(row)
-        row, self._slider_img_tile_density, self._lbl_img_tile_density = self._create_slider_row("Tile Density", 1, 500, 1, "x")
         image_layout.addWidget(row)
         row, self._slider_img_brightness, self._lbl_img_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
         image_layout.addWidget(row)
