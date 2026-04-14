@@ -2552,10 +2552,28 @@ class STLViewerWindow(QMainWindow):
             # Restore material/texture if saved in bundle
             if texture_data and vw and hasattr(vw, '_apply_material_preset_to_mesh'):
                 try:
+                    restored_part_ids = set()
+                    for part_texture in texture_data.get('parts_textures', []):
+                        part_id = part_texture.get('part_id')
+                        if part_id is None or not hasattr(vw, 'apply_material_preset_to_part'):
+                            continue
+                        vw.apply_material_preset_to_part(part_id, part_texture)
+                        restored_part_ids.add(part_id)
+
                     mesh_obj = getattr(vw, '_mesh_obj', None)
-                    if mesh_obj is not None:
+                    has_root_texture = any(
+                        texture_data.get(key)
+                        for key in ('albedo_map_path', 'albedo_map', 'use_texture_maps', 'image_file')
+                    ) and not texture_data.get('parts_textures')
+
+                    if mesh_obj is not None and has_root_texture:
                         vw._apply_material_preset_to_mesh(mesh_obj, texture_data)
-                        logger.info(f"_load_ecto_file: Restored material/texture (image_file={texture_data.get('image_file', False)})")
+
+                    if restored_part_ids or has_root_texture:
+                        logger.info(
+                            f"_load_ecto_file: Restored material/texture (image_file={texture_data.get('image_file', False)}, "
+                            f"parts={len(restored_part_ids)})"
+                        )
                 except Exception as tex_err:
                     logger.warning(f"_load_ecto_file: Failed to restore texture: {tex_err}")
             

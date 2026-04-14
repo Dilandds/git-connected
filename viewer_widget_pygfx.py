@@ -2457,22 +2457,31 @@ class STLViewerWidget(QWidget):
         Returns dict with material properties and image path, or None if no preset applied."""
         if self._mesh_obj is None:
             return None
+
         preset_data = getattr(self._mesh_obj, '_material_preset_data', None)
-        if preset_data is None:
-            return None
-        # Return a copy with all relevant fields
-        result = dict(preset_data)
-        # Also check per-part textures
-        if self._mesh_parts and len(self._mesh_parts) > 1:
-            parts_textures = []
+        result = dict(preset_data) if preset_data else None
+
+        parts_textures = []
+        if self._mesh_parts:
             for part in self._mesh_parts:
                 mesh_obj = part.get('mesh_obj')
-                if mesh_obj:
-                    part_data = getattr(mesh_obj, '_material_preset_data', None)
-                    if part_data:
-                        parts_textures.append({"part_id": part.get("id"), **dict(part_data)})
-            if parts_textures:
-                result["parts_textures"] = parts_textures
+                if mesh_obj is None:
+                    continue
+                part_data = getattr(mesh_obj, '_material_preset_data', None)
+                if part_data:
+                    parts_textures.append({"part_id": part.get("id"), **dict(part_data)})
+
+        if result is None and parts_textures:
+            first_part_texture = dict(parts_textures[0])
+            first_part_texture.pop('part_id', None)
+            result = first_part_texture
+
+        if result is None:
+            return None
+
+        if parts_textures:
+            result["parts_textures"] = parts_textures
+
         return result
 
 
