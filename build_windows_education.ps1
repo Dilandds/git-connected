@@ -34,7 +34,8 @@ if (-not (Test-Path $exePath)) {
 }
 
 $fileInfo = Get-Item $exePath
-Write-Host "✓ EXE created: $exePath ($([math]::Round($fileInfo.Length / 1MB, 2)) MB)" -ForegroundColor Green
+$sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+Write-Host ("EXE created: {0} ({1} MB)" -f $exePath, $sizeMB) -ForegroundColor Green
 
 # Create ZIP
 $zipPath = "ECTOFORM-Education-Windows.zip"
