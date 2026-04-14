@@ -166,8 +166,8 @@ class ArrowPanel(QWidget):
         exit_btn.setFixedSize(24, 24)
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.setStyleSheet(f"""
-            QPushButton {{ background: transparent; color: {default_theme.text_secondary}; border: none; font-size: 16px; font-weight: 500; border-radius: 4px; padding: 2px; min-width: 24px; min-height: 24px; }}
-            QPushButton:hover {{ background: #FEE2E2; color: #DC2626; }}
+            QPushButton {{ background: transparent; color: #FFFFFF; border: none; font-size: 16px; font-weight: 500; border-radius: 4px; padding: 2px; min-width: 24px; min-height: 24px; }}
+            QPushButton:hover {{ background: rgba(255, 255, 255, 0.20); color: #FFFFFF; }}
         """)
         exit_btn.clicked.connect(self.exit_arrow_mode.emit)
         header.addWidget(exit_btn)

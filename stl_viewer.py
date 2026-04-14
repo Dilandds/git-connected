@@ -217,7 +217,7 @@ class STLViewerWindow(QMainWindow):
         """)
         mode_bar_layout = QHBoxLayout(mode_bar)
         mode_bar_layout.setContentsMargins(12, 4, 12, 4)
-        mode_bar_layout.setSpacing(4)
+        mode_bar_layout.setSpacing(8)
         
         self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
         self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
