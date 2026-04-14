@@ -3787,7 +3787,12 @@ class STLViewerWidget(QWidget):
                 self._add_preset_accent_lights(tone=env_tone)
 
             preset_category = preset_data.get("category", "metal") if preset_data else ("metal" if base_metalness > 0 else "fabric")
-            if preset_category == "metal":
+            if is_image_file:
+                self.material_preset_applied.emit({
+                    "category": "fabric",
+                    "image_file": True,
+                })
+            elif preset_category == "metal":
                 self.material_preset_applied.emit({
                     "category": "metal",
                     "shine": self._roughness_to_shine(base_roughness),
