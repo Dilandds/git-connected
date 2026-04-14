@@ -16,6 +16,7 @@ from ui.components import (
     Separator, ScaleResultRow, ReportCheckbox, confirm_dialog,
 )
 from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class SidebarPanel(QWidget):
         self.has_stl_loaded = False
         self.has_scaled_data = False
         self.init_ui()
+        on_language_changed(self.retranslate)
     
     def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
         """Add a black drop shadow to a sidebar card, button, or other widget."""
@@ -148,35 +150,33 @@ class SidebarPanel(QWidget):
         upload_card_layout.setSpacing(10)
         
         # Title label
-        title_label = QLabel("ECTOFORM")
-        title_label.setObjectName("titleLabel")
+        self._title_label = QLabel(t("sidebar.title"))
+        self._title_label.setObjectName("titleLabel")
         title_font = make_font(size=16, bold=True)
-        title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
-        upload_card_layout.addWidget(title_label)
+        self._title_label.setFont(title_font)
+        self._title_label.setAlignment(Qt.AlignCenter)
+        self._title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(self._title_label)
         
         # Upload button
-        self.upload_btn = QPushButton("Upload 3D File")
+        self.upload_btn = QPushButton(t("sidebar.upload_btn"))
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setObjectName("uploadBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
-        self.upload_btn.setToolTip("Upload STL, STEP, 3DM, OBJ, or IGES file for 3D visualization")
+        self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
         self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         # Strong black drop shadow (visible below the pill; layout margin reserves space in stylesheet)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         upload_card_layout.addWidget(self.upload_btn)
         
         # Info label
-        info_label = QLabel(
-            "Click the button above\nto load a 3D file (STL, STEP, 3DM, OBJ, IGES, ECTO)\nfor 3D visualization."
-        )
-        info_label.setObjectName("infoLabel")
-        info_label.setAlignment(Qt.AlignCenter)
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_white};")
-        upload_card_layout.addWidget(info_label)
+        self._info_label = QLabel(t("sidebar.upload_info"))
+        self._info_label.setObjectName("infoLabel")
+        self._info_label.setAlignment(Qt.AlignCenter)
+        self._info_label.setWordWrap(True)
+        self._info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_white};")
+        upload_card_layout.addWidget(self._info_label)
         
         layout.addWidget(upload_card)
         
@@ -225,18 +225,18 @@ class SidebarPanel(QWidget):
         card_layout.setSpacing(10)
         
         # Card title (transparent so gradient shows through)
-        title_label = QLabel("Dimensions")
+        self._dim_title = QLabel(t("sidebar.dimensions"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self._dim_title.setFont(title_font)
+        self._dim_title.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
-        card_layout.addWidget(title_label)
+        card_layout.addWidget(self._dim_title)
         
         # Dimension rows using components
-        self.width_row = DimensionRow("Length (X)", "--", self)
-        self.height_row = DimensionRow("Width (Y)", "--", self)
-        self.depth_row = DimensionRow("Height (Z)", "--", self)
+        self.width_row = DimensionRow(t("sidebar.length_x"), "--", self)
+        self.height_row = DimensionRow(t("sidebar.width_y"), "--", self)
+        self.depth_row = DimensionRow(t("sidebar.height_z"), "--", self)
         
         card_layout.addWidget(self.width_row)
         card_layout.addWidget(self.height_row)
@@ -1470,4 +1470,31 @@ class SidebarPanel(QWidget):
         self.update_pdf_button_state()
         
         logger.info("reset_all_data: All sidebar data reset")
+
+    def retranslate(self):
+        """Update all sidebar labels for the current language."""
+        self._title_label.setText(t("sidebar.title"))
+        self.upload_btn.setText(t("sidebar.upload_btn"))
+        self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
+        self._info_label.setText(t("sidebar.upload_info"))
+        self._dim_title.setText(t("sidebar.dimensions"))
+        self.width_row.set_label(t("sidebar.length_x"))
+        self.height_row.set_label(t("sidebar.width_y"))
+        self.depth_row.set_label(t("sidebar.height_z"))
+        self.volume_row.set_label(t("sidebar.volume"))
+        self.surface_total_row.set_label(t("sidebar.total_area"))
+        self.surface_cm_row.set_label(t("sidebar.area_cm2"))
+        self.weight_volume_row.set_label(t("sidebar.volume"))
+        self.weight_result_row.set_label(t("sidebar.estimated_weight_result"))
+        self.calculate_scale_btn.setText(t("sidebar.calculate_scale"))
+        self.scale_factor_row.set_label(t("sidebar.scale_factor"))
+        self.new_x_row.set_label(t("sidebar.new_x"))
+        self.new_y_row.set_label(t("sidebar.new_y"))
+        self.new_z_row.set_label(t("sidebar.new_z"))
+        self.new_volume_row.set_label(t("sidebar.new_volume"))
+        self.original_weight_row.set_label(t("sidebar.original_weight"))
+        self.target_weight_row.set_label(t("sidebar.target_weight"))
+        self.export_scaled_btn.setText(t("sidebar.export_scaled_stl"))
+        self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
+        self.target_weight_input.setPlaceholderText(t("sidebar.enter_target_weight"))
 

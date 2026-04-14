@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 
 from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 

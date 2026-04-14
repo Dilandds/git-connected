@@ -1,4 +1,7 @@
 """
+Arrow Panel — right-side panel for managing 3D arrows.
+"""
+from i18n import t, on_language_changed
 Arrow Manipulator Control Panel.
 Provides buttons to select, rotate, resize, move, and delete 3D arrows.
 """

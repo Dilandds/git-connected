@@ -1,4 +1,7 @@
 """
+Annotation Panel — sidebar for managing annotations in 3D viewer.
+"""
+from i18n import t, on_language_changed
 Annotation Panel UI for displaying and managing 3D model annotations.
 Workflow: Gray dots (pending) → Click to open popup → Add text/photos → Done → Black dot (validated)
 """

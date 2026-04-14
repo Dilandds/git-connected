@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPixmap
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 

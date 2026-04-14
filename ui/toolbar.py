@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -435,6 +436,7 @@ class ViewControlsToolbar(QWidget):
         
         self.init_ui()
         self._update_expanded_state(animate=False)
+        on_language_changed(self.retranslate)
     
     def init_ui(self):
         """Initialize the toolbar UI."""
@@ -1267,3 +1269,43 @@ class ViewControlsToolbar(QWidget):
         existing = app.styleSheet() or ""
         if "QToolTip" not in existing:
             app.setStyleSheet(existing + "\n" + tooltip_style)
+
+    def retranslate(self):
+        """Update all toolbar button labels for the current language."""
+        self.grid_btn.set_label(t("toolbar.grid"))
+        if self.dark_theme:
+            self.theme_btn.set_label(t("toolbar.dark"))
+        else:
+            self.theme_btn.set_label(t("toolbar.light"))
+        self.render_mode_btn.set_label(t("toolbar.visual_style"))
+        self.reset_btn.set_label(t("toolbar.reset"))
+        self.view_btn.set_label(t("toolbar.2d_views"))
+        self.ruler_btn.set_label(t("toolbar.ruler"))
+        if self.arrow_mode_enabled:
+            self.annotation_btn.set_label(t("toolbar.arrow"))
+        elif self.annotation_mode_enabled:
+            self.annotation_btn.set_label(t("toolbar.annotate"))
+        else:
+            self.annotation_btn.set_label(t("toolbar.annotate"))
+        self.screenshot_btn.set_label(t("toolbar.screenshot"))
+        self.texture_btn.set_label(t("toolbar.texture"))
+        if self.draw_mode_enabled:
+            if self._eraser_active:
+                self.draw_btn.set_label(t("toolbar.eraser") + " ▼")
+            else:
+                self.draw_btn.set_label(t("toolbar.draw").replace(" ▼", "ing ▼"))
+        else:
+            self.draw_btn.set_label(t("toolbar.draw"))
+        self.convert_btn.set_label(t("toolbar.convert"))
+        if self.is_fullscreen:
+            self.fullscreen_btn.set_label("Exit")
+        else:
+            self.fullscreen_btn.set_label(t("toolbar.fullscreen"))
+        self.ruler_btn.setToolTip(t("toolbar.measure_tooltip"))
+        self.annotation_btn.setToolTip(t("toolbar.annotate_tooltip"))
+        self.screenshot_btn.setToolTip(t("toolbar.screenshot_tooltip"))
+        self.texture_btn.setToolTip(t("toolbar.texture_tooltip"))
+        self.draw_btn.setToolTip(t("toolbar.draw_tooltip"))
+        self.convert_btn.setToolTip(t("toolbar.convert_tooltip"))
+        self.load_btn.setToolTip(t("toolbar.load_tooltip"))
+        self.reset_model_btn.setToolTip(t("toolbar.clear_tooltip"))

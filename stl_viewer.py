@@ -55,6 +55,7 @@ from ui.technical_sidebar import TechnicalSidebar
 from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
 from ui.help_panel import HelpWidget
+from i18n import t, set_language, get_language, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -205,10 +206,10 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.setContentsMargins(12, 4, 12, 4)
         mode_bar_layout.setSpacing(4)
         
-        self._mode_3d_btn = QPushButton("🔲 3D Viewer")
-        self._mode_tech_btn = QPushButton("📋 Technical Overview")
-        self._mode_scale_btn = QPushButton("📐 Drawing Scale")
-        self._mode_help_btn = QPushButton("❓ Help")
+        self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
+        self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
+        self._mode_scale_btn = QPushButton(t("mode_bar.drawing_scale"))
+        self._mode_help_btn = QPushButton(t("mode_bar.help"))
         for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn, self._mode_help_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
@@ -227,6 +228,29 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
         mode_bar_layout.addStretch()
+
+        # Language toggle button (EN/FR)
+        self._lang_btn = QPushButton("FR" if get_language() == "en" else "EN")
+        self._lang_btn.setFixedSize(42, 26)
+        self._lang_btn.setCursor(Qt.PointingHandCursor)
+        self._lang_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: rgba(255, 255, 255, 0.12);
+                color: {default_theme.text_white};
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 2px 6px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.22);
+                border-color: rgba(255, 255, 255, 0.40);
+            }}
+        """)
+        self._lang_btn.clicked.connect(self._toggle_language)
+        mode_bar_layout.addWidget(self._lang_btn)
+
         mode_bar_layout.addWidget(self._mode_help_btn)
         root_layout.addWidget(mode_bar)
         
@@ -407,6 +431,15 @@ class STLViewerWindow(QMainWindow):
         # Create initial empty tab
         self._create_new_tab()
         
+        # Register language change listener
+        on_language_changed(self._retranslate_ui)
+        
+        # Restore saved language preference
+        from PyQt5.QtCore import QSettings
+        saved_lang = QSettings("ECTOFORM", "App").value("language", "en", type=str)
+        if saved_lang != get_language():
+            set_language(saved_lang)
+        
         logger.info("init_ui: UI initialization complete")
     
     # ======================== Mode Switching ========================
@@ -505,6 +538,21 @@ class STLViewerWindow(QMainWindow):
             self.setWindowTitle("ECTOFORM - Help")
         
         logger.info(f"_switch_mode: Switched to {mode} mode")
+    
+    def _toggle_language(self):
+        """Toggle between English and French."""
+        from PyQt5.QtCore import QSettings
+        new_lang = "fr" if get_language() == "en" else "en"
+        QSettings("ECTOFORM", "App").setValue("language", new_lang)
+        set_language(new_lang)
+    
+    def _retranslate_ui(self):
+        """Update all mode bar texts when language changes."""
+        self._mode_3d_btn.setText(t("mode_bar.viewer_3d"))
+        self._mode_tech_btn.setText(t("mode_bar.technical"))
+        self._mode_scale_btn.setText(t("mode_bar.drawing_scale"))
+        self._mode_help_btn.setText(t("mode_bar.help"))
+        self._lang_btn.setText("FR" if get_language() == "en" else "EN")
     
     def _tech_upload_image(self):
         """Handle upload request from technical sidebar — supports images, PDFs, and .ecto files."""

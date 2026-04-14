@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal
 from PyQt5.QtGui import QFont, QPainter, QColor, QDoubleValidator
 from ui.styles import default_theme
+from i18n import t
 
 
 def confirm_dialog(parent, title: str, message: str) -> bool:
@@ -99,14 +100,14 @@ class DimensionRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
-        label.setObjectName("dimensionLabel")
-        label.setStyleSheet("background-color: transparent; color: #000000;")
+        self._label = QLabel(label_text)
+        self._label.setObjectName("dimensionLabel")
+        self._label.setStyleSheet("background-color: transparent; color: #000000;")
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -122,7 +123,7 @@ class DimensionRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -152,6 +153,11 @@ class DimensionRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class SurfaceAreaRow(QFrame):
@@ -215,20 +221,20 @@ class SurfaceAreaRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
+        self._label = QLabel(label_text)
         if row_type == "total_area":
-            label.setObjectName("surfaceTotalLabel")
-            label.setStyleSheet(
+            self._label.setObjectName("surfaceTotalLabel")
+            self._label.setStyleSheet(
                 f"background-color: transparent; color: {default_theme.text_white};"
             )
         else:
-            label.setObjectName("surfaceLabel")
-            label.setStyleSheet("background-color: transparent; color: #000000;")
+            self._label.setObjectName("surfaceLabel")
+            self._label.setStyleSheet("background-color: transparent; color: #000000;")
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -250,7 +256,7 @@ class SurfaceAreaRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -325,6 +331,11 @@ class SurfaceAreaRow(QFrame):
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
 
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
+
 
 class WeightRow(QFrame):
     """A reusable weight row component with hover effect."""
@@ -368,16 +379,16 @@ class WeightRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
-        label.setObjectName("weightLabel")
-        label.setStyleSheet(
+        self._label = QLabel(label_text)
+        self._label.setObjectName("weightLabel")
+        self._label.setStyleSheet(
             f"background-color: transparent; color: {default_theme.text_white};"
         )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -395,7 +406,7 @@ class WeightRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -446,6 +457,11 @@ class WeightRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class WeightDensityInputRow(QFrame):
@@ -670,16 +686,16 @@ class ScaleResultRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
-        label.setObjectName("scaleLabel")
-        label.setStyleSheet(
+        self._label = QLabel(label_text)
+        self._label.setObjectName("scaleLabel")
+        self._label.setStyleSheet(
             f"background-color: transparent; color: {_label_fg};"
         )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -697,7 +713,7 @@ class ScaleResultRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -788,6 +804,11 @@ class ScaleResultRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class ReportCheckbox(QFrame):
