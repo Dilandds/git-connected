@@ -204,6 +204,7 @@ class EctoFormat:
                     logger.info(f"export: Created texture.json (has_texture_image={has_texture})")
 
             # 6. Create manifest.json (creator_token identifies sender for reopen-as-editor)
+            from core.edition import is_education, WATERMARK_TEXT
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'created_by': 'ECTOFORM',
@@ -218,6 +219,9 @@ class EctoFormat:
                 'drawing_count': len(drawings_data),
                 'has_texture': has_texture,
             }
+            if is_education():
+                manifest['edition'] = 'education'
+                manifest['watermark'] = WATERMARK_TEXT
             manifest_path = os.path.join(temp_dir, 'manifest.json')
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
