@@ -431,6 +431,15 @@ class STLViewerWindow(QMainWindow):
         # Create initial empty tab
         self._create_new_tab()
         
+        # Register language change listener
+        on_language_changed(self._retranslate_ui)
+        
+        # Restore saved language preference
+        from PyQt5.QtCore import QSettings
+        saved_lang = QSettings("ECTOFORM", "App").value("language", "en", type=str)
+        if saved_lang != get_language():
+            set_language(saved_lang)
+        
         logger.info("init_ui: UI initialization complete")
     
     # ======================== Mode Switching ========================
