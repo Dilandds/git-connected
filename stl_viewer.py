@@ -206,10 +206,10 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.setContentsMargins(12, 4, 12, 4)
         mode_bar_layout.setSpacing(4)
         
-        self._mode_3d_btn = QPushButton("🔲 3D Viewer")
-        self._mode_tech_btn = QPushButton("📋 Technical Overview")
-        self._mode_scale_btn = QPushButton("📐 Drawing Scale")
-        self._mode_help_btn = QPushButton("❓ Help")
+        self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
+        self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
+        self._mode_scale_btn = QPushButton(t("mode_bar.drawing_scale"))
+        self._mode_help_btn = QPushButton(t("mode_bar.help"))
         for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn, self._mode_help_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
@@ -228,6 +228,29 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
         mode_bar_layout.addStretch()
+
+        # Language toggle button (EN/FR)
+        self._lang_btn = QPushButton("FR" if get_language() == "en" else "EN")
+        self._lang_btn.setFixedSize(42, 26)
+        self._lang_btn.setCursor(Qt.PointingHandCursor)
+        self._lang_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: rgba(255, 255, 255, 0.12);
+                color: {default_theme.text_white};
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 2px 6px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.22);
+                border-color: rgba(255, 255, 255, 0.40);
+            }}
+        """)
+        self._lang_btn.clicked.connect(self._toggle_language)
+        mode_bar_layout.addWidget(self._lang_btn)
+
         mode_bar_layout.addWidget(self._mode_help_btn)
         root_layout.addWidget(mode_bar)
         
