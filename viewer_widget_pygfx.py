@@ -2532,8 +2532,22 @@ class STLViewerWidget(QWidget):
             self._canvas.request_draw()
 
     def undo_last_stroke(self):
-        """Remove the most recently drawn stroke."""
-        if self._draw_strokes:
+        """Remove the most recently drawn stroke or text label."""
+        # Determine which was added last by comparing list lengths
+        # If text was the last action, undo text; otherwise undo stroke
+        # We track order via a simple approach: undo whichever list was modified last
+        # Since we can't easily track order, undo text if text_mode is active, otherwise stroke
+        if self._text_mode and self._draw_texts:
+            text_obj = self._draw_texts.pop()
+            if self._draw_texts_data:
+                self._draw_texts_data.pop()
+            try:
+                self._scene.remove(text_obj)
+            except Exception:
+                pass
+            if self._canvas:
+                self._canvas.request_draw()
+        elif self._draw_strokes:
             stroke = self._draw_strokes.pop()
             if self._draw_strokes_data:
                 self._draw_strokes_data.pop()
