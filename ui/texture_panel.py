@@ -1297,6 +1297,15 @@ class TexturePanel(QWidget):
         upload_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(upload_label)
 
+        # Size hint
+        size_hint = QLabel("Recommended: 1–15 MB · JPG/PNG · min 1024×1024 px")
+        size_hint.setWordWrap(True)
+        size_hint.setStyleSheet(
+            f"color: {default_theme.text_secondary}; font-size: 9px; "
+            f"background: transparent; border: none; padding: 0 0 2px 0;"
+        )
+        layout.addWidget(size_hint)
+
         self.upload_btn = QPushButton("📁  Upload Texture")
         self.upload_btn.setObjectName("uploadTextureBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
@@ -1316,6 +1325,15 @@ class TexturePanel(QWidget):
         """)
         self.upload_btn.clicked.connect(self._on_upload)
         layout.addWidget(self.upload_btn)
+
+        # Upload status label (warnings/errors)
+        self._upload_status = QLabel("")
+        self._upload_status.setWordWrap(True)
+        self._upload_status.setStyleSheet(
+            "color: #F59E0B; font-size: 9px; background: transparent; border: none;"
+        )
+        self._upload_status.hide()
+        layout.addWidget(self._upload_status)
 
         # Scroll area with grid for uploaded textures
         scroll = QScrollArea()
