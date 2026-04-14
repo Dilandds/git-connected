@@ -1146,13 +1146,25 @@ class ViewControlsToolbar(QWidget):
     def _on_eraser_toggled(self):
         """Toggle eraser mode."""
         self._eraser_active = not self._eraser_active
+        self._draw_text_active = False
         self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "Drawing ▼")
         self.draw_eraser_toggled.emit(self._eraser_active)
+        self.draw_text_toggled.emit(False)
+
+    def _on_text_toggled(self):
+        """Toggle text placement mode."""
+        self._draw_text_active = not self._draw_text_active
+        if self._draw_text_active:
+            self._eraser_active = False
+            self.draw_eraser_toggled.emit(False)
+        self.draw_btn.set_label("Text ▼" if self._draw_text_active else "Drawing ▼")
+        self.draw_text_toggled.emit(self._draw_text_active)
 
     def reset_draw_state(self):
         """Reset draw button state (called when exiting draw mode externally)."""
         self.draw_mode_enabled = False
         self._eraser_active = False
+        self._draw_text_active = False
         self.draw_btn.set_label("Draw ▼")
         self.draw_btn.set_active(False)
     
