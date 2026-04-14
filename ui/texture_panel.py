@@ -733,20 +733,18 @@ class MaterialPresetCard(QFrame):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        # Sphere thumbnail or image-based swatch
+        # Sphere thumbnail — image-based presets get texture-on-sphere
         swatch_image_path = preset.get("swatch_image")
-        if swatch_image_path:
-            import sys as _sys
-            if hasattr(_sys, '_MEIPASS'):
-                _base = _sys._MEIPASS
-            else:
-                _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            full_swatch = os.path.join(_base, swatch_image_path)
-            swatch = QPixmap(full_swatch)
+        if preset.get("image_file") and swatch_image_path:
+            swatch = _generate_image_swatch(swatch_image_path, size=80)
+        elif swatch_image_path:
+            swatch = _generate_image_swatch(swatch_image_path, size=80)
             if swatch.isNull():
-                swatch = _generate_material_swatch(preset["color"], preset["highlight"])
+                swatch = _generate_material_swatch(preset.get("color", "#888888"), preset.get("highlight", "#CCCCCC"))
+        elif "color" in preset:
+            swatch = _generate_material_swatch(preset["color"], preset.get("highlight", "#FFFFFF"))
         else:
-            swatch = _generate_material_swatch(preset["color"], preset["highlight"])
+            swatch = QPixmap(80, 80)
         self._swatch = swatch
         thumb = QLabel()
         thumb.setAlignment(Qt.AlignCenter)
