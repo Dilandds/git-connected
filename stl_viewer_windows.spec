@@ -38,6 +38,14 @@ splash_image_paths = [
     ('assets/icon.ico', 'assets'),
 ]
 
+# Add entire textures directory if it exists
+textures_dir = project_root / 'assets' / 'textures'
+if textures_dir.exists() and textures_dir.is_dir():
+    datas.append(('assets/textures', 'assets/textures'))
+    print(f"[PyInstaller] [OK] Adding textures directory to bundle")
+else:
+    print(f"[PyInstaller] [X] Textures directory NOT found: {textures_dir}")
+
 for src_path, dst_path in splash_image_paths:
     full_path = project_root / src_path
     if full_path.exists():
