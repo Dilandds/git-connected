@@ -150,35 +150,33 @@ class SidebarPanel(QWidget):
         upload_card_layout.setSpacing(10)
         
         # Title label
-        title_label = QLabel("ECTOFORM")
-        title_label.setObjectName("titleLabel")
+        self._title_label = QLabel(t("sidebar.title"))
+        self._title_label.setObjectName("titleLabel")
         title_font = make_font(size=16, bold=True)
-        title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
-        upload_card_layout.addWidget(title_label)
+        self._title_label.setFont(title_font)
+        self._title_label.setAlignment(Qt.AlignCenter)
+        self._title_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(self._title_label)
         
         # Upload button
-        self.upload_btn = QPushButton("Upload 3D File")
+        self.upload_btn = QPushButton(t("sidebar.upload_btn"))
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setObjectName("uploadBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
-        self.upload_btn.setToolTip("Upload STL, STEP, 3DM, OBJ, or IGES file for 3D visualization")
+        self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
         self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         # Strong black drop shadow (visible below the pill; layout margin reserves space in stylesheet)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         upload_card_layout.addWidget(self.upload_btn)
         
         # Info label
-        info_label = QLabel(
-            "Click the button above\nto load a 3D file (STL, STEP, 3DM, OBJ, IGES, ECTO)\nfor 3D visualization."
-        )
-        info_label.setObjectName("infoLabel")
-        info_label.setAlignment(Qt.AlignCenter)
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_white};")
-        upload_card_layout.addWidget(info_label)
+        self._info_label = QLabel(t("sidebar.upload_info"))
+        self._info_label.setObjectName("infoLabel")
+        self._info_label.setAlignment(Qt.AlignCenter)
+        self._info_label.setWordWrap(True)
+        self._info_label.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_white};")
+        upload_card_layout.addWidget(self._info_label)
         
         layout.addWidget(upload_card)
         
