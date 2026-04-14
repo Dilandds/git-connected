@@ -123,7 +123,7 @@ class DimensionRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -153,6 +153,11 @@ class DimensionRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class SurfaceAreaRow(QFrame):
