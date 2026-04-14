@@ -16,6 +16,7 @@ from ui.components import (
     Separator, ScaleResultRow, ReportCheckbox, confirm_dialog,
 )
 from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
