@@ -225,18 +225,18 @@ class SidebarPanel(QWidget):
         card_layout.setSpacing(10)
         
         # Card title (transparent so gradient shows through)
-        title_label = QLabel("Dimensions")
+        self._dim_title = QLabel(t("sidebar.dimensions"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self._dim_title.setFont(title_font)
+        self._dim_title.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
-        card_layout.addWidget(title_label)
+        card_layout.addWidget(self._dim_title)
         
         # Dimension rows using components
-        self.width_row = DimensionRow("Length (X)", "--", self)
-        self.height_row = DimensionRow("Width (Y)", "--", self)
-        self.depth_row = DimensionRow("Height (Z)", "--", self)
+        self.width_row = DimensionRow(t("sidebar.length_x"), "--", self)
+        self.height_row = DimensionRow(t("sidebar.width_y"), "--", self)
+        self.depth_row = DimensionRow(t("sidebar.height_z"), "--", self)
         
         card_layout.addWidget(self.width_row)
         card_layout.addWidget(self.height_row)
