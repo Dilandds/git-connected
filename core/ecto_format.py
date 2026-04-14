@@ -498,6 +498,7 @@ class EctoFormat:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
 
             # manifest.json
+            from core.edition import is_education, WATERMARK_TEXT
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'type': 'technical_overview',
@@ -509,6 +510,9 @@ class EctoFormat:
             }
             if passcode_hash:
                 manifest['passcode_hash'] = passcode_hash
+            if is_education():
+                manifest['edition'] = 'education'
+                manifest['watermark'] = WATERMARK_TEXT
             manifest_path = os.path.join(temp_dir, 'manifest.json')
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)

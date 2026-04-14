@@ -165,7 +165,8 @@ class STLViewerWindow(QMainWindow):
         logger.info("init_ui: Starting UI initialization...")
         
         logger.info("init_ui: Setting window title and size...")
-        self.setWindowTitle("ECTOFORM")
+        _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
+        self.setWindowTitle(_title)
         if sys.platform == 'win32':
             min_w, min_h = 1600, 1000
         else:
