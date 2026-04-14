@@ -80,6 +80,7 @@ class SidebarPanel(QWidget):
         self.has_stl_loaded = False
         self.has_scaled_data = False
         self.init_ui()
+        on_language_changed(self.retranslate)
     
     def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
         """Add a black drop shadow to a sidebar card, button, or other widget."""
