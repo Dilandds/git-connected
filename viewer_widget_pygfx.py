@@ -2564,8 +2564,8 @@ class STLViewerWidget(QWidget):
         logger.info(f"set_eraser_mode: {enabled}")
 
     def erase_stroke_at(self, x, y):
-        """Erase the stroke closest to the click point on the mesh surface."""
-        if self._annotation_trimesh is None or not self._draw_strokes:
+        """Erase the stroke or text label closest to the click point on the mesh surface."""
+        if self._annotation_trimesh is None or (not self._draw_strokes and not self._draw_texts):
             return False
         ray_origin, ray_direction = self._screen_to_ray(x, y)
         if ray_origin is None:
@@ -2580,28 +2580,52 @@ class STLViewerWidget(QWidget):
             dists = np.linalg.norm(locations - cam_pos, axis=1)
             hit_point = locations[np.argmin(dists)]
 
-            # Find the closest stroke to hit_point
-            threshold = self._get_draw_normal_offset() * 50  # generous click radius
-            best_idx = -1
-            best_dist = float('inf')
+            threshold = self._get_draw_normal_offset() * 50
+
+            # Check strokes
+            best_stroke_idx = -1
+            best_stroke_dist = float('inf')
             for i, stroke_data in enumerate(self._draw_strokes_data):
                 pts = np.array(stroke_data['points'], dtype=np.float32)
                 if len(pts) == 0:
                     continue
                 d = np.min(np.linalg.norm(pts - hit_point, axis=1))
-                if d < best_dist:
-                    best_dist = d
-                    best_idx = i
-            if best_idx >= 0 and best_dist < threshold:
-                stroke_obj = self._draw_strokes.pop(best_idx)
-                self._draw_strokes_data.pop(best_idx)
+                if d < best_stroke_dist:
+                    best_stroke_dist = d
+                    best_stroke_idx = i
+
+            # Check text labels
+            best_text_idx = -1
+            best_text_dist = float('inf')
+            for i, td in enumerate(self._draw_texts_data):
+                pos = np.array(td['position'], dtype=np.float32)
+                d = np.linalg.norm(pos - hit_point)
+                if d < best_text_dist:
+                    best_text_dist = d
+                    best_text_idx = i
+
+            # Erase whichever is closer (stroke or text)
+            if best_stroke_idx >= 0 and best_stroke_dist <= best_text_dist and best_stroke_dist < threshold:
+                stroke_obj = self._draw_strokes.pop(best_stroke_idx)
+                self._draw_strokes_data.pop(best_stroke_idx)
                 try:
                     self._scene.remove(stroke_obj)
                 except Exception:
                     pass
                 if self._canvas:
                     self._canvas.request_draw()
-                logger.info(f"erase_stroke_at: Removed stroke {best_idx} (dist={best_dist:.4f})")
+                logger.info(f"erase_stroke_at: Removed stroke {best_stroke_idx} (dist={best_stroke_dist:.4f})")
+                return True
+            elif best_text_idx >= 0 and best_text_dist < threshold:
+                text_obj = self._draw_texts.pop(best_text_idx)
+                self._draw_texts_data.pop(best_text_idx)
+                try:
+                    self._scene.remove(text_obj)
+                except Exception:
+                    pass
+                if self._canvas:
+                    self._canvas.request_draw()
+                logger.info(f"erase_stroke_at: Removed text {best_text_idx} (dist={best_text_dist:.4f})")
                 return True
             return False
         except Exception as e:
