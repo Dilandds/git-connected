@@ -4118,6 +4118,45 @@ class STLViewerWidget(QWidget):
                 is_standard = True
                 is_phong = False
 
+            # --- Image category: Softness / Tile Density / Brightness / Contrast ---
+            if category == "image" and is_standard and preset_data is not None and preset_data.get("image_file", False):
+                # Tile Density: re-scale UVs for image-based textures
+                tile_density = settings.get("tile_density", None)
+                if tile_density is not None:
+                    self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_density))
+                    if self._canvas:
+                        self._canvas.request_draw()
+
+                # Softness: controls roughness (0% = rough matte, 100% = smooth/polished)
+                img_softness = settings.get("softness", None)
+                if img_softness is not None:
+                    softness_factor = 1.0 - (img_softness / 100.0) * 0.7  # 1.0 → 0.3
+                    mat.roughness = float(softness_factor)
+
+                # Brightness: adjust base color from black→white (50 = pure white = original)
+                img_brightness = settings.get("img_brightness", 50)
+                brightness_val = float(img_brightness) / 50.0  # 0→0.0, 50→1.0, 100→2.0
+                # Clamp the color multiplier
+                r = min(int(255 * brightness_val), 255)
+                mat.color = f"#{r:02x}{r:02x}{r:02x}"
+
+                # Contrast: adjust emissive to wash out or deepen
+                img_contrast = settings.get("img_contrast", 50)
+                contrast_factor = (float(img_contrast) - 50.0) / 100.0  # -0.5 → +0.5
+                if contrast_factor < 0:
+                    # Low contrast: add emissive to wash out shadows
+                    mat.emissive = "#888888"
+                    mat.emissive_intensity = float(abs(contrast_factor) * 0.6)
+                else:
+                    # High contrast: darken base slightly, no emissive
+                    mat.emissive = "#000000"
+                    mat.emissive_intensity = 0.0
+                    darken = 1.0 - contrast_factor * 0.3
+                    r2 = min(int(r * darken), 255)
+                    mat.color = f"#{r2:02x}{r2:02x}{r2:02x}"
+
+                continue  # Skip metal/fabric logic for image presets
+
             # --- Fabric category: Grain / Softness / Wear / Tile Density ---
             if category == "fabric" and is_standard and preset_data is not None:
                 base_metalness = preset_data.get("metalness", 0.0)
@@ -4131,26 +4170,22 @@ class STLViewerWidget(QWidget):
                             self._canvas.request_draw()
 
                     # Grain: controls normal map intensity (bump strength)
-                    # 0% = flat (no grain), 100% = maximum grain detail
                     if grain is not None:
-                        grain_strength = grain / 50.0  # 0→0x, 50→1x (default), 100→2x
+                        grain_strength = grain / 50.0
                         if hasattr(mat, 'normal_scale'):
                             mat.normal_scale = (grain_strength, grain_strength)
 
-                    # Softness: controls roughness (0% = rough matte, 100% = smooth/polished)
+                    # Softness: controls roughness
                     if softness is not None:
                         base_roughness = preset_data.get("roughness", 1.0)
-                        # Invert: high softness = low roughness
-                        softness_factor = 1.0 - (softness / 100.0) * 0.7  # range: 1.0 → 0.3
+                        softness_factor = 1.0 - (softness / 100.0) * 0.7
                         mat.roughness = float(base_roughness * softness_factor)
 
-                    # Wear: adds aging/fading effect by blending emissive and lightening color
+                    # Wear: adds aging/fading effect
                     if wear is not None:
                         wear_factor = wear / 100.0
-                        # Increase emissive to simulate faded/worn patches
                         base_emissive_intensity = preset_data.get("emissive_intensity", 0.25)
                         mat.emissive_intensity = float(base_emissive_intensity + wear_factor * 0.5)
-                        # Slightly reduce roughness for worn shiny patches
                         if softness is None:
                             base_roughness = preset_data.get("roughness", 1.0)
                             mat.roughness = float(base_roughness * (1.0 - wear_factor * 0.3))
