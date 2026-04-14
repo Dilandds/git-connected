@@ -3781,6 +3781,10 @@ class STLViewerWidget(QWidget):
                 "category": preset_data.get("category", "metal"),
                 "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
                 "image_file": is_image_file,
+                "use_texture_maps": use_texture_maps,
+                "albedo_map": preset_data.get("albedo_map", ""),
+                "albedo_map_path": preset_data.get("albedo_map_path", ""),
+                "tile_repeat": preset_data.get("tile_repeat", 1.0),
             }
 
             if not is_image_file:
