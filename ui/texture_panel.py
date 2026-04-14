@@ -916,8 +916,20 @@ class TextureCard(QFrame):
             return
         drag = QDrag(self)
         mime = QMimeData()
+        # Use same material-preset MIME as built-in image presets
+        payload_dict = {
+            "category": "fabric",
+            "image_file": True,
+            "use_texture_maps": True,
+            "albedo_map": "image_file",
+            "albedo_map_path": self.image_path,
+            "tile_repeat": 1,
+            "metalness": 0.0,
+            "roughness": 0.7,
+        }
+        payload = json.dumps(payload_dict)
+        mime.setData("application/x-ectoform-material-preset", payload.encode('utf-8'))
         mime.setText(self.image_path)
-        mime.setData("application/x-ectoform-texture", self.image_path.encode('utf-8'))
         drag.setMimeData(mime)
         thumb = self.pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         drag.setPixmap(thumb)
