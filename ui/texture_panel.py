@@ -105,6 +105,8 @@ MATERIAL_PRESETS = [
         "normal_map": None,
         "roughness_map": None,
         "swatch_image": "assets/textures/lapis_lazuli.png",
+        "image_file": True,
+        "tile_repeat": 200,
     },
 ]
 
@@ -271,7 +273,7 @@ class MaterialPresetCard(QFrame):
         if "env_tone" in self.preset:
             payload_dict["env_tone"] = self.preset["env_tone"]
         # Texture map keys for PBR texture-mapped presets
-        for map_key in ("use_texture_maps", "albedo_map", "albedo_map_path", "normal_map", "roughness_map", "category"):
+        for map_key in ("use_texture_maps", "albedo_map", "albedo_map_path", "normal_map", "roughness_map", "category", "image_file", "tile_repeat"):
             if map_key in self.preset:
                 payload_dict[map_key] = self.preset[map_key]
         payload = json.dumps(payload_dict)

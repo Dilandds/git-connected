@@ -3683,11 +3683,25 @@ class STLViewerWidget(QWidget):
             base_env_map_intensity = 1.5 if base_metalness > 0 else 1.0
             env_tone = self._resolve_env_tone(preset_data)
             use_texture_maps = preset_data.get("use_texture_maps", False)
+            is_image_file = preset_data.get("image_file", False)
 
             preset_opacity = preset_data.get("opacity", None)
             is_glass = preset_data.get("category", "") == "glass"
 
-            if is_glass:
+            # --- Image-file preset (e.g. Lapis Lazuli): matte base, faithful image ---
+            if is_image_file:
+                material = gfx.MeshStandardMaterial(
+                    color="#FFFFFF",
+                    metalness=0.0,
+                    roughness=1.0,
+                )
+                # No emissive, no env map — keep image colors pure
+                try:
+                    self._apply_image_texture(mesh_obj, material, preset_data)
+                except Exception as tex_err:
+                    logger.warning(f"Failed to apply image texture, falling back to solid color: {tex_err}")
+
+            elif is_glass:
                 # Glass: transparent PBR material
                 material = gfx.MeshStandardMaterial(
                     color=color,
@@ -3699,7 +3713,7 @@ class STLViewerWidget(QWidget):
                 if env_tex is not None:
                     material.env_map = env_tex
                     material.env_mapping_mode = "CUBE-REFLECTION"
-                    material.env_map_intensity = 2.0  # strong reflections for glass
+                    material.env_map_intensity = 2.0
                     base_env_map_intensity = 2.0
             elif base_metalness > 0:
                 # Metallic PBR (Gold, Silver, Chrome…)
@@ -3723,20 +3737,19 @@ class STLViewerWidget(QWidget):
                     metalness=base_metalness,
                     roughness=base_roughness,
                 )
-                # Subtle environment reflections even for non-metals (leather has faint sheen)
                 env_tex = self._create_studio_env_map(tone=env_tone)
                 if env_tex is not None:
                     material.env_map = env_tex
                     material.env_mapping_mode = "CUBE-REFLECTION"
-                    material.env_map_intensity = 0.3  # very subtle env for non-metal
+                    material.env_map_intensity = 0.3
                     base_env_map_intensity = 0.3
                 if emissive:
                     material.emissive = emissive
                     material.emissive_intensity = 0.12
                     base_emissive_intensity = 0.12
 
-            # --- Apply texture maps for texture-mapped presets (e.g. Leather) ---
-            if use_texture_maps:
+            # --- Apply texture maps for non-image texture-mapped presets (e.g. Leather) ---
+            if use_texture_maps and not is_image_file:
                 try:
                     self._apply_pbr_texture_maps(mesh_obj, material, preset_data)
                 except Exception as tex_err:
@@ -3767,9 +3780,11 @@ class STLViewerWidget(QWidget):
                 "env_tone": env_tone,
                 "category": preset_data.get("category", "metal"),
                 "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
+                "image_file": is_image_file,
             }
 
-            self._add_preset_accent_lights(tone=env_tone)
+            if not is_image_file:
+                self._add_preset_accent_lights(tone=env_tone)
 
             preset_category = preset_data.get("category", "metal") if preset_data else ("metal" if base_metalness > 0 else "fabric")
             if preset_category == "metal":
@@ -3789,9 +3804,38 @@ class STLViewerWidget(QWidget):
 
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} texture_maps={use_texture_maps}")
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} image_file={is_image_file}")
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
+
+    def _apply_image_texture(self, mesh_obj, material, preset_data):
+        """Apply an image texture with matte look — faithful color reproduction.
+        Caches base UVs for repeatable tile density scaling."""
+        import pygfx as gfx
+
+        albedo_path = preset_data.get("albedo_map_path", "")
+        if not albedo_path:
+            logger.warning("_apply_image_texture: No albedo_map_path provided")
+            return
+
+        albedo = self._load_texture_image(albedo_path)
+        if albedo is None:
+            logger.warning(f"_apply_image_texture: Failed to load image {albedo_path}")
+            return
+
+        # Make seamlessly tileable
+        albedo = self._make_seamless(albedo)
+
+        tile_repeat = preset_data.get("tile_repeat", 200.0)
+
+        # Ensure UVs exist and cache base UVs, then scale
+        self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_repeat))
+
+        # Apply texture map with repeat wrapping
+        tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
+        material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
+
+        logger.info(f"_apply_image_texture: Applied matte image texture from {albedo_path} (repeat={tile_repeat})")
 
     def _apply_pbr_texture_maps(self, mesh_obj, material, preset_data):
         """Apply PBR texture maps (albedo, normal, roughness) to a mesh.
@@ -4080,11 +4124,11 @@ class STLViewerWidget(QWidget):
                 if base_metalness < 0.5:
                     # Tile Density: re-scale UVs for image-based textures
                     tile_density = settings.get("tile_density", None)
-                    if tile_density is not None and preset_data.get("image_file"):
+                    if tile_density is not None and preset_data.get("image_file", False):
                         # Reset UVs to cached base then scale
                         self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_density))
-                        if hasattr(self, '_renderer') and self._renderer:
-                            self._renderer.request_draw()
+                        if self._canvas:
+                            self._canvas.request_draw()
 
                     # Grain: controls normal map intensity (bump strength)
                     # 0% = flat (no grain), 100% = maximum grain detail
