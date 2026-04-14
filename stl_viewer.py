@@ -55,6 +55,7 @@ from ui.technical_sidebar import TechnicalSidebar
 from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
 from ui.help_panel import HelpWidget
+from i18n import t, set_language, get_language, on_language_changed
 
 logger = logging.getLogger(__name__)
 
