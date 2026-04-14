@@ -1353,7 +1353,7 @@ class SidebarPanel(QWidget):
                 
                 # Build success message
                 msg = f"Export complete!\n\nCreated: {os.path.basename(file_path)}"
-                if annotations or drawings:
+                if annotations or drawings or texture_data:
                     msg += f"\n\n📦 Bundle contains:"
                     msg += f"\n• 3D Model (STL)"
                     if annotations:
@@ -1363,6 +1363,8 @@ class SidebarPanel(QWidget):
                             msg += f"\n• {image_count} attached photo{'s' if image_count != 1 else ''}"
                     if drawings:
                         msg += f"\n• {len(drawings)} drawing stroke{'s' if len(drawings) != 1 else ''}"
+                    if texture_data:
+                        msg += f"\n• Material/texture preset"
                 else:
                     msg += f"\n\n📦 Bundle contains: 3D Model only"
                 
