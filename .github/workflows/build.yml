@@ -112,6 +112,24 @@ jobs:
         chmod +x build_mac_education.sh
         ./build_mac_education.sh
 
+    - name: Verify Education .app bundle exists
+      run: |
+        if [ ! -d "dist/ECTOFORM-Education.app" ]; then
+          echo "Error: Education .app bundle not found"
+          exit 1
+        fi
+        echo "✓ Education .app bundle created successfully"
+
+    - name: Verify Education executable
+      run: |
+        EXE_PATH="dist/ECTOFORM-Education.app/Contents/MacOS/ECTOFORM-Education"
+        if [ ! -f "$EXE_PATH" ]; then
+          echo "Error: Education executable not found"
+          exit 1
+        fi
+        file "$EXE_PATH"
+        echo "✓ Education executable verified"
+
     - name: Upload Education .app as artifact
       if: always()
       uses: actions/upload-artifact@v4
@@ -127,6 +145,13 @@ jobs:
         name: ECTOFORM-Education-DMG-${{ matrix.os }}
         path: ECTOFORM-Education-1.0.0-macOS.dmg
         retention-days: 30
+
+    - name: Education build summary
+      run: |
+        echo "## Build Summary (Education)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Education .app bundle created" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Education executable verified" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Education build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
 
   build-windows:
     name: Build on Windows
