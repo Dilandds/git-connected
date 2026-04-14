@@ -1471,3 +1471,30 @@ class SidebarPanel(QWidget):
         
         logger.info("reset_all_data: All sidebar data reset")
 
+    def retranslate(self):
+        """Update all sidebar labels for the current language."""
+        self._title_label.setText(t("sidebar.title"))
+        self.upload_btn.setText(t("sidebar.upload_btn"))
+        self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
+        self._info_label.setText(t("sidebar.upload_info"))
+        self._dim_title.setText(t("sidebar.dimensions"))
+        self.width_row.set_label(t("sidebar.length_x"))
+        self.height_row.set_label(t("sidebar.width_y"))
+        self.depth_row.set_label(t("sidebar.height_z"))
+        self.volume_row.set_label(t("sidebar.volume"))
+        self.surface_total_row.set_label(t("sidebar.total_area"))
+        self.surface_cm_row.set_label(t("sidebar.area_cm2"))
+        self.weight_volume_row.set_label(t("sidebar.volume"))
+        self.weight_result_row.set_label(t("sidebar.estimated_weight_result"))
+        self.calculate_scale_btn.setText(t("sidebar.calculate_scale"))
+        self.scale_factor_row.set_label(t("sidebar.scale_factor"))
+        self.new_x_row.set_label(t("sidebar.new_x"))
+        self.new_y_row.set_label(t("sidebar.new_y"))
+        self.new_z_row.set_label(t("sidebar.new_z"))
+        self.new_volume_row.set_label(t("sidebar.new_volume"))
+        self.original_weight_row.set_label(t("sidebar.original_weight"))
+        self.target_weight_row.set_label(t("sidebar.target_weight"))
+        self.export_scaled_btn.setText(t("sidebar.export_scaled_stl"))
+        self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
+        self.target_weight_input.setPlaceholderText(t("sidebar.enter_target_weight"))
+
