@@ -619,6 +619,88 @@ def _generate_material_swatch(base_color: str, highlight_color: str, size: int =
     return pixmap
 
 
+def _generate_image_swatch(image_path: str, size: int = 80) -> QPixmap:
+    """Create a sphere swatch using a texture image mapped onto it."""
+    import sys as _sys
+    if hasattr(_sys, '_MEIPASS'):
+        _base = _sys._MEIPASS
+    else:
+        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    full_path = os.path.join(_base, image_path)
+
+    src = QPixmap(full_path)
+    if src.isNull():
+        return QPixmap(size, size)
+
+    # Scale source to fill sphere area
+    src = src.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    if src.width() > size or src.height() > size:
+        x = (src.width() - size) // 2
+        y = (src.height() - size) // 2
+        src = src.copy(x, y, size, size)
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+
+    cx, cy = size * 0.5, size * 0.52
+    radius = size * 0.40
+
+    from PyQt5.QtGui import QPainterPath
+    clip = QPainterPath()
+    clip.addEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+
+    # Draw texture clipped to circle
+    painter.setClipPath(clip)
+    painter.drawPixmap(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2), src)
+    painter.setClipping(False)
+
+    # Shadow below
+    shadow_grad = QRadialGradient(cx, size * 0.88, size * 0.28)
+    shadow_grad.setColorAt(0.0, QColor(0, 0, 0, 80))
+    shadow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+    painter.setPen(QPen(Qt.NoPen))
+    painter.setBrush(shadow_grad)
+    painter.drawEllipse(int(cx - size * 0.28), int(size * 0.82), int(size * 0.56), int(size * 0.12))
+
+    # Edge darkening for 3D sphere illusion
+    edge_grad = QRadialGradient(cx * 0.85, cy * 0.75, radius * 1.1)
+    edge_grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+    edge_grad.setColorAt(0.55, QColor(0, 0, 0, 0))
+    edge_grad.setColorAt(0.85, QColor(0, 0, 0, 90))
+    edge_grad.setColorAt(1.0, QColor(0, 0, 0, 180))
+    painter.setClipPath(clip)
+    painter.setBrush(edge_grad)
+    painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+    painter.setClipping(False)
+
+    # Specular highlight
+    spec_cx = cx - radius * 0.22
+    spec_cy = cy - radius * 0.32
+    spec_r = radius * 0.38
+    spec_grad = QRadialGradient(spec_cx, spec_cy, spec_r)
+    spec_grad.setColorAt(0.0, QColor(255, 255, 255, 160))
+    spec_grad.setColorAt(0.35, QColor(255, 255, 255, 60))
+    spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+    painter.setClipPath(clip)
+    painter.setBrush(spec_grad)
+    painter.drawEllipse(int(spec_cx - spec_r), int(spec_cy - spec_r), int(spec_r * 2), int(spec_r * 2))
+    painter.setClipping(False)
+
+    # Rim light
+    rim_grad = QRadialGradient(cx + radius * 0.85, cy - radius * 0.1, radius * 0.35)
+    rim_grad.setColorAt(0.0, QColor(255, 255, 255, 40))
+    rim_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+    painter.setClipPath(clip)
+    painter.setBrush(rim_grad)
+    painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+
+    painter.end()
+    return pixmap
+
+
 # ---------------------------------------------------------------------------
 # Material preset card (permanent, no delete)
 # ---------------------------------------------------------------------------
