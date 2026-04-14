@@ -100,14 +100,14 @@ class DimensionRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
-        label.setObjectName("dimensionLabel")
-        label.setStyleSheet("background-color: transparent; color: #000000;")
+        self._label = QLabel(label_text)
+        self._label.setObjectName("dimensionLabel")
+        self._label.setStyleSheet("background-color: transparent; color: #000000;")
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
