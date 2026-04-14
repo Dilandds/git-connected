@@ -23,6 +23,7 @@ print(f"[PyInstaller] Checking for assets/icon.icns: {(project_root / 'assets' /
 datas = [
     ('ui', 'ui'),
     ('core', 'core'),
+    ('i18n', 'i18n'),
 ]
 
 # Add splash screen images if they exist
