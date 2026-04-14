@@ -1288,9 +1288,10 @@ class SidebarPanel(QWidget):
             )
             return
         
-        # Get annotations and drawings
+        # Get annotations, drawings, and texture data
         annotations = self._get_annotations()
         drawings = self._get_drawings()
+        texture_data = self._get_texture_data()
         
         if not annotations and not drawings:
             if not confirm_dialog(
@@ -1324,14 +1325,15 @@ class SidebarPanel(QWidget):
             self.export_annotations_btn.setText("Exporting...")
             QApplication.processEvents()
             
-            # Export as .ecto bundle (includes annotations and drawings)
+            # Export as .ecto bundle (includes annotations, drawings, and texture)
             success, result, creator_token = EctoFormat.export(
                 mesh=mesh,
                 annotations=annotations,
                 output_path=file_path,
                 source_format='stl',
                 original_filename=self.current_stl_filename,
-                drawings=drawings
+                drawings=drawings,
+                texture_data=texture_data
             )
             
             # Restore button
