@@ -686,16 +686,16 @@ class ScaleResultRow(QFrame):
         row_layout.setSpacing(0)
         
         # Label
-        label = QLabel(label_text)
-        label.setObjectName("scaleLabel")
-        label.setStyleSheet(
+        self._label = QLabel(label_text)
+        self._label.setObjectName("scaleLabel")
+        self._label.setStyleSheet(
             f"background-color: transparent; color: {_label_fg};"
         )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance(label_text) + 8)
+        self._label.setFont(label_font)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
         
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
@@ -713,7 +713,7 @@ class ScaleResultRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
@@ -804,6 +804,11 @@ class ScaleResultRow(QFrame):
         """Update the value label text."""
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
+
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class ReportCheckbox(QFrame):
