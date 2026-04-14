@@ -3808,6 +3808,35 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             logger.error(f"_apply_material_preset_to_mesh: Failed: {e}", exc_info=True)
 
+    def _apply_image_texture(self, mesh_obj, material, preset_data):
+        """Apply an image texture with matte look — faithful color reproduction.
+        Caches base UVs for repeatable tile density scaling."""
+        import pygfx as gfx
+
+        albedo_path = preset_data.get("albedo_map_path", "")
+        if not albedo_path:
+            logger.warning("_apply_image_texture: No albedo_map_path provided")
+            return
+
+        albedo = self._load_texture_image(albedo_path)
+        if albedo is None:
+            logger.warning(f"_apply_image_texture: Failed to load image {albedo_path}")
+            return
+
+        # Make seamlessly tileable
+        albedo = self._make_seamless(albedo)
+
+        tile_repeat = preset_data.get("tile_repeat", 200.0)
+
+        # Ensure UVs exist and cache base UVs, then scale
+        self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_repeat))
+
+        # Apply texture map with repeat wrapping
+        tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
+        material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
+
+        logger.info(f"_apply_image_texture: Applied matte image texture from {albedo_path} (repeat={tile_repeat})")
+
     def _apply_pbr_texture_maps(self, mesh_obj, material, preset_data):
         """Apply PBR texture maps (albedo, normal, roughness) to a mesh.
         Supports procedural leather textures and image-file-based textures."""
