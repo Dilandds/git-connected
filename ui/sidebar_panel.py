@@ -763,6 +763,8 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.export_pdf_btn.clicked.connect(self.export_pdf_report)
+        if is_education():
+            self.export_pdf_btn.hide()
         card_layout.addWidget(self.export_pdf_btn)
         
         # Information footer
