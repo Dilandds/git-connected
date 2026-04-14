@@ -1094,6 +1094,12 @@ class ViewControlsToolbar(QWidget):
         eraser_action.setEnabled(self.draw_mode_enabled)
         eraser_action.triggered.connect(self._on_eraser_toggled)
 
+        text_action = menu.addAction("T  Text")
+        text_action.setCheckable(True)
+        text_action.setChecked(self._draw_text_active)
+        text_action.setEnabled(self.draw_mode_enabled)
+        text_action.triggered.connect(self._on_text_toggled)
+
         menu.addSeparator()
 
         color_action = menu.addAction("🎨  Pen Color")
