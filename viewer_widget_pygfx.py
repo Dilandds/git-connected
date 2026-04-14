@@ -3943,6 +3943,32 @@ class STLViewerWidget(QWidget):
                 if child_geom is not None:
                     _scale_geom_uvs(child_geom)
 
+    def _reset_and_scale_texcoords(self, mesh_obj, gfx, scale_factor):
+        """Reset UVs to cached base then scale — supports repeated slider changes."""
+        def _process_geom(geom):
+            if not hasattr(geom, '_base_texcoords'):
+                tc = getattr(geom, 'texcoords', None)
+                if tc is None:
+                    pos = getattr(geom, 'positions', None)
+                    if pos is None:
+                        return
+                    pos_data = pos.data if hasattr(pos, 'data') else pos
+                    base = self._generate_box_uvs(pos_data)
+                else:
+                    base = np.array(tc.data if hasattr(tc, 'data') else tc, dtype=np.float32).copy()
+                geom._base_texcoords = base
+            scaled = geom._base_texcoords.copy() * float(scale_factor)
+            geom.texcoords = gfx.Buffer(scaled)
+
+        geom = getattr(mesh_obj, 'geometry', None)
+        if geom is not None:
+            _process_geom(geom)
+        elif hasattr(mesh_obj, 'children'):
+            for child in mesh_obj.children:
+                child_geom = getattr(child, 'geometry', None)
+                if child_geom is not None:
+                    _process_geom(child_geom)
+
 
     def _add_preset_accent_lights(self, tone="warm"):
         """Add clean 4-light rig — env map handles reflections, these add
@@ -4055,9 +4081,8 @@ class STLViewerWidget(QWidget):
                     # Tile Density: re-scale UVs for image-based textures
                     tile_density = settings.get("tile_density", None)
                     if tile_density is not None and preset_data.get("image_file"):
-                        # Reset UVs to base box projection then scale
-                        self._ensure_texcoords(mesh_obj, gfx)
-                        self._scale_texcoords(mesh_obj, gfx, float(tile_density))
+                        # Reset UVs to cached base then scale
+                        self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_density))
                         if hasattr(self, '_renderer') and self._renderer:
                             self._renderer.request_draw()
 
