@@ -2548,6 +2548,16 @@ class STLViewerWindow(QMainWindow):
                 vw.restore_draw_strokes(drawings)
                 logger.info(f"_load_ecto_file: Restored {len(drawings)} drawing strokes")
             
+            # Restore material/texture if saved in bundle
+            if texture_data and vw and hasattr(vw, '_apply_material_preset_to_mesh'):
+                try:
+                    mesh_obj = getattr(vw, '_mesh_obj', None)
+                    if mesh_obj is not None:
+                        vw._apply_material_preset_to_mesh(mesh_obj, texture_data)
+                        logger.info(f"_load_ecto_file: Restored material/texture (image_file={texture_data.get('image_file', False)})")
+                except Exception as tex_err:
+                    logger.warning(f"_load_ecto_file: Failed to restore texture: {tex_err}")
+            
             logger.info(f"_load_ecto_file: Successfully loaded .ecto file")
             
         except Exception as e:
