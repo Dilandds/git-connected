@@ -545,12 +545,6 @@ class TexturePanel(QWidget):
                 self._lbl_tint.setText("0%")
         elif is_image:
             # Image preset: reset image-specific sliders
-            tile_default = int(preset_data.get("tile_repeat", 1))
-            self._slider_img_tile_density.blockSignals(True)
-            self._slider_img_tile_density.setValue(tile_default)
-            self._slider_img_tile_density.blockSignals(False)
-            if hasattr(self, '_lbl_img_tile_density'):
-                self._lbl_img_tile_density.setText(f"{tile_default}x")
             self._slider_img_softness.blockSignals(True)
             self._slider_img_softness.setValue(50)
             self._slider_img_softness.blockSignals(False)
