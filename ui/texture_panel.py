@@ -699,11 +699,10 @@ class MaterialPresetCard(QFrame):
             return
         drag = QDrag(self)
         mime = QMimeData()
-        payload_dict = {
-            "color": self.preset["color"],
-            "specular": self.preset["specular"],
-            "shininess": self.preset["shininess"],
-        }
+        payload_dict = {}
+        for key in ("color", "specular", "shininess", "highlight"):
+            if key in self.preset:
+                payload_dict[key] = self.preset[key]
         if "emissive" in self.preset:
             payload_dict["emissive"] = self.preset["emissive"]
         if "metalness" in self.preset:
