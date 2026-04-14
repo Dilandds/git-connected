@@ -4124,11 +4124,11 @@ class STLViewerWidget(QWidget):
                 if base_metalness < 0.5:
                     # Tile Density: re-scale UVs for image-based textures
                     tile_density = settings.get("tile_density", None)
-                    if tile_density is not None and preset_data.get("image_file"):
+                    if tile_density is not None and preset_data.get("image_file", False):
                         # Reset UVs to cached base then scale
                         self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_density))
-                        if hasattr(self, '_renderer') and self._renderer:
-                            self._renderer.request_draw()
+                        if self._canvas:
+                            self._canvas.request_draw()
 
                     # Grain: controls normal map intensity (bump strength)
                     # 0% = flat (no grain), 100% = maximum grain detail
