@@ -190,6 +190,9 @@ class STLViewerWidget(QWidget):
         self._draw_event_filter_installed = False
         self._drawing_active = False  # True while mouse button is held
         self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
+        self._text_mode = False  # When True, clicks place text labels on mesh surface
+        self._draw_texts = []  # list of pygfx.Text objects in scene
+        self._draw_texts_data = []  # parallel list for export: [{'text': '...', 'position': [x,y,z], 'color': '...', 'font_size': N}]
 
         # Parts pick mode state
         self.parts_pick_mode = False
