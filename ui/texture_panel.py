@@ -6,6 +6,7 @@ presets in a 2-column grid.  Textures / materials can be dragged onto
 import os
 import json
 import logging
+from core.edition import is_education
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
@@ -1368,23 +1369,48 @@ class TexturePanel(QWidget):
 
         self.upload_btn = QPushButton("📁  Upload Texture")
         self.upload_btn.setObjectName("uploadTextureBtn")
-        self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet(f"""
-            QPushButton#uploadTextureBtn {{
-                background-color: #D1FAE5;
-                color: #059669;
-                border: 1px solid #A7F3D0;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 11px;
-                font-weight: bold;
-            }}
-            QPushButton#uploadTextureBtn:hover {{
-                background-color: #6EE7B7;
-            }}
-        """)
-        self.upload_btn.clicked.connect(self._on_upload)
-        layout.addWidget(self.upload_btn)
+
+        if is_education():
+            self.upload_btn.setEnabled(False)
+            self.upload_btn.setCursor(Qt.ForbiddenCursor)
+            self.upload_btn.setStyleSheet(f"""
+                QPushButton#uploadTextureBtn {{
+                    background-color: #E5E7EB;
+                    color: #9CA3AF;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+            """)
+            layout.addWidget(self.upload_btn)
+
+            edu_notice = QLabel("🎓 Custom texture upload is not available in Education mode.")
+            edu_notice.setWordWrap(True)
+            edu_notice.setStyleSheet(
+                "color: #EF4444; font-size: 9px; background: transparent; "
+                "border: none; padding: 2px 0;"
+            )
+            layout.addWidget(edu_notice)
+        else:
+            self.upload_btn.setCursor(Qt.PointingHandCursor)
+            self.upload_btn.setStyleSheet(f"""
+                QPushButton#uploadTextureBtn {{
+                    background-color: #D1FAE5;
+                    color: #059669;
+                    border: 1px solid #A7F3D0;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+                QPushButton#uploadTextureBtn:hover {{
+                    background-color: #6EE7B7;
+                }}
+            """)
+            self.upload_btn.clicked.connect(self._on_upload)
+            layout.addWidget(self.upload_btn)
 
         # Upload status label (warnings/errors)
         self._upload_status = QLabel("")
