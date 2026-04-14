@@ -256,7 +256,7 @@ class SurfaceAreaRow(QFrame):
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
         
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
         
