@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for ECTOFORM macOS build.
+PyInstaller spec file for ECTOFORM-Education macOS build.
 """
 
 import sys
@@ -48,7 +48,7 @@ for src_path, dst_path in splash_image_paths:
 print(f"[PyInstaller] Final datas list has {len(datas)} items")
 
 a = Analysis(
-    ['main.py'],
+    ['main_education.py'],
     pathex=[],
     binaries=[],
     datas=datas,
@@ -145,7 +145,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='ECTOFORM',
+    name='ECTOFORM-Education',
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,  # Enable stripping for size reduction
@@ -166,7 +166,7 @@ coll = COLLECT(
     strip=True,  # Enable stripping for size reduction
     upx=True,
     upx_exclude=[],
-    name='ECTOFORM',
+    name='ECTOFORM-Education',
 )
 
 # Debug icon for BUNDLE
@@ -179,9 +179,9 @@ else:
 
 app = BUNDLE(
     coll,
-    name='ECTOFORM.app',
+    name='ECTOFORM-Education.app',
     icon=bundle_icon,
-        bundle_identifier='com.ectoform.app',
+        bundle_identifier='com.ectoform.education',
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSHighResolutionCapable': 'True',

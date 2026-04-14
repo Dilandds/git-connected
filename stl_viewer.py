@@ -56,6 +56,7 @@ from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
 from ui.help_panel import HelpWidget
 from i18n import t, set_language, get_language, on_language_changed
+from core.edition import is_education, WATERMARK_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,8 @@ class STLViewerWindow(QMainWindow):
         logger.info("init_ui: Starting UI initialization...")
         
         logger.info("init_ui: Setting window title and size...")
-        self.setWindowTitle("ECTOFORM")
+        _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
+        self.setWindowTitle(_title)
         if sys.platform == 'win32':
             min_w, min_h = 1600, 1000
         else:
@@ -189,6 +191,17 @@ class STLViewerWindow(QMainWindow):
         root_layout = QVBoxLayout(central_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
+        
+        # ---- Education watermark banner (top) ----
+        if is_education():
+            self._edu_top_banner = QLabel(WATERMARK_TEXT)
+            self._edu_top_banner.setAlignment(Qt.AlignCenter)
+            self._edu_top_banner.setFixedHeight(28)
+            self._edu_top_banner.setStyleSheet(
+                "background-color: #B91C1C; color: #ffffff; font-size: 11px; "
+                "font-weight: bold; padding: 4px 0; letter-spacing: 0.5px;"
+            )
+            root_layout.addWidget(self._edu_top_banner)
         
         # ---- Mode Switcher Bar ----
         mode_bar = QWidget()
@@ -367,6 +380,17 @@ class STLViewerWindow(QMainWindow):
         viewer_container = QWidget()
         viewer_container.setLayout(viewer_h_layout)
         self.right_layout.addWidget(viewer_container, 1)
+        
+        # ---- Education watermark below 3D viewer ----
+        if is_education():
+            self._edu_viewer_watermark = QLabel(WATERMARK_TEXT)
+            self._edu_viewer_watermark.setAlignment(Qt.AlignCenter)
+            self._edu_viewer_watermark.setFixedHeight(24)
+            self._edu_viewer_watermark.setStyleSheet(
+                f"background-color: {default_theme.background}; color: #B91C1C; "
+                "font-size: 10px; font-weight: bold; font-style: italic; padding: 2px 0;"
+            )
+            self.right_layout.addWidget(self._edu_viewer_watermark)
         
         # Add right container to splitter
         splitter.addWidget(right_container)
@@ -582,12 +606,14 @@ class STLViewerWindow(QMainWindow):
             QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
             return
 
-        # Ask for passcode
-        from ui.passcode_dialog import PasscodeDialog
-        dlg = PasscodeDialog(mode='set', parent=self)
-        if dlg.exec() != PasscodeDialog.Accepted:
-            return
-        passcode_hash = dlg.get_passcode_hash()
+        passcode_hash = None
+        if not is_education():
+            # Ask for passcode (disabled in Education edition)
+            from ui.passcode_dialog import PasscodeDialog
+            dlg = PasscodeDialog(mode='set', parent=self)
+            if dlg.exec() != PasscodeDialog.Accepted:
+                return
+            passcode_hash = dlg.get_passcode_hash()
 
         # Pick save location
         default_name = Path(doc_path).stem + '.ecto'
@@ -618,6 +644,10 @@ class STLViewerWindow(QMainWindow):
 
     def _tech_export_pdf(self):
         """Export technical overview as a PDF report with annotated image and table."""
+        if is_education():
+            QMessageBox.information(self, "Education Version",
+                                    "PDF export is not available in the Education version.")
+            return
         pixmap = self.technical_overview.canvas._pixmap
         if pixmap is None or pixmap.isNull():
             QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")

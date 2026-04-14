@@ -17,6 +17,7 @@ from ui.components import (
 )
 from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
 from i18n import t, on_language_changed
+from core.edition import is_education
 
 logger = logging.getLogger(__name__)
 
@@ -762,6 +763,8 @@ class SidebarPanel(QWidget):
             }}
         """)
         self.export_pdf_btn.clicked.connect(self.export_pdf_report)
+        if is_education():
+            self.export_pdf_btn.hide()
         card_layout.addWidget(self.export_pdf_btn)
         
         # Information footer
@@ -1042,6 +1045,12 @@ class SidebarPanel(QWidget):
     
     def export_pdf_report(self):
         """Generate and export 3D PDF with multiple views."""
+        if is_education():
+            QMessageBox.information(
+                self, "Education Version",
+                "PDF export is not available in the Education version."
+            )
+            return
         if not self.has_stl_loaded:
             return
         

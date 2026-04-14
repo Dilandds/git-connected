@@ -100,10 +100,33 @@ jobs:
     
     - name: Build summary
       run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## Build Summary (Commercial)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ App bundle created" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Executable verified" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+
+    # ---- Education Edition ----
+    - name: Build Education edition
+      run: |
+        rm -rf build dist
+        chmod +x build_mac_education.sh
+        ./build_mac_education.sh
+
+    - name: Upload Education .app as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ECTOFORM-Education-macOS-${{ matrix.os }}
+        path: dist/ECTOFORM-Education.app
+        retention-days: 30
+
+    - name: Upload Education DMG as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ECTOFORM-Education-DMG-${{ matrix.os }}
+        path: ECTOFORM-Education-1.0.0-macOS.dmg
+        retention-days: 30
 
   build-windows:
     name: Build on Windows
@@ -191,7 +214,20 @@ jobs:
     
     - name: Build summary
       run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## Build Summary (Commercial)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ EXE created successfully" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ ZIP distribution created (ECTOFORM-Windows.zip)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Build completed on Windows" >> $GITHUB_STEP_SUMMARY
+
+    # ---- Education Edition ----
+    - name: Build Education edition
+      run: |
+        powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
+
+    - name: Upload Education ZIP as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ECTOFORM-Education-Windows.zip
+        path: ECTOFORM-Education-Windows.zip
+        retention-days: 30
