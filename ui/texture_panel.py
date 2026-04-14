@@ -1057,7 +1057,41 @@ class TexturePanel(QWidget):
         self.texture_settings_changed.emit(settings)
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # Main scroll area wrapping everything
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main_scroll.setFrameShape(QFrame.NoFrame)
+        main_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background: {default_theme.card_background};
+            }}
+            QScrollBar:vertical {{
+                background: {default_theme.card_background};
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(255, 255, 255, 0.15);
+                min-height: 30px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(255, 255, 255, 0.25);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+        """)
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet(f"background: {default_theme.card_background};")
+        layout = QVBoxLayout(scroll_content)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
@@ -1321,6 +1355,11 @@ class TexturePanel(QWidget):
         # Crease Angle: 0-180 degrees (edges sharper than this stay hard)
         row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 30, u"\u00b0")
         layout.addWidget(row)
+
+        layout.addStretch()
+
+        main_scroll.setWidget(scroll_content)
+        outer_layout.addWidget(main_scroll)
 
     def _rebuild_grid(self):
         while self.grid_layout.count():
