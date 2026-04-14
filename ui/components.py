@@ -331,6 +331,11 @@ class SurfaceAreaRow(QFrame):
         self.value_label.setText(text)
         self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
 
+    def set_label(self, text):
+        """Update the label text."""
+        self._label.setText(text)
+        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
+
 
 class WeightRow(QFrame):
     """A reusable weight row component with hover effect."""
