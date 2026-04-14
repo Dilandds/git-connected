@@ -1,54 +1,63 @@
 
 
-# Fix: Tile Density slider only works once
+# New Image Material Workflow for Presets
 
 ## Problem
-Two bugs prevent the Tile Density slider from working after the first change:
+Image-based presets like Lapis Lazuli currently use PBR material properties (roughness, metalness, emissive, env maps) that distort the image appearance. The Tile Density slider also fails after the first change due to UV caching bugs. The image should look as close to the source file as possible on the 3D surface.
 
-1. **No UV reset**: `_ensure_texcoords` returns early if UVs already exist (line 3921). So on subsequent slider changes, the "reset to base" step is skipped, and `_scale_texcoords` multiplies on top of already-scaled UVs — causing compounding or no visible effect.
+## Approach
+Create a dedicated image-material pipeline that prioritizes faithful image reproduction with a flat matte look. Gold, Silver, Glass, and Leather Brown remain unchanged.
 
-2. **Wrong parameter type**: `_ensure_texcoords` expects a geometry object but receives a mesh object (`mesh_obj`). It fails silently because `mesh_obj` has no `positions` attribute directly.
+## Changes
 
-## Fix (viewer_widget_pygfx.py)
+### 1. viewer_widget_pygfx.py -- New image preset pipeline
 
-### 1. Store base UVs and reset properly
-In the tile density block (~line 4055-4062), instead of calling `_ensure_texcoords` (which doesn't reset), we will:
-- On first call, generate base UVs and store them on the geometry as `_base_texcoords`
-- On subsequent calls, copy from `_base_texcoords` back to `texcoords`, then scale
+**In `_apply_material_preset_to_mesh`** (~line 3685-3795):
+- Detect `albedo_map == "image_file"` early, before the metal/glass/fabric material branches
+- For image presets, create a `MeshStandardMaterial` with:
+  - `metalness=0.0`, `roughness=1.0` (fully matte, no reflections)
+  - `color="#FFFFFF"` (white base so the texture map colors are unaltered)
+  - No emissive, no env map (these tint/alter the image)
+- Call `_apply_image_texture` (new method) instead of `_apply_pbr_texture_maps`
+- Store `"image_file": True` in `_material_preset_data` so the slider knows it's an image preset
+- Still emit `material_preset_applied` with `category: "fabric"` so the panel shows the right sliders
 
-### 2. Handle mesh_obj vs geometry
-Extract `geometry` from `mesh_obj` (and handle `Group` children) before operating on UVs.
+**New method `_apply_image_texture`**:
+- Load the image via `_load_texture_image`
+- Apply `_make_seamless` for edge blending
+- Cache base UVs on geometry as `_base_texcoords` (same pattern as `_reset_and_scale_texcoords`)
+- Scale UVs by `tile_repeat` (default 200)
+- Set `material.map` with `wrap="repeat"`
+- This method handles both single mesh and Group children
 
-### Implementation
-Replace the tile density block with logic that:
-```python
-def _reset_and_scale_texcoords(self, mesh_obj, gfx, scale_factor):
-    def _process_geom(geom):
-        # Store base UVs on first call
-        if not hasattr(geom, '_base_texcoords'):
-            tc = getattr(geom, 'texcoords', None)
-            if tc is None:
-                pos = getattr(geom, 'positions', None)
-                if pos is None: return
-                pos_data = pos.data if hasattr(pos, 'data') else pos
-                base = self._generate_box_uvs(pos_data)
-            else:
-                base = np.array(tc.data if hasattr(tc, 'data') else tc, dtype=np.float32).copy()
-            geom._base_texcoords = base
-        # Reset to base, then scale
-        scaled = geom._base_texcoords.copy() * float(scale_factor)
-        geom.texcoords = gfx.Buffer(scaled)
+**In `update_texture_settings`** (~line 4077-4087):
+- Change the tile density condition from `preset_data.get("image_file")` to check `_material_preset_data.get("image_file")` on the mesh object
+- Use `_reset_and_scale_texcoords` which already caches base UVs -- but ensure it works by also storing `_base_texcoords` during initial application (in `_apply_image_texture`)
+- After scaling, call `self._renderer.request_draw()` or `self._canvas.request_draw()`
 
-    geom = getattr(mesh_obj, 'geometry', None)
-    if geom is not None:
-        _process_geom(geom)
-    elif hasattr(mesh_obj, 'children'):
-        for child in mesh_obj.children:
-            child_geom = getattr(child, 'geometry', None)
-            if child_geom: _process_geom(child_geom)
-```
+**In `_apply_pbr_texture_maps`** (~line 3819-3835):
+- Remove the `image_file` branch entirely since image presets now go through the new pipeline
 
-Then call `self._reset_and_scale_texcoords(mesh_obj, gfx, tile_density)` instead of the current `_ensure_texcoords` + `_scale_texcoords` pair.
+### 2. ui/texture_panel.py -- Store image_file flag in preset data
 
-**Files to edit**: `viewer_widget_pygfx.py` only.
+**In `MATERIAL_PRESETS` Lapis Lazuli definition** (~line 92-108):
+- Add `"tile_repeat": 200` explicitly (already used as default, but make it explicit)
+- Add `"image_file": True` flag for easy detection
+
+**In `MaterialPresetCard.mouseMoveEvent`** (~line 260-285):
+- Ensure `image_file` and `tile_repeat` are included in the drag payload so the viewer receives them
+
+### 3. viewer_widget_pygfx.py -- Fix _reset_and_scale_texcoords integration
+
+The existing `_reset_and_scale_texcoords` method (line 3946) is correct in design but the tile density block (line 4082) checks `preset_data.get("image_file")` -- however `_material_preset_data` stored on the mesh doesn't include `image_file`. Fix by:
+- Storing `"image_file": True` in `mesh_obj._material_preset_data` during image preset application
+- Updating the condition to `preset_data.get("image_file", False)`
+
+## Summary of the visual result
+- Image presets will render with a pure white matte base, so the texture image colors appear exactly as in the source file
+- No environment reflections or emissive tinting will alter the image
+- The Tile Density slider will work repeatedly because base UVs are cached during initial application
+- Gold, Silver, Glass, and Leather Brown presets are completely unaffected
+
+**Files to edit**: `viewer_widget_pygfx.py`, `ui/texture_panel.py`
 
