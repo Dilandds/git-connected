@@ -1,63 +1,86 @@
 
 
-# New Image Material Workflow for Presets
+## Multi-Language Support (English/French) for ECTOFORM
 
-## Problem
-Image-based presets like Lapis Lazuli currently use PBR material properties (roughness, metalness, emissive, env maps) that distort the image appearance. The Tile Density slider also fails after the first change due to UV caching bugs. The image should look as close to the source file as possible on the 3D surface.
+### Overview
+Add internationalization (i18n) to the entire ECTOFORM PyQt5 desktop application with a toggle button for English/French, placed left of the Help button in the mode bar.
 
-## Approach
-Create a dedicated image-material pipeline that prioritizes faithful image reproduction with a flat matte look. Gold, Silver, Glass, and Leather Brown remain unchanged.
+### Approach: JSON-based i18n module
+PyQt5 has a built-in `QTranslator` system, but it requires `.ts`/`.qm` compilation tooling. A simpler, more maintainable approach for two languages is a lightweight custom i18n module using JSON translation files — no extra dependencies needed.
 
-## Changes
+### Files to create
 
-### 1. viewer_widget_pygfx.py -- New image preset pipeline
+1. **`i18n/__init__.py`** — Core translation engine
+   - `_current_lang = "en"` state variable
+   - `t(key: str) -> str` function that looks up a dotted key (e.g. `"sidebar.upload"`) in the current language dictionary
+   - `set_language(lang: str)` to switch and notify listeners
+   - `on_language_changed(callback)` to register UI refresh callbacks
+   - Load translations from JSON files
 
-**In `_apply_material_preset_to_mesh`** (~line 3685-3795):
-- Detect `albedo_map == "image_file"` early, before the metal/glass/fabric material branches
-- For image presets, create a `MeshStandardMaterial` with:
-  - `metalness=0.0`, `roughness=1.0` (fully matte, no reflections)
-  - `color="#FFFFFF"` (white base so the texture map colors are unaltered)
-  - No emissive, no env map (these tint/alter the image)
-- Call `_apply_image_texture` (new method) instead of `_apply_pbr_texture_maps`
-- Store `"image_file": True` in `_material_preset_data` so the slider knows it's an image preset
-- Still emit `material_preset_applied` with `category: "fabric"` so the panel shows the right sliders
+2. **`i18n/en.json`** — English translations (all UI strings)
 
-**New method `_apply_image_texture`**:
-- Load the image via `_load_texture_image`
-- Apply `_make_seamless` for edge blending
-- Cache base UVs on geometry as `_base_texcoords` (same pattern as `_reset_and_scale_texcoords`)
-- Scale UVs by `tile_repeat` (default 200)
-- Set `material.map` with `wrap="repeat"`
-- This method handles both single mesh and Group children
+3. **`i18n/fr.json`** — French translations
 
-**In `update_texture_settings`** (~line 4077-4087):
-- Change the tile density condition from `preset_data.get("image_file")` to check `_material_preset_data.get("image_file")` on the mesh object
-- Use `_reset_and_scale_texcoords` which already caches base UVs -- but ensure it works by also storing `_base_texcoords` during initial application (in `_apply_image_texture`)
-- After scaling, call `self._renderer.request_draw()` or `self._canvas.request_draw()`
+### Structure of translation keys
+Organized by UI module:
+```text
+mode_bar.3d_viewer, mode_bar.technical, mode_bar.drawing_scale, mode_bar.help
+sidebar.upload_title, sidebar.dimensions, sidebar.surface_area, sidebar.weight, ...
+toolbar.grid, toolbar.theme, toolbar.ruler, toolbar.annotate, ...
+help.title, help.subtitle, help.q1, help.a1, ...
+annotation.panel_title, annotation.clear_all, ...
+screenshot.panel_title, screenshot.capture, screenshot.save, ...
+texture.panel_title, texture.upload, ...
+technical.title, technical.upload, technical.export, ...
+scale.title, ...
+common.save, common.cancel, common.delete, common.close, common.yes, common.no, ...
+```
 
-**In `_apply_pbr_texture_maps`** (~line 3819-3835):
-- Remove the `image_file` branch entirely since image presets now go through the new pipeline
+### Files to modify
 
-### 2. ui/texture_panel.py -- Store image_file flag in preset data
+4. **`stl_viewer.py`** — Mode bar changes:
+   - Add a language toggle button (`🇬🇧`/`🇫🇷` or `EN`/`FR`) to the left of the Help button
+   - On click, call `i18n.set_language()` to toggle between `"en"` and `"fr"`
+   - Register a `_retranslate_ui()` callback that updates all mode bar button texts
+   - Pass i18n refresh down to child widgets
 
-**In `MATERIAL_PRESETS` Lapis Lazuli definition** (~line 92-108):
-- Add `"tile_repeat": 200` explicitly (already used as default, but make it explicit)
-- Add `"image_file": True` flag for easy detection
+5. **`ui/sidebar_panel.py`** — Replace all hardcoded English strings with `t()` calls; add `retranslate()` method
 
-**In `MaterialPresetCard.mouseMoveEvent`** (~line 260-285):
-- Ensure `image_file` and `tile_repeat` are included in the drag payload so the viewer receives them
+6. **`ui/toolbar.py`** — Replace button labels/tooltips with `t()` calls; add `retranslate()` method
 
-### 3. viewer_widget_pygfx.py -- Fix _reset_and_scale_texcoords integration
+7. **`ui/help_panel.py`** — Replace `HELP_TOPICS` with language-aware lookup; rebuild cards on language change
 
-The existing `_reset_and_scale_texcoords` method (line 3946) is correct in design but the tile density block (line 4082) checks `preset_data.get("image_file")` -- however `_material_preset_data` stored on the mesh doesn't include `image_file`. Fix by:
-- Storing `"image_file": True` in `mesh_obj._material_preset_data` during image preset application
-- Updating the condition to `preset_data.get("image_file", False)`
+8. **`ui/annotation_panel.py`** — Replace labels with `t()` calls
 
-## Summary of the visual result
-- Image presets will render with a pure white matte base, so the texture image colors appear exactly as in the source file
-- No environment reflections or emissive tinting will alter the image
-- The Tile Density slider will work repeatedly because base UVs are cached during initial application
-- Gold, Silver, Glass, and Leather Brown presets are completely unaffected
+9. **`ui/arrow_panel.py`** — Replace labels with `t()` calls
 
-**Files to edit**: `viewer_widget_pygfx.py`, `ui/texture_panel.py`
+10. **`ui/parts_panel.py`** — Replace labels with `t()` calls
+
+11. **`ui/screenshot_panel.py`** / **`ui/screenshot_editor.py`** — Replace labels with `t()` calls
+
+12. **`ui/texture_panel.py`** — Replace labels with `t()` calls
+
+13. **`ui/technical_sidebar.py`** / **`ui/technical_overview.py`** — Replace labels with `t()` calls
+
+14. **`ui/scale_sidebar.py`** / **`ui/scale_canvas.py`** — Replace labels with `t()` calls
+
+15. **`ui/converter_dialog.py`** — Replace labels with `t()` calls
+
+16. **`ui/components.py`** — Replace labels in confirmation dialogs, row labels
+
+17. **`ui/ruler_toolbar.py`** — Replace labels with `t()` calls
+
+18. **`ui/license_dialog.py`** / **`ui/passcode_dialog.py`** — Replace labels with `t()` calls
+
+### How the toggle works
+- A `QPushButton` labeled `"EN"` or `"FR"` in the mode bar, left of the Help button
+- Clicking toggles the language and updates the button text
+- Language preference is saved in `QSettings` and restored on startup
+- All widgets register a `retranslate()` method via `i18n.on_language_changed(self.retranslate)`
+
+### Implementation order
+1. Create `i18n/` module with `en.json`, `fr.json`, and translation engine
+2. Add toggle button to mode bar in `stl_viewer.py`
+3. Migrate strings in each UI file one-by-one, starting with the mode bar and sidebar, then toolbar, help panel, and remaining panels
+4. Each file gets a `retranslate()` method that re-sets all visible text from `t()` calls
 
