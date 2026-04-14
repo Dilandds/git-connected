@@ -449,6 +449,15 @@ class STLViewerWindow(QMainWindow):
         self._workspace_stack.addWidget(self.help_widget)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
+        # ==== Education watermark overlays on all workspace areas ====
+        if is_education():
+            from ui.watermark_overlay import WatermarkOverlay
+            # Overlay on the workspace stack itself (covers 3D, Technical, Scale)
+            self._edu_workspace_watermark = WatermarkOverlay(self._workspace_stack)
+            self._edu_workspace_watermark.raise_()
+            # Keep it sized to the workspace stack
+            self._workspace_stack.installEventFilter(self)
+        
         logger.info("init_ui: Applying styling...")
         self.apply_styling()
         
@@ -1067,6 +1076,13 @@ class STLViewerWindow(QMainWindow):
         """Apply minimalistic styling with floating card design."""
         self.setStyleSheet(get_global_stylesheet())
     
+    def eventFilter(self, obj, event):
+        """Resize education watermark overlay when workspace stack resizes."""
+        if is_education() and hasattr(self, '_edu_workspace_watermark') and obj is self._workspace_stack and event.type() == QEvent.Resize:
+            self._edu_workspace_watermark.setGeometry(0, 0, self._workspace_stack.width(), self._workspace_stack.height())
+            self._edu_workspace_watermark.raise_()
+        return super().eventFilter(obj, event)
+
     def resizeEvent(self, event):
         """Trigger viewer render on resize (Windows black screen fix)."""
         super().resizeEvent(event)
