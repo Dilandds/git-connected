@@ -169,7 +169,40 @@ class EctoFormat:
                     json.dump({'version': '1.0', 'strokes': drawings_data}, f, indent=2, ensure_ascii=False)
                 logger.info(f"export: Created drawings.json with {len(drawings_data)} strokes")
 
-            # 5. Create manifest.json (creator_token identifies sender for reopen-as-editor)
+            # 5. Bundle texture/material data if present
+            texture_json_data = None
+            has_texture = False
+            if texture_data:
+                texture_json_data = dict(texture_data)
+                # Copy texture image files into bundle
+                textures_dir = os.path.join(temp_dir, 'textures')
+                # Handle main albedo_map_path
+                albedo_path = texture_data.get('albedo_map_path', '')
+                if albedo_path and os.path.exists(albedo_path):
+                    os.makedirs(textures_dir, exist_ok=True)
+                    _, ext = os.path.splitext(albedo_path)
+                    tex_filename = f"texture_albedo{ext}"
+                    shutil.copy2(albedo_path, os.path.join(textures_dir, tex_filename))
+                    texture_json_data['albedo_map_path'] = f"textures/{tex_filename}"
+                    has_texture = True
+                    logger.info(f"export: Copied texture image to bundle: {tex_filename}")
+                # Handle per-part textures
+                for pt in texture_json_data.get('parts_textures', []):
+                    pt_path = pt.get('albedo_map_path', '')
+                    if pt_path and os.path.exists(pt_path):
+                        os.makedirs(textures_dir, exist_ok=True)
+                        _, ext = os.path.splitext(pt_path)
+                        pt_filename = f"texture_part_{pt.get('part_id', 0)}{ext}"
+                        shutil.copy2(pt_path, os.path.join(textures_dir, pt_filename))
+                        pt['albedo_map_path'] = f"textures/{pt_filename}"
+                        has_texture = True
+                if texture_json_data:
+                    tex_json_path = os.path.join(temp_dir, 'texture.json')
+                    with open(tex_json_path, 'w', encoding='utf-8') as f:
+                        json.dump({'version': '1.0', 'material': texture_json_data}, f, indent=2, ensure_ascii=False)
+                    logger.info(f"export: Created texture.json (has_texture_image={has_texture})")
+
+            # 6. Create manifest.json (creator_token identifies sender for reopen-as-editor)
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'created_by': 'ECTOFORM',
@@ -181,14 +214,15 @@ class EctoFormat:
                 'creator_token': creator_token,
                 'annotation_count': len(processed_annotations),
                 'has_images': has_images,
-                'drawing_count': len(drawings_data)
+                'drawing_count': len(drawings_data),
+                'has_texture': has_texture,
             }
             manifest_path = os.path.join(temp_dir, 'manifest.json')
             with open(manifest_path, 'w', encoding='utf-8') as f:
                 json.dump(manifest, f, indent=2)
             logger.info(f"export: Created manifest.json")
 
-            # 6. Create the .ecto ZIP file
+            # 7. Create the .ecto ZIP file
             with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 # Add manifest
                 zf.write(manifest_path, 'manifest.json')
@@ -204,6 +238,14 @@ class EctoFormat:
                     for img_file in os.listdir(images_dir):
                         img_path = os.path.join(images_dir, img_file)
                         zf.write(img_path, f'images/{img_file}')
+                # Add texture data if any
+                if texture_json_data:
+                    tex_json_path = os.path.join(temp_dir, 'texture.json')
+                    zf.write(tex_json_path, 'texture.json')
+                    if os.path.exists(textures_dir):
+                        for tex_file in os.listdir(textures_dir):
+                            tex_path = os.path.join(textures_dir, tex_file)
+                            zf.write(tex_path, f'textures/{tex_file}')
             
             logger.info(f"export: Created .ecto bundle at {output_path}")
             return True, output_path, creator_token
