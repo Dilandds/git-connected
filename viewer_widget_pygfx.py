@@ -3683,16 +3683,128 @@ class STLViewerWidget(QWidget):
             base_env_map_intensity = 1.5 if base_metalness > 0 else 1.0
             env_tone = self._resolve_env_tone(preset_data)
             use_texture_maps = preset_data.get("use_texture_maps", False)
+            is_image_file = preset_data.get("image_file", False)
 
             preset_opacity = preset_data.get("opacity", None)
             is_glass = preset_data.get("category", "") == "glass"
 
-            if is_glass:
+            # --- Image-file preset (e.g. Lapis Lazuli): matte base, faithful image ---
+            if is_image_file:
+                material = gfx.MeshStandardMaterial(
+                    color="#FFFFFF",
+                    metalness=0.0,
+                    roughness=1.0,
+                )
+                # No emissive, no env map — keep image colors pure
+                try:
+                    self._apply_image_texture(mesh_obj, material, preset_data)
+                except Exception as tex_err:
+                    logger.warning(f"Failed to apply image texture, falling back to solid color: {tex_err}")
+
+            elif is_glass:
                 # Glass: transparent PBR material
                 material = gfx.MeshStandardMaterial(
                     color=color,
                     metalness=base_metalness,
                     roughness=base_roughness,
+                    opacity=float(preset_opacity) if preset_opacity is not None else 0.3,
+                )
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 2.0
+                    base_env_map_intensity = 2.0
+            elif base_metalness > 0:
+                # Metallic PBR (Gold, Silver, Chrome…)
+                material = gfx.MeshStandardMaterial(
+                    color=color,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
+                )
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = base_env_map_intensity
+                if emissive:
+                    material.emissive = emissive
+                    material.emissive_intensity = base_emissive_intensity
+            else:
+                # Non-metallic: use PBR MeshStandardMaterial for realistic look
+                material = gfx.MeshStandardMaterial(
+                    color=color,
+                    metalness=base_metalness,
+                    roughness=base_roughness,
+                )
+                env_tex = self._create_studio_env_map(tone=env_tone)
+                if env_tex is not None:
+                    material.env_map = env_tex
+                    material.env_mapping_mode = "CUBE-REFLECTION"
+                    material.env_map_intensity = 0.3
+                    base_env_map_intensity = 0.3
+                if emissive:
+                    material.emissive = emissive
+                    material.emissive_intensity = 0.12
+                    base_emissive_intensity = 0.12
+
+            # --- Apply texture maps for non-image texture-mapped presets (e.g. Leather) ---
+            if use_texture_maps and not is_image_file:
+                try:
+                    self._apply_pbr_texture_maps(mesh_obj, material, preset_data)
+                except Exception as tex_err:
+                    logger.warning(f"Failed to apply texture maps, falling back to solid color: {tex_err}")
+
+            # Apply material — handle both single Mesh and Group with children
+            if hasattr(mesh_obj, 'geometry') and mesh_obj.geometry is not None:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
+            elif hasattr(mesh_obj, 'children'):
+                for child in mesh_obj.children:
+                    if hasattr(child, 'material'):
+                        if not hasattr(child, '_original_material'):
+                            child._original_material = child.material
+                        child.material = material
+            else:
+                if not hasattr(mesh_obj, '_original_material'):
+                    mesh_obj._original_material = mesh_obj.material
+                mesh_obj.material = material
+            mesh_obj._material_preset_data = {
+                "color": color,
+                "emissive": emissive,
+                "roughness": base_roughness,
+                "metalness": base_metalness,
+                "emissive_intensity": base_emissive_intensity,
+                "env_map_intensity": base_env_map_intensity,
+                "env_tone": env_tone,
+                "category": preset_data.get("category", "metal"),
+                "opacity": float(preset_opacity) if preset_opacity is not None else 1.0,
+                "image_file": is_image_file,
+            }
+
+            if not is_image_file:
+                self._add_preset_accent_lights(tone=env_tone)
+
+            preset_category = preset_data.get("category", "metal") if preset_data else ("metal" if base_metalness > 0 else "fabric")
+            if preset_category == "metal":
+                self.material_preset_applied.emit({
+                    "category": "metal",
+                    "shine": self._roughness_to_shine(base_roughness),
+                    "shadow_depth": self._emissive_intensity_to_shadow(base_emissive_intensity),
+                })
+            elif preset_category == "glass":
+                self.material_preset_applied.emit({
+                    "category": "glass",
+                })
+            else:
+                self.material_preset_applied.emit({
+                    "category": "fabric",
+                })
+
+            if self._canvas:
+                self._canvas.request_draw()
+            logger.info(f"_apply_material_preset_to_mesh: Applied preset color={color} metalness={metalness} roughness={roughness} image_file={is_image_file}")
                     opacity=float(preset_opacity) if preset_opacity is not None else 0.3,
                 )
                 env_tex = self._create_studio_env_map(tone=env_tone)
