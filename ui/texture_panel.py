@@ -1479,7 +1479,7 @@ class TexturePanel(QWidget):
             self.grid_layout.addWidget(card, row, col)
 
     def _on_upload(self):
-        """Open file dialog to add texture images."""
+        """Open file dialog to add texture images with size validation."""
         paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Texture Images",
@@ -1489,6 +1489,28 @@ class TexturePanel(QWidget):
         if not paths:
             return
         for path in paths:
+            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+            if file_size_mb > 30:
+                self._upload_status.setText(
+                    f"⚠ '{os.path.basename(path)}' is {file_size_mb:.0f} MB — "
+                    f"max 30 MB. Please compress or resize."
+                )
+                self._upload_status.setStyleSheet(
+                    "color: #EF4444; font-size: 9px; background: transparent; border: none;"
+                )
+                self._upload_status.show()
+                continue
+            if file_size_mb < 0.1:
+                self._upload_status.setText(
+                    f"⚠ '{os.path.basename(path)}' is only {file_size_mb * 1024:.0f} KB — "
+                    f"may appear low quality as a texture."
+                )
+                self._upload_status.setStyleSheet(
+                    "color: #F59E0B; font-size: 9px; background: transparent; border: none;"
+                )
+                self._upload_status.show()
+            else:
+                self._upload_status.hide()
             self.add_texture(path)
 
     def add_texture(self, image_path: str):
@@ -1521,6 +1543,22 @@ class TexturePanel(QWidget):
         self.grid_layout.addWidget(card, row, col)
 
         self.clear_btn.setVisible(len(self.textures) > 0)
+
+        # Switch slider group to image controls
+        self._active_category = "image"
+        self._metal_sliders_container.hide()
+        self._fabric_sliders_container.hide()
+        self._glass_sliders_container.hide()
+        self._image_sliders_container.show()
+        self._slider_img_softness.blockSignals(True)
+        self._slider_img_softness.setValue(50)
+        self._slider_img_softness.blockSignals(False)
+        self._slider_img_brightness.blockSignals(True)
+        self._slider_img_brightness.setValue(50)
+        self._slider_img_brightness.blockSignals(False)
+        self._slider_img_contrast.blockSignals(True)
+        self._slider_img_contrast.setValue(50)
+        self._slider_img_contrast.blockSignals(False)
 
     def _on_delete(self, index: int):
         if 0 <= index < len(self.cards):
