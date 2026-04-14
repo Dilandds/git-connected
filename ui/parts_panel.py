@@ -1,10 +1,8 @@
 """
-Parts Panel — right-side panel for managing 3D model part visibility.
-"""
-from i18n import t, on_language_changed
 Parts List Panel for hiding/showing individual sub-meshes of a 3D model.
 Groups are displayed as single selectable items (no sub-part expansion).
 """
+from i18n import t, on_language_changed
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
