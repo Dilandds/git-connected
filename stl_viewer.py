@@ -449,6 +449,15 @@ class STLViewerWindow(QMainWindow):
         self._workspace_stack.addWidget(self.help_widget)
         self._workspace_stack.setCurrentIndex(0)  # Start with 3D Viewer
         
+        # ==== Education watermark overlays on all workspace areas ====
+        if is_education():
+            from ui.watermark_overlay import WatermarkOverlay
+            # Overlay on the workspace stack itself (covers 3D, Technical, Scale)
+            self._edu_workspace_watermark = WatermarkOverlay(self._workspace_stack)
+            self._edu_workspace_watermark.raise_()
+            # Keep it sized to the workspace stack
+            self._workspace_stack.installEventFilter(self)
+        
         logger.info("init_ui: Applying styling...")
         self.apply_styling()
         
