@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
 from ui.styles import default_theme, make_font
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -435,6 +436,7 @@ class ViewControlsToolbar(QWidget):
         
         self.init_ui()
         self._update_expanded_state(animate=False)
+        on_language_changed(self.retranslate)
     
     def init_ui(self):
         """Initialize the toolbar UI."""
