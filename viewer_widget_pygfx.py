@@ -3826,7 +3826,7 @@ class STLViewerWidget(QWidget):
         # Make seamlessly tileable
         albedo = self._make_seamless(albedo)
 
-        tile_repeat = preset_data.get("tile_repeat", 200.0)
+        tile_repeat = preset_data.get("tile_repeat", 1.0)
 
         # Ensure UVs exist and cache base UVs, then scale
         self._reset_and_scale_texcoords(mesh_obj, gfx, float(tile_repeat))
@@ -3869,7 +3869,7 @@ class STLViewerWidget(QWidget):
                     # Make texture seamlessly tileable by blending edges
                     albedo = self._make_seamless(albedo)
                     # Scale UVs for tiling (repeat the texture across the surface)
-                    tile_repeat = preset_data.get("tile_repeat", 200.0)
+                    tile_repeat = preset_data.get("tile_repeat", 1.0)
                     self._scale_texcoords(mesh_obj, gfx, tile_repeat)
                     tex_albedo = gfx.Texture(albedo, dim=2, generate_mipmaps=True)
                     material.map = gfx.TextureMap(tex_albedo, wrap="repeat")
