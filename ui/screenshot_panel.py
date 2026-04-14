@@ -429,20 +429,25 @@ class ScreenshotPanel(QWidget):
         if index < 0 or index >= len(self.screenshots):
             return
         pixmap, _ = self.screenshots[index]
+        # Open editor so user can annotate before saving
+        title = f"Image {index + 1}"
         if index < len(self.cards):
             raw = self.cards[index].name_edit.text().strip()
-            suggested = "".join(c for c in raw if c not in r'\/:*?"<>|') if raw else f"Image {index + 1}"
-        else:
-            suggested = f"Image {index + 1}"
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Screenshot",
-            f"{suggested}.png",
-            "PNG (*.png);;JPEG (*.jpg);;All Files (*)"
-        )
-        if path:
-            pixmap.save(path)
-            logger.info(f"Screenshot saved to {path}")
+            if raw:
+                title = raw
+        editor = ScreenshotEditorDialog(pixmap, title=f"Edit & Save — {title}", parent=self.window())
+
+        def _do_save(result_pixmap):
+            # Update the card with the annotated version
+            if index < len(self.cards):
+                self.cards[index].pixmap = result_pixmap
+                self.cards[index]._update_thumbnail()
+            if index < len(self.screenshots):
+                ts = self.screenshots[index][1]
+                self.screenshots[index] = (result_pixmap, ts)
+
+        editor.pixmap_updated.connect(_do_save)
+        editor.exec_()
 
     def _on_clear_all(self):
         if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):
