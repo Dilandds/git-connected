@@ -390,7 +390,7 @@ class EctoFormat:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            return None, None, False, str(e), None
+            return None, None, False, str(e), None, None
     
     @staticmethod
     def get_manifest(ecto_path: str) -> Optional[Dict[str, Any]]:
