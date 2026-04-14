@@ -1,86 +1,95 @@
 
+Goal: fix the Windows bundled texture presets properly, based on how assets are resolved elsewhere in the app, so preset textures load reliably in both Commercial and Education builds.
 
-## Multi-Language Support (English/French) for ECTOFORM
+What I found
+- The warning is real and the current fix is incomplete.
+- `viewer_widget_pygfx.py` resolves bundled assets correctly using `sys._MEIPASS`, so the loader logic itself is basically fine.
+- The actual mismatch is in `ui/texture_panel.py`:
+  - `Lapis Lazuli` points to `assets/textures/lapis_lazuli.png`
+  - but most other presets still point to top-level paths like `assets/leather_orange.png`
+- The PyInstaller specs currently bundle:
+  - some selected top-level files in `assets/`
+  - the whole `assets/textures/` folder
+- Result: anything still referencing `assets/<file>` can fail in the Windows EXE unless that exact top-level file was also individually included.
 
-### Overview
-Add internationalization (i18n) to the entire ECTOFORM PyQt5 desktop application with a toggle button for English/French, placed left of the Help button in the mode bar.
+Implementation plan
+1. Normalize preset texture paths
+- Update all image-based material presets in `ui/texture_panel.py` so built-in preset files consistently use one bundled location.
+- Best path: move all built-in preset references to `assets/textures/<filename>` in code.
+- This includes both:
+  - `albedo_map_path`
+  - `swatch_image`
 
-### Approach: JSON-based i18n module
-PyQt5 has a built-in `QTranslator` system, but it requires `.ts`/`.qm` compilation tooling. A simpler, more maintainable approach for two languages is a lightweight custom i18n module using JSON translation files — no extra dependencies needed.
+2. Make swatch/runtime asset resolution use a shared convention
+- Add or reuse a small helper for “resolve asset path in dev + PyInstaller”.
+- Use that helper in:
+  - `_generate_image_swatch()` in `ui/texture_panel.py`
+  - `_load_texture_image()` in `viewer_widget_pygfx.py`
+- This avoids one-off path joining logic and makes asset behavior match other working helpers like `ui/styles.py` and `ui/annotation_icon.py`.
 
-### Files to create
+3. Align bundling with runtime expectations
+- Keep the specs bundling `assets/textures` for:
+  - `stl_viewer_windows.spec`
+  - `stl_viewer_windows_education.spec`
+  - `stl_viewer_mac.spec`
+  - `stl_viewer_mac_education.spec`
+- If the actual image files still live at top-level `assets/` in the repo, add a clean follow-up strategy:
+  - either also bundle those top-level preset files explicitly, or
+  - preferably move/copy the actual files into `assets/textures/` and keep code/specs consistent.
+- Preferred final state: all built-in material images live under `assets/textures/`.
 
-1. **`i18n/__init__.py`** — Core translation engine
-   - `_current_lang = "en"` state variable
-   - `t(key: str) -> str` function that looks up a dotted key (e.g. `"sidebar.upload"`) in the current language dictionary
-   - `set_language(lang: str)` to switch and notify listeners
-   - `on_language_changed(callback)` to register UI refresh callbacks
-   - Load translations from JSON files
+4. Audit every built-in image preset
+- Verify every preset in `MATERIAL_PRESETS` points to a file that exists.
+- Specifically check the known texture/image set:
+  - leathers
+  - woods
+  - stone
+  - brushed metal
+  - color presets
+  - astro grain
+  - pink onyx
+  - lapis lazuli
+- Also check case sensitivity issues like `Leather_light_blue.png` so macOS/Linux builds stay safe.
 
-2. **`i18n/en.json`** — English translations (all UI strings)
+5. Verify education restrictions still behave correctly
+- Ensure the Education upload restriction remains unchanged:
+  - upload button disabled
+  - notice shown
+- Only built-in preset loading should be fixed.
 
-3. **`i18n/fr.json`** — French translations
-
-### Structure of translation keys
-Organized by UI module:
+Technical details
 ```text
-mode_bar.3d_viewer, mode_bar.technical, mode_bar.drawing_scale, mode_bar.help
-sidebar.upload_title, sidebar.dimensions, sidebar.surface_area, sidebar.weight, ...
-toolbar.grid, toolbar.theme, toolbar.ruler, toolbar.annotate, ...
-help.title, help.subtitle, help.q1, help.a1, ...
-annotation.panel_title, annotation.clear_all, ...
-screenshot.panel_title, screenshot.capture, screenshot.save, ...
-texture.panel_title, texture.upload, ...
-technical.title, technical.upload, technical.export, ...
-scale.title, ...
-common.save, common.cancel, common.delete, common.close, common.yes, common.no, ...
+Current mismatch:
+code expects:  assets/leather_orange.png
+bundle has:    assets/textures/lapis_lazuli.png (+ some selected assets/*)
+
+Safer target state:
+code expects:  assets/textures/leather_orange.png
+bundle has:    assets/textures/*
+resolver uses: shared helper -> base/assets/textures/file
 ```
 
-### Files to modify
+Files likely to change
+- `ui/texture_panel.py`
+- `viewer_widget_pygfx.py`
+- Possibly all 4 PyInstaller spec files if we tighten bundling consistency
+- Possibly asset file locations under `assets/textures/` if we choose the cleaner consolidation route
 
-4. **`stl_viewer.py`** — Mode bar changes:
-   - Add a language toggle button (`🇬🇧`/`🇫🇷` or `EN`/`FR`) to the left of the Help button
-   - On click, call `i18n.set_language()` to toggle between `"en"` and `"fr"`
-   - Register a `_retranslate_ui()` callback that updates all mode bar button texts
-   - Pass i18n refresh down to child widgets
+Why this is the right fix
+- It addresses the root cause: inconsistent asset paths between presets and bundle layout.
+- It follows the project’s existing PyInstaller-safe asset pattern instead of relying on fragile one-off additions.
+- It should fix both swatch previews and actual texture application, not just one side.
 
-5. **`ui/sidebar_panel.py`** — Replace all hardcoded English strings with `t()` calls; add `retranslate()` method
+Validation I would do after approval
+- Static audit that every preset path resolves to a real bundled file
+- Re-check both Windows spec files against the final asset layout
+- Confirm no preset still references `assets/<file>` when the bundle only guarantees `assets/textures/*`
+- End-to-end test the preset flow in both Commercial and Education builds
 
-6. **`ui/toolbar.py`** — Replace button labels/tooltips with `t()` calls; add `retranslate()` method
-
-7. **`ui/help_panel.py`** — Replace `HELP_TOPICS` with language-aware lookup; rebuild cards on language change
-
-8. **`ui/annotation_panel.py`** — Replace labels with `t()` calls
-
-9. **`ui/arrow_panel.py`** — Replace labels with `t()` calls
-
-10. **`ui/parts_panel.py`** — Replace labels with `t()` calls
-
-11. **`ui/screenshot_panel.py`** / **`ui/screenshot_editor.py`** — Replace labels with `t()` calls
-
-12. **`ui/texture_panel.py`** — Replace labels with `t()` calls
-
-13. **`ui/technical_sidebar.py`** / **`ui/technical_overview.py`** — Replace labels with `t()` calls
-
-14. **`ui/scale_sidebar.py`** / **`ui/scale_canvas.py`** — Replace labels with `t()` calls
-
-15. **`ui/converter_dialog.py`** — Replace labels with `t()` calls
-
-16. **`ui/components.py`** — Replace labels in confirmation dialogs, row labels
-
-17. **`ui/ruler_toolbar.py`** — Replace labels with `t()` calls
-
-18. **`ui/license_dialog.py`** / **`ui/passcode_dialog.py`** — Replace labels with `t()` calls
-
-### How the toggle works
-- A `QPushButton` labeled `"EN"` or `"FR"` in the mode bar, left of the Help button
-- Clicking toggles the language and updates the button text
-- Language preference is saved in `QSettings` and restored on startup
-- All widgets register a `retranslate()` method via `i18n.on_language_changed(self.retranslate)`
-
-### Implementation order
-1. Create `i18n/` module with `en.json`, `fr.json`, and translation engine
-2. Add toggle button to mode bar in `stl_viewer.py`
-3. Migrate strings in each UI file one-by-one, starting with the mode bar and sidebar, then toolbar, help panel, and remaining panels
-4. Each file gets a `retranslate()` method that re-sets all visible text from `t()` calls
-
+<lov-actions>
+<lov-suggestion message="Test the preset texture flow end-to-end in both Commercial and Education builds to make sure every built-in material loads correctly">Verify that it works</lov-suggestion>
+<lov-suggestion message="Implement the asset-path normalization so all built-in texture presets use a single bundled assets/textures location with shared PyInstaller-safe resolution helpers">Fix preset asset paths</lov-suggestion>
+<lov-suggestion message="Audit all material preset image files and clean up any missing files or filename case mismatches so Mac and Windows builds stay consistent">Audit all texture files</lov-suggestion>
+<lov-suggestion message="Consolidate all built-in material images into assets/textures and simplify the PyInstaller specs so bundling matches runtime expectations exactly">Consolidate texture assets</lov-suggestion>
+<lov-suggestion message="Add a lightweight startup diagnostic log that reports missing built-in material assets by preset name to catch packaging mistakes earlier">Add texture diagnostics</lov-suggestion>
+</lov-actions>
