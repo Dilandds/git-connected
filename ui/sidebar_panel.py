@@ -1407,7 +1407,18 @@ class SidebarPanel(QWidget):
                     return vw.get_draw_strokes()
             parent = parent.parent()
         return []
-    
+
+    def _get_texture_data(self):
+        """Get current material/texture preset data from the viewer widget for .ecto export."""
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
+                vw = parent.viewer_widget
+                if hasattr(vw, 'get_texture_data'):
+                    return vw.get_texture_data()
+            parent = parent.parent()
+        return None
+
     def reset_all_data(self):
         """Reset all data displays to initial state."""
         # Reset dimensions
