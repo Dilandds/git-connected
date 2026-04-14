@@ -2595,6 +2595,8 @@ class STLViewerWidget(QWidget):
             pos = event.pos()
             if self._eraser_mode:
                 return self.erase_stroke_at(pos.x(), pos.y())
+            if self._text_mode:
+                return self._draw_place_text(pos.x(), pos.y())
             hit = self._draw_start_stroke(pos.x(), pos.y())
             return hit
         elif t == QEvent.MouseMove and self._drawing_active:
