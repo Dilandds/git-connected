@@ -1356,6 +1356,11 @@ class TexturePanel(QWidget):
         row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 30, u"\u00b0")
         layout.addWidget(row)
 
+        layout.addStretch()
+
+        main_scroll.setWidget(scroll_content)
+        outer_layout.addWidget(main_scroll)
+
     def _rebuild_grid(self):
         while self.grid_layout.count():
             self.grid_layout.takeAt(0)
