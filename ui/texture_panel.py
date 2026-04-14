@@ -884,19 +884,78 @@ class TextureCard(QFrame):
         header.addWidget(close_btn)
         layout.addLayout(header)
 
-        # Square thumbnail
+        # Sphere thumbnail (matching material preset cards)
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
         self.thumb_label.setStyleSheet("background: transparent;")
         self.thumb_label.setFixedHeight(90)
         self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._update_thumbnail()
+        self._sphere_swatch = self._make_sphere_swatch()
+        self.thumb_label.setPixmap(self._sphere_swatch.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(self.thumb_label)
 
+    def _make_sphere_swatch(self) -> QPixmap:
+        """Render the uploaded texture onto a 3D sphere."""
+        size = 80
+        src = self.pixmap.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        if src.width() > size or src.height() > size:
+            x = (src.width() - size) // 2
+            y = (src.height() - size) // 2
+            src = src.copy(x, y, size, size)
+
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        cx, cy = size * 0.5, size * 0.52
+        radius = size * 0.40
+
+        from PyQt5.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(cx - radius, cy - radius, radius * 2, radius * 2)
+
+        # Texture clipped to circle
+        painter.setClipPath(clip)
+        painter.drawPixmap(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2), src)
+        painter.setClipping(False)
+
+        # Shadow
+        shadow_grad = QRadialGradient(cx, size * 0.88, size * 0.28)
+        shadow_grad.setColorAt(0.0, QColor(0, 0, 0, 80))
+        shadow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setPen(QPen(Qt.NoPen))
+        painter.setBrush(shadow_grad)
+        painter.drawEllipse(int(cx - size * 0.28), int(size * 0.82), int(size * 0.56), int(size * 0.12))
+
+        # Edge darkening
+        edge_grad = QRadialGradient(cx * 0.85, cy * 0.75, radius * 1.1)
+        edge_grad.setColorAt(0.0, QColor(0, 0, 0, 0))
+        edge_grad.setColorAt(0.55, QColor(0, 0, 0, 0))
+        edge_grad.setColorAt(0.85, QColor(0, 0, 0, 90))
+        edge_grad.setColorAt(1.0, QColor(0, 0, 0, 180))
+        painter.setClipPath(clip)
+        painter.setBrush(edge_grad)
+        painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
+        painter.setClipping(False)
+
+        # Specular highlight
+        spec_cx = cx - radius * 0.22
+        spec_cy = cy - radius * 0.32
+        spec_r = radius * 0.38
+        spec_grad = QRadialGradient(spec_cx, spec_cy, spec_r)
+        spec_grad.setColorAt(0.0, QColor(255, 255, 255, 160))
+        spec_grad.setColorAt(0.35, QColor(255, 255, 255, 60))
+        spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setClipPath(clip)
+        painter.setBrush(spec_grad)
+        painter.drawEllipse(int(spec_cx - spec_r), int(spec_cy - spec_r), int(spec_r * 2), int(spec_r * 2))
+
+        painter.end()
+        return pixmap
+
     def _update_thumbnail(self):
-        card_w = max(self.width() - 16, 80)
-        scaled = self.pixmap.scaled(card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.thumb_label.setPixmap(scaled)
+        self.thumb_label.setPixmap(self._sphere_swatch.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
