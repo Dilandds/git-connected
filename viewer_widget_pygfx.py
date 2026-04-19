@@ -155,6 +155,7 @@ class STLViewerWidget(QWidget):
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
         self._axes_labels = []  # X, Y, Z text labels on the corner axes
+        self._dark_theme = False  # Tracks current background theme for grid label color
 
         # Ruler/measurement mode state (matches viewer_widget.py interface)
         self.ruler_mode = False
