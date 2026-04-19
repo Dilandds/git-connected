@@ -963,12 +963,18 @@ class STLViewerWidget(QWidget):
                 self._scene.remove(self._background)
             self._background = gfx.Background.from_color(color)
             self._scene.add(self._background)
+            # Track dark theme for grid label coloring
+            is_dark = color.lower() == '#1a1a2e'
+            theme_changed = (is_dark != self._dark_theme)
+            self._dark_theme = is_dark
+            # Re-render grid with the right label color if it's currently visible
+            if theme_changed and self._grid_visible:
+                self.show_grid()
             if self._canvas:
                 self._canvas.request_draw()
             # Update drop overlay when visible (no model loaded)
             if not self._model_loaded and hasattr(self, 'drop_overlay'):
                 self.drop_overlay.setStyleSheet(f"DropZoneOverlay {{ background-color: {color}; }}")
-                is_dark = color.lower() == '#1a1a2e'
                 primary = '#e2e8f0' if is_dark else '#1a1a2e'
                 secondary = '#94a3b8' if is_dark else '#4a5568'
                 helper = '#64748b' if is_dark else '#a0aec0'
