@@ -1227,42 +1227,7 @@ class SidebarPanel(QWidget):
         self.export_annotations_btn.clicked.connect(self.export_as_ecto)
         card_layout.addWidget(self.export_annotations_btn)
         
-        # Information footer
-        footer_frame = QFrame()
-        footer_frame.setObjectName("exportAnnotationsFooter")
-        footer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        footer_frame.setMinimumHeight(36)
-        footer_frame.setAttribute(Qt.WA_StyledBackground, True)
-        footer_frame.setStyleSheet("""
-            QFrame#exportAnnotationsFooter {
-                background-color: #ffffff;
-                border: 1px solid #d0d0d0;
-                border-radius: 6px;
-            }
-        """)
-        
-        footer_layout = QHBoxLayout(footer_frame)
-        footer_layout.setContentsMargins(10, 6, 10, 6)
-        footer_layout.setSpacing(8)
-        
-        info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet(
-            "color: #000000; font-size: 11px; background: transparent; border: none;"
-        )
-        info_icon.setFixedWidth(18)
-        info_icon.setAlignment(Qt.AlignTop)
-        
-        disclaimer = QLabel("Single file contains: model + annotations + photos. Recipients open it directly in ECTOFORM.")
-        disclaimer_font = make_font(size=9)
-        disclaimer.setFont(disclaimer_font)
-        disclaimer.setStyleSheet("color: #000000; background: transparent; border: none;")
-        disclaimer.setWordWrap(True)
-        
-        footer_layout.addWidget(info_icon)
-        footer_layout.addWidget(disclaimer)
-        footer_layout.addStretch()
-        
-        card_layout.addWidget(footer_frame)
+        # (Disclaimer moved to '?' help badge in section header)
         
         self._style_section_card(card)
         
