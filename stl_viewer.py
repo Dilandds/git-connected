@@ -360,6 +360,7 @@ class STLViewerWindow(QMainWindow):
         self.texture_panel = TexturePanel()
         self.texture_panel.exit_texture_mode.connect(self._exit_texture_mode_from_panel)
         self.texture_panel.texture_settings_changed.connect(self._on_texture_settings_changed)
+        self.texture_panel.reset_textures_requested.connect(self._on_reset_textures_requested)
         self.texture_stack.addWidget(self.texture_panel)
         
         # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture visible at a time
@@ -2096,6 +2097,12 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'update_texture_settings'):
             vw.update_texture_settings(settings)
+
+    def _on_reset_textures_requested(self):
+        """Remove all applied textures from the active viewer (back to default)."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'reset_all_textures'):
+            vw.reset_all_textures()
 
     def _on_material_preset_applied(self, preset_data):
         """Sync simplified material sliders when a preset is dropped onto the model."""
