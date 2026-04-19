@@ -2098,6 +2098,12 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'update_texture_settings'):
             vw.update_texture_settings(settings)
 
+    def _on_reset_textures_requested(self):
+        """Remove all applied textures from the active viewer (back to default)."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'reset_all_textures'):
+            vw.reset_all_textures()
+
     def _on_material_preset_applied(self, preset_data):
         """Sync simplified material sliders when a preset is dropped onto the model."""
         if self.texture_panel and hasattr(self.texture_panel, 'sync_material_controls'):
