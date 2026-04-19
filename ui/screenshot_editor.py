@@ -161,15 +161,18 @@ class _EditorCanvas(QWidget):
         """Paint all annotations. Used for both display and burn-in."""
         # Lines
         for start, end, color, width in self._lines:
+            painter.save()
             pen = QPen(QColor(color), width * scale)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
             s = QPointF(start.x() * scale + offset.x(), start.y() * scale + offset.y())
             e = QPointF(end.x() * scale + offset.x(), end.y() * scale + offset.y())
             painter.drawLine(s, e)
+            painter.restore()
 
         # Arrows
         for start, end, color, width in self._arrows:
+            painter.save()
             pen = QPen(QColor(color), width * scale)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
@@ -177,39 +180,41 @@ class _EditorCanvas(QWidget):
             e = QPointF(end.x() * scale + offset.x(), end.y() * scale + offset.y())
             painter.drawLine(s, e)
             self._draw_arrowhead(painter, s, e, color, width * scale)
+            painter.restore()
 
         # Texts
         for pos, text, color, font_size in self._texts:
+            painter.save()
             font = QFont("Arial", max(1, int(font_size * scale)))
             font.setBold(True)
             painter.setFont(font)
             painter.setPen(QColor(color))
             p = QPointF(pos.x() * scale + offset.x(), pos.y() * scale + offset.y())
             painter.drawText(p, text)
+            painter.restore()
 
     def _draw_arrowhead(self, painter, start: QPointF, end: QPointF, color: str, width: float):
         """Draw an arrowhead at the end point."""
         import math
+        from PyQt5.QtGui import QPolygonF, QBrush
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         length = math.sqrt(dx * dx + dy * dy)
         if length < 1:
             return
-        # Normalize
         ux, uy = dx / length, dy / length
-        # Arrow size proportional to line width
         arrow_len = max(12, width * 4)
         arrow_w = arrow_len * 0.5
-        # Two points for arrowhead
         bx = end.x() - ux * arrow_len
         by = end.y() - uy * arrow_len
         p1 = QPointF(bx + uy * arrow_w, by - ux * arrow_w)
         p2 = QPointF(bx - uy * arrow_w, by + ux * arrow_w)
-        from PyQt5.QtGui import QPolygonF, QBrush
+        painter.save()
         polygon = QPolygonF([end, p1, p2])
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(QColor(color)))
         painter.drawPolygon(polygon)
+        painter.restore()
 
     # ---- mouse events ----
 
