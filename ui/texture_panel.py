@@ -1011,6 +1011,7 @@ class TexturePanel(QWidget):
 
     exit_texture_mode = pyqtSignal()
     texture_settings_changed = pyqtSignal(dict)
+    reset_textures_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1283,6 +1284,31 @@ class TexturePanel(QWidget):
         title.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(title)
         title_row.addStretch()
+
+        reset_btn = QPushButton("Reset")
+        reset_btn.setObjectName("resetTextureBtn")
+        reset_btn.setCursor(Qt.PointingHandCursor)
+        reset_btn.setToolTip("Remove all applied textures and return to the default view")
+        reset_btn.setFixedHeight(24)
+        reset_btn.setStyleSheet("""
+            QPushButton#resetTextureBtn {
+                background-color: rgba(255, 255, 255, 0.18);
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                color: #FFFFFF;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 2px 10px;
+                border-radius: 12px;
+            }
+            QPushButton#resetTextureBtn:hover {
+                background-color: rgba(255, 255, 255, 0.30);
+            }
+            QPushButton#resetTextureBtn:pressed {
+                background-color: rgba(255, 255, 255, 0.42);
+            }
+        """)
+        reset_btn.clicked.connect(self.reset_textures_requested.emit)
+        title_row.addWidget(reset_btn)
 
         exit_btn = QPushButton("✕")
         exit_btn.setObjectName("exitTextureBtn")
