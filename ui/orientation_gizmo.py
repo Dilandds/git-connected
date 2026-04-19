@@ -24,7 +24,7 @@ class OrientationGizmoWidget(QWidget):
     """
     rotation_delta = pyqtSignal(float, float)  # dx, dy in pixels
 
-    SIZE = 72
+    SIZE = 120
 
     def __init__(self, parent=None):
         super().__init__(parent)

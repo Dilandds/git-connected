@@ -137,29 +137,38 @@ class STLViewerWidget(QWidget):
         
         # Object control overlay (gizmo + label, shown in annotation mode)
         self._object_control_overlay = QFrame()
+        self._object_control_overlay.setObjectName("ObjectControlOverlay")
         self._object_control_overlay.setStyleSheet("""
-            QFrame {
+            QFrame#ObjectControlOverlay {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #0A1428, stop:0.5 #0F2A4A, stop:1 #1E5BA8);
+                    stop:0 #050B1A, stop:0.45 #0A1838, stop:1 #1B4FA0);
+                border-radius: 14px;
+                border: 2px solid #0B1A33;
+            }
+            QLabel#ObjectControlTitle {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #1A2A45, stop:1 #0E1A30);
+                color: #FFFFFF;
+                font-size: 13px;
+                font-weight: bold;
+                border: 1px solid #2A3F60;
                 border-radius: 10px;
-                border: 1px solid #1E3A5F;
+                padding: 5px 10px;
+                letter-spacing: 0.5px;
             }
         """)
         overlay_layout = QVBoxLayout(self._object_control_overlay)
-        overlay_layout.setContentsMargins(6, 4, 6, 6)
-        overlay_layout.setSpacing(2)
+        overlay_layout.setContentsMargins(8, 8, 8, 10)
+        overlay_layout.setSpacing(6)
         self._object_control_title = QLabel("3D Control")
+        self._object_control_title.setObjectName("ObjectControlTitle")
         self._object_control_title.setAlignment(Qt.AlignCenter)
-        self._object_control_title.setStyleSheet(
-            "color: #FFFFFF; font-size: 11px; font-weight: bold; "
-            "background: transparent; border: none; letter-spacing: 0.5px;"
-        )
-        overlay_layout.addWidget(self._object_control_title, 0, Qt.AlignCenter)
+        overlay_layout.addWidget(self._object_control_title)
         self._orientation_gizmo = OrientationGizmoWidget(self._object_control_overlay)
         overlay_layout.addWidget(self._orientation_gizmo, 0, Qt.AlignCenter)
         self._object_control_overlay.setFixedSize(
-            OrientationGizmoWidget.SIZE + 20,
-            OrientationGizmoWidget.SIZE + 38
+            OrientationGizmoWidget.SIZE + 30,
+            OrientationGizmoWidget.SIZE + 60
         )
         self._orientation_gizmo.rotation_delta.connect(self._on_gizmo_rotate)
         self._object_control_overlay.hide()
