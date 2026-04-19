@@ -4657,6 +4657,42 @@ class STLViewerWidget(QWidget):
                     self._remove_preset_accent_lights()
                 return
 
+    def reset_all_textures(self):
+        """Remove all applied textures/materials from every part and the main mesh,
+        restoring the default look."""
+        try:
+            restored = False
+            # Multi-part meshes
+            for p in self._mesh_parts:
+                mesh_obj = p.get('mesh_obj')
+                if mesh_obj is not None and hasattr(mesh_obj, '_original_material'):
+                    mesh_obj.material = mesh_obj._original_material
+                    try:
+                        del mesh_obj._original_material
+                    except Exception:
+                        pass
+                    restored = True
+            # Single mesh case
+            mesh_obj = getattr(self, '_mesh_obj', None)
+            if mesh_obj is not None and hasattr(mesh_obj, '_original_material'):
+                mesh_obj.material = mesh_obj._original_material
+                try:
+                    del mesh_obj._original_material
+                except Exception:
+                    pass
+                restored = True
+            # Remove preset accent lights since no presets remain
+            try:
+                self._remove_preset_accent_lights()
+            except Exception:
+                pass
+            if restored and self._canvas:
+                self._canvas.request_draw()
+            logger.info(f"reset_all_textures: restored={restored}")
+        except Exception as e:
+            logger.warning(f"reset_all_textures failed: {e}")
+
+
     def _generate_box_uvs(self, vertices, normals=None):
         """Generate UV coordinates using per-vertex cube/box projection.
 
