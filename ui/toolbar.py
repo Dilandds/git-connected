@@ -960,9 +960,9 @@ class ViewControlsToolbar(QWidget):
                 self.ruler_mode_enabled = False
                 self.ruler_btn.set_active(False)
                 self.ruler_btn.set_icon("📏")
-            if self.screenshot_mode_enabled:
-                self.screenshot_mode_enabled = False
-                self.screenshot_btn.set_active(False)
+            # Screenshot: do NOT clear flags here — main window must run _exit_screenshot_mode()
+            # to hide the rubber-band overlay. Clearing only the toolbar flag prevents that and
+            # leaves the overlay intercepting clicks so arrows can't be placed.
             if self.draw_mode_enabled:
                 self.draw_mode_enabled = False
                 self._eraser_active = False
