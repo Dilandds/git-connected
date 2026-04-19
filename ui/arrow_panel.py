@@ -204,88 +204,28 @@ class ArrowPanel(QWidget):
         ctrl_layout.setContentsMargins(0, 0, 0, 0)
         ctrl_layout.setSpacing(6)
 
-        # Rotation
-        ctrl_layout.addWidget(_section_label("ROTATION"))
-        rot_grid = QVBoxLayout()
-        rot_grid.setSpacing(3)
+        # Rotation / Size / Move controls removed per design — only color is exposed.
+        # Buttons are still constructed (hidden) to keep external references safe.
+        self._rot_left = _control_button("\u2190", "")
+        self._rot_right = _control_button("\u2192", "")
+        self._rot_up = _control_button("\u2191", "")
+        self._rot_down = _control_button("\u2193", "")
+        self._rot_cw = _control_button("\u21BB", "")
+        self._rot_ccw = _control_button("\u21BA", "")
+        self._size_plus = _control_button("+", "")
+        self._size_minus = _control_button("\u2212", "")
+        self._move_xp = _control_button("X+", "")
+        self._move_xn = _control_button("X-", "")
+        self._move_yp = _control_button("Y+", "")
+        self._move_yn = _control_button("Y-", "")
+        self._move_zp = _control_button("Z+", "")
+        self._move_zn = _control_button("Z-", "")
+        for _b in (self._rot_left, self._rot_right, self._rot_up, self._rot_down,
+                   self._rot_cw, self._rot_ccw, self._size_plus, self._size_minus,
+                   self._move_xp, self._move_xn, self._move_yp, self._move_yn,
+                   self._move_zp, self._move_zn):
+            _b.hide()
 
-        row1 = QHBoxLayout()
-        row1.setSpacing(3)
-        self._rot_left = _control_button("\u2190", "Rotate Left (Y-axis)")   # ←
-        self._rot_right = _control_button("\u2192", "Rotate Right (Y-axis)")  # →
-        self._rot_up = _control_button("\u2191", "Rotate Up (X-axis)")    # ↑
-        self._rot_down = _control_button("\u2193", "Rotate Down (X-axis)")  # ↓
-        row1.addWidget(self._rot_left)
-        row1.addWidget(self._rot_right)
-        row1.addWidget(self._rot_up)
-        row1.addWidget(self._rot_down)
-        rot_grid.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        row2.setSpacing(3)
-        self._rot_cw = _control_button("\u21BB", "Tilt Clockwise (Z-axis)")   # ↻
-        self._rot_ccw = _control_button("\u21BA", "Tilt Counter-Clockwise (Z-axis)")  # ↺
-        row2.addWidget(self._rot_cw)
-        row2.addWidget(self._rot_ccw)
-        row2.addStretch()
-        rot_grid.addLayout(row2)
-        ctrl_layout.addLayout(rot_grid)
-
-        # Connect rotation buttons
-        self._rot_left.clicked.connect(lambda: self._emit_rotate('y', -15))
-        self._rot_right.clicked.connect(lambda: self._emit_rotate('y', 15))
-        self._rot_up.clicked.connect(lambda: self._emit_rotate('x', -15))
-        self._rot_down.clicked.connect(lambda: self._emit_rotate('x', 15))
-        self._rot_cw.clicked.connect(lambda: self._emit_rotate('z', 15))
-        self._rot_ccw.clicked.connect(lambda: self._emit_rotate('z', -15))
-
-        # Size
-        ctrl_layout.addWidget(_section_label("SIZE"))
-        size_row = QHBoxLayout()
-        size_row.setSpacing(3)
-        self._size_plus = _control_button("+", "Lengthen arrow")
-        self._size_minus = _control_button("\u2212", "Shorten arrow")  # − (minus sign)
-        size_row.addWidget(self._size_plus)
-        size_row.addWidget(self._size_minus)
-        size_row.addStretch()
-        ctrl_layout.addLayout(size_row)
-
-        self._size_plus.clicked.connect(lambda: self._emit_scale(1.15))
-        self._size_minus.clicked.connect(lambda: self._emit_scale(0.85))
-
-        # Move
-        ctrl_layout.addWidget(_section_label("MOVE"))
-        move_grid = QVBoxLayout()
-        move_grid.setSpacing(3)
-
-        mrow1 = QHBoxLayout()
-        mrow1.setSpacing(3)
-        self._move_xp = _control_button("X+", "Move along X+")
-        self._move_xn = _control_button("X-", "Move along X-")
-        self._move_yp = _control_button("Y+", "Move along Y+")
-        self._move_yn = _control_button("Y-", "Move along Y-")
-        mrow1.addWidget(self._move_xp)
-        mrow1.addWidget(self._move_xn)
-        mrow1.addWidget(self._move_yp)
-        mrow1.addWidget(self._move_yn)
-        move_grid.addLayout(mrow1)
-
-        mrow2 = QHBoxLayout()
-        mrow2.setSpacing(3)
-        self._move_zp = _control_button("Z+", "Move along Z+")
-        self._move_zn = _control_button("Z-", "Move along Z-")
-        mrow2.addWidget(self._move_zp)
-        mrow2.addWidget(self._move_zn)
-        mrow2.addStretch()
-        move_grid.addLayout(mrow2)
-        ctrl_layout.addLayout(move_grid)
-
-        self._move_xp.clicked.connect(lambda: self._emit_move(1, 0, 0))
-        self._move_xn.clicked.connect(lambda: self._emit_move(-1, 0, 0))
-        self._move_yp.clicked.connect(lambda: self._emit_move(0, 1, 0))
-        self._move_yn.clicked.connect(lambda: self._emit_move(0, -1, 0))
-        self._move_zp.clicked.connect(lambda: self._emit_move(0, 0, 1))
-        self._move_zn.clicked.connect(lambda: self._emit_move(0, 0, -1))
 
         # Color
         ctrl_layout.addWidget(_section_label("COLOR"))
