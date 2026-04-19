@@ -807,10 +807,10 @@ class ScaleCanvas(QWidget):
                 painter.setPen(label_color)
                 painter.setFont(font)
                 if top:
-                    painter.drawText(ix - 10, base_y - tick_len - 2, 20, 12,
+                    painter.drawText(ix - 12, base_y - tick_len - 14, 24, 12,
                                      Qt.AlignCenter, label_text)
                 else:
-                    painter.drawText(ix - 10, base_y + tick_len + 1, 20, 12,
+                    painter.drawText(ix - 12, base_y + tick_len + 2, 24, 12,
                                      Qt.AlignCenter, label_text)
 
             x += minor_px
