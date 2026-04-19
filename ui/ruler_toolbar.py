@@ -164,17 +164,17 @@ class RulerToolbar(QWidget):
         self.view_combo.setCursor(Qt.PointingHandCursor)
         self.view_combo.setStyleSheet(f"""
             QComboBox {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_light};
+                background-color: #FFFFFF;
+                color: #111111;
+                border: 1px solid #CFCFCF;
                 border-radius: 6px;
                 padding: 2px 8px;
                 font-size: 11px;
                 font-weight: 500;
             }}
             QComboBox:hover {{
-                background-color: {default_theme.row_bg_hover};
-                border: 1px solid {default_theme.border_medium};
+                background-color: #F7F7F7;
+                border: 1px solid #BDBDBD;
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -184,16 +184,16 @@ class RulerToolbar(QWidget):
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 5px solid {default_theme.text_secondary};
+                border-top: 5px solid #111111;
                 margin-right: 6px;
             }}
             QComboBox QAbstractItemView {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_medium};
+                background-color: #FFFFFF;
+                color: #111111;
+                border: 1px solid #CFCFCF;
                 border-radius: 4px;
-                selection-background-color: {default_theme.button_primary};
-                selection-color: {default_theme.text_white};
+                selection-background-color: #EAF3FF;
+                selection-color: #111111;
                 padding: 2px;
                 outline: none;
             }}
@@ -227,17 +227,17 @@ class RulerToolbar(QWidget):
         self.unit_combo.setCursor(Qt.PointingHandCursor)
         self.unit_combo.setStyleSheet(f"""
             QComboBox {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_light};
+                background-color: #FFFFFF;
+                color: #111111;
+                border: 1px solid #CFCFCF;
                 border-radius: 6px;
                 padding: 2px 8px;
                 font-size: 11px;
                 font-weight: 500;
             }}
             QComboBox:hover {{
-                background-color: {default_theme.row_bg_hover};
-                border: 1px solid {default_theme.border_medium};
+                background-color: #F7F7F7;
+                border: 1px solid #BDBDBD;
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -247,16 +247,16 @@ class RulerToolbar(QWidget):
                 image: none;
                 border-left: 4px solid transparent;
                 border-right: 4px solid transparent;
-                border-top: 5px solid {default_theme.text_secondary};
+                border-top: 5px solid #111111;
                 margin-right: 6px;
             }}
             QComboBox QAbstractItemView {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_medium};
+                background-color: #FFFFFF;
+                color: #111111;
+                border: 1px solid #CFCFCF;
                 border-radius: 4px;
-                selection-background-color: {default_theme.button_primary};
-                selection-color: {default_theme.text_white};
+                selection-background-color: #EAF3FF;
+                selection-color: #111111;
                 padding: 2px;
                 outline: none;
             }}
@@ -273,26 +273,48 @@ class RulerToolbar(QWidget):
         layout.addWidget(separator2)
         
         # Clear button
-        self.clear_btn = RulerViewButton("Clear")
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.setCursor(Qt.PointingHandCursor)
+        self.clear_btn.setFixedHeight(26)
+        self.clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {default_theme.button_primary};
+                color: #fff;
+                border: 1px solid {default_theme.button_primary_hover};
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 11px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: {default_theme.button_primary_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {default_theme.button_primary_pressed};
+            }}
+        """)
         self.clear_btn.clicked.connect(self._on_clear_clicked)
         layout.addWidget(self.clear_btn)
-        
+
         # Exit button
-        self.exit_btn = QPushButton("✕ Exit")
+        self.exit_btn = QPushButton("\u2715 Exit")
         self.exit_btn.setCursor(Qt.PointingHandCursor)
         self.exit_btn.setFixedHeight(26)
         self.exit_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_light};
+                background-color: {default_theme.button_primary};
+                color: #fff;
+                border: 1px solid {default_theme.button_primary_hover};
                 border-radius: 6px;
                 padding: 4px 12px;
                 font-size: 11px;
+                font-weight: 500;
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
-                border: 1px solid {default_theme.border_medium};
+                background-color: {default_theme.button_primary_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {default_theme.button_primary_pressed};
             }}
         """)
         self.exit_btn.clicked.connect(self._on_exit_clicked)

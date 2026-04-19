@@ -370,13 +370,18 @@ class ScreenshotEditorDialog(QDialog):
         # Color button
         self._color_btn = QPushButton("")
         self._color_btn.setToolTip("Change color")
-        self._color_btn.setFixedSize(32, 32)
+        self._color_btn.setFixedSize(24, 24)
         self._color_btn.setCursor(Qt.PointingHandCursor)
         self._color_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self._current_color};
                 border: 2px solid {default_theme.border_standard};
                 border-radius: 6px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                padding: 0px;
             }}
             QPushButton:hover {{
                 border: 2px solid {default_theme.button_primary};
@@ -499,6 +504,11 @@ class ScreenshotEditorDialog(QDialog):
                 background-color: {color};
                 border: 2px solid {default_theme.border_standard};
                 border-radius: 6px;
+                min-width: 24px;
+                max-width: 24px;
+                min-height: 24px;
+                max-height: 24px;
+                padding: 0px;
             }}
             QPushButton:hover {{
                 border: 2px solid {default_theme.button_primary};

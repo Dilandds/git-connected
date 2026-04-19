@@ -153,22 +153,24 @@ class STLViewerWidget(QWidget):
                 font-weight: bold;
                 border: 1px solid #2A3F60;
                 border-radius: 10px;
-                padding: 5px 10px;
+                padding: 3px 8px;
                 letter-spacing: 0.5px;
             }
         """)
         overlay_layout = QVBoxLayout(self._object_control_overlay)
-        overlay_layout.setContentsMargins(8, 8, 8, 10)
-        overlay_layout.setSpacing(6)
+        overlay_layout.setContentsMargins(4, 4, 4, 4)
+        overlay_layout.setSpacing(2)
         self._object_control_title = QLabel("3D Control")
         self._object_control_title.setObjectName("ObjectControlTitle")
         self._object_control_title.setAlignment(Qt.AlignCenter)
         overlay_layout.addWidget(self._object_control_title)
         self._orientation_gizmo = OrientationGizmoWidget(self._object_control_overlay)
         overlay_layout.addWidget(self._orientation_gizmo, 0, Qt.AlignCenter)
+        title_h = self._object_control_title.sizeHint().height()
+        overlay_h = 4 + title_h + 2 + OrientationGizmoWidget.SIZE + 4
         self._object_control_overlay.setFixedSize(
-            OrientationGizmoWidget.SIZE + 30,
-            OrientationGizmoWidget.SIZE + 60
+            OrientationGizmoWidget.SIZE + 12,
+            overlay_h
         )
         self._orientation_gizmo.rotation_delta.connect(self._on_gizmo_rotate)
         self._object_control_overlay.hide()

@@ -2,6 +2,7 @@
 Screenshot panel — displays captured screenshots in a 2-column grid with Delete / Save actions.
 """
 import logging
+import sys
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -137,6 +138,8 @@ class ScreenshotCard(QFrame):
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 2, 0, 0)
         actions.setSpacing(4)
+        _btn_font_px = 11 if sys.platform == 'win32' else 10
+        _btn_padding = "4px 7px" if sys.platform == 'win32' else "3px 6px"
 
         self.delete_btn = QPushButton("🗑 Delete")
         self.delete_btn.setObjectName("screenshotDeleteBtn")
@@ -147,8 +150,8 @@ class ScreenshotCard(QFrame):
                 color: #DC2626;
                 border: 1px solid #FECACA;
                 border-radius: 5px;
-                padding: 3px 6px;
-                font-size: 9px;
+                padding: {_btn_padding};
+                font-size: {_btn_font_px}px;
                 font-weight: bold;
             }}
             QPushButton#screenshotDeleteBtn:hover {{
@@ -167,8 +170,8 @@ class ScreenshotCard(QFrame):
                 color: #059669;
                 border: 1px solid #A7F3D0;
                 border-radius: 5px;
-                padding: 3px 6px;
-                font-size: 9px;
+                padding: {_btn_padding};
+                font-size: {_btn_font_px}px;
                 font-weight: bold;
             }}
             QPushButton#screenshotSaveBtn:hover {{

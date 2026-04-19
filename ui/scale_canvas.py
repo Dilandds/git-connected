@@ -939,13 +939,13 @@ class ScaleCanvas(QWidget):
             if major_idx > 0:
                 label_text = fmt(major_idx, label_step)
                 painter.setPen(label_color)
-                painter.save()
                 if left:
-                    painter.translate(base_x - 14 - 28, iy + 5)
+                    # Keep text fully inside the left ruler panel (prevents clipping).
+                    text_rect = QRectF(2, iy - 7, max(8, base_x - 18), 14)
+                    painter.drawText(text_rect, Qt.AlignRight | Qt.AlignVCenter, label_text)
                 else:
-                    painter.translate(base_x + 14 + 2, iy + 5)
-                painter.drawText(0, 0, label_text)
-                painter.restore()
+                    text_rect = QRectF(base_x + 16, iy - 7, RULER_THICKNESS - 18, 14)
+                    painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, label_text)
             major_idx += 1
 
     # ---- interaction ----

@@ -156,7 +156,9 @@ class _PartsMenuRow(QWidget):
 _TB_BG = "#ffffff"
 _TB_FG = "#000000"
 _TB_HOVER = "#f0f0f0"
+_TB_ACTIVE = "#c8c8c8"
 _TB_BORDER = "#d0d0d0"
+_TB_ACTIVE_BORDER = "#a8a8a8"
 
 
 def _toolbar_label_font(size=10):
@@ -285,8 +287,13 @@ class ToolbarButton(QPushButton):
         if self._is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {_TB_BG};
-                    border: 1px solid {default_theme.border_highlight};
+                    background-color: {_TB_ACTIVE};
+                    border: 1px solid {_TB_ACTIVE_BORDER};
+                    border-radius: 6px;
+                }}
+                QPushButton:pressed {{
+                    background-color: {_TB_ACTIVE};
+                    border: 1px solid {_TB_ACTIVE_BORDER};
                     border-radius: 6px;
                 }}
             """)
@@ -297,6 +304,11 @@ class ToolbarButton(QPushButton):
                     border: 1px solid transparent;
                     border-radius: 6px;
                 }}
+                QPushButton:pressed {{
+                    background-color: {_TB_ACTIVE};
+                    border: 1px solid {_TB_BORDER};
+                    border-radius: 6px;
+                }}
             """)
     
     def _apply_hover_style(self):
@@ -304,8 +316,13 @@ class ToolbarButton(QPushButton):
         if self._is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {_TB_HOVER};
-                    border: 1px solid {default_theme.border_highlight};
+                    background-color: {_TB_ACTIVE};
+                    border: 1px solid {_TB_ACTIVE_BORDER};
+                    border-radius: 6px;
+                }}
+                QPushButton:pressed {{
+                    background-color: {_TB_ACTIVE};
+                    border: 1px solid {_TB_ACTIVE_BORDER};
                     border-radius: 6px;
                 }}
             """)
@@ -313,6 +330,11 @@ class ToolbarButton(QPushButton):
             self.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {_TB_HOVER};
+                    border: 1px solid {_TB_BORDER};
+                    border-radius: 6px;
+                }}
+                QPushButton:pressed {{
+                    background-color: {_TB_ACTIVE};
                     border: 1px solid {_TB_BORDER};
                     border-radius: 6px;
                 }}
@@ -559,7 +581,7 @@ class ViewControlsToolbar(QWidget):
         
         _anno_icon = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets", "annotation_icon.png"))
         self.annotation_btn = ToolbarButton(
-            "📝", "Annotate ▼", "Add annotations or 3D arrows",
+            "📝", "Annotation ▼", "Add annotations or 3D arrows",
             icon_path=_anno_icon if os.path.exists(_anno_icon) else None
         )
         self.annotation_btn.clicked.connect(self._show_annotate_menu)
@@ -571,7 +593,7 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.screenshot_btn)
         
-        self.texture_btn = ToolbarButton("🎨", "Texture", "Upload and apply textures to model parts")
+        self.texture_btn = ToolbarButton("🎨", "Render mode", "Upload and apply textures to model parts")
         self.texture_btn.clicked.connect(self._on_texture_clicked)
         self.texture_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.texture_btn)
@@ -871,7 +893,7 @@ class ViewControlsToolbar(QWidget):
         self.toggle_ruler.emit()
     
     def _show_annotate_menu(self):
-        """Show dropdown menu with Annotate and 3D Arrow options."""
+        """Show dropdown menu with Annotation and 3D Arrow options."""
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -893,7 +915,7 @@ class ViewControlsToolbar(QWidget):
             }}
         """)
 
-        annotate_action = menu.addAction("📝  Annotate")
+        annotate_action = menu.addAction("📝  Annotation")
         annotate_action.setCheckable(True)
         annotate_action.setChecked(self.annotation_mode_enabled)
         annotate_action.triggered.connect(self._on_annotation_selected)
@@ -916,7 +938,7 @@ class ViewControlsToolbar(QWidget):
 
         self.annotation_mode_enabled = not self.annotation_mode_enabled
         if self.annotation_mode_enabled:
-            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_label("Annotation ▼")
             self.annotation_btn.set_icon("✏️")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
@@ -935,7 +957,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
         else:
-            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_label("Annotation ▼")
             self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(self.annotation_mode_enabled)
         self.toggle_annotation.emit()
@@ -969,7 +991,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
         else:
-            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_label("Annotation ▼")
             self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(self.arrow_mode_enabled)
         self.toggle_arrow.emit()

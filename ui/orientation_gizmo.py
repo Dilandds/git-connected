@@ -5,7 +5,7 @@ Used by both PyVista and pygfx viewers.
 import sys
 from pathlib import Path
 from PyQt5.QtWidgets import QWidget, QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF
+from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPixmap
 
 
@@ -25,6 +25,7 @@ class OrientationGizmoWidget(QWidget):
     rotation_delta = pyqtSignal(float, float)  # dx, dy in pixels
 
     SIZE = 120
+    RENDER_SCALE = 1.75
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,6 +36,33 @@ class OrientationGizmoWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         path = _get_xyz_gizmo_path()
         self._gizmo_pixmap = QPixmap(str(path)) if path.exists() else None
+        self._gizmo_source_rect = self._compute_non_transparent_rect(self._gizmo_pixmap)
+
+    @staticmethod
+    def _compute_non_transparent_rect(pixmap: QPixmap):
+        """Return alpha-bounds rect to trim transparent padding around gizmo image."""
+        if pixmap is None or pixmap.isNull():
+            return None
+        image = pixmap.toImage().convertToFormat(4)  # QImage.Format_ARGB32
+        width, height = image.width(), image.height()
+        min_x, min_y = width, height
+        max_x, max_y = -1, -1
+
+        for y in range(height):
+            for x in range(width):
+                if image.pixelColor(x, y).alpha() > 8:
+                    if x < min_x:
+                        min_x = x
+                    if y < min_y:
+                        min_y = y
+                    if x > max_x:
+                        max_x = x
+                    if y > max_y:
+                        max_y = y
+
+        if max_x < min_x or max_y < min_y:
+            return None
+        return QRect(min_x, min_y, (max_x - min_x + 1), (max_y - min_y + 1))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -62,9 +90,12 @@ class OrientationGizmoWidget(QWidget):
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         w, h = self.width(), self.height()
         if self._gizmo_pixmap and not self._gizmo_pixmap.isNull():
-            scaled = self._gizmo_pixmap.scaled(
-                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+            source = self._gizmo_pixmap
+            if self._gizmo_source_rect is not None and not self._gizmo_source_rect.isEmpty():
+                source = self._gizmo_pixmap.copy(self._gizmo_source_rect)
+            target_w = max(1, int(w * self.RENDER_SCALE))
+            target_h = max(1, int(h * self.RENDER_SCALE))
+            scaled = source.scaled(target_w, target_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             x = (w - scaled.width()) // 2
             y = (h - scaled.height()) // 2
             painter.drawPixmap(x, y, scaled)

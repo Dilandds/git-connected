@@ -1209,6 +1209,10 @@ class TexturePanel(QWidget):
             settings["crease_angle"] = self._slider_crease_angle.value()
         self.texture_settings_changed.emit(settings)
 
+    def emit_current_settings(self):
+        """Emit current slider values without requiring a slider move."""
+        self._emit_settings()
+
     def _init_ui(self):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -1290,22 +1294,22 @@ class TexturePanel(QWidget):
         reset_btn.setCursor(Qt.PointingHandCursor)
         reset_btn.setToolTip("Remove all applied textures and return to the default view")
         reset_btn.setFixedHeight(24)
-        reset_btn.setStyleSheet("""
-            QPushButton#resetTextureBtn {
-                background-color: rgba(255, 255, 255, 0.18);
-                border: 1px solid rgba(255, 255, 255, 0.45);
-                color: #FFFFFF;
+        reset_btn.setStyleSheet(f"""
+            QPushButton#resetTextureBtn {{
+                background-color: {default_theme.button_primary};
+                border: 1px solid {default_theme.button_primary_hover};
+                color: #fff;
                 font-size: 10px;
                 font-weight: 600;
                 padding: 2px 10px;
                 border-radius: 12px;
-            }
-            QPushButton#resetTextureBtn:hover {
-                background-color: rgba(255, 255, 255, 0.30);
-            }
-            QPushButton#resetTextureBtn:pressed {
-                background-color: rgba(255, 255, 255, 0.42);
-            }
+            }}
+            QPushButton#resetTextureBtn:hover {{
+                background-color: {default_theme.button_primary_hover};
+            }}
+            QPushButton#resetTextureBtn:pressed {{
+                background-color: {default_theme.button_primary_pressed};
+            }}
         """)
         reset_btn.clicked.connect(self.reset_textures_requested.emit)
         title_row.addWidget(reset_btn)
@@ -1314,20 +1318,22 @@ class TexturePanel(QWidget):
         exit_btn.setObjectName("exitTextureBtn")
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.setFixedSize(28, 28)
-        exit_btn.setStyleSheet("""
-            QPushButton#exitTextureBtn {
-                background-color: transparent;
-                border: none;
-                color: rgba(255, 255, 255, 0.92);
+        exit_btn.setStyleSheet(f"""
+            QPushButton#exitTextureBtn {{
+                background-color: {default_theme.button_primary};
+                border: 1px solid {default_theme.button_primary_hover};
+                color: #fff;
                 font-size: 16px;
                 font-weight: bold;
                 padding: 0; min-width: 28px; min-height: 28px;
-            }
-            QPushButton#exitTextureBtn:hover {
-                color: #FFFFFF;
-                background-color: rgba(0, 0, 0, 0.18);
                 border-radius: 14px;
-            }
+            }}
+            QPushButton#exitTextureBtn:hover {{
+                background-color: {default_theme.button_primary_hover};
+            }}
+            QPushButton#exitTextureBtn:pressed {{
+                background-color: {default_theme.button_primary_pressed};
+            }}
         """)
         exit_btn.clicked.connect(self.exit_texture_mode.emit)
         title_row.addWidget(exit_btn)
@@ -1573,8 +1579,8 @@ class TexturePanel(QWidget):
         row, self._slider_smoothness, _ = self._create_slider_row("Smoothness", 0, 100, 100, "%")
         layout.addWidget(row)
 
-        # Crease Angle: 0-180 degrees (edges sharper than this stay hard)
-        row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 30, u"\u00b0")
+        # Crease Angle: 0-180 degrees (lower = sharper shaded view by default)
+        row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 10, u"\u00b0")
         layout.addWidget(row)
 
         layout.addStretch()

@@ -920,6 +920,7 @@ class STLViewerWindow(QMainWindow):
         if tab.texture_mode_active:
             self.toolbar.texture_mode_enabled = True
             self.toolbar.texture_btn.set_active(True)
+            self._apply_current_texture_settings()
         else:
             if self.toolbar.texture_mode_enabled:
                 self._exit_texture_mode()
@@ -1369,6 +1370,9 @@ class STLViewerWindow(QMainWindow):
             
             # Keep 3D view aligned with toolbar (default visual style is shaded)
             self._set_render_mode(self.toolbar.render_mode)
+
+            # Ensure initial shading matches current texture panel slider defaults
+            self._apply_current_texture_settings()
     
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
@@ -2040,6 +2044,17 @@ class STLViewerWindow(QMainWindow):
 
     # ========== Texture Mode Methods ==========
 
+    def _apply_current_texture_settings(self):
+        """Apply current texture panel slider values to the active viewer."""
+        try:
+            if self.texture_panel and hasattr(self.texture_panel, 'emit_current_settings'):
+                self.texture_panel.emit_current_settings()
+            elif self.texture_panel and hasattr(self.texture_panel, '_emit_settings'):
+                # Backward-compatible fallback
+                self.texture_panel._emit_settings()
+        except Exception as e:
+            logger.warning(f"_apply_current_texture_settings: {e}")
+
     def _toggle_texture_mode(self):
         """Toggle texture application mode."""
         vw = self.viewer_widget
@@ -2066,6 +2081,7 @@ class STLViewerWindow(QMainWindow):
             self.texture_panel.show()
             self.right_panel_stack.setCurrentWidget(self.texture_stack)
             self.right_panel_stack.show()
+            self._apply_current_texture_settings()
             if hasattr(vw, 'reframe_for_viewport'):
                 QTimer.singleShot(50, vw.reframe_for_viewport)
             logger.info("_toggle_texture_mode: Texture mode enabled")
@@ -2622,6 +2638,7 @@ class STLViewerWindow(QMainWindow):
             self.toolbar.set_stl_loaded(True)
             
             self._set_render_mode(self.toolbar.render_mode)
+            self._apply_current_texture_settings()
             
             if hasattr(vw, 'current_mesh'):
                 mesh = vw.current_mesh
