@@ -8,7 +8,7 @@
   "sidebar": {
     "title": "ECTOFORM",
     "upload_btn": "Importer un Fichier 3D",
-    "upload_info": "Cliquez sur le bouton ci-dessus\npour charger un fichier 3D (STL, STEP, 3DM, OBJ, IGES, ECTO)\npour la visualisation 3D.",
+    "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .ECTO",
     "upload_tooltip": "Importer un fichier STL, STEP, 3DM, OBJ ou IGES pour la visualisation 3D",
     "dimensions": "Dimensions",
     "length_x": "Longueur (X)",
