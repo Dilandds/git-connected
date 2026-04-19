@@ -354,7 +354,7 @@ class ScreenshotEditorDialog(QDialog):
         toolbar.addWidget(sep)
 
         # Color button
-        self._color_btn = QPushButton("🎨")
+        self._color_btn = QPushButton("")
         self._color_btn.setToolTip("Change color")
         self._color_btn.setFixedSize(32, 32)
         self._color_btn.setCursor(Qt.PointingHandCursor)
