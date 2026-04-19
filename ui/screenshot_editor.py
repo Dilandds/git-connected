@@ -161,15 +161,18 @@ class _EditorCanvas(QWidget):
         """Paint all annotations. Used for both display and burn-in."""
         # Lines
         for start, end, color, width in self._lines:
+            painter.save()
             pen = QPen(QColor(color), width * scale)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
             s = QPointF(start.x() * scale + offset.x(), start.y() * scale + offset.y())
             e = QPointF(end.x() * scale + offset.x(), end.y() * scale + offset.y())
             painter.drawLine(s, e)
+            painter.restore()
 
         # Arrows
         for start, end, color, width in self._arrows:
+            painter.save()
             pen = QPen(QColor(color), width * scale)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
@@ -177,39 +180,41 @@ class _EditorCanvas(QWidget):
             e = QPointF(end.x() * scale + offset.x(), end.y() * scale + offset.y())
             painter.drawLine(s, e)
             self._draw_arrowhead(painter, s, e, color, width * scale)
+            painter.restore()
 
         # Texts
         for pos, text, color, font_size in self._texts:
+            painter.save()
             font = QFont("Arial", max(1, int(font_size * scale)))
             font.setBold(True)
             painter.setFont(font)
             painter.setPen(QColor(color))
             p = QPointF(pos.x() * scale + offset.x(), pos.y() * scale + offset.y())
             painter.drawText(p, text)
+            painter.restore()
 
     def _draw_arrowhead(self, painter, start: QPointF, end: QPointF, color: str, width: float):
         """Draw an arrowhead at the end point."""
         import math
+        from PyQt5.QtGui import QPolygonF, QBrush
         dx = end.x() - start.x()
         dy = end.y() - start.y()
         length = math.sqrt(dx * dx + dy * dy)
         if length < 1:
             return
-        # Normalize
         ux, uy = dx / length, dy / length
-        # Arrow size proportional to line width
         arrow_len = max(12, width * 4)
         arrow_w = arrow_len * 0.5
-        # Two points for arrowhead
         bx = end.x() - ux * arrow_len
         by = end.y() - uy * arrow_len
         p1 = QPointF(bx + uy * arrow_w, by - ux * arrow_w)
         p2 = QPointF(bx - uy * arrow_w, by + ux * arrow_w)
-        from PyQt5.QtGui import QPolygonF, QBrush
+        painter.save()
         polygon = QPolygonF([end, p1, p2])
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(QColor(color)))
         painter.drawPolygon(polygon)
+        painter.restore()
 
     # ---- mouse events ----
 
@@ -221,6 +226,9 @@ class _EditorCanvas(QWidget):
             self._drawing = True
             self._draw_start = img_pos
             self._draw_current = img_pos
+            self._draw_start_widget = QPointF(event.pos())
+            logger.info(f"ScreenshotEditor: start drawing {self._tool} at image {img_pos.x():.1f},{img_pos.y():.1f}")
+            self.update()
         elif self._tool == TOOL_TEXT:
             text, ok = QInputDialog.getText(self, "Add Text", "Enter text:")
             if ok and text.strip():
@@ -237,16 +245,22 @@ class _EditorCanvas(QWidget):
         if event.button() == Qt.LeftButton and self._drawing:
             self._drawing = False
             end_pos = self._widget_to_image(event.pos())
-            # Only add if has some length
-            dx = end_pos.x() - self._draw_start.x()
-            dy = end_pos.y() - self._draw_start.y()
-            if (dx * dx + dy * dy) > 25:
+            # Use widget-space distance to decide if drag was meaningful (>=4px in widget)
+            start_w = getattr(self, '_draw_start_widget', QPointF(event.pos()))
+            wdx = event.pos().x() - start_w.x()
+            wdy = event.pos().y() - start_w.y()
+            widget_dist_sq = wdx * wdx + wdy * wdy
+            if widget_dist_sq > 16:  # > 4px drag in widget space
                 if self._tool == TOOL_LINE:
                     self._lines.append((self._draw_start, end_pos, self._color, self._line_width))
                     self._undo_stack.append(('line', len(self._lines) - 1))
+                    logger.info(f"ScreenshotEditor: added line, total={len(self._lines)}")
                 elif self._tool == TOOL_ARROW:
                     self._arrows.append((self._draw_start, end_pos, self._color, self._line_width))
                     self._undo_stack.append(('arrow', len(self._arrows) - 1))
+                    logger.info(f"ScreenshotEditor: added arrow, total={len(self._arrows)}")
+            else:
+                logger.info(f"ScreenshotEditor: drag too short (widget dist²={widget_dist_sq:.1f}), ignored")
             self.update()
 
     def resizeEvent(self, event):
