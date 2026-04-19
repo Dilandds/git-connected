@@ -2244,9 +2244,8 @@ class STLViewerWidget(QWidget):
         self._screenshot_overlay.raise_()
         self._screenshot_overlay.show()
         self.screenshot_mode = True
-        # Show zoom controls (bottom-left) and rotation gizmo (bottom-right)
-        self._zoom_controls_overlay.show()
-        self._zoom_controls_overlay.raise_()
+        # Zoom buttons removed in screenshot mode; keep rotation gizmo only
+        self._zoom_controls_overlay.hide()
         self._object_control_overlay.show()
         self._object_control_overlay.raise_()
         return True
