@@ -696,8 +696,65 @@ class ScaleCanvas(QWidget):
             painter.setPen(QColor("#2E7D32"))
             painter.drawText(bg_rect, Qt.AlignCenter, label)
 
+    # ---- Adaptive ruler step computation ----
+
+    # Minimum on-screen pixels between two labels.
+    _MIN_LABEL_PX = 40
+    # Minimum on-screen pixels between two minor ticks (skip if tighter).
+    _MIN_MINOR_PX = 3
+
+    def _compute_label_step(self, ppu: float):
+        """
+        Pick a "nice" label step (in base sub-units) so labels are at least
+        _MIN_LABEL_PX pixels apart on screen.
+
+        Returns: (step_in_base_sub_units, ppu_per_base_sub_unit, format_label_callback)
+        - For "cm":     base sub-unit = 1 cm,  candidates in cm
+        - For "mm":     base sub-unit = 1 mm,  candidates in mm
+        - For "inches": base sub-unit = 1 in,  candidates in inches
+        - For "m":      base sub-unit = 1 cm,  candidates in cm (label may render as m)
+        """
+        unit = self._unit
+
+        if unit == "cm":
+            ppu_base = ppu  # ppu is per-cm
+            candidates = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+            def fmt(idx, step):
+                return str(idx * step)
+        elif unit == "mm":
+            ppu_base = ppu  # ppu is per-mm
+            candidates = [1, 2, 5, 10, 20, 50, 100, 200, 500]
+            def fmt(idx, step):
+                val_mm = idx * step
+                if val_mm >= 100 and val_mm % 10 == 0:
+                    return f"{val_mm // 10}cm"
+                return str(val_mm)
+        elif unit == "inches":
+            ppu_base = ppu  # ppu is per-inch
+            candidates = [1, 2, 5, 10, 20, 50, 100]
+            def fmt(idx, step):
+                return str(idx * step)
+        else:  # "m" — work in cm sub-units for finer control
+            ppu_base = ppu / 100.0  # convert per-m → per-cm
+            candidates = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+            def fmt(idx, step):
+                val_cm = idx * step
+                if val_cm >= 100 and val_cm % 100 == 0:
+                    return f"{val_cm // 100}m"
+                return f"{val_cm}cm"
+
+        if ppu_base <= 0:
+            return candidates[-1], ppu_base, fmt
+
+        chosen = candidates[-1]
+        for c in candidates:
+            if c * ppu_base >= self._MIN_LABEL_PX:
+                chosen = c
+                break
+        return chosen, ppu_base, fmt
+
     def _draw_ruler_frame(self, painter: QPainter):
-        """Draw graduated ruler borders on all 4 edges."""
+        """Draw graduated ruler borders on all 4 edges with adaptive labeling."""
         w, h = self.width(), self.height()
         ppu = self._pixels_per_unit()
 
@@ -719,37 +776,32 @@ class ScaleCanvas(QWidget):
         label_color = QColor("#222222")
         pen_thin = QPen(tick_color, 1)
 
-        font = QFont("Segoe UI", 7)
+        font = QFont("Segoe UI", 8)
         painter.setFont(font)
 
-        if self._unit == "mm":
-            minor_px = ppu
-            major_px = ppu * 10
-            label_every = 10
-        elif self._unit == "inches":
-            minor_px = ppu / 8
-            major_px = ppu
-            label_every = 1
-        elif self._unit == "m":
-            minor_px = ppu / 100  # 1 cm subdivisions for meter
-            major_px = ppu / 10   # 10 cm major ticks
-            label_every = 10
-        else:  # cm
-            minor_px = ppu / 10
-            major_px = ppu
-            label_every = 1
+        # Adaptive step computation
+        label_step, ppu_base, fmt = self._compute_label_step(ppu)
+        label_step_px = label_step * ppu_base
+        medium_step_px = label_step_px / 2.0
+        minor_step_px = label_step_px / 10.0
 
-        if minor_px < 2:
-            minor_px = 2
+        if label_step_px <= 0:
+            return  # nothing meaningful to draw
 
-        self._draw_ruler_ticks_horizontal(painter, pen_thin, label_color, font,
-                                           minor_px, major_px, label_every, top=True)
-        self._draw_ruler_ticks_horizontal(painter, pen_thin, label_color, font,
-                                           minor_px, major_px, label_every, top=False)
-        self._draw_ruler_ticks_vertical(painter, pen_thin, label_color, font,
-                                         minor_px, major_px, label_every, left=True)
-        self._draw_ruler_ticks_vertical(painter, pen_thin, label_color, font,
-                                         minor_px, major_px, label_every, left=False)
+        draw_minor = minor_step_px >= self._MIN_MINOR_PX
+
+        for top in (True, False):
+            self._draw_ruler_ticks_horizontal(
+                painter, pen_thin, label_color, font,
+                label_step_px, medium_step_px, minor_step_px,
+                draw_minor, fmt, label_step, top=top,
+            )
+        for left in (True, False):
+            self._draw_ruler_ticks_vertical(
+                painter, pen_thin, label_color, font,
+                label_step_px, medium_step_px, minor_step_px,
+                draw_minor, fmt, label_step, left=left,
+            )
 
         # Border lines
         border_pen = QPen(QColor("#bbbbbb"), 1)
@@ -758,7 +810,8 @@ class ScaleCanvas(QWidget):
                          w - 2 * RULER_THICKNESS, h - 2 * RULER_THICKNESS)
 
     def _draw_ruler_ticks_horizontal(self, painter, pen, label_color, font,
-                                      minor_px, major_px, label_every, top: bool):
+                                      label_step_px, medium_step_px, minor_step_px,
+                                      draw_minor, fmt, label_step, top: bool):
         w = self.width()
         start_x = RULER_THICKNESS
         end_x = w - RULER_THICKNESS
@@ -768,56 +821,65 @@ class ScaleCanvas(QWidget):
         else:
             base_y = self.height() - RULER_THICKNESS
 
-        tick_idx = 0
-        x = start_x
-        while x <= end_x:
-            if major_px > 0 and minor_px > 0:
-                ticks_per_major = max(1, round(major_px / minor_px))
-            else:
-                ticks_per_major = 10
-
-            is_major = (tick_idx % ticks_per_major == 0) if ticks_per_major > 0 else False
-            is_medium = (tick_idx % max(1, ticks_per_major // 2) == 0) if not is_major else False
-
-            if is_major:
-                tick_len = 14
-            elif is_medium:
-                tick_len = 9
-            else:
-                tick_len = 5
-
+        # Minor ticks
+        if draw_minor and minor_step_px > 0:
             painter.setPen(pen)
-            ix = int(x)
-            if top:
-                painter.drawLine(ix, base_y - tick_len, ix, base_y)
-            else:
-                painter.drawLine(ix, base_y, ix, base_y + tick_len)
-
-            if is_major and tick_idx > 0:
-                major_idx = tick_idx // ticks_per_major
-                if self._unit == "mm":
-                    label_text = str(major_idx * 10)
-                elif self._unit == "m":
-                    label_text = f"{major_idx * 10}cm"
-                elif self._unit == "inches":
-                    label_text = str(major_idx)
-                else:
-                    label_text = str(major_idx)
-
-                painter.setPen(label_color)
-                painter.setFont(font)
+            i = 0
+            while True:
+                x = start_x + i * minor_step_px
+                if x > end_x:
+                    break
+                ix = int(x)
                 if top:
-                    painter.drawText(ix - 12, base_y - tick_len - 14, 24, 12,
+                    painter.drawLine(ix, base_y - 5, ix, base_y)
+                else:
+                    painter.drawLine(ix, base_y, ix, base_y + 5)
+                i += 1
+
+        # Medium ticks
+        if medium_step_px > 0:
+            painter.setPen(pen)
+            i = 0
+            while True:
+                x = start_x + i * medium_step_px
+                if x > end_x:
+                    break
+                if i % 2 != 0:  # skip those overlapping major
+                    ix = int(x)
+                    if top:
+                        painter.drawLine(ix, base_y - 9, ix, base_y)
+                    else:
+                        painter.drawLine(ix, base_y, ix, base_y + 9)
+                i += 1
+
+        # Major ticks + labels
+        painter.setFont(font)
+        major_idx = 0
+        while True:
+            x = start_x + major_idx * label_step_px
+            if x > end_x:
+                break
+            ix = int(x)
+            painter.setPen(pen)
+            if top:
+                painter.drawLine(ix, base_y - 14, ix, base_y)
+            else:
+                painter.drawLine(ix, base_y, ix, base_y + 14)
+
+            if major_idx > 0:
+                label_text = fmt(major_idx, label_step)
+                painter.setPen(label_color)
+                if top:
+                    painter.drawText(ix - 24, base_y - 14 - 14, 48, 12,
                                      Qt.AlignCenter, label_text)
                 else:
-                    painter.drawText(ix - 12, base_y + tick_len + 2, 24, 12,
+                    painter.drawText(ix - 24, base_y + 14 + 2, 48, 12,
                                      Qt.AlignCenter, label_text)
-
-            x += minor_px
-            tick_idx += 1
+            major_idx += 1
 
     def _draw_ruler_ticks_vertical(self, painter, pen, label_color, font,
-                                    minor_px, major_px, label_every, left: bool):
+                                    label_step_px, medium_step_px, minor_step_px,
+                                    draw_minor, fmt, label_step, left: bool):
         h = self.height()
         start_y = RULER_THICKNESS
         end_y = h - RULER_THICKNESS
@@ -827,54 +889,62 @@ class ScaleCanvas(QWidget):
         else:
             base_x = self.width() - RULER_THICKNESS
 
-        tick_idx = 0
-        y = start_y
-        while y <= end_y:
-            if major_px > 0 and minor_px > 0:
-                ticks_per_major = max(1, round(major_px / minor_px))
-            else:
-                ticks_per_major = 10
-
-            is_major = (tick_idx % ticks_per_major == 0) if ticks_per_major > 0 else False
-            is_medium = (tick_idx % max(1, ticks_per_major // 2) == 0) if not is_major else False
-
-            if is_major:
-                tick_len = 14
-            elif is_medium:
-                tick_len = 9
-            else:
-                tick_len = 5
-
+        # Minor ticks
+        if draw_minor and minor_step_px > 0:
             painter.setPen(pen)
-            iy = int(y)
-            if left:
-                painter.drawLine(base_x - tick_len, iy, base_x, iy)
-            else:
-                painter.drawLine(base_x, iy, base_x + tick_len, iy)
-
-            if is_major and tick_idx > 0:
-                major_idx = tick_idx // ticks_per_major
-                if self._unit == "mm":
-                    label_text = str(major_idx * 10)
-                elif self._unit == "m":
-                    label_text = f"{major_idx * 10}cm"
-                elif self._unit == "inches":
-                    label_text = str(major_idx)
+            i = 0
+            while True:
+                y = start_y + i * minor_step_px
+                if y > end_y:
+                    break
+                iy = int(y)
+                if left:
+                    painter.drawLine(base_x - 5, iy, base_x, iy)
                 else:
-                    label_text = str(major_idx)
+                    painter.drawLine(base_x, iy, base_x + 5, iy)
+                i += 1
 
+        # Medium ticks
+        if medium_step_px > 0:
+            painter.setPen(pen)
+            i = 0
+            while True:
+                y = start_y + i * medium_step_px
+                if y > end_y:
+                    break
+                if i % 2 != 0:
+                    iy = int(y)
+                    if left:
+                        painter.drawLine(base_x - 9, iy, base_x, iy)
+                    else:
+                        painter.drawLine(base_x, iy, base_x + 9, iy)
+                i += 1
+
+        # Major ticks + labels
+        painter.setFont(font)
+        major_idx = 0
+        while True:
+            y = start_y + major_idx * label_step_px
+            if y > end_y:
+                break
+            iy = int(y)
+            painter.setPen(pen)
+            if left:
+                painter.drawLine(base_x - 14, iy, base_x, iy)
+            else:
+                painter.drawLine(base_x, iy, base_x + 14, iy)
+
+            if major_idx > 0:
+                label_text = fmt(major_idx, label_step)
                 painter.setPen(label_color)
-                painter.setFont(font)
                 painter.save()
                 if left:
-                    painter.translate(base_x - tick_len - 14, iy + 5)
+                    painter.translate(base_x - 14 - 28, iy + 5)
                 else:
-                    painter.translate(base_x + tick_len + 2, iy + 5)
+                    painter.translate(base_x + 14 + 2, iy + 5)
                 painter.drawText(0, 0, label_text)
                 painter.restore()
-
-            y += minor_px
-            tick_idx += 1
+            major_idx += 1
 
     # ---- interaction ----
 
