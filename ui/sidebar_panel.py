@@ -310,6 +310,10 @@ class SidebarPanel(QWidget):
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(title_label)
+        header_layout.addWidget(self._make_help_badge(
+            "Calculated surface area: Sum of the areas of all triangles in the 3D mesh. "
+            "Useful for estimating galvanizing or surface treatment costs."
+        ))
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addLayout(header_layout)
@@ -320,41 +324,6 @@ class SidebarPanel(QWidget):
         
         card_layout.addWidget(self.surface_total_row)
         card_layout.addWidget(self.surface_cm_row)
-        
-        # Information footer — explicit white + WA_StyledBackground so it paints on the gradient card
-        footer_frame = QFrame()
-        footer_frame.setObjectName("surfaceFooter")
-        footer_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        footer_frame.setMinimumHeight(40)
-        footer_frame.setStyleSheet("""
-            QFrame#surfaceFooter {
-                background-color: #ffffff;
-                border: 1px solid #d0d0d0;
-                border-radius: 6px;
-            }
-        """)
-        footer_frame.setAttribute(Qt.WA_StyledBackground, True)
-        
-        footer_layout = QHBoxLayout(footer_frame)
-        footer_layout.setContentsMargins(10, 8, 10, 8)
-        footer_layout.setSpacing(8)
-        
-        info_icon = QLabel("ℹ️")
-        info_icon.setStyleSheet("color: #000000; font-size: 12px; background: transparent;")
-        info_icon.setFixedWidth(20)
-        info_icon.setAlignment(Qt.AlignTop)
-        
-        disclaimer = QLabel("Calculated surface area: Sum of the areas of all triangles in the 3D mesh. Useful for estimating galvanizing or surface treatment costs.")
-        disclaimer_font = make_font(size=9)
-        disclaimer.setFont(disclaimer_font)
-        disclaimer.setStyleSheet("color: #000000; background: transparent; border: none;")
-        disclaimer.setWordWrap(True)
-        
-        footer_layout.addWidget(info_icon)
-        footer_layout.addWidget(disclaimer)
-        footer_layout.addStretch()
-        
-        card_layout.addWidget(footer_frame)
         
         self._style_section_card(card)
         
