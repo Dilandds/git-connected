@@ -106,7 +106,34 @@ class SidebarPanel(QWidget):
         card.setStyleSheet(f"QFrame#{name} {{ {frag} }}")
         card.setAttribute(Qt.WA_StyledBackground, True)
         self._add_card_shadow(card)
-    
+
+    def _make_help_badge(self, tooltip_text: str) -> QLabel:
+        """Create a small circular '?' badge that shows `tooltip_text` on hover.
+
+        Used in section headers in place of always-visible disclaimer footers.
+        """
+        badge = QLabel("?")
+        badge.setFixedSize(18, 18)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setCursor(Qt.WhatsThisCursor)
+        badge.setToolTip(tooltip_text)
+        # Slightly delay-free, multi-line tooltip via rich text
+        badge.setStyleSheet(
+            "QLabel {"
+            "  background-color: rgba(255,255,255,0.18);"
+            "  color: #ffffff;"
+            "  border: 1px solid rgba(255,255,255,0.35);"
+            "  border-radius: 9px;"
+            "  font-size: 11px;"
+            "  font-weight: 700;"
+            "}"
+            "QLabel:hover {"
+            "  background-color: rgba(255,255,255,0.32);"
+            "  border-color: rgba(255,255,255,0.6);"
+            "}"
+        )
+        return badge
+
     def init_ui(self):
         """Initialize the sidebar UI."""
         # Create scroll area
