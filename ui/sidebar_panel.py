@@ -1171,6 +1171,10 @@ class SidebarPanel(QWidget):
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(title_label)
+        header_layout.addWidget(self._make_help_badge(
+            "Single file contains: model + annotations + photos. "
+            "Recipients open it directly in ECTOFORM."
+        ))
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addLayout(header_layout)
