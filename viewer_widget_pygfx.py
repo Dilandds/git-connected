@@ -1342,6 +1342,45 @@ class STLViewerWidget(QWidget):
         """Disabled - no longer snap to mesh vertices. Always return the input point."""
         return world_pos
 
+    def _get_rounded_label_texture(self, char_count: int = 8):
+        """Build (and cache) a rounded-rectangle RGBA texture for measurement labels.
+        Light blue fill (#bfe3ff) with transparent corners. Aspect ratio matches the
+        label plane so the corner radius stays visually circular.
+        """
+        import pygfx as gfx
+        aspect_bucket = max(2, int(round(0.40 * char_count + 1.2)))
+        cache = getattr(self, "_rounded_label_tex_cache", None)
+        if cache is None:
+            cache = {}
+            self._rounded_label_tex_cache = cache
+        if aspect_bucket in cache:
+            return cache[aspect_bucket]
+        h = 64
+        w = max(64, h * aspect_bucket)
+        radius = h * 0.32
+        ys = np.arange(h, dtype=np.float32)[:, None]
+        xs = np.arange(w, dtype=np.float32)[None, :]
+        dx = np.minimum(xs, (w - 1) - xs)
+        dy = np.minimum(ys, (h - 1) - ys)
+        inside_core = (dx >= radius) | (dy >= radius)
+        cx = np.where(dx < radius, dx, radius)
+        cy = np.where(dy < radius, dy, radius)
+        corner_dist = np.sqrt((radius - cx) ** 2 + (radius - cy) ** 2)
+        alpha = np.clip(radius - corner_dist + 0.5, 0.0, 1.0)
+        alpha = np.where(inside_core, 1.0, alpha)
+        rgba = np.zeros((h, w, 4), dtype=np.float32)
+        rgba[..., 0] = 0xBF / 255.0
+        rgba[..., 1] = 0xE3 / 255.0
+        rgba[..., 2] = 0xFF / 255.0
+        rgba[..., 3] = alpha
+        rgba_u8 = (rgba * 255.0).astype(np.uint8)
+        try:
+            tex = gfx.Texture(rgba_u8, dim=2)
+        except Exception:
+            tex = None
+        cache[aspect_bucket] = tex
+        return tex
+
     def _get_camera_view_axes(self):
         """Return (view_right, view_up) in world space for screen-space snapping.
         Uses camera world matrix for reliable axes in Front/Left/Rear/Right ortho views.
@@ -1572,7 +1611,7 @@ class STLViewerWidget(QWidget):
             converted = distance * conversion.get(unit, 1.0)
             suffix = unit_labels.get(unit, "mm")
             label_text = f"{converted:.4f} {suffix}" if converted < 1 else (f"{converted:.2f} {suffix}" if converted < 100 else f"{converted:.1f} {suffix}")
-            # Background plane behind label (grey #666666, rounded look via size)
+            # Background plane behind label (light blue with rounded corners via texture)
             try:
                 view_right, view_up = self._get_camera_view_axes()
             except Exception:
@@ -1582,8 +1621,8 @@ class STLViewerWidget(QWidget):
             max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4]) if b else length
             # Scale background - compact size, still covers text
             char_count = len(label_text)
-            bg_w = max_dim * (0.014 * char_count + 0.04)  # Reduced: compact grey box
-            bg_h = max_dim * 0.032  # Reduced height
+            bg_w = max_dim * (0.014 * char_count + 0.04)
+            bg_h = max_dim * 0.032
             normal = np.cross(view_right, view_up)
             n = np.linalg.norm(normal)
             if n > 1e-12:
@@ -1596,18 +1635,28 @@ class STLViewerWidget(QWidget):
             m[:3, 2] = normal
             m[:3, 3] = np.array(label_pos, dtype=np.float32)
             bg_geom = gfx.plane_geometry(1, 1)
-            bg_mat = gfx.MeshBasicMaterial(color="#666666", side="both")
+            # Build/reuse a rounded-rect light-blue texture (transparent corners)
+            try:
+                rounded_tex = self._get_rounded_label_texture(char_count)
+                bg_mat = gfx.MeshBasicMaterial(map=rounded_tex, color="#ffffff", side="both")
+            except Exception:
+                # Fallback: solid light-blue rectangle if texture build fails
+                bg_mat = gfx.MeshBasicMaterial(color="#bfe3ff", side="both")
             bg_mat.depth_test = False
             bg_mat.depth_write = False
+            try:
+                bg_mat.transparent = True  # ensure rounded corners blend
+            except Exception:
+                pass
             bg_mat.render_queue = 4000  # Labels render on top of lines
             bg_plane = gfx.Mesh(bg_geom, bg_mat)
             bg_plane.local.matrix = m
             self._scene.add(bg_plane)
             self.measurement_actors.append(bg_plane)
             try:
-                lbl_mat = gfx.TextMaterial(color="#000000", weight_offset=300)
+                lbl_mat = gfx.TextMaterial(color="#0d2a3a", weight_offset=300)
             except TypeError:
-                lbl_mat = gfx.TextMaterial(color="#000000")
+                lbl_mat = gfx.TextMaterial(color="#0d2a3a")
             lbl_mat.depth_test = False
             lbl_mat.depth_write = False
             lbl_mat.render_queue = 4100  # Text renders on top of background and lines
