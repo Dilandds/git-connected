@@ -1,64 +1,59 @@
 
 
 ## Goal
-Eliminate texture stretching on curved/cylindrical surfaces (visible on the exhaust pipe shown) by replacing the current single-axis planar UV projection with a normal-based "cube/box projection" UV bake.
+Fix unreadable rulers at scale ratios 1:5 and 1:10 (and prevent the same issue at any future high ratio) by making the tick/label spacing **adaptive to actual pixel density** instead of fixed to the unit.
 
-## Root cause
-`_generate_box_uvs()` in `viewer_widget_pygfx.py` does **single-plane projection** — it projects every vertex onto the two largest-span axes only. On a curved pipe, vertices on sides facing parallel to the projection direction get squashed to near-identical UVs, producing the long streaks the user sees.
+## Root Cause
+In `ui/scale_canvas.py → _draw_ruler_frame()`:
+- `pixels_per_unit (ppu)` shrinks linearly with the scale ratio.
+- At 1:1 (cm): ~38 px/cm → readable.
+- At 1:5 (cm): ~7.5 px/cm → minor mm ticks clamp to 2 px, major labels every ~7.5 px.
+- At 1:10 (cm): ~3.78 px/cm → major labels drawn ~4 px apart → black smear.
 
-This is the standard "planar projection on a cylinder" artifact. Stock pygfx materials sample one UV set per vertex, so the fix must happen at UV generation time on the CPU.
+The label-emission logic assumes fixed `1 cm`, `1 mm`, `1 inch`, `10 cm` major intervals regardless of how visually close that is.
 
-## Fix: per-vertex cube/box UV projection
-Replace `_generate_box_uvs()` with a true 6-face cube projection:
+## Fix Strategy
 
-1. Compute per-vertex normals (use `geom.normals` if present; otherwise derive from face normals averaged per vertex).
-2. For each vertex, pick the dominant axis of its normal (`argmax(|nx|, |ny|, |nz|)`).
-3. Project that vertex onto the perpendicular plane:
-   - normal dominant on X → UV from (Y, Z)
-   - normal dominant on Y → UV from (X, Z)
-   - normal dominant on Z → UV from (X, Y)
-4. Normalize using a single world-scale derived from the mesh bounding box's largest extent (so tiling stays consistent across all 3 planes — no UV size jumps between faces).
-5. Keep returning a `(N, 2) float32` array — drop-in compatible with all existing callers (`_ensure_texcoords`, `_reset_and_scale_texcoords`, `_scale_texcoords`, `_apply_texture_to_mesh`).
+Introduce an **adaptive labeling step** so labels are emitted only when their real-world spacing produces enough on-screen pixels (target: ≥ 40 px between labels).
 
-This is essentially a discrete triplanar bake. It removes streaking on curved surfaces because each vertex uses the projection plane closest to its actual surface orientation. Visible seams between projection regions are minimized by sharing one global scale and by the existing seamless-edge blending already applied to textures.
+### Algorithm (per unit)
+Compute `label_step_units` from a "nice number" sequence so that `label_step_units * ppu_per_base_unit ≥ MIN_LABEL_PX (40)`:
 
-## Implementation details
+- **cm**: candidates `[1, 2, 5, 10, 20, 50, 100, 200, 500]` cm
+- **mm**: candidates `[1, 2, 5, 10, 20, 50, 100, 200] mm` (label text = value mm or convert to cm if ≥ 100)
+- **inches**: candidates `[1, 2, 5, 10, 20, 50] in`
+- **m**: candidates `[10, 20, 50, 100, 200, 500] cm` (label text in cm or m if ≥ 100 cm)
 
-**File**: `viewer_widget_pygfx.py`
+Tick hierarchy (3 levels, all derived from chosen `label_step`):
+- **Major** (long tick + label) every `label_step`.
+- **Medium** (mid tick, no label) every `label_step / 2`.
+- **Minor** (short tick) every `label_step / 10` — but only drawn if `≥ 3 px` apart, otherwise skipped.
 
-**Function to replace**: `_generate_box_uvs(self, vertices)` at line 4653.
+This guarantees labels never overlap and the ruler stays clean at every ratio (1:1 → 1:10 → 1:100).
 
-**New signature**: `_generate_box_uvs(self, vertices, normals=None)` — backward compatible (normals optional; falls back to current behavior only if normals truly unavailable and cannot be computed).
+### Implementation Changes (single file: `ui/scale_canvas.py`)
 
-**Helper**: small `_compute_vertex_normals(vertices)` if positions come without normals — but since meshes are built via pyvista/trimesh which compute normals, in practice we read `geom.normals` from the geometry buffer at the call sites.
+1. **Add helper** `_compute_label_step(ppu_per_base_unit) → (step_value, base_unit_name)` that picks the smallest "nice" step so `step * ppu ≥ 40 px`.
 
-**Update callers** (3 places) to pass normals when available:
-- `_apply_texture_to_mesh` (line ~3714)
-- `_ensure_texcoords` (line ~4151)
-- `_reset_and_scale_texcoords` (line ~4183)
+2. **Refactor `_draw_ruler_frame()`** to compute:
+   - `label_step_px` (pixel spacing between labels)
+   - `medium_step_px = label_step_px / 2`
+   - `minor_step_px = label_step_px / 10` (skip if `< 3 px`)
+   - Pass these + a `format_label(major_idx) → str` callback into the tick drawers.
 
-Each becomes:
-```text
-normals_buf = getattr(geom, 'normals', None)
-normals_data = normals_buf.data if normals_buf is not None else None
-uvs = self._generate_box_uvs(pos_data, normals_data)
-```
+3. **Refactor `_draw_ruler_ticks_horizontal/vertical()`** to use the new step values and the formatter callback (replaces the hard-coded `"mm"/"m"/"inches"/"cm"` branches inside).
 
-**Important**: Since `_base_texcoords` is cached on geometry, any mesh that already has cached UVs will keep using the old planar bake until reload. Add a one-line cache-bust by versioning the cache attribute name (e.g. `_base_texcoords_v2`) so the new bake is used immediately on first texture application after the update.
+4. **Bonus polish**: use a slightly larger font (`Segoe UI 8`) for major labels at higher steps to keep them legible.
 
-## Why this is the right fix
-- Targets the actual root cause (projection direction vs surface orientation) rather than masking with stronger tiling.
-- No shader changes — works inside stock pygfx `MeshStandardMaterial` / `MeshPhongMaterial`.
-- Drop-in: same return shape, same callers, same downstream tiling/scaling logic.
-- Works for all current image presets (leathers, woods, stones, metals) and the procedural leather PBR path.
-- Consistent global scale keeps tiling density uniform across the model — no visible "patch size" jumps between faces.
+### Files Changed
+- `ui/scale_canvas.py` — only file that needs editing.
 
-## Files changed
-- `viewer_widget_pygfx.py` (replace `_generate_box_uvs`, update 3 call sites, version-bump UV cache key)
-
-## Validation after implementation
-- Reload the exhaust-pipe model, apply Lapis Lazuli / Leather Orange / Walnut Wood — confirm streaks on curved surfaces are gone.
-- Confirm flat parts (mounting flanges) still render the texture cleanly without warping.
-- Confirm tile-density slider still works (cache reset path).
-- Confirm Education-mode upload restriction is untouched.
+### Validation
+- Switch unit/ratio in the Drawing Scale workspace and verify:
+  - 1:1 cm → labels every 1 cm.
+  - 1:5 cm → labels auto-promote to every 5 cm.
+  - 1:10 cm → labels auto-promote to every 10 cm.
+  - 1:1 mm → labels every 10 mm.
+  - 1:10 m → labels every 100 cm or 1 m.
+- Confirm no overlapping numbers on top, bottom, left and right rulers at any ratio.
 
