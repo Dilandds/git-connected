@@ -1572,7 +1572,7 @@ class STLViewerWidget(QWidget):
             converted = distance * conversion.get(unit, 1.0)
             suffix = unit_labels.get(unit, "mm")
             label_text = f"{converted:.4f} {suffix}" if converted < 1 else (f"{converted:.2f} {suffix}" if converted < 100 else f"{converted:.1f} {suffix}")
-            # Background plane behind label (grey #666666, rounded look via size)
+            # Background plane behind label (light blue with rounded corners via texture)
             try:
                 view_right, view_up = self._get_camera_view_axes()
             except Exception:
@@ -1582,8 +1582,8 @@ class STLViewerWidget(QWidget):
             max_dim = max(b[1] - b[0], b[3] - b[2], b[5] - b[4]) if b else length
             # Scale background - compact size, still covers text
             char_count = len(label_text)
-            bg_w = max_dim * (0.014 * char_count + 0.04)  # Reduced: compact grey box
-            bg_h = max_dim * 0.032  # Reduced height
+            bg_w = max_dim * (0.014 * char_count + 0.04)
+            bg_h = max_dim * 0.032
             normal = np.cross(view_right, view_up)
             n = np.linalg.norm(normal)
             if n > 1e-12:
@@ -1596,7 +1596,13 @@ class STLViewerWidget(QWidget):
             m[:3, 2] = normal
             m[:3, 3] = np.array(label_pos, dtype=np.float32)
             bg_geom = gfx.plane_geometry(1, 1)
-            bg_mat = gfx.MeshBasicMaterial(color="#666666", side="both")
+            # Build/reuse a rounded-rect light-blue texture (transparent corners)
+            try:
+                rounded_tex = self._get_rounded_label_texture(char_count)
+                bg_mat = gfx.MeshBasicMaterial(map=rounded_tex, color="#ffffff", side="both")
+            except Exception:
+                # Fallback: solid light-blue rectangle if texture build fails
+                bg_mat = gfx.MeshBasicMaterial(color="#bfe3ff", side="both")
             bg_mat.depth_test = False
             bg_mat.depth_write = False
             bg_mat.render_queue = 4000  # Labels render on top of lines
@@ -1605,9 +1611,9 @@ class STLViewerWidget(QWidget):
             self._scene.add(bg_plane)
             self.measurement_actors.append(bg_plane)
             try:
-                lbl_mat = gfx.TextMaterial(color="#000000", weight_offset=300)
+                lbl_mat = gfx.TextMaterial(color="#0d2a3a", weight_offset=300)
             except TypeError:
-                lbl_mat = gfx.TextMaterial(color="#000000")
+                lbl_mat = gfx.TextMaterial(color="#0d2a3a")
             lbl_mat.depth_test = False
             lbl_mat.depth_write = False
             lbl_mat.render_queue = 4100  # Text renders on top of background and lines
