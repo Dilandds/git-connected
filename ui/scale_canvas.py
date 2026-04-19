@@ -692,6 +692,7 @@ class ScaleCanvas(QWidget):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(255, 255, 255, 220))
             painter.drawRoundedRect(bg_rect, 4, 4)
+            painter.setBrush(Qt.NoBrush)
 
             painter.setPen(QColor("#2E7D32"))
             painter.drawText(bg_rect, Qt.AlignCenter, label)
