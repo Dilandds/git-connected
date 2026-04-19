@@ -1268,7 +1268,8 @@ class STLViewerWidget(QWidget):
         return super().eventFilter(obj, event)
 
     def _ruler_event_filter_impl(self, obj, event):
-        """Handle ruler mode events. Return True to consume, False to pass through."""
+        """Handle ruler mode events. Return True to consume, False to pass through.
+        Left click = place ruler point. Right/Middle drag = pan view (no rotation)."""
         if not self.ruler_mode or self._canvas is None:
             return False
         t = event.type()
@@ -1278,14 +1279,30 @@ class STLViewerWidget(QWidget):
                 self._on_ruler_click(pos.x(), pos.y())
                 return True
             if event.button() in (Qt.RightButton, Qt.MidButton):
-                return True  # Block pan
+                # Begin panning the orthographic view
+                self._ruler_panning = True
+                self._ruler_pan_last_pos = event.pos()
+                try:
+                    self._canvas.setCursor(Qt.ClosedHandCursor)
+                except Exception:
+                    pass
+                return True
         elif t == QEvent.MouseButtonRelease:
             if event.button() == Qt.LeftButton:
                 return True
             if event.button() in (Qt.RightButton, Qt.MidButton):
+                self._ruler_panning = False
+                self._ruler_pan_last_pos = None
+                try:
+                    self._canvas.unsetCursor()
+                except Exception:
+                    pass
                 return True
         elif t == QEvent.MouseMove:
             pos = event.pos()
+            if self._ruler_panning and self._ruler_pan_last_pos is not None:
+                self._handle_ruler_pan(pos)
+                return True
             self._on_ruler_mouse_move(pos.x(), pos.y())
             return True
         elif t == QEvent.Wheel:
@@ -1293,6 +1310,45 @@ class STLViewerWidget(QWidget):
             self._handle_ruler_wheel(event)
             return True
         return False
+
+    def _handle_ruler_pan(self, pos):
+        """Pan the orthographic camera in screen-space based on mouse delta."""
+        if self._camera is None or self._canvas is None or self._ruler_pan_last_pos is None:
+            return
+        try:
+            import pygfx as gfx
+            dx_px = pos.x() - self._ruler_pan_last_pos.x()
+            dy_px = pos.y() - self._ruler_pan_last_pos.y()
+            self._ruler_pan_last_pos = pos
+            if dx_px == 0 and dy_px == 0:
+                return
+            # Canvas size in logical pixels
+            try:
+                cw, ch = self._canvas.get_logical_size()
+            except Exception:
+                cw, ch = self._canvas.width(), self._canvas.height()
+            if cw <= 0 or ch <= 0:
+                return
+            if isinstance(self._camera, gfx.OrthographicCamera):
+                # Convert pixel delta to world-space delta using ortho width/height
+                world_dx = -dx_px * (self._camera.width / cw)
+                world_dy = dy_px * (self._camera.height / ch)  # Y flipped (screen down = world up)
+                # Move camera along its right/up axes (use world matrix)
+                try:
+                    view_right, view_up = self._get_camera_view_axes()
+                except Exception:
+                    view_right = np.array([1, 0, 0])
+                    view_up = np.array([0, 1, 0])
+                offset = view_right * world_dx + view_up * world_dy
+                cam_pos = np.array(self._camera.local.position, dtype=np.float32)
+                self._camera.local.position = tuple(cam_pos + offset)
+                # Update preview line if a measurement is in progress
+                if len(self.measurement_points) == 1:
+                    # Refresh preview against current mouse pos
+                    pass
+                self._canvas.request_draw()
+        except Exception as e:
+            logger.warning(f"_handle_ruler_pan: {e}")
 
     def _handle_ruler_wheel(self, event):
         """Handle wheel zoom in ruler mode by directly scaling OrthographicCamera width/height."""
