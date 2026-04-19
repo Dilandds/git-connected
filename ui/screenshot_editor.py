@@ -35,8 +35,8 @@ class _EditorCanvas(QWidget):
         self._offset = QPoint(0, 0)
         self._tool = TOOL_NONE
         self._color = '#FF0000'
-        self._line_width = 3
-        self._font_size = 16
+        self._line_width = 20
+        self._font_size = 70
 
         # Annotation layers (stored in image coords)
         self._lines = []       # list of (QPointF start, QPointF end, color, width)
