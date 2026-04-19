@@ -1342,6 +1342,45 @@ class STLViewerWidget(QWidget):
         """Disabled - no longer snap to mesh vertices. Always return the input point."""
         return world_pos
 
+    def _get_rounded_label_texture(self, char_count: int = 8):
+        """Build (and cache) a rounded-rectangle RGBA texture for measurement labels.
+        Light blue fill (#bfe3ff) with transparent corners. Aspect ratio matches the
+        label plane so the corner radius stays visually circular.
+        """
+        import pygfx as gfx
+        aspect_bucket = max(2, int(round(0.40 * char_count + 1.2)))
+        cache = getattr(self, "_rounded_label_tex_cache", None)
+        if cache is None:
+            cache = {}
+            self._rounded_label_tex_cache = cache
+        if aspect_bucket in cache:
+            return cache[aspect_bucket]
+        h = 64
+        w = max(64, h * aspect_bucket)
+        radius = h * 0.32
+        ys = np.arange(h, dtype=np.float32)[:, None]
+        xs = np.arange(w, dtype=np.float32)[None, :]
+        dx = np.minimum(xs, (w - 1) - xs)
+        dy = np.minimum(ys, (h - 1) - ys)
+        inside_core = (dx >= radius) | (dy >= radius)
+        cx = np.where(dx < radius, dx, radius)
+        cy = np.where(dy < radius, dy, radius)
+        corner_dist = np.sqrt((radius - cx) ** 2 + (radius - cy) ** 2)
+        alpha = np.clip(radius - corner_dist + 0.5, 0.0, 1.0)
+        alpha = np.where(inside_core, 1.0, alpha)
+        rgba = np.zeros((h, w, 4), dtype=np.float32)
+        rgba[..., 0] = 0xBF / 255.0
+        rgba[..., 1] = 0xE3 / 255.0
+        rgba[..., 2] = 0xFF / 255.0
+        rgba[..., 3] = alpha
+        rgba_u8 = (rgba * 255.0).astype(np.uint8)
+        try:
+            tex = gfx.Texture(rgba_u8, dim=2)
+        except Exception:
+            tex = None
+        cache[aspect_bucket] = tex
+        return tex
+
     def _get_camera_view_axes(self):
         """Return (view_right, view_up) in world space for screen-space snapping.
         Uses camera world matrix for reliable axes in Front/Left/Rear/Right ortho views.
