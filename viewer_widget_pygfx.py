@@ -1079,10 +1079,11 @@ class STLViewerWidget(QWidget):
             return ticks
 
         # ── Helper: create a text label (pygfx Text API: text=, material=, no TextGeometry) ──
+        label_color = "#ffffff" if self._dark_theme else "#333333"
         def _make_text(text, pos, font_size=10, anchor="middle-center"):
             obj = gfx.Text(
                 text=str(text),
-                material=gfx.TextMaterial(color="#333333"),
+                material=gfx.TextMaterial(color=label_color),
                 font_size=font_size,
                 anchor=anchor,
                 screen_space=True,
