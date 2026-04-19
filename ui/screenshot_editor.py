@@ -35,8 +35,8 @@ class _EditorCanvas(QWidget):
         self._offset = QPoint(0, 0)
         self._tool = TOOL_NONE
         self._color = '#FF0000'
-        self._line_width = 3
-        self._font_size = 16
+        self._line_width = 20
+        self._font_size = 70
 
         # Annotation layers (stored in image coords)
         self._lines = []       # list of (QPointF start, QPointF end, color, width)
@@ -376,53 +376,8 @@ class ScreenshotEditorDialog(QDialog):
         sep2.setStyleSheet(f"color: {default_theme.border_standard}; font-size: 16px;")
         toolbar.addWidget(sep2)
 
-        # Line width control
-        spin_css = f"""
-            QSpinBox {{
-                background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.border_standard};
-                border-radius: 4px;
-                padding: 2px 4px;
-                font-size: 11px;
-                min-width: 42px;
-                max-width: 50px;
-            }}
-            QSpinBox::up-button, QSpinBox::down-button {{
-                width: 14px;
-                border: none;
-                background: {default_theme.row_bg_hover};
-            }}
-        """
-        lw_label = QLabel("Line:")
-        lw_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px;")
-        toolbar.addWidget(lw_label)
-        self._line_width_spin = QSpinBox()
-        self._line_width_spin.setRange(1, 20)
-        self._line_width_spin.setValue(3)
-        self._line_width_spin.setSuffix("px")
-        self._line_width_spin.setToolTip("Line / arrow thickness")
-        self._line_width_spin.setStyleSheet(spin_css)
-        self._line_width_spin.valueChanged.connect(lambda v: self._canvas.set_line_width(v))
-        toolbar.addWidget(self._line_width_spin)
-
-        # Font size control
-        fs_label = QLabel("Font:")
-        fs_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px;")
-        toolbar.addWidget(fs_label)
-        self._font_size_spin = QSpinBox()
-        self._font_size_spin.setRange(8, 72)
-        self._font_size_spin.setValue(16)
-        self._font_size_spin.setSuffix("pt")
-        self._font_size_spin.setToolTip("Text font size")
-        self._font_size_spin.setStyleSheet(spin_css)
-        self._font_size_spin.valueChanged.connect(lambda v: self._canvas.set_font_size(v))
-        toolbar.addWidget(self._font_size_spin)
-
-        # Separator
-        sep3 = QLabel("│")
-        sep3.setStyleSheet(f"color: {default_theme.border_standard}; font-size: 16px;")
-        toolbar.addWidget(sep3)
+        # Fixed line width (20px) and font size (70pt) — no user choice
+        # Smaller values were too thin/small to be readable on screenshots.
 
         # Undo
         undo_btn = QPushButton("↩ Undo")
