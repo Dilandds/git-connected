@@ -167,6 +167,9 @@ class STLViewerWidget(QWidget):
         self._ruler_event_filter_installed = False
         self._camera_before_ruler = None  # Store PerspectiveCamera to restore on exit
         self._controller_before_ruler = None  # Store controller state for zoom-only
+        # Pan state for ruler mode (right/middle mouse drag translates the view)
+        self._ruler_panning = False
+        self._ruler_pan_last_pos = None
 
         # Annotation mode state
         self.annotation_mode = False
