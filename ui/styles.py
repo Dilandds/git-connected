@@ -524,6 +524,123 @@ def get_global_stylesheet(theme=None):
             background-color: {theme.button_primary};
             color: {theme.text_white};
         }}
+        /* QDialog styling - ensures white text on dark backgrounds for ALL dialogs (Windows fix).
+           On macOS, native theming handles this; on Windows, default text is dark on our dark bg. */
+        QDialog {{
+            background-color: {theme.background};
+            color: {theme.text_primary};
+        }}
+        QDialog QLabel {{
+            color: {theme.text_primary};
+            background-color: transparent;
+        }}
+        QDialog QLineEdit, QDialog QTextEdit, QDialog QPlainTextEdit, QDialog QSpinBox, QDialog QDoubleSpinBox, QDialog QComboBox {{
+            background-color: {theme.input_bg};
+            color: {theme.text_primary};
+            border: 1px solid {theme.input_border};
+            border-radius: 6px;
+            padding: 6px 8px;
+            selection-background-color: {theme.button_primary};
+            selection-color: {theme.text_white};
+        }}
+        QDialog QLineEdit:focus, QDialog QTextEdit:focus, QDialog QPlainTextEdit:focus, QDialog QSpinBox:focus, QDialog QDoubleSpinBox:focus, QDialog QComboBox:focus {{
+            border: 2px solid {theme.button_primary};
+        }}
+        QDialog QPushButton {{
+            background-color: {theme.button_primary};
+            color: {theme.text_white};
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 80px;
+        }}
+        QDialog QPushButton:hover {{
+            background-color: {theme.button_primary_hover};
+            color: {theme.text_white};
+        }}
+        QDialog QPushButton:pressed {{
+            background-color: {theme.button_primary_pressed};
+            color: {theme.text_white};
+        }}
+        QDialog QCheckBox, QDialog QRadioButton {{
+            color: {theme.text_primary};
+            background-color: transparent;
+        }}
+        QDialog QGroupBox {{
+            color: {theme.text_primary};
+            background-color: transparent;
+        }}
+        /* QInputDialog: same dark bg + white text (Windows fix for native dialog text) */
+        QInputDialog {{
+            background-color: {theme.background};
+            color: {theme.text_primary};
+        }}
+        QInputDialog QLabel {{
+            color: {theme.text_primary};
+            background-color: transparent;
+        }}
+        QInputDialog QLineEdit, QInputDialog QTextEdit, QInputDialog QSpinBox, QInputDialog QDoubleSpinBox, QInputDialog QComboBox {{
+            background-color: {theme.input_bg};
+            color: {theme.text_primary};
+            border: 1px solid {theme.input_border};
+            border-radius: 6px;
+            padding: 6px 8px;
+            selection-background-color: {theme.button_primary};
+            selection-color: {theme.text_white};
+        }}
+        QInputDialog QPushButton {{
+            background-color: {theme.button_primary};
+            color: {theme.text_white};
+            border: none;
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 80px;
+        }}
+        QInputDialog QPushButton:hover {{
+            background-color: {theme.button_primary_hover};
+        }}
+        QInputDialog QPushButton:pressed {{
+            background-color: {theme.button_primary_pressed};
+        }}
+        /* QFileDialog: ensure list/tree views are readable on Windows */
+        QFileDialog {{
+            background-color: {theme.background};
+            color: {theme.text_primary};
+        }}
+        QFileDialog QLabel, QFileDialog QToolButton {{
+            color: {theme.text_primary};
+            background-color: transparent;
+        }}
+        QFileDialog QListView, QFileDialog QTreeView, QFileDialog QComboBox, QFileDialog QLineEdit {{
+            background-color: {theme.input_bg};
+            color: {theme.text_primary};
+            border: 1px solid {theme.input_border};
+            selection-background-color: {theme.button_primary};
+            selection-color: {theme.text_white};
+        }}
+        QFileDialog QPushButton {{
+            background-color: {theme.button_primary};
+            color: {theme.text_white};
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-weight: bold;
+        }}
+        QFileDialog QPushButton:hover {{
+            background-color: {theme.button_primary_hover};
+        }}
+        /* Tooltips: white text on dark background */
+        QToolTip {{
+            color: {theme.text_white};
+            background-color: {theme.card_background};
+            border: 1px solid {theme.border_medium};
+            padding: 4px 8px;
+            border-radius: 4px;
+        }}
         /* ---- Tab Bar: glossy / dimensional (same palette as mode switcher + sidebar cards) ---- */
         QTabBar#ectoTabBar {{
             background: {theme.background};
