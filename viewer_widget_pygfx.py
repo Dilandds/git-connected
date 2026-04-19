@@ -1644,6 +1644,10 @@ class STLViewerWidget(QWidget):
                 bg_mat = gfx.MeshBasicMaterial(color="#bfe3ff", side="both")
             bg_mat.depth_test = False
             bg_mat.depth_write = False
+            try:
+                bg_mat.transparent = True  # ensure rounded corners blend
+            except Exception:
+                pass
             bg_mat.render_queue = 4000  # Labels render on top of lines
             bg_plane = gfx.Mesh(bg_geom, bg_mat)
             bg_plane.local.matrix = m
