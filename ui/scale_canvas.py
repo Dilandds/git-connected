@@ -1496,15 +1496,34 @@ class ScaleCanvas(QWidget):
 
         # Text tool: click to place a text annotation
         if event.button() == Qt.LeftButton and self._drawing_mode == "text" and self._pixmap:
-            text, ok = QInputDialog.getText(self, "Add Text", "Text:")
-            text = text.strip()
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Add Text")
+            dialog.setLabelText("Text:")
+            # Keep text-entry readable on both macOS and Windows regardless of app theme.
+            dialog.setStyleSheet("""
+                QInputDialog QLabel {
+                    color: #111827;
+                }
+                QInputDialog QLineEdit {
+                    color: #111827;
+                    background-color: #ffffff;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    padding: 4px 6px;
+                }
+                QInputDialog QPushButton {
+                    color: #111827;
+                }
+            """)
+            ok = dialog.exec_()
+            text = dialog.textValue().strip()
             if ok and text:
                 self._texts.append(DrawingText(
                     id=self._next_text_id,
                     x=pos.x(),
                     y=pos.y(),
                     text=text,
-                    color=QColor(self._drawing_color),
+                    color=QColor("#000000"),
                 ))
                 self._next_text_id += 1
                 self.update()
