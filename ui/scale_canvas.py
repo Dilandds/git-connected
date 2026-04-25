@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QApplication,
-    QFileDialog, QLabel
+    QFileDialog, QLabel, QInputDialog
 )
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import (
@@ -103,6 +103,16 @@ class DrawingCircle:
         return {"radius": abs(self.radius), "diameter": abs(self.radius * 2)}
 
 
+@dataclass
+class DrawingText:
+    """A text annotation on the canvas."""
+    id: int
+    x: float
+    y: float
+    text: str
+    color: QColor = field(default_factory=lambda: QColor("#000000"))
+
+
 class ScaleCanvas(QWidget):
     """
     Canvas with graduated ruler border, zoomable/pannable drawing display,
@@ -155,14 +165,16 @@ class ScaleCanvas(QWidget):
         self._pdf_locked = False  # Lock PDF position (disable panning)
         
         # Drawing shapes mode
-        self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle"
+        self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle" | "text"
         self._drawing_color = QColor("#FFFF00")  # Current drawing color
         self._arrows: List[DrawingArrow] = []
         self._rectangles: List[DrawingRectangle] = []
         self._circles: List[DrawingCircle] = []
+        self._texts: List[DrawingText] = []
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         
         # Drawing state
         self._drawing_start_pos: Optional[QPointF] = None
@@ -222,9 +234,11 @@ class ScaleCanvas(QWidget):
         self._arrows.clear()
         self._rectangles.clear()
         self._circles.clear()
+        self._texts.clear()
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         self._drawing_start_pos = None
         self._current_preview_pos = None
         self._selected_shape = None
@@ -268,6 +282,8 @@ class ScaleCanvas(QWidget):
         self._resizing_handle = None
         if mode in {"arrow", "rectangle", "circle"}:
             self.setCursor(Qt.CrossCursor)
+        elif mode == "text":
+            self.setCursor(Qt.IBeamCursor)
         elif mode == "move":
             self.setCursor(Qt.OpenHandCursor)
         elif mode == "erase":
@@ -289,9 +305,11 @@ class ScaleCanvas(QWidget):
         self._arrows.clear()
         self._rectangles.clear()
         self._circles.clear()
+        self._texts.clear()
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         self._drawing_start_pos = None
         self._current_preview_pos = None
         self._selected_shape = None
