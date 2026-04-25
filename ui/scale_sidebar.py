@@ -7,11 +7,12 @@ import logging
 from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QColorDialog
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QColorDialog,
+    QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor
-from ui.styles import default_theme, make_font
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
 from i18n import t, on_language_changed
 from ui.technical_sidebar import (
     _FIELD_BG,
@@ -23,7 +24,7 @@ from ui.technical_sidebar import (
 
 logger = logging.getLogger(__name__)
 
-SIDEBAR_WIDTH = 260
+SIDEBAR_WIDTH = 350
 
 
 def _styled_combo() -> QComboBox:
