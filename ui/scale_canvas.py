@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QApplication,
-    QFileDialog, QLabel
+    QFileDialog, QLabel, QInputDialog
 )
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import (
@@ -103,6 +103,16 @@ class DrawingCircle:
         return {"radius": abs(self.radius), "diameter": abs(self.radius * 2)}
 
 
+@dataclass
+class DrawingText:
+    """A text annotation on the canvas."""
+    id: int
+    x: float
+    y: float
+    text: str
+    color: QColor = field(default_factory=lambda: QColor("#000000"))
+
+
 class ScaleCanvas(QWidget):
     """
     Canvas with graduated ruler border, zoomable/pannable drawing display,
@@ -155,14 +165,16 @@ class ScaleCanvas(QWidget):
         self._pdf_locked = False  # Lock PDF position (disable panning)
         
         # Drawing shapes mode
-        self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle"
+        self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle" | "text"
         self._drawing_color = QColor("#FFFF00")  # Current drawing color
         self._arrows: List[DrawingArrow] = []
         self._rectangles: List[DrawingRectangle] = []
         self._circles: List[DrawingCircle] = []
+        self._texts: List[DrawingText] = []
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         
         # Drawing state
         self._drawing_start_pos: Optional[QPointF] = None
@@ -222,9 +234,11 @@ class ScaleCanvas(QWidget):
         self._arrows.clear()
         self._rectangles.clear()
         self._circles.clear()
+        self._texts.clear()
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         self._drawing_start_pos = None
         self._current_preview_pos = None
         self._selected_shape = None
@@ -268,6 +282,8 @@ class ScaleCanvas(QWidget):
         self._resizing_handle = None
         if mode in {"arrow", "rectangle", "circle"}:
             self.setCursor(Qt.CrossCursor)
+        elif mode == "text":
+            self.setCursor(Qt.IBeamCursor)
         elif mode == "move":
             self.setCursor(Qt.OpenHandCursor)
         elif mode == "erase":
@@ -289,9 +305,11 @@ class ScaleCanvas(QWidget):
         self._arrows.clear()
         self._rectangles.clear()
         self._circles.clear()
+        self._texts.clear()
         self._next_arrow_id = 1
         self._next_rectangle_id = 1
         self._next_circle_id = 1
+        self._next_text_id = 1
         self._drawing_start_pos = None
         self._current_preview_pos = None
         self._selected_shape = None
@@ -617,7 +635,7 @@ class ScaleCanvas(QWidget):
         # Measurements + projection lines
         self._draw_measurements(painter)
 
-        # Draw shapes (arrows, rectangles, circles)
+        # Draw shapes (arrows, rectangles, circles, text)
         self._draw_all_shapes(painter)
 
         # Live preview line (ruler mode, pending first click)
@@ -636,7 +654,7 @@ class ScaleCanvas(QWidget):
         painter.end()
 
     def _draw_all_shapes(self, painter: QPainter):
-        """Draw all shapes: arrows, rectangles, circles."""
+        """Draw all shapes: arrows, rectangles, circles, text."""
         # Draw arrows
         for arrow in self._arrows:
             self._draw_arrow_shape(painter, arrow)
@@ -648,6 +666,9 @@ class ScaleCanvas(QWidget):
         # Draw circles
         for circle in self._circles:
             self._draw_circle_shape(painter, circle)
+
+        for text in self._texts:
+            self._draw_text_shape(painter, text)
 
         # Selection highlight
         self._draw_selected_shape_highlight(painter)
@@ -726,6 +747,18 @@ class ScaleCanvas(QWidget):
         painter.drawText(int(circle.cx - 35), int(circle.cy), radius_label)
         painter.drawText(int(circle.cx - 35), int(circle.cy + circle.radius + 15), diameter_label)
 
+    def _draw_text_shape(self, painter: QPainter, text: DrawingText):
+        """Draw a text annotation."""
+        font = QFont("Segoe UI", 13, QFont.Bold)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        rect = QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 215))
+        painter.drawRoundedRect(rect, 4, 4)
+        painter.setPen(text.color)
+        painter.drawText(QPointF(text.x, text.y), text.text)
+
     def _draw_arrow_preview(self, painter: QPainter):
         """Draw preview of arrow being drawn."""
         preview_arrow = DrawingArrow(
@@ -786,6 +819,17 @@ class ScaleCanvas(QWidget):
                 int(circle.cy - circle.radius),
                 int(circle.radius * 2),
                 int(circle.radius * 2),
+            )
+        elif shape_type == "text":
+            text = next((t for t in self._texts if t.id == shape_id), None)
+            if not text:
+                return
+            font = QFont("Segoe UI", 13, QFont.Bold)
+            fm = QFontMetrics(font)
+            painter.drawRoundedRect(
+                QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10),
+                4,
+                4,
             )
 
     def _arrow_polygon(self, arrow: DrawingArrow) -> Optional[QPolygonF]:
@@ -869,10 +913,22 @@ class ScaleCanvas(QWidget):
             if not s:
                 return None
             return QPointF(s.cx, s.cy)
+        if shape_type == "text":
+            s = next((t for t in self._texts if t.id == shape_id), None)
+            if not s:
+                return None
+            return QPointF(s.x, s.y)
         return None
 
     def _hit_shape(self, pos: QPointF) -> Optional[Tuple[str, int]]:
         """Hit test topmost shape at a screen position."""
+        font = QFont("Segoe UI", 13, QFont.Bold)
+        fm = QFontMetrics(font)
+        for text in reversed(self._texts):
+            rect = QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10)
+            if rect.contains(pos):
+                return ("text", text.id)
+
         for circle in reversed(self._circles):
             if math.hypot(pos.x() - circle.cx, pos.y() - circle.cy) <= circle.radius:
                 return ("circle", circle.id)
@@ -899,6 +955,8 @@ class ScaleCanvas(QWidget):
             self._rectangles = [r for r in self._rectangles if r.id != shape_id]
         elif shape_type == "circle":
             self._circles = [c for c in self._circles if c.id != shape_id]
+        elif shape_type == "text":
+            self._texts = [t for t in self._texts if t.id != shape_id]
         self._selected_shape = None
         self.update()
 
@@ -1436,6 +1494,22 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
+        # Text tool: click to place a text annotation
+        if event.button() == Qt.LeftButton and self._drawing_mode == "text" and self._pixmap:
+            text, ok = QInputDialog.getText(self, "Add Text", "Text:")
+            text = text.strip()
+            if ok and text:
+                self._texts.append(DrawingText(
+                    id=self._next_text_id,
+                    x=pos.x(),
+                    y=pos.y(),
+                    text=text,
+                    color=QColor(self._drawing_color),
+                ))
+                self._next_text_id += 1
+                self.update()
+            return
+
         # Eraser tool: delete one shape on click
         if event.button() == Qt.LeftButton and self._drawing_mode == "erase" and self._pixmap:
             hit_shape = self._hit_shape(pos)
@@ -1470,6 +1544,10 @@ class ScaleCanvas(QWidget):
                     c = next((x for x in self._circles if x.id == shape_id), None)
                     if c:
                         self._shape_drag_origin = (c.cx, c.cy)
+                elif shape_type == "text":
+                    t = next((x for x in self._texts if x.id == shape_id), None)
+                    if t:
+                        self._shape_drag_origin = (t.x, t.y)
 
                 self.setCursor(Qt.ClosedHandCursor)
                 self.update()
@@ -1578,6 +1656,12 @@ class ScaleCanvas(QWidget):
                     ocx, ocy = self._shape_drag_origin
                     c.cx = ocx + delta.x()
                     c.cy = ocy + delta.y()
+            elif shape_type == "text":
+                t = next((x for x in self._texts if x.id == shape_id), None)
+                if t:
+                    ox, oy = self._shape_drag_origin
+                    t.x = ox + delta.x()
+                    t.y = oy + delta.y()
 
             self.update()
             return
