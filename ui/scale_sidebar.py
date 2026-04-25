@@ -7,11 +7,12 @@ import logging
 from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QColorDialog
+    QComboBox, QFrame, QSizePolicy, QScrollArea, QColorDialog,
+    QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor
-from ui.styles import default_theme, make_font
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
 from i18n import t, on_language_changed
 from ui.technical_sidebar import (
     _FIELD_BG,
@@ -23,7 +24,7 @@ from ui.technical_sidebar import (
 
 logger = logging.getLogger(__name__)
 
-SIDEBAR_WIDTH = 260
+SIDEBAR_WIDTH = 350
 
 
 def _styled_combo() -> QComboBox:
@@ -64,6 +65,45 @@ def _styled_combo() -> QComboBox:
     return combo
 
 
+def _shape_icon(kind: str, color: QColor = None) -> QIcon:
+    """Create crisp toolbar icons for drawing tools without external assets."""
+    color = color or QColor(default_theme.text_primary)
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(color, 2.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    if kind == "arrow":
+        painter.drawLine(8, 24, 24, 8)
+        painter.drawLine(24, 8, 24, 17)
+        painter.drawLine(24, 8, 15, 8)
+    elif kind == "rectangle":
+        painter.drawRoundedRect(7, 9, 18, 14, 2, 2)
+    elif kind == "circle":
+        painter.drawEllipse(8, 8, 16, 16)
+    elif kind == "move":
+        painter.drawLine(16, 6, 16, 26)
+        painter.drawLine(6, 16, 26, 16)
+        painter.drawPolygon(QPolygonF([QPointF(16, 4), QPointF(12, 9), QPointF(20, 9)]))
+        painter.drawPolygon(QPolygonF([QPointF(16, 28), QPointF(12, 23), QPointF(20, 23)]))
+        painter.drawPolygon(QPolygonF([QPointF(4, 16), QPointF(9, 12), QPointF(9, 20)]))
+        painter.drawPolygon(QPolygonF([QPointF(28, 16), QPointF(23, 12), QPointF(23, 20)]))
+    elif kind == "erase":
+        painter.drawRoundedRect(9, 12, 15, 9, 2, 2)
+        painter.drawLine(12, 10, 25, 23)
+        painter.drawLine(7, 24, 26, 24)
+    elif kind == "clear":
+        painter.drawLine(11, 12, 21, 12)
+        painter.drawRoundedRect(10, 14, 12, 12, 2, 2)
+        painter.drawLine(13, 17, 13, 23)
+        painter.drawLine(16, 17, 16, 23)
+        painter.drawLine(19, 17, 19, 23)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class ScaleSidebar(QWidget):
     """Sidebar controls for Drawing Scale mode."""
 
@@ -93,6 +133,33 @@ class ScaleSidebar(QWidget):
         self._drawing_color = QColor("#FFFF00")
         self._init_ui()
 
+    def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(blur_radius)
+        shadow.setXOffset(0)
+        shadow.setYOffset(y_offset)
+        shadow.setColor(QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
+    def _style_section_card(self, card: QFrame):
+        name = card.objectName()
+        if not name:
+            return
+        card.setStyleSheet(f"QFrame#{name} {{ {sidebar_section_card_stylesheet(default_theme)} }}")
+        card.setAttribute(Qt.WA_StyledBackground, True)
+        self._add_card_shadow(card)
+
+    def _create_tool_button(self, kind: str, tooltip: str, checkable: bool = True) -> QPushButton:
+        btn = QPushButton()
+        btn.setFixedSize(42, 36)
+        btn.setIcon(_shape_icon(kind))
+        btn.setIconSize(QSize(24, 24))
+        btn.setCheckable(checkable)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setToolTip(tooltip)
+        self._update_drawing_btn_style(btn, False)
+        return btn
+
     def _init_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -102,21 +169,45 @@ class ScaleSidebar(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setObjectName("sidebarScrollArea")
+        scroll.setMinimumWidth(SIDEBAR_WIDTH)
+        scroll.setStyleSheet(f"""
+            QScrollArea#sidebarScrollArea {{
+                background-color: {default_theme.background};
+                border: none;
+            }}
+            QScrollArea#sidebarScrollArea > QWidget > QWidget {{
+                background-color: {default_theme.background};
+            }}
+        """)
+        scroll.viewport().setStyleSheet(f"background-color: {default_theme.background};")
 
         container = QWidget()
+        container.setObjectName("sidebarContent")
+        container.setStyleSheet(f"background-color: {default_theme.background};")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignTop)
+        layout.setContentsMargins(10, 14, 20, 18)
+        layout.setSpacing(15)
+
+        upload_card = QFrame()
+        upload_card.setObjectName("uploadCard")
+        self._style_section_card(upload_card)
+        upload_card_layout = QVBoxLayout(upload_card)
+        upload_card_layout.setContentsMargins(16, 18, 16, 18)
+        upload_card_layout.setSpacing(10)
 
         # Title header
         title = QLabel("📐 Drawing Scale")
-        title.setFont(make_font(size=13, bold=True))
-        title.setStyleSheet(f"color: {default_theme.text_title};")
-        layout.addWidget(title)
+        title.setFont(make_font(size=16, bold=True))
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(title)
 
         # Upload button (same pattern as Technical Overview)
         self.upload_btn = QPushButton("📂 Upload Drawing")
-        self.upload_btn.setFixedHeight(34)
+        self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(f"""
             QPushButton {{
@@ -132,8 +223,11 @@ class ScaleSidebar(QWidget):
                 background-color: {default_theme.row_bg_hover};
             }}
         """)
+        self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(self.upload_requested.emit)
-        layout.addWidget(self.upload_btn)
+        upload_card_layout.addWidget(self.upload_btn)
+
+        layout.addWidget(upload_card)
 
         layout.addWidget(self._separator())
 
@@ -270,80 +364,43 @@ class ScaleSidebar(QWidget):
         # Drawing shapes section
         layout.addWidget(_section_label("DRAW SHAPES"))
         
-        # Drawing mode buttons (scrollable so sidebar width stays fixed)
-        button_row = QHBoxLayout()
-        button_row.setSpacing(4)
+        shape_card = QFrame()
+        shape_card.setObjectName("drawShapesCard")
+        self._style_section_card(shape_card)
+        shape_layout = QVBoxLayout(shape_card)
+        shape_layout.setContentsMargins(12, 12, 12, 12)
+        shape_layout.setSpacing(10)
 
-        tools_widget = QWidget()
-        tools_layout = QHBoxLayout(tools_widget)
+        tools_layout = QHBoxLayout()
         tools_layout.setContentsMargins(0, 0, 0, 0)
-        tools_layout.setSpacing(4)
-        
-        self.arrow_btn = QPushButton("➜")
-        self.arrow_btn.setFixedWidth(44)
-        self.arrow_btn.setFixedHeight(32)
-        self.arrow_btn.setCheckable(True)
-        self.arrow_btn.setCursor(Qt.PointingHandCursor)
-        self.arrow_btn.setToolTip("Draw arrow")
+        tools_layout.setSpacing(6)
+
+        self.arrow_btn = self._create_tool_button("arrow", "Draw arrow")
         self.arrow_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("arrow"))
         tools_layout.addWidget(self.arrow_btn)
         
-        self.rectangle_btn = QPushButton("▭")
-        self.rectangle_btn.setFixedWidth(44)
-        self.rectangle_btn.setFixedHeight(32)
-        self.rectangle_btn.setCheckable(True)
-        self.rectangle_btn.setCursor(Qt.PointingHandCursor)
-        self.rectangle_btn.setToolTip("Draw rectangle")
+        self.rectangle_btn = self._create_tool_button("rectangle", "Draw rectangle")
         self.rectangle_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("rectangle"))
         tools_layout.addWidget(self.rectangle_btn)
         
-        self.circle_btn = QPushButton("◯")
-        self.circle_btn.setFixedWidth(44)
-        self.circle_btn.setFixedHeight(32)
-        self.circle_btn.setCheckable(True)
-        self.circle_btn.setCursor(Qt.PointingHandCursor)
-        self.circle_btn.setToolTip("Draw circle")
+        self.circle_btn = self._create_tool_button("circle", "Draw circle")
         self.circle_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("circle"))
         tools_layout.addWidget(self.circle_btn)
 
-        self.move_btn = QPushButton("✋")
-        self.move_btn.setFixedWidth(44)
-        self.move_btn.setFixedHeight(32)
-        self.move_btn.setCheckable(True)
-        self.move_btn.setCursor(Qt.PointingHandCursor)
-        self.move_btn.setToolTip("Move drawings")
+        self.move_btn = self._create_tool_button("move", "Move drawings")
         self.move_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("move"))
         tools_layout.addWidget(self.move_btn)
 
-        self.erase_btn = QPushButton("⌫")
-        self.erase_btn.setFixedWidth(44)
-        self.erase_btn.setFixedHeight(32)
-        self.erase_btn.setCheckable(True)
-        self.erase_btn.setCursor(Qt.PointingHandCursor)
-        self.erase_btn.setToolTip("Erase one drawing")
+        self.erase_btn = self._create_tool_button("erase", "Erase one drawing")
         self.erase_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("erase"))
         tools_layout.addWidget(self.erase_btn)
         
-        self.clear_shapes_btn = QPushButton("🗑")
-        self.clear_shapes_btn.setFixedWidth(44)
-        self.clear_shapes_btn.setFixedHeight(32)
-        self.clear_shapes_btn.setCursor(Qt.PointingHandCursor)
-        self.clear_shapes_btn.setToolTip("Clear all shapes")
+        self.clear_shapes_btn = self._create_tool_button("clear", "Clear all shapes", checkable=False)
         self.clear_shapes_btn.clicked.connect(self._on_clear_shapes)
         tools_layout.addWidget(self.clear_shapes_btn)
         
         tools_layout.addStretch()
-
-        tools_scroll = QScrollArea()
-        tools_scroll.setWidgetResizable(False)
-        tools_scroll.setFrameShape(QFrame.NoFrame)
-        tools_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tools_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        tools_scroll.setFixedHeight(52)
-        tools_scroll.setWidget(tools_widget)
-
-        button_row.addWidget(tools_scroll)
-        layout.addLayout(button_row)
+        shape_layout.addLayout(tools_layout)
         
         # Color picker button
         self.color_btn = QPushButton("🎨 Color: ")
@@ -351,7 +408,8 @@ class ScaleSidebar(QWidget):
         self.color_btn.setCursor(Qt.PointingHandCursor)
         self.color_btn.clicked.connect(self._on_color_picker)
         self._update_color_btn_style()
-        layout.addWidget(self.color_btn)
+        shape_layout.addWidget(self.color_btn)
+        layout.addWidget(shape_card)
         
         self._drawing_mode_buttons = {
             "arrow": self.arrow_btn,
@@ -679,10 +737,9 @@ class ScaleSidebar(QWidget):
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {default_theme.button_primary};
-                    border: none;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 14px;
+                    border: 1px solid {default_theme.button_primary_hover};
+                    border-radius: 8px;
+                    padding: 6px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -695,9 +752,8 @@ class ScaleSidebar(QWidget):
                 QPushButton {{
                     background-color: {default_theme.row_bg_standard};
                     border: 1px solid {default_theme.border_light};
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 14px;
+                    border-radius: 8px;
+                    padding: 6px;
                     color: {default_theme.text_primary};
                 }}
                 QPushButton:hover {{
