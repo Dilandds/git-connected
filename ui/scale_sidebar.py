@@ -199,14 +199,14 @@ class ScaleSidebar(QWidget):
         upload_card_layout.setSpacing(10)
 
         # Title header
-        title = QLabel("📐 Drawing Scale")
-        title.setFont(make_font(size=16, bold=True))
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
-        upload_card_layout.addWidget(title)
+        self.title = QLabel(t("scale.title"))
+        self.title.setFont(make_font(size=16, bold=True))
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(self.title)
 
         # Upload button (same pattern as Technical Overview)
-        self.upload_btn = QPushButton("📂 Upload Drawing")
+        self.upload_btn = QPushButton(t("scale.upload_btn"))
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(f"""
@@ -231,13 +231,15 @@ class ScaleSidebar(QWidget):
 
         layout.addWidget(self._separator())
 
-        layout.addWidget(_section_label("UNIT"))
+        self.unit_label = _section_label(t("scale.unit"))
+        layout.addWidget(self.unit_label)
         self.unit_combo = _styled_combo()
         self.unit_combo.addItems(["Centimeters (cm)", "Millimeters (mm)", "Inches (in)", "Meters (m)"])
         self.unit_combo.currentIndexChanged.connect(self._on_unit_changed)
         layout.addWidget(self.unit_combo)
 
-        layout.addWidget(_section_label("SCALE RATIO"))
+        self.scale_ratio_label = _section_label(t("scale.scale_ratio"))
+        layout.addWidget(self.scale_ratio_label)
         self.scale_combo = _styled_combo()
         self.scale_combo.addItems(["1:1", "1:2", "1:5", "1:10"])
         self.scale_combo.currentIndexChanged.connect(self._on_scale_changed)
@@ -246,7 +248,7 @@ class ScaleSidebar(QWidget):
         layout.addWidget(self._separator())
 
         # Ruler toggle — same family as Technical "Annotate"
-        self.ruler_btn = QPushButton("📏 Ruler Tool")
+        self.ruler_btn = QPushButton(t("scale.ruler_tool"))
         self.ruler_btn.setFixedHeight(34)
         self.ruler_btn.setCheckable(True)
         self.ruler_btn.setCursor(Qt.PointingHandCursor)
@@ -295,7 +297,7 @@ class ScaleSidebar(QWidget):
         layout.addWidget(self.lock_btn)
 
         # Add Reference — outlined accent (dark-theme-safe hover)
-        self.add_ref_btn = QPushButton("📌 Add Reference")
+        self.add_ref_btn = QPushButton(t("scale.add_reference"))
         self.add_ref_btn.setFixedHeight(34)
         self.add_ref_btn.setCursor(Qt.PointingHandCursor)
         self.add_ref_btn.setStyleSheet(f"""
@@ -318,7 +320,7 @@ class ScaleSidebar(QWidget):
         layout.addWidget(self.add_ref_btn)
 
         # Reset — red destructive (matches Technical "Reset Workspace")
-        self.reset_btn = QPushButton("🗑 Reset")
+        self.reset_btn = QPushButton(t("scale.reset"))
         self.reset_btn.setFixedHeight(34)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(f"""
@@ -339,7 +341,7 @@ class ScaleSidebar(QWidget):
         layout.addWidget(self.reset_btn)
 
         # Export — same green as Technical "Export .ecto"
-        self.export_btn = QPushButton("💾 Export Scaled")
+        self.export_btn = QPushButton(t("scale.export_scaled"))
         self.export_btn.setFixedHeight(34)
         self.export_btn.setCursor(Qt.PointingHandCursor)
         self.export_btn.setStyleSheet(f"""
@@ -362,7 +364,8 @@ class ScaleSidebar(QWidget):
         layout.addWidget(self._separator())
 
         # Drawing shapes section
-        layout.addWidget(_section_label("DRAW SHAPES"))
+        self.draw_shapes_label = _section_label(t("scale.draw_shapes"))
+        layout.addWidget(self.draw_shapes_label)
         
         shape_card = QFrame()
         shape_card.setObjectName("drawShapesCard")
@@ -422,7 +425,8 @@ class ScaleSidebar(QWidget):
 
         layout.addWidget(self._separator())
 
-        layout.addWidget(_section_label("HOW TO USE"))
+        self.how_to_use_label = _section_label(t("scale.how_to_use"))
+        layout.addWidget(self.how_to_use_label)
         instructions = QLabel(
             "1. Upload a drawing (PDF/image)\n"
             "2. Use scroll wheel to resize the drawing proportionally\n"
@@ -441,6 +445,8 @@ class ScaleSidebar(QWidget):
 
         scroll.setWidget(container)
         outer.addWidget(scroll)
+        self._update_texts()
+        on_language_changed(self._update_texts)
 
     def _separator(self) -> QFrame:
         sep = QFrame()
@@ -448,6 +454,18 @@ class ScaleSidebar(QWidget):
         sep.setFixedHeight(1)
         sep.setStyleSheet(f"background: {default_theme.separator}; border: none;")
         return sep
+
+    def _update_texts(self):
+        self.title.setText(t("scale.title"))
+        self.upload_btn.setText(t("scale.upload_btn"))
+        self.unit_label.setText(t("scale.unit"))
+        self.scale_ratio_label.setText(t("scale.scale_ratio"))
+        self.ruler_btn.setText(t("scale.ruler_tool"))
+        self.add_ref_btn.setText(t("scale.add_reference"))
+        self.reset_btn.setText(t("scale.reset"))
+        self.export_btn.setText(t("scale.export_scaled"))
+        self.draw_shapes_label.setText(t("scale.draw_shapes"))
+        self.how_to_use_label.setText(t("scale.how_to_use"))
 
     def _on_unit_changed(self, index: int):
         units = ["cm", "mm", "inches", "m"]

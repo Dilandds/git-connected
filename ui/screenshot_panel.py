@@ -265,10 +265,10 @@ class ScreenshotPanel(QWidget):
         cam_icon.setAlignment(Qt.AlignCenter)
         cam_icon.setStyleSheet("background: transparent; border: none; font-size: 16px;")
         title_row.addWidget(cam_icon)
-        title = QLabel("Screenshots")
-        title.setFont(make_font(size=12, bold=True))
-        title.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
-        title_row.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setFont(make_font(size=12, bold=True))
+        self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+        title_row.addWidget(self.title_label)
         title_row.addStretch()
 
         exit_btn = QPushButton("✕")
@@ -363,6 +363,9 @@ class ScreenshotPanel(QWidget):
         self.clear_btn.hide()
         layout.addWidget(self.clear_btn)
 
+        on_language_changed(self._update_texts)
+        self._update_texts()
+
     def _rebuild_grid(self):
         """Rebuild the grid layout from the cards list."""
         # Remove all items from grid (without deleting widgets)
@@ -456,3 +459,9 @@ class ScreenshotPanel(QWidget):
     def _on_clear_all(self):
         if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):
             self.clear_all()
+
+    def _update_texts(self):
+        """Refresh translated labels."""
+        self.title_label.setText(t("screenshot.panel_title"))
+        self.instruction.setText(t("screenshot.instruction"))
+        self.clear_btn.setText(t("screenshot.clear_all"))

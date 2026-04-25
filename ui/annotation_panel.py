@@ -506,11 +506,11 @@ class AnnotationPanel(QWidget):
         anno_icon.setAlignment(Qt.AlignCenter)
         anno_icon.setStyleSheet("background: transparent; border: none;")
         title_row.addWidget(anno_icon)
-        title_label = QLabel("Annotation mode")
+        self.title_label = QLabel()
         title_font = make_font(size=12, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
-        title_row.addWidget(title_label)
+        self.title_label.setFont(title_font)
+        self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+        title_row.addWidget(self.title_label)
         title_row.addStretch()
         
         # Close button
@@ -644,6 +644,9 @@ class AnnotationPanel(QWidget):
         btn_layout.addStretch()
         
         main_layout.addWidget(btn_frame)
+
+        on_language_changed(self._update_texts)
+        self._update_texts()
     
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (view-only)."""
@@ -762,6 +765,12 @@ class AnnotationPanel(QWidget):
             card = self.annotation_cards.get(ann.id)
             if card is not None:
                 card.update_annotation(ann, display_number=i + 1)
+
+    def _update_texts(self):
+        """Refresh translated labels."""
+        self.title_label.setText(t("annotation.panel_title"))
+        self.instructions_label.setText(t("annotation.subtitle"))
+        self.clear_btn.setText(t("annotation.clear_all"))
     
     def load_annotations(self, data: List[dict]):
         """Load annotations from serialized data."""

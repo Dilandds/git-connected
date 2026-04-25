@@ -1283,10 +1283,10 @@ class TexturePanel(QWidget):
         tex_icon.setAlignment(Qt.AlignCenter)
         tex_icon.setStyleSheet("background: transparent; border: none; font-size: 16px;")
         title_row.addWidget(tex_icon)
-        title = QLabel("Textures")
-        title.setFont(make_font(size=12, bold=True))
-        title.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
-        title_row.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setFont(make_font(size=12, bold=True))
+        self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
+        title_row.addWidget(self.title_label)
         title_row.addStretch()
 
         reset_btn = QPushButton("Reset")
@@ -1493,10 +1493,10 @@ class TexturePanel(QWidget):
         layout.addWidget(self.clear_btn)
 
         # ---- Texture Settings (sliders) ----
-        settings_label = QLabel("Texture Settings")
-        settings_label.setFont(make_font(size=11, bold=True))
-        settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
-        layout.addWidget(settings_label)
+        self.settings_label = QLabel()
+        self.settings_label.setFont(make_font(size=11, bold=True))
+        self.settings_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(self.settings_label)
 
         # --- Metal sliders container ---
         self._metal_sliders_container = QWidget()
@@ -1587,6 +1587,9 @@ class TexturePanel(QWidget):
 
         main_scroll.setWidget(scroll_content)
         outer_layout.addWidget(main_scroll)
+
+        on_language_changed(self._update_texts)
+        self._update_texts()
 
     def _rebuild_grid(self):
         while self.grid_layout.count():
@@ -1700,3 +1703,10 @@ class TexturePanel(QWidget):
 
     def clear_all(self):
         self._on_clear_all()
+
+    def _update_texts(self):
+        """Refresh translated labels."""
+        self.title_label.setText(t("texture.panel_title"))
+        self.instruction.setText(t("texture.instruction"))
+        self.clear_btn.setText(t("texture.clear_all"))
+        self.settings_label.setText(t("texture.settings"))

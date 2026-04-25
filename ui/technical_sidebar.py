@@ -128,12 +128,12 @@ class TechnicalSidebar(QWidget):
         upload_card_layout.setSpacing(10)
 
         # Title header
-        header = QLabel("Technical Overview")
+        self.header = QLabel(t("technical.title"))
         hfont = make_font(size=16, bold=True)
-        header.setFont(hfont)
-        header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
-        upload_card_layout.addWidget(header)
+        self.header.setFont(hfont)
+        self.header.setAlignment(Qt.AlignCenter)
+        self.header.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(self.header)
 
         # Upload button
         self.upload_btn = QPushButton("📄 Upload Image / PDF / .ecto")
@@ -164,18 +164,21 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(sep)
 
         # Property
-        layout.addWidget(_section_label("PROPERTY"))
+        self.property_label = _section_label(t("technical.property"))
+        layout.addWidget(self.property_label)
         self.property_edit = _line_edit("e.g. Company")
         layout.addWidget(self.property_edit)
 
         # Title
-        layout.addWidget(_section_label("OBJECT TITLE"))
+        self.object_title_label = _section_label(t("technical.object_title"))
+        layout.addWidget(self.object_title_label)
         self.title_edit = _line_edit("e.g. HVAC Unit #12")
         layout.addWidget(self.title_edit)
 
         # Manufacturer(s)
         mfr_header = QHBoxLayout()
-        mfr_header.addWidget(_section_label("MANUFACTURER"))
+        self.manufacturer_label = _section_label(t("technical.manufacturer"))
+        mfr_header.addWidget(self.manufacturer_label)
         mfr_header.addStretch()
         add_mfr_btn = QPushButton("+")
         add_mfr_btn.setFixedSize(26, 26)
@@ -204,7 +207,8 @@ class TechnicalSidebar(QWidget):
         layout.addLayout(self._manufacturer_container)
 
         # Dates
-        layout.addWidget(_section_label("START DATE"))
+        self.start_date_label = _section_label(t("technical.start_date"))
+        layout.addWidget(self.start_date_label)
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
         self.start_date.setDate(QDate.currentDate())
@@ -212,7 +216,8 @@ class TechnicalSidebar(QWidget):
         self._style_date_edit(self.start_date)
         layout.addWidget(self.start_date)
 
-        layout.addWidget(_section_label("DEADLINE"))
+        self.deadline_label = _section_label(t("technical.deadline"))
+        layout.addWidget(self.deadline_label)
         self.deadline_date = QDateEdit()
         self.deadline_date.setCalendarPopup(True)
         self.deadline_date.setDate(QDate.currentDate().addMonths(1))
@@ -221,7 +226,8 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(self.deadline_date)
 
         # Comments
-        layout.addWidget(_section_label("COMMENTS"))
+        self.comments_label = _section_label(t("technical.comments"))
+        layout.addWidget(self.comments_label)
         self.comments_edit = QTextEdit()
         self.comments_edit.setPlaceholderText("Add notes, observations, or instructions…")
         self.comments_edit.setMinimumHeight(120)
@@ -249,7 +255,7 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(sep2)
 
         # Annotate toggle button
-        self.annotate_btn = QPushButton("📌 Annotate")
+        self.annotate_btn = QPushButton(t("technical.annotate"))
         self.annotate_btn.setFixedHeight(34)
         self.annotate_btn.setCursor(Qt.PointingHandCursor)
         self.annotate_btn.setCheckable(True)
@@ -274,7 +280,7 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(self.annotate_btn)
 
         # Export .ecto button
-        self.export_btn = QPushButton("📦 Export .ecto")
+        self.export_btn = QPushButton(t("technical.export_ecto"))
         self.export_btn.setFixedHeight(34)
         self.export_btn.setCursor(Qt.PointingHandCursor)
         self.export_btn.setStyleSheet(f"""
@@ -292,7 +298,7 @@ class TechnicalSidebar(QWidget):
         layout.addWidget(self.export_btn)
 
         # Export PDF button (hidden in Education edition)
-        self.export_pdf_btn = QPushButton("📄 Export PDF Report")
+        self.export_pdf_btn = QPushButton(t("technical.export_pdf"))
         self.export_pdf_btn.setFixedHeight(34)
         self.export_pdf_btn.setCursor(Qt.PointingHandCursor)
         self.export_pdf_btn.setStyleSheet(f"""
@@ -314,7 +320,7 @@ class TechnicalSidebar(QWidget):
         layout.addSpacing(12)
 
         # Reset button
-        self.reset_btn = QPushButton("🔄 Reset Workspace")
+        self.reset_btn = QPushButton(t("technical.reset_workspace"))
         self.reset_btn.setFixedHeight(34)
         self.reset_btn.setCursor(Qt.PointingHandCursor)
         self.reset_btn.setStyleSheet(f"""
@@ -335,6 +341,8 @@ class TechnicalSidebar(QWidget):
 
         scroll.setWidget(container)
         outer.addWidget(scroll)
+        self._update_texts()
+        on_language_changed(self._update_texts)
 
     def _style_date_edit(self, de: QDateEdit):
         de.setStyleSheet(f"""
@@ -355,6 +363,20 @@ class TechnicalSidebar(QWidget):
             }}
         """)
         _apply_field_palette(de)
+
+    def _update_texts(self):
+        self.header.setText(t("technical.title"))
+        self.property_label.setText(t("technical.property"))
+        self.object_title_label.setText(t("technical.object_title"))
+        self.manufacturer_label.setText(t("technical.manufacturer"))
+        self.start_date_label.setText(t("technical.start_date"))
+        self.deadline_label.setText(t("technical.deadline"))
+        self.comments_label.setText(t("technical.comments"))
+        self.upload_btn.setText(t("technical.upload_btn"))
+        self.annotate_btn.setText(t("technical.annotate"))
+        self.export_btn.setText(t("technical.export_ecto"))
+        self.export_pdf_btn.setText(t("technical.export_pdf"))
+        self.reset_btn.setText(t("technical.reset_workspace"))
 
     def _on_annotate_toggled(self):
         self._annotation_mode = self.annotate_btn.isChecked()

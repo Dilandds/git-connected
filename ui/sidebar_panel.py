@@ -77,6 +77,7 @@ class SidebarPanel(QWidget):
         self.current_dimensions = {'width': 0.0, 'height': 0.0, 'depth': 0.0}
         self.calculated_scale_factor = 1.0
         self.current_surface_area_cm2 = 0.0
+        self._annotation_count = 0
         self.current_stl_filename = ""
         self.has_stl_loaded = False
         self.has_scaled_data = False
@@ -285,7 +286,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(separator)
         
         # Volume row
-        self.volume_row = DimensionRow("Volume", "--", self)
+        self.volume_row = DimensionRow(t("sidebar.volume"), "--", self)
         card_layout.addWidget(self.volume_row)
         
         self._style_section_card(card)
@@ -306,10 +307,10 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title_label = QLabel("Total Surface Area")
+        self.surface_title_label = QLabel(t("sidebar.total_surface_area"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self.surface_title_label.setFont(title_font)
+        self.surface_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
         
@@ -319,7 +320,7 @@ class SidebarPanel(QWidget):
         )
         icon_label.setAlignment(Qt.AlignCenter)
         
-        header_layout.addWidget(title_label)
+        header_layout.addWidget(self.surface_title_label)
         header_layout.addWidget(self._make_help_badge(
             "Calculated surface area: Sum of the areas of all triangles in the 3D mesh. "
             "Useful for estimating galvanizing or surface treatment costs."
@@ -329,8 +330,8 @@ class SidebarPanel(QWidget):
         card_layout.addLayout(header_layout)
         
         # Surface area rows using components
-        self.surface_total_row = SurfaceAreaRow("Total area", "--", "total_area", self)
-        self.surface_cm_row = SurfaceAreaRow("Area (cm²)", "--", "highlight", self)
+        self.surface_total_row = SurfaceAreaRow(t("sidebar.total_area"), "--", "total_area", self)
+        self.surface_cm_row = SurfaceAreaRow(t("sidebar.area_cm2"), "--", "highlight", self)
         
         card_layout.addWidget(self.surface_total_row)
         card_layout.addWidget(self.surface_cm_row)
@@ -353,10 +354,10 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title_label = QLabel("Estimated Weight")
+        self.weight_title_label = QLabel(t("sidebar.estimated_weight"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self.weight_title_label.setFont(title_font)
+        self.weight_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
         
@@ -366,7 +367,7 @@ class SidebarPanel(QWidget):
         )
         icon_label.setAlignment(Qt.AlignCenter)
         
-        header_layout.addWidget(title_label)
+        header_layout.addWidget(self.weight_title_label)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addLayout(header_layout)
@@ -432,10 +433,10 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.material_combo)
         
         # Weight rows using components
-        self.weight_volume_row = WeightRow("Volume", "--", "standard", self)
+        self.weight_volume_row = WeightRow(t("sidebar.volume"), "--", "standard", self)
         self.weight_density_row = WeightDensityInputRow(self)
         self.weight_density_row.densityChanged.connect(self.calculate_weight)
-        self.weight_result_row = WeightRow("Estimated weight", "--", "highlight", self)
+        self.weight_result_row = WeightRow(t("sidebar.estimated_weight_result"), "--", "highlight", self)
         
         card_layout.addWidget(self.weight_volume_row)
         card_layout.addWidget(self.weight_density_row)
@@ -494,16 +495,16 @@ class SidebarPanel(QWidget):
         """)
         self._adjust_weight_collapse_lbl.installEventFilter(self)
         
-        title_label = QLabel("Adjust to Target Weight")
+        self.adjust_weight_title_label = QLabel(t("sidebar.adjust_target_weight"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self.adjust_weight_title_label.setFont(title_font)
+        self.adjust_weight_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; padding: 2px 0; background-color: transparent; background: transparent; border: none;"
         )
-        title_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.adjust_weight_title_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         # Ensure full title is visible (avoids truncation on narrow sidebars)
-        fm = title_label.fontMetrics()
-        title_label.setMinimumWidth(fm.horizontalAdvance("Adjust to Target Weight") + 8)
+        fm = self.adjust_weight_title_label.fontMetrics()
+        self.adjust_weight_title_label.setMinimumWidth(fm.horizontalAdvance(self.adjust_weight_title_label.text()) + 8)
         
         icon_label = QLabel("⚙")
         icon_label.setStyleSheet(
@@ -513,7 +514,7 @@ class SidebarPanel(QWidget):
         icon_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         
         header_layout.addWidget(self._adjust_weight_collapse_lbl)
-        header_layout.addWidget(title_label)
+        header_layout.addWidget(self.adjust_weight_title_label)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addWidget(self._adjust_weight_header)
@@ -617,13 +618,13 @@ class SidebarPanel(QWidget):
         content_layout.addWidget(separator)
         
         # Results section title
-        results_label = QLabel("Scaled Results")
+        self.results_label = QLabel(t("sidebar.scaled_results"))
         results_font = make_font(size=11, bold=True)
-        results_label.setFont(results_font)
-        results_label.setStyleSheet(
+        self.results_label.setFont(results_font)
+        self.results_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; margin-top: 4px; background-color: transparent; border: none;"
         )
-        content_layout.addWidget(results_label)
+        content_layout.addWidget(self.results_label)
         
         # Scale factor row
         self.scale_factor_row = ScaleResultRow("Scale factor", "--", "highlight", self)
@@ -646,12 +647,12 @@ class SidebarPanel(QWidget):
         content_layout.addWidget(separator2)
         
         # Weight comparison title
-        comparison_label = QLabel("Weight Comparison")
-        comparison_label.setFont(results_font)
-        comparison_label.setStyleSheet(
+        self.weight_comparison_label = QLabel(t("sidebar.weight_comparison"))
+        self.weight_comparison_label.setFont(results_font)
+        self.weight_comparison_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; margin-top: 4px; background-color: transparent; border: none;"
         )
-        content_layout.addWidget(comparison_label)
+        content_layout.addWidget(self.weight_comparison_label)
         
         # Weight comparison rows
         self.original_weight_row = ScaleResultRow("Original weight", "--", "comparison", self)
@@ -1167,10 +1168,10 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
-        title_label = QLabel("Export as .ecto")
+        self.export_ecto_title_label = QLabel(t("sidebar.export_ecto_title"))
         title_font = make_font(size=14, bold=True)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet(
+        self.export_ecto_title_label.setFont(title_font)
+        self.export_ecto_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
         
@@ -1180,27 +1181,25 @@ class SidebarPanel(QWidget):
         )
         icon_label.setAlignment(Qt.AlignCenter)
         
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(self._make_help_badge(
-            "Single file contains: model + annotations + photos. "
-            "Recipients open it directly in ECTOFORM."
-        ))
+        header_layout.addWidget(self.export_ecto_title_label)
+        self.export_ecto_help_badge = self._make_help_badge(t("sidebar.export_ecto_footer"))
+        header_layout.addWidget(self.export_ecto_help_badge)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addLayout(header_layout)
         
         # Description
-        desc_label = QLabel("Export a single .ecto file with model, annotations, and photos bundled together.\nOnly ECTOFORM can open .ecto files.")
+        self.export_ecto_desc_label = QLabel(t("sidebar.export_ecto_desc"))
         desc_font = make_font(size=11)
-        desc_label.setFont(desc_font)
-        desc_label.setStyleSheet(
+        self.export_ecto_desc_label.setFont(desc_font)
+        self.export_ecto_desc_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; background-color: transparent; background: transparent; border: none;"
         )
-        desc_label.setWordWrap(True)
-        card_layout.addWidget(desc_label)
+        self.export_ecto_desc_label.setWordWrap(True)
+        card_layout.addWidget(self.export_ecto_desc_label)
         
         # Annotation count label
-        self.annotation_count_label = QLabel("No annotations to export")
+        self.annotation_count_label = QLabel(t("sidebar.no_annotations"))
         self.annotation_count_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; font-style: italic; background-color: transparent; background: transparent; border: none;"
         )
@@ -1245,11 +1244,12 @@ class SidebarPanel(QWidget):
     
     def update_annotation_count(self, count: int):
         """Update the annotation count label and button state."""
+        self._annotation_count = count
         if count == 0:
-            self.annotation_count_label.setText("No annotations to export")
+            self.annotation_count_label.setText(t("sidebar.no_annotations"))
             self.export_annotations_btn.setEnabled(self.has_stl_loaded)
         else:
-            self.annotation_count_label.setText(f"📌 {count} annotation{'s' if count != 1 else ''} ready to export")
+            self.annotation_count_label.setText(f"📌 {count} {t('sidebar.annotations_ready')}")
             self.export_annotations_btn.setEnabled(self.has_stl_loaded)
     
     def export_as_ecto(self):
@@ -1306,7 +1306,7 @@ class SidebarPanel(QWidget):
             
             # Show progress
             self.export_annotations_btn.setEnabled(False)
-            self.export_annotations_btn.setText("Exporting...")
+            self.export_annotations_btn.setText(t("sidebar.exporting"))
             QApplication.processEvents()
             
             # Export as .ecto bundle (includes annotations, drawings, and texture)
@@ -1322,7 +1322,7 @@ class SidebarPanel(QWidget):
             
             # Restore button
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export as .ecto")
+            self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
             
             if success:
                 # Register creator token so sender can reopen in editor mode
@@ -1466,10 +1466,15 @@ class SidebarPanel(QWidget):
         self.height_row.set_label(t("sidebar.width_y"))
         self.depth_row.set_label(t("sidebar.height_z"))
         self.volume_row.set_label(t("sidebar.volume"))
+        self.surface_title_label.setText(t("sidebar.total_surface_area"))
         self.surface_total_row.set_label(t("sidebar.total_area"))
         self.surface_cm_row.set_label(t("sidebar.area_cm2"))
+        self.weight_title_label.setText(t("sidebar.estimated_weight"))
         self.weight_volume_row.set_label(t("sidebar.volume"))
         self.weight_result_row.set_label(t("sidebar.estimated_weight_result"))
+        self.adjust_weight_title_label.setText(t("sidebar.adjust_target_weight"))
+        self.results_label.setText(t("sidebar.scaled_results"))
+        self.weight_comparison_label.setText(t("sidebar.weight_comparison"))
         self.calculate_scale_btn.setText(t("sidebar.calculate_scale"))
         self.scale_factor_row.set_label(t("sidebar.scale_factor"))
         self.new_x_row.set_label(t("sidebar.new_x"))
@@ -1479,6 +1484,12 @@ class SidebarPanel(QWidget):
         self.original_weight_row.set_label(t("sidebar.original_weight"))
         self.target_weight_row.set_label(t("sidebar.target_weight"))
         self.export_scaled_btn.setText(t("sidebar.export_scaled_stl"))
+        self.export_ecto_title_label.setText(t("sidebar.export_ecto_title"))
+        self.export_ecto_desc_label.setText(t("sidebar.export_ecto_desc"))
+        self.export_ecto_help_badge.setToolTip(t("sidebar.export_ecto_footer"))
         self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
         self.target_weight_input.setPlaceholderText(t("sidebar.enter_target_weight"))
+        self.update_annotation_count(self._annotation_count)
+        fm = self.adjust_weight_title_label.fontMetrics()
+        self.adjust_weight_title_label.setMinimumWidth(fm.horizontalAdvance(self.adjust_weight_title_label.text()) + 8)
 
