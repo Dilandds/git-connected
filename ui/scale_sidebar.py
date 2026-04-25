@@ -377,7 +377,40 @@ class ScaleSidebar(QWidget):
         shape_layout.setContentsMargins(12, 12, 12, 12)
         shape_layout.setSpacing(10)
 
-        tools_layout = QHBoxLayout()
+        tools_scroll = QScrollArea()
+        tools_scroll.setWidgetResizable(False)
+        tools_scroll.setFrameShape(QFrame.NoFrame)
+        tools_scroll.setFixedHeight(58)
+        tools_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        tools_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tools_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollBar:horizontal {{
+                background: {default_theme.row_bg_standard};
+                height: 7px;
+                border-radius: 3px;
+                margin: 0px 8px 0px 8px;
+            }}
+            QScrollBar::handle:horizontal {{
+                background: {default_theme.button_primary};
+                border-radius: 3px;
+                min-width: 34px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background: {default_theme.button_primary_hover};
+            }}
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+                background: transparent;
+            }}
+        """)
+        tools_viewport = QWidget()
+        tools_viewport.setStyleSheet("background: transparent;")
+        tools_layout = QHBoxLayout(tools_viewport)
         tools_layout.setContentsMargins(0, 0, 0, 0)
         tools_layout.setSpacing(6)
 
@@ -409,8 +442,9 @@ class ScaleSidebar(QWidget):
         self.clear_shapes_btn.clicked.connect(self._on_clear_shapes)
         tools_layout.addWidget(self.clear_shapes_btn)
         
-        tools_layout.addStretch()
-        shape_layout.addLayout(tools_layout)
+        tools_viewport.setFixedWidth(7 * 42 + 6 * 6)
+        tools_scroll.setWidget(tools_viewport)
+        shape_layout.addWidget(tools_scroll)
         
         # Color picker button
         self.color_btn = QPushButton("🎨 Color: ")
