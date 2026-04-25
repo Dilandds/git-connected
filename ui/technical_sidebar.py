@@ -258,7 +258,7 @@ class TechnicalSidebar(QWidget):
             QPushButton {{
                 background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
-                border-radius: 6px;
+                border-radius: 8px;
                 padding: 6px 12px; font-size: 11px;
                 color: {default_theme.text_primary};
             }}
@@ -280,7 +280,7 @@ class TechnicalSidebar(QWidget):
         self.export_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #10B981;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
@@ -298,7 +298,7 @@ class TechnicalSidebar(QWidget):
         self.export_pdf_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #3B82F6;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
@@ -320,7 +320,7 @@ class TechnicalSidebar(QWidget):
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #B91C1C;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
