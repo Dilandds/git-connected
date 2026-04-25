@@ -635,7 +635,7 @@ class ScaleCanvas(QWidget):
         # Measurements + projection lines
         self._draw_measurements(painter)
 
-        # Draw shapes (arrows, rectangles, circles)
+        # Draw shapes (arrows, rectangles, circles, text)
         self._draw_all_shapes(painter)
 
         # Live preview line (ruler mode, pending first click)
@@ -654,7 +654,7 @@ class ScaleCanvas(QWidget):
         painter.end()
 
     def _draw_all_shapes(self, painter: QPainter):
-        """Draw all shapes: arrows, rectangles, circles."""
+        """Draw all shapes: arrows, rectangles, circles, text."""
         # Draw arrows
         for arrow in self._arrows:
             self._draw_arrow_shape(painter, arrow)
@@ -666,6 +666,9 @@ class ScaleCanvas(QWidget):
         # Draw circles
         for circle in self._circles:
             self._draw_circle_shape(painter, circle)
+
+        for text in self._texts:
+            self._draw_text_shape(painter, text)
 
         # Selection highlight
         self._draw_selected_shape_highlight(painter)
@@ -744,6 +747,18 @@ class ScaleCanvas(QWidget):
         painter.drawText(int(circle.cx - 35), int(circle.cy), radius_label)
         painter.drawText(int(circle.cx - 35), int(circle.cy + circle.radius + 15), diameter_label)
 
+    def _draw_text_shape(self, painter: QPainter, text: DrawingText):
+        """Draw a text annotation."""
+        font = QFont("Segoe UI", 13, QFont.Bold)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        rect = QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 215))
+        painter.drawRoundedRect(rect, 4, 4)
+        painter.setPen(text.color)
+        painter.drawText(QPointF(text.x, text.y), text.text)
+
     def _draw_arrow_preview(self, painter: QPainter):
         """Draw preview of arrow being drawn."""
         preview_arrow = DrawingArrow(
@@ -804,6 +819,17 @@ class ScaleCanvas(QWidget):
                 int(circle.cy - circle.radius),
                 int(circle.radius * 2),
                 int(circle.radius * 2),
+            )
+        elif shape_type == "text":
+            text = next((t for t in self._texts if t.id == shape_id), None)
+            if not text:
+                return
+            font = QFont("Segoe UI", 13, QFont.Bold)
+            fm = QFontMetrics(font)
+            painter.drawRoundedRect(
+                QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10),
+                4,
+                4,
             )
 
     def _arrow_polygon(self, arrow: DrawingArrow) -> Optional[QPolygonF]:
