@@ -913,10 +913,22 @@ class ScaleCanvas(QWidget):
             if not s:
                 return None
             return QPointF(s.cx, s.cy)
+        if shape_type == "text":
+            s = next((t for t in self._texts if t.id == shape_id), None)
+            if not s:
+                return None
+            return QPointF(s.x, s.y)
         return None
 
     def _hit_shape(self, pos: QPointF) -> Optional[Tuple[str, int]]:
         """Hit test topmost shape at a screen position."""
+        font = QFont("Segoe UI", 13, QFont.Bold)
+        fm = QFontMetrics(font)
+        for text in reversed(self._texts):
+            rect = QRectF(text.x - 6, text.y - fm.ascent() - 5, fm.horizontalAdvance(text.text) + 12, fm.height() + 10)
+            if rect.contains(pos):
+                return ("text", text.id)
+
         for circle in reversed(self._circles):
             if math.hypot(pos.x() - circle.cx, pos.y() - circle.cy) <= circle.radius:
                 return ("circle", circle.id)
@@ -943,6 +955,8 @@ class ScaleCanvas(QWidget):
             self._rectangles = [r for r in self._rectangles if r.id != shape_id]
         elif shape_type == "circle":
             self._circles = [c for c in self._circles if c.id != shape_id]
+        elif shape_type == "text":
+            self._texts = [t for t in self._texts if t.id != shape_id]
         self._selected_shape = None
         self.update()
 
