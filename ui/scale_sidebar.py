@@ -133,6 +133,33 @@ class ScaleSidebar(QWidget):
         self._drawing_color = QColor("#FFFF00")
         self._init_ui()
 
+    def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(blur_radius)
+        shadow.setXOffset(0)
+        shadow.setYOffset(y_offset)
+        shadow.setColor(QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
+    def _style_section_card(self, card: QFrame):
+        name = card.objectName()
+        if not name:
+            return
+        card.setStyleSheet(f"QFrame#{name} {{ {sidebar_section_card_stylesheet(default_theme)} }}")
+        card.setAttribute(Qt.WA_StyledBackground, True)
+        self._add_card_shadow(card)
+
+    def _create_tool_button(self, kind: str, tooltip: str, checkable: bool = True) -> QPushButton:
+        btn = QPushButton()
+        btn.setFixedSize(42, 36)
+        btn.setIcon(_shape_icon(kind))
+        btn.setIconSize(QSize(24, 24))
+        btn.setCheckable(checkable)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setToolTip(tooltip)
+        self._update_drawing_btn_style(btn, False)
+        return btn
+
     def _init_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -142,21 +169,45 @@ class ScaleSidebar(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setObjectName("sidebarScrollArea")
+        scroll.setMinimumWidth(SIDEBAR_WIDTH)
+        scroll.setStyleSheet(f"""
+            QScrollArea#sidebarScrollArea {{
+                background-color: {default_theme.background};
+                border: none;
+            }}
+            QScrollArea#sidebarScrollArea > QWidget > QWidget {{
+                background-color: {default_theme.background};
+            }}
+        """)
+        scroll.viewport().setStyleSheet(f"background-color: {default_theme.background};")
 
         container = QWidget()
+        container.setObjectName("sidebarContent")
+        container.setStyleSheet(f"background-color: {default_theme.background};")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignTop)
+        layout.setContentsMargins(10, 14, 20, 18)
+        layout.setSpacing(15)
+
+        upload_card = QFrame()
+        upload_card.setObjectName("uploadCard")
+        self._style_section_card(upload_card)
+        upload_card_layout = QVBoxLayout(upload_card)
+        upload_card_layout.setContentsMargins(16, 18, 16, 18)
+        upload_card_layout.setSpacing(10)
 
         # Title header
         title = QLabel("📐 Drawing Scale")
-        title.setFont(make_font(size=13, bold=True))
-        title.setStyleSheet(f"color: {default_theme.text_title};")
-        layout.addWidget(title)
+        title.setFont(make_font(size=16, bold=True))
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(title)
 
         # Upload button (same pattern as Technical Overview)
         self.upload_btn = QPushButton("📂 Upload Drawing")
-        self.upload_btn.setFixedHeight(34)
+        self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(f"""
             QPushButton {{
@@ -172,8 +223,11 @@ class ScaleSidebar(QWidget):
                 background-color: {default_theme.row_bg_hover};
             }}
         """)
+        self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(self.upload_requested.emit)
-        layout.addWidget(self.upload_btn)
+        upload_card_layout.addWidget(self.upload_btn)
+
+        layout.addWidget(upload_card)
 
         layout.addWidget(self._separator())
 
