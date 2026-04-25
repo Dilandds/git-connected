@@ -5,11 +5,12 @@ Fields: Property, Title, Manufacturer, Start Date, Deadline, Comments.
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QTextEdit,
-    QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout
+    QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout,
+    QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
 from i18n import t, on_language_changed
 from core.edition import is_education
 
@@ -68,9 +69,25 @@ class TechnicalSidebar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(260)
+        self.setFixedWidth(350)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._init_ui()
+
+    def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(blur_radius)
+        shadow.setXOffset(0)
+        shadow.setYOffset(y_offset)
+        shadow.setColor(QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
+    def _style_section_card(self, card: QFrame):
+        name = card.objectName()
+        if not name:
+            return
+        card.setStyleSheet(f"QFrame#{name} {{ {sidebar_section_card_stylesheet(default_theme)} }}")
+        card.setAttribute(Qt.WA_StyledBackground, True)
+        self._add_card_shadow(card)
 
     def _init_ui(self):
         outer = QVBoxLayout(self)
