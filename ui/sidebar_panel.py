@@ -92,6 +92,16 @@ class SidebarPanel(QWidget):
         shadow.setColor(QColor(0, 0, 0, alpha))
         widget.setGraphicsEffect(shadow)
 
+    def set_2d_mode(self, is_2d: bool):
+        """Handle UI state when a 2D model is loaded or switched from.
+        
+        In 2D mode, disable/grey out Visual style and 2D/3D view controls.
+        Keep enabled: Ruler, Annotation, Draw.
+        """
+        # This is a placeholder that can be expanded based on the actual UI structure
+        # when the specific visual style and 2D/3D view controls are identified
+        pass
+
     def _style_section_card(self, card: QFrame):
         """Gradient + border on this card, styled background + drop shadow.
 

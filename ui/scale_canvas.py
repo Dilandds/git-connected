@@ -6,6 +6,7 @@ graduated frame, then use the ruler tool for real-world measurements.
 """
 import os
 import logging
+import math
 from typing import Optional, List, Tuple
 from dataclasses import dataclass, field
 
@@ -17,7 +18,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPoint
 from PyQt5.QtGui import (
     QPainter, QPixmap, QColor, QPen, QFont, QFontMetrics,
     QDragEnterEvent, QDropEvent, QWheelEvent, QMouseEvent, QPaintEvent,
-    QImage,
+    QImage, QPolygonF,
 )
 
 from ui.styles import default_theme
@@ -51,6 +52,55 @@ class ExtraRefLine:
     """A user-placed reference line that can be dragged anywhere."""
     id: int
     pos: QPointF  # absolute screen position (top-left of the line)
+
+
+@dataclass
+class DrawingArrow:
+    """An arrow shape on the canvas."""
+    id: int
+    x1: float  # start point in screen coords
+    y1: float
+    x2: float  # end point in screen coords
+    y2: float
+    color: QColor = field(default_factory=lambda: QColor("#000000"))
+    
+    def get_dimensions(self) -> dict:
+        """Return dimensions dict with length."""
+        dist = ((self.x2 - self.x1) ** 2 + (self.y2 - self.y1) ** 2) ** 0.5
+        import math
+        angle = math.degrees(math.atan2(self.y2 - self.y1, self.x2 - self.x1))
+        return {"length": dist, "angle": angle}
+
+
+@dataclass
+class DrawingRectangle:
+    """A rectangle shape on the canvas."""
+    id: int
+    x: float  # top-left in screen coords
+    y: float
+    width: float
+    height: float
+    color: QColor = field(default_factory=lambda: QColor("#000000"))
+    angle: float = 0.0
+    
+    def get_dimensions(self) -> dict:
+        """Return dimensions dict with width and height."""
+        return {"width": abs(self.width), "height": abs(self.height)}
+
+
+@dataclass
+class DrawingCircle:
+    """A circle shape on the canvas."""
+    id: int
+    cx: float  # center in screen coords
+    cy: float
+    radius: float
+    color: QColor = field(default_factory=lambda: QColor("#000000"))
+    angle: float = 0.0
+    
+    def get_dimensions(self) -> dict:
+        """Return dimensions dict with radius and diameter."""
+        return {"radius": abs(self.radius), "diameter": abs(self.radius * 2)}
 
 
 class ScaleCanvas(QWidget):
@@ -97,8 +147,32 @@ class ScaleCanvas(QWidget):
 
         # Static border: records the image rect at load time (doesn't move with zoom)
         self._static_border_rect: Optional[QRectF] = None
-
-        self.setMouseTracking(True)
+        
+        # Visibility flags for different border elements
+        self._show_static_border = True  # Show/hide static border
+        self._show_moving_border = True  # Show/hide moving border
+        self._show_ref_lines = True  # Show/hide dotted reference lines
+        self._pdf_locked = False  # Lock PDF position (disable panning)
+        
+        # Drawing shapes mode
+        self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle"
+        self._drawing_color = QColor("#FFFF00")  # Current drawing color
+        self._arrows: List[DrawingArrow] = []
+        self._rectangles: List[DrawingRectangle] = []
+        self._circles: List[DrawingCircle] = []
+        self._next_arrow_id = 1
+        self._next_rectangle_id = 1
+        self._next_circle_id = 1
+        
+        # Drawing state
+        self._drawing_start_pos: Optional[QPointF] = None
+        self._current_preview_pos: Optional[QPointF] = None
+        self._selected_shape: Optional[Tuple[str, int]] = None  # (shape_type, id) or None
+        self._resizing_handle: Optional[str] = None  # "start" | "end" | "edge" for current resize
+        self._dragging_shape: Optional[Tuple[str, int]] = None
+        self._shape_drag_start = QPointF(0, 0)
+        self._shape_drag_origin: Optional[Tuple[float, ...]] = None
+        
         self.setFocusPolicy(Qt.StrongFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(500, 400)
@@ -144,12 +218,84 @@ class ScaleCanvas(QWidget):
         self._panning = False
         self._unit = "cm"
         self._scale_ratio = 1.0
+        self._drawing_mode = None
+        self._arrows.clear()
+        self._rectangles.clear()
+        self._circles.clear()
+        self._next_arrow_id = 1
+        self._next_rectangle_id = 1
+        self._next_circle_id = 1
+        self._drawing_start_pos = None
+        self._current_preview_pos = None
+        self._selected_shape = None
+        self._resizing_handle = None
+        self._dragging_shape = None
+        self._shape_drag_start = QPointF(0, 0)
+        self._shape_drag_origin = None
         self.setCursor(Qt.ArrowCursor)
         self.update()
 
     def clear_image(self):
         """Clear the drawing; same as :meth:`reset_workspace`."""
         self.reset_workspace()
+
+    def set_show_static_border(self, show: bool):
+        """Show or hide the static border (original image boundary)."""
+        self._show_static_border = show
+        self.update()
+
+    def set_show_moving_border(self, show: bool):
+        """Show or hide the moving border (zoomed/panned image border)."""
+        self._show_moving_border = show
+        self.update()
+
+    def set_show_ref_lines(self, show: bool):
+        """Show or hide the dotted reference lines (projection lines from corners to ruler)."""
+        self._show_ref_lines = show
+        self.update()
+
+    def set_pdf_locked(self, locked: bool):
+        """Lock or unlock PDF position (disable/enable panning)."""
+        self._pdf_locked = locked
+        self.update()
+
+    def set_drawing_mode(self, mode: Optional[str]):
+        """Set drawing tool mode: draw shapes, move, erase, or None."""
+        self._drawing_mode = mode
+        self._drawing_start_pos = None
+        self._current_preview_pos = None
+        self._selected_shape = None
+        self._resizing_handle = None
+        if mode in {"arrow", "rectangle", "circle"}:
+            self.setCursor(Qt.CrossCursor)
+        elif mode == "move":
+            self.setCursor(Qt.OpenHandCursor)
+        elif mode == "erase":
+            self.setCursor(Qt.ForbiddenCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+        self.update()
+
+    def _is_shape_draw_mode(self) -> bool:
+        return self._drawing_mode in {"arrow", "rectangle", "circle"}
+
+    def set_drawing_color(self, color: QColor):
+        """Set the color for new drawing shapes."""
+        self._drawing_color = color
+        self.update()
+
+    def clear_drawings(self):
+        """Clear all drawn shapes."""
+        self._arrows.clear()
+        self._rectangles.clear()
+        self._circles.clear()
+        self._next_arrow_id = 1
+        self._next_rectangle_id = 1
+        self._next_circle_id = 1
+        self._drawing_start_pos = None
+        self._current_preview_pos = None
+        self._selected_shape = None
+        self.update()
 
     def set_unit(self, unit: str):
         """Set unit: 'cm', 'mm', 'inches', or 'm'."""
@@ -440,20 +586,22 @@ class ScaleCanvas(QWidget):
             painter.drawPixmap(ir.toRect(), self._pixmap)
 
             # --- Image border (moving with zoom) ---
-            pen_moving = QPen(QColor("#333333"), 1.5, Qt.SolidLine)
-            painter.setPen(pen_moving)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRect(ir.toRect())
+            if self._show_moving_border:
+                pen_moving = QPen(QColor("#333333"), 1.5, Qt.SolidLine)
+                painter.setPen(pen_moving)
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRect(ir.toRect())
 
             # --- Static border (original size, doesn't move with zoom) ---
-            if self._static_border_rect is not None:
+            if self._show_static_border and self._static_border_rect is not None:
                 pen_static = QPen(QColor("#333333"), 1.5, Qt.SolidLine)
                 painter.setPen(pen_static)
                 painter.setBrush(Qt.NoBrush)
                 painter.drawRect(self._static_border_rect.toRect())
 
             # --- Dashed projection lines from image corners to ruler edges ---
-            self._draw_image_projection_lines(painter, ir)
+            if self._show_ref_lines:
+                self._draw_image_projection_lines(painter, ir)
         else:
             self._draw_drop_zone(painter, canvas)
 
@@ -469,6 +617,9 @@ class ScaleCanvas(QWidget):
         # Measurements + projection lines
         self._draw_measurements(painter)
 
+        # Draw shapes (arrows, rectangles, circles)
+        self._draw_all_shapes(painter)
+
         # Live preview line (ruler mode, pending first click)
         if self._ruler_mode and self._pending_point is not None and self._mouse_pos is not None:
             p1 = self._image_to_screen(self._pending_point.x(), self._pending_point.y())
@@ -483,6 +634,319 @@ class ScaleCanvas(QWidget):
         self._draw_ruler_frame(painter)
 
         painter.end()
+
+    def _draw_all_shapes(self, painter: QPainter):
+        """Draw all shapes: arrows, rectangles, circles."""
+        # Draw arrows
+        for arrow in self._arrows:
+            self._draw_arrow_shape(painter, arrow)
+        
+        # Draw rectangles
+        for rect in self._rectangles:
+            self._draw_rectangle_shape(painter, rect)
+        
+        # Draw circles
+        for circle in self._circles:
+            self._draw_circle_shape(painter, circle)
+
+        # Selection highlight
+        self._draw_selected_shape_highlight(painter)
+        
+        # Draw preview shape being created
+        if self._is_shape_draw_mode() and self._drawing_start_pos and self._current_preview_pos:
+            if self._drawing_mode == "arrow":
+                self._draw_arrow_preview(painter)
+            elif self._drawing_mode == "rectangle":
+                self._draw_rectangle_preview(painter)
+            elif self._drawing_mode == "circle":
+                self._draw_circle_preview(painter)
+
+    def _draw_arrow_shape(self, painter: QPainter, arrow: DrawingArrow):
+        """Draw a directional filled arrow (shaft + triangular head)."""
+        poly = self._arrow_polygon(arrow)
+        if poly is None:
+            return
+
+        # Fill-only look
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(arrow.color)
+        painter.drawPolygon(poly)
+
+    def _draw_rectangle_shape(self, painter: QPainter, rect: DrawingRectangle):
+        """Draw a rectangle shape with dimensions."""
+        poly = self._rectangle_polygon(rect)
+        if poly is None:
+            return
+
+        # Fill-only look
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(rect.color)
+        painter.drawPolygon(poly)
+
+        x, y, w, h = rect.x, rect.y, rect.width, rect.height
+        norm_x = min(x, x + w)
+        norm_y = min(y, y + h)
+        norm_w = abs(w)
+        norm_h = abs(h)
+        
+        # Draw dimension labels
+        font = QFont("Segoe UI", 9, QFont.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor("#000000"))
+        
+        dims = rect.get_dimensions()
+        width_label = f"{dims['width']:.0f}px"
+        height_label = f"{dims['height']:.0f}px"
+        
+        painter.drawText(int(norm_x + norm_w / 2 - 20), int(norm_y - 8), width_label)
+        painter.drawText(int(norm_x + norm_w + 5), int(norm_y + norm_h / 2 - 5), height_label)
+
+    def _draw_circle_shape(self, painter: QPainter, circle: DrawingCircle):
+        """Draw a circle shape with dimensions."""
+        # Fill-only look
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(circle.color)
+        
+        painter.drawEllipse(
+            int(circle.cx - circle.radius),
+            int(circle.cy - circle.radius),
+            int(circle.radius * 2),
+            int(circle.radius * 2)
+        )
+        
+        # Draw dimension labels
+        font = QFont("Segoe UI", 9, QFont.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor("#000000"))
+        
+        dims = circle.get_dimensions()
+        radius_label = f"r: {dims['radius']:.0f}px"
+        diameter_label = f"d: {dims['diameter']:.0f}px"
+        
+        painter.drawText(int(circle.cx - 35), int(circle.cy), radius_label)
+        painter.drawText(int(circle.cx - 35), int(circle.cy + circle.radius + 15), diameter_label)
+
+    def _draw_arrow_preview(self, painter: QPainter):
+        """Draw preview of arrow being drawn."""
+        preview_arrow = DrawingArrow(
+            id=-1,
+            x1=self._drawing_start_pos.x(),
+            y1=self._drawing_start_pos.y(),
+            x2=self._current_preview_pos.x(),
+            y2=self._current_preview_pos.y(),
+            color=self._drawing_color,
+        )
+        poly = self._arrow_polygon(preview_arrow)
+        if poly is None:
+            return
+
+        painter.setPen(QPen(QColor("#000000"), 1.5, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawPolygon(poly)
+
+    def _draw_rectangle_preview(self, painter: QPainter):
+        """Draw preview of rectangle being drawn."""
+        x1, y1 = self._drawing_start_pos.x(), self._drawing_start_pos.y()
+        x2, y2 = self._current_preview_pos.x(), self._current_preview_pos.y()
+        
+        # Draw with dashed outline
+        painter.setPen(QPen(QColor("#000000"), 1.5, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(int(min(x1, x2)), int(min(y1, y2)), int(abs(x2 - x1)), int(abs(y2 - y1)))
+
+    def _draw_selected_shape_highlight(self, painter: QPainter):
+        """Draw selected-shape visual guide."""
+        if not self._selected_shape:
+            return
+
+        shape_type, shape_id = self._selected_shape
+        painter.setPen(QPen(QColor("#1E88E5"), 1.5, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+
+        if shape_type == "arrow":
+            arrow = next((a for a in self._arrows if a.id == shape_id), None)
+            if not arrow:
+                return
+            poly = self._arrow_polygon(arrow)
+            if poly:
+                painter.drawPolygon(poly)
+        elif shape_type == "rectangle":
+            rect = next((r for r in self._rectangles if r.id == shape_id), None)
+            if not rect:
+                return
+            poly = self._rectangle_polygon(rect)
+            if poly:
+                painter.drawPolygon(poly)
+        elif shape_type == "circle":
+            circle = next((c for c in self._circles if c.id == shape_id), None)
+            if not circle:
+                return
+            painter.drawEllipse(
+                int(circle.cx - circle.radius),
+                int(circle.cy - circle.radius),
+                int(circle.radius * 2),
+                int(circle.radius * 2),
+            )
+
+    def _arrow_polygon(self, arrow: DrawingArrow) -> Optional[QPolygonF]:
+        """Build a right/left/up/down directional arrow polygon from start->end."""
+        dx = arrow.x2 - arrow.x1
+        dy = arrow.y2 - arrow.y1
+        length = math.hypot(dx, dy)
+        if length < 6:
+            return None
+
+        ux = dx / length
+        uy = dy / length
+        px = -uy
+        py = ux
+
+        shaft_half = max(6.0, min(18.0, length * 0.08))
+        head_half = shaft_half * 1.6
+        head_len = max(14.0, min(length * 0.35, 36.0))
+
+        tail_x, tail_y = arrow.x1, arrow.y1
+        tip_x, tip_y = arrow.x2, arrow.y2
+        neck_x = tip_x - ux * head_len
+        neck_y = tip_y - uy * head_len
+
+        points = [
+            QPointF(tail_x + px * shaft_half, tail_y + py * shaft_half),
+            QPointF(neck_x + px * shaft_half, neck_y + py * shaft_half),
+            QPointF(neck_x + px * head_half, neck_y + py * head_half),
+            QPointF(tip_x, tip_y),
+            QPointF(neck_x - px * head_half, neck_y - py * head_half),
+            QPointF(neck_x - px * shaft_half, neck_y - py * shaft_half),
+            QPointF(tail_x - px * shaft_half, tail_y - py * shaft_half),
+        ]
+        return QPolygonF(points)
+
+    def _rectangle_polygon(self, rect: DrawingRectangle) -> Optional[QPolygonF]:
+        """Build rectangle polygon with optional rotation."""
+        norm_x = min(rect.x, rect.x + rect.width)
+        norm_y = min(rect.y, rect.y + rect.height)
+        norm_w = abs(rect.width)
+        norm_h = abs(rect.height)
+        if norm_w < 2 or norm_h < 2:
+            return None
+
+        cx = norm_x + norm_w / 2
+        cy = norm_y + norm_h / 2
+        angle_rad = math.radians(rect.angle)
+        ca = math.cos(angle_rad)
+        sa = math.sin(angle_rad)
+
+        corners = [
+            QPointF(norm_x, norm_y),
+            QPointF(norm_x + norm_w, norm_y),
+            QPointF(norm_x + norm_w, norm_y + norm_h),
+            QPointF(norm_x, norm_y + norm_h),
+        ]
+
+        rotated = []
+        for p in corners:
+            rx = p.x() - cx
+            ry = p.y() - cy
+            x = cx + rx * ca - ry * sa
+            y = cy + rx * sa + ry * ca
+            rotated.append(QPointF(x, y))
+        return QPolygonF(rotated)
+
+    def _shape_center(self, shape_type: str, shape_id: int) -> Optional[QPointF]:
+        """Return center point of a shape."""
+        if shape_type == "arrow":
+            s = next((a for a in self._arrows if a.id == shape_id), None)
+            if not s:
+                return None
+            return QPointF((s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2)
+        if shape_type == "rectangle":
+            s = next((r for r in self._rectangles if r.id == shape_id), None)
+            if not s:
+                return None
+            return QPointF(s.x + s.width / 2, s.y + s.height / 2)
+        if shape_type == "circle":
+            s = next((c for c in self._circles if c.id == shape_id), None)
+            if not s:
+                return None
+            return QPointF(s.cx, s.cy)
+        return None
+
+    def _hit_shape(self, pos: QPointF) -> Optional[Tuple[str, int]]:
+        """Hit test topmost shape at a screen position."""
+        for circle in reversed(self._circles):
+            if math.hypot(pos.x() - circle.cx, pos.y() - circle.cy) <= circle.radius:
+                return ("circle", circle.id)
+
+        for rect in reversed(self._rectangles):
+            poly = self._rectangle_polygon(rect)
+            if poly and poly.containsPoint(pos, Qt.OddEvenFill):
+                return ("rectangle", rect.id)
+
+        for arrow in reversed(self._arrows):
+            poly = self._arrow_polygon(arrow)
+            if poly and poly.containsPoint(pos, Qt.OddEvenFill):
+                return ("arrow", arrow.id)
+        return None
+
+    def _delete_selected_shape(self):
+        """Delete currently selected shape."""
+        if not self._selected_shape:
+            return
+        shape_type, shape_id = self._selected_shape
+        if shape_type == "arrow":
+            self._arrows = [a for a in self._arrows if a.id != shape_id]
+        elif shape_type == "rectangle":
+            self._rectangles = [r for r in self._rectangles if r.id != shape_id]
+        elif shape_type == "circle":
+            self._circles = [c for c in self._circles if c.id != shape_id]
+        self._selected_shape = None
+        self.update()
+
+    def _rotate_selected_shape(self, angle_deg: float):
+        """Rotate selected shape by angle degrees around its center."""
+        if not self._selected_shape:
+            return
+        shape_type, shape_id = self._selected_shape
+
+        if shape_type == "arrow":
+            arrow = next((a for a in self._arrows if a.id == shape_id), None)
+            if not arrow:
+                return
+            cx = (arrow.x1 + arrow.x2) / 2
+            cy = (arrow.y1 + arrow.y2) / 2
+            rad = math.radians(angle_deg)
+            ca = math.cos(rad)
+            sa = math.sin(rad)
+            for keyx, keyy in (("x1", "y1"), ("x2", "y2")):
+                x = getattr(arrow, keyx) - cx
+                y = getattr(arrow, keyy) - cy
+                setattr(arrow, keyx, cx + x * ca - y * sa)
+                setattr(arrow, keyy, cy + x * sa + y * ca)
+        elif shape_type == "rectangle":
+            rect = next((r for r in self._rectangles if r.id == shape_id), None)
+            if not rect:
+                return
+            rect.angle = (rect.angle + angle_deg) % 360
+        elif shape_type == "circle":
+            circle = next((c for c in self._circles if c.id == shape_id), None)
+            if not circle:
+                return
+            circle.angle = (circle.angle + angle_deg) % 360
+
+        self.update()
+
+    def _draw_circle_preview(self, painter: QPainter):
+        """Draw preview of circle being drawn."""
+        x1, y1 = self._drawing_start_pos.x(), self._drawing_start_pos.y()
+        x2, y2 = self._current_preview_pos.x(), self._current_preview_pos.y()
+        
+        import math
+        radius = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        
+        # Draw with dashed black outline
+        painter.setPen(QPen(QColor("#000000"), 1.5, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(int(x1 - radius), int(y1 - radius), int(radius * 2), int(radius * 2))
 
     def _draw_image_projection_lines(self, painter: QPainter, ir: QRectF):
         """Draw dashed projection lines from the 4 edges of the image to the ruler frame."""
@@ -952,7 +1416,7 @@ class ScaleCanvas(QWidget):
 
     def wheelEvent(self, event: QWheelEvent):
         """Zoom drawing proportionally (homothetic)."""
-        if not self._pixmap:
+        if not self._pixmap or self._pdf_locked:
             return
         delta = event.angleDelta().y()
         factor = 1.1 if delta > 0 else 0.9
@@ -965,7 +1429,64 @@ class ScaleCanvas(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         pos = QPointF(event.pos())
 
-        if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode:
+        # Handle shape drawing modes
+        if event.button() == Qt.LeftButton and self._is_shape_draw_mode() and self._pixmap:
+            self._drawing_start_pos = pos
+            self._current_preview_pos = pos
+            self.update()
+            return
+
+        # Eraser tool: delete one shape on click
+        if event.button() == Qt.LeftButton and self._drawing_mode == "erase" and self._pixmap:
+            hit_shape = self._hit_shape(pos)
+            if hit_shape is not None:
+                self._selected_shape = hit_shape
+                self._delete_selected_shape()
+            return
+
+        # Shape selection + move (hand tool)
+        if (
+            event.button() == Qt.LeftButton
+            and self._pixmap
+            and self._drawing_mode == "move"
+            and not self._ruler_mode
+        ):
+            hit_shape = self._hit_shape(pos)
+            if hit_shape is not None:
+                self._selected_shape = hit_shape
+                self._dragging_shape = hit_shape
+                self._shape_drag_start = QPointF(pos)
+
+                shape_type, shape_id = hit_shape
+                if shape_type == "arrow":
+                    a = next((x for x in self._arrows if x.id == shape_id), None)
+                    if a:
+                        self._shape_drag_origin = (a.x1, a.y1, a.x2, a.y2)
+                elif shape_type == "rectangle":
+                    r = next((x for x in self._rectangles if x.id == shape_id), None)
+                    if r:
+                        self._shape_drag_origin = (r.x, r.y)
+                elif shape_type == "circle":
+                    c = next((x for x in self._circles if x.id == shape_id), None)
+                    if c:
+                        self._shape_drag_origin = (c.cx, c.cy)
+
+                self.setCursor(Qt.ClosedHandCursor)
+                self.update()
+                return
+            else:
+                self._selected_shape = None
+                self.update()
+
+        # Rotate selected shape with right click in move mode
+        if event.button() == Qt.RightButton and self._drawing_mode == "move":
+            hit_shape = self._hit_shape(pos)
+            if hit_shape is not None:
+                self._selected_shape = hit_shape
+                self._rotate_selected_shape(15)
+                return
+
+        if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode and not self._pdf_locked:
             # Check if clicking delete button on any extra ref line
             for ref in self._extra_ref_lines:
                 ppu = self._pixels_per_unit()
@@ -988,7 +1509,7 @@ class ScaleCanvas(QWidget):
             # Red reference line is static — no dragging
 
         if event.button() == Qt.MiddleButton or (
-            event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap
+            event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._pdf_locked and not self._drawing_mode
         ):
             self._panning = True
             self._pan_start = event.pos() - self._pan_offset.toPoint()
@@ -1026,6 +1547,41 @@ class ScaleCanvas(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         pos = QPointF(event.pos())
 
+        # Update drawing preview
+        if self._is_shape_draw_mode() and self._drawing_start_pos:
+            self._current_preview_pos = pos
+            self.update()
+            return
+
+        # Move selected shape
+        if self._dragging_shape is not None and self._shape_drag_origin is not None:
+            delta = pos - self._shape_drag_start
+            shape_type, shape_id = self._dragging_shape
+
+            if shape_type == "arrow":
+                a = next((x for x in self._arrows if x.id == shape_id), None)
+                if a:
+                    ox1, oy1, ox2, oy2 = self._shape_drag_origin
+                    a.x1 = ox1 + delta.x()
+                    a.y1 = oy1 + delta.y()
+                    a.x2 = ox2 + delta.x()
+                    a.y2 = oy2 + delta.y()
+            elif shape_type == "rectangle":
+                r = next((x for x in self._rectangles if x.id == shape_id), None)
+                if r:
+                    ox, oy = self._shape_drag_origin
+                    r.x = ox + delta.x()
+                    r.y = oy + delta.y()
+            elif shape_type == "circle":
+                c = next((x for x in self._circles if x.id == shape_id), None)
+                if c:
+                    ocx, ocy = self._shape_drag_origin
+                    c.cx = ocx + delta.x()
+                    c.cy = ocy + delta.y()
+
+            self.update()
+            return
+
         # Dragging extra reference line
         if self._dragging_extra_ref is not None:
             delta = pos - self._extra_ref_drag_start
@@ -1049,32 +1605,101 @@ class ScaleCanvas(QWidget):
             return
 
         # Update cursor based on hover
-        if self._pixmap and not self._ruler_mode:
+        if self._pixmap and not self._ruler_mode and not self._drawing_mode:
             if self._hit_extra_ref(pos) is not None:
                 self.setCursor(Qt.SizeAllCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        pos = QPointF(event.pos())
+        
+        # Finish drawing shape
+        if event.button() == Qt.LeftButton and self._is_shape_draw_mode() and self._drawing_start_pos:
+            self._finish_drawing_shape(pos)
+            return
+
         if self._dragging_extra_ref is not None:
             self._dragging_extra_ref = None
             self.setCursor(Qt.ArrowCursor)
             self.update()
             return
 
+        if self._dragging_shape is not None:
+            self._dragging_shape = None
+            self._shape_drag_origin = None
+            self.setCursor(Qt.OpenHandCursor if self._drawing_mode == "move" else Qt.ArrowCursor)
+            self.update()
+            return
+
 
         if self._panning:
             self._panning = False
-            self.setCursor(Qt.CrossCursor if self._ruler_mode else Qt.ArrowCursor)
+            self.setCursor(Qt.CrossCursor if self._ruler_mode else (Qt.CrossCursor if self._drawing_mode else Qt.ArrowCursor))
             self.update()
+
+    def _finish_drawing_shape(self, end_pos: QPointF):
+        """Finalize a drawn shape."""
+        if not self._drawing_start_pos or not self._current_preview_pos:
+            return
+        
+        start = self._drawing_start_pos
+        end = self._current_preview_pos
+        
+        if self._drawing_mode == "arrow":
+            arrow = DrawingArrow(
+                id=self._next_arrow_id,
+                x1=start.x(),
+                y1=start.y(),
+                x2=end.x(),
+                y2=end.y(),
+                color=QColor(self._drawing_color)
+            )
+            self._arrows.append(arrow)
+            self._next_arrow_id += 1
+        elif self._drawing_mode == "rectangle":
+            rect = DrawingRectangle(
+                id=self._next_rectangle_id,
+                x=start.x(),
+                y=start.y(),
+                width=end.x() - start.x(),
+                height=end.y() - start.y(),
+                color=QColor(self._drawing_color)
+            )
+            self._rectangles.append(rect)
+            self._next_rectangle_id += 1
+        elif self._drawing_mode == "circle":
+            import math
+            radius = math.sqrt((end.x() - start.x()) ** 2 + (end.y() - start.y()) ** 2)
+            circle = DrawingCircle(
+                id=self._next_circle_id,
+                cx=start.x(),
+                cy=start.y(),
+                radius=radius,
+                color=QColor(self._drawing_color)
+            )
+            self._circles.append(circle)
+            self._next_circle_id += 1
+        
+        # Reset drawing state
+        self._drawing_start_pos = None
+        self._current_preview_pos = None
+        self.update()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
             self._pending_point = None
             self._mouse_pos = None
+            self._drawing_start_pos = None
+            self._current_preview_pos = None
             self.update()
         elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
             self.undo_last_measurement()
+        elif event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
+            self._delete_selected_shape()
+        elif event.key() == Qt.Key_R:
+            step = -15 if (event.modifiers() & Qt.ShiftModifier) else 15
+            self._rotate_selected_shape(step)
 
     # ---- drag and drop ----
 

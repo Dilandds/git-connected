@@ -109,6 +109,7 @@ class TabState:
     ecto_temp_dir: Optional[str] = None
     filename: Optional[str] = None  # display name for tab
     loaded_via_conversion: bool = False  # True when file was loaded via Convert File flow
+    is_2d_model: bool = False  # True when current model is 2D geometry
 
 
 # ======================== Main Window ========================
@@ -441,6 +442,12 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.export_requested.connect(self._scale_export)
         self.scale_sidebar.add_ref_requested.connect(self._scale_add_ref)
         self.scale_sidebar.reset_requested.connect(self._scale_reset)
+        self.scale_sidebar.static_border_toggled.connect(self._scale_static_border_toggled)
+        self.scale_sidebar.moving_border_toggled.connect(self._scale_moving_border_toggled)
+        self.scale_sidebar.ref_lines_toggled.connect(self._scale_ref_lines_toggled)
+        self.scale_sidebar.pdf_locked.connect(self._scale_pdf_locked)
+        self.scale_sidebar.drawing_mode_changed.connect(self._scale_drawing_mode_changed)
+        self.scale_sidebar.drawing_color_changed.connect(self._scale_drawing_color_changed)
         scale_layout.addWidget(self.scale_sidebar)
         
         self.scale_canvas = ScaleCanvas()
@@ -742,6 +749,32 @@ class STLViewerWindow(QMainWindow):
         """Clear the drawing and reset all Drawing Scale controls (canvas + sidebar)."""
         self.scale_canvas.reset_workspace()
         self.scale_sidebar.reset()
+
+    def _scale_static_border_toggled(self, show: bool):
+        """Handle static border visibility toggle."""
+        self.scale_canvas.set_show_static_border(show)
+
+    def _scale_moving_border_toggled(self, show: bool):
+        """Handle moving border visibility toggle."""
+        self.scale_canvas.set_show_moving_border(show)
+    def _scale_ref_lines_toggled(self, show: bool):
+        """Handle dotted reference lines visibility toggle."""
+        self.scale_canvas.set_show_ref_lines(show)
+
+    def _scale_pdf_locked(self, locked: bool):
+        """Handle PDF lock/unlock toggle."""
+        self.scale_canvas.set_pdf_locked(locked)
+
+    def _scale_drawing_mode_changed(self, mode: str):
+        """Handle drawing mode changes (arrow, rectangle, circle, or None)."""
+        if mode == "clear":
+            self.scale_canvas.clear_drawings()
+        else:
+            self.scale_canvas.set_drawing_mode(mode if mode else None)
+
+    def _scale_drawing_color_changed(self, color):
+        """Handle drawing color changes."""
+        self.scale_canvas.set_drawing_color(color)
 
     # ======================== Tab Management ========================
     
@@ -1281,11 +1314,11 @@ class STLViewerWindow(QMainWindow):
             self._load_ecto_file(file_path)
             return
         
-        if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs')):
+        if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
             QMessageBox.warning(
                 self,
                 "Invalid File",
-                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, or .ecto extension)."
+                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
             )
             return
         
@@ -1368,11 +1401,19 @@ class STLViewerWindow(QMainWindow):
             # Load any existing annotations for this file
             self._load_annotations_for_file(file_path)
             
+            # Check if model is 2D and update tab state
+            if hasattr(tab.viewer_widget, '_current_is_2d'):
+                tab.is_2d_model = tab.viewer_widget._current_is_2d
+            
             # Keep 3D view aligned with toolbar (default visual style is shaded)
             self._set_render_mode(self.toolbar.render_mode)
 
             # Ensure initial shading matches current texture panel slider defaults
             self._apply_current_texture_settings()
+            
+            # Update UI state for 2D models
+            if hasattr(self.sidebar_panel, 'set_2d_mode'):
+                self.sidebar_panel.set_2d_mode(tab.is_2d_model)
     
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""

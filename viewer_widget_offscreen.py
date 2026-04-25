@@ -89,6 +89,7 @@ class STLViewerWidgetOffscreen(QWidget):
         self.plotter = None
         self.current_mesh = None
         self.rotation_angle = 0
+        self._current_is_2d = False  # Track whether currently loaded model is 2D
         
         # Initialize plotter
         self._initialize_plotter()
@@ -308,8 +309,9 @@ class STLViewerWidgetOffscreen(QWidget):
                 logger.info("load_stl: Detected DXF file, loading with DxfLoader...")
                 from core.dxf_loader import DxfLoader
                 try:
-                    mesh = DxfLoader.load_dxf(file_path)
+                    mesh, is_2d = DxfLoader.load_dxf(file_path)
                     logger.info(f"load_stl: DXF file loaded successfully. Mesh info: {mesh}")
+                    self._current_is_2d = is_2d
                 except Exception as e:
                     logger.error(f"load_stl: Failed to load DXF file: {e}", exc_info=True)
                     raise

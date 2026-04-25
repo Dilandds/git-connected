@@ -151,6 +151,7 @@ class STLViewerWidget(QWidget):
         self.plotter = None  # Not used; kept for hasattr checks
         self._model_loaded = False
         self._initialized = False
+        self._current_is_2d = False  # Track whether currently loaded model is 2D
         self._render_mode = 'shaded'  # Match toolbar default; Phong shading on load
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
@@ -575,10 +576,11 @@ class STLViewerWidget(QWidget):
             elif file_ext.endswith('.dxf'):
                 logger.info("load_stl (pygfx): Loading DXF with DxfLoader...")
                 from core.dxf_loader import DxfLoader
-                pv_mesh = DxfLoader.load_dxf(file_path)
+                pv_mesh, is_2d = DxfLoader.load_dxf(file_path)
                 if pv_mesh is None or pv_mesh.n_points == 0:
                     raise ValueError("DXF loader returned empty mesh")
                 mesh_tri = _pyvista_to_trimesh(pv_mesh)
+                self._current_is_2d = is_2d
             # OBJ: prefer Scene (preserves object groups), then fallback chain
             elif file_ext.endswith('.obj'):
                 mesh_tri = None
