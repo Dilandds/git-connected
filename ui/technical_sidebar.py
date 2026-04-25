@@ -5,11 +5,12 @@ Fields: Property, Title, Manufacturer, Start Date, Deadline, Comments.
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QTextEdit,
-    QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout
+    QDateEdit, QFrame, QSizePolicy, QScrollArea, QPushButton, QHBoxLayout,
+    QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
 from i18n import t, on_language_changed
 from core.edition import is_education
 
@@ -68,9 +69,25 @@ class TechnicalSidebar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(260)
+        self.setFixedWidth(350)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._init_ui()
+
+    def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(blur_radius)
+        shadow.setXOffset(0)
+        shadow.setYOffset(y_offset)
+        shadow.setColor(QColor(0, 0, 0, alpha))
+        widget.setGraphicsEffect(shadow)
+
+    def _style_section_card(self, card: QFrame):
+        name = card.objectName()
+        if not name:
+            return
+        card.setStyleSheet(f"QFrame#{name} {{ {sidebar_section_card_stylesheet(default_theme)} }}")
+        card.setAttribute(Qt.WA_StyledBackground, True)
+        self._add_card_shadow(card)
 
     def _init_ui(self):
         outer = QVBoxLayout(self)
@@ -81,22 +98,46 @@ class TechnicalSidebar(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setObjectName("sidebarScrollArea")
+        scroll.setMinimumWidth(350)
+        scroll.setStyleSheet(f"""
+            QScrollArea#sidebarScrollArea {{
+                background-color: {default_theme.background};
+                border: none;
+            }}
+            QScrollArea#sidebarScrollArea > QWidget > QWidget {{
+                background-color: {default_theme.background};
+            }}
+        """)
+        scroll.viewport().setStyleSheet(f"background-color: {default_theme.background};")
 
         container = QWidget()
+        container.setObjectName("sidebarContent")
+        container.setStyleSheet(f"background-color: {default_theme.background};")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setAlignment(Qt.AlignTop)
+        layout.setContentsMargins(10, 14, 20, 18)
+        layout.setSpacing(15)
+
+        upload_card = QFrame()
+        upload_card.setObjectName("uploadCard")
+        self._style_section_card(upload_card)
+        upload_card_layout = QVBoxLayout(upload_card)
+        upload_card_layout.setContentsMargins(16, 18, 16, 18)
+        upload_card_layout.setSpacing(10)
 
         # Title header
         header = QLabel("Technical Overview")
-        hfont = make_font(size=13, bold=True)
+        hfont = make_font(size=16, bold=True)
         header.setFont(hfont)
-        header.setStyleSheet(f"color: {default_theme.text_title};")
-        layout.addWidget(header)
+        header.setAlignment(Qt.AlignCenter)
+        header.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
+        upload_card_layout.addWidget(header)
 
         # Upload button
         self.upload_btn = QPushButton("📄 Upload Image / PDF / .ecto")
-        self.upload_btn.setFixedHeight(34)
+        self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet(f"""
             QPushButton {{
@@ -110,8 +151,11 @@ class TechnicalSidebar(QWidget):
                 background-color: {default_theme.row_bg_hover};
             }}
         """)
+        self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(lambda: self.upload_requested.emit())
-        layout.addWidget(self.upload_btn)
+        upload_card_layout.addWidget(self.upload_btn)
+
+        layout.addWidget(upload_card)
 
         # Separator
         sep = QFrame()
@@ -214,7 +258,7 @@ class TechnicalSidebar(QWidget):
             QPushButton {{
                 background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
-                border-radius: 6px;
+                border-radius: 8px;
                 padding: 6px 12px; font-size: 11px;
                 color: {default_theme.text_primary};
             }}
@@ -236,7 +280,7 @@ class TechnicalSidebar(QWidget):
         self.export_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #10B981;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
@@ -254,7 +298,7 @@ class TechnicalSidebar(QWidget):
         self.export_pdf_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #3B82F6;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
@@ -276,7 +320,7 @@ class TechnicalSidebar(QWidget):
         self.reset_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #B91C1C;
-                border: none; border-radius: 6px;
+                border: none; border-radius: 8px;
                 padding: 6px 12px; font-size: 11px; font-weight: bold;
                 color: white;
             }}
