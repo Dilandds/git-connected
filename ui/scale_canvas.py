@@ -1494,6 +1494,22 @@ class ScaleCanvas(QWidget):
             self.update()
             return
 
+        # Text tool: click to place a text annotation
+        if event.button() == Qt.LeftButton and self._drawing_mode == "text" and self._pixmap:
+            text, ok = QInputDialog.getText(self, "Add Text", "Text:")
+            text = text.strip()
+            if ok and text:
+                self._texts.append(DrawingText(
+                    id=self._next_text_id,
+                    x=pos.x(),
+                    y=pos.y(),
+                    text=text,
+                    color=QColor(self._drawing_color),
+                ))
+                self._next_text_id += 1
+                self.update()
+            return
+
         # Eraser tool: delete one shape on click
         if event.button() == Qt.LeftButton and self._drawing_mode == "erase" and self._pixmap:
             hit_shape = self._hit_shape(pos)
@@ -1528,6 +1544,10 @@ class ScaleCanvas(QWidget):
                     c = next((x for x in self._circles if x.id == shape_id), None)
                     if c:
                         self._shape_drag_origin = (c.cx, c.cy)
+                elif shape_type == "text":
+                    t = next((x for x in self._texts if x.id == shape_id), None)
+                    if t:
+                        self._shape_drag_origin = (t.x, t.y)
 
                 self.setCursor(Qt.ClosedHandCursor)
                 self.update()
@@ -1636,6 +1656,12 @@ class ScaleCanvas(QWidget):
                     ocx, ocy = self._shape_drag_origin
                     c.cx = ocx + delta.x()
                     c.cy = ocy + delta.y()
+            elif shape_type == "text":
+                t = next((x for x in self._texts if x.id == shape_id), None)
+                if t:
+                    ox, oy = self._shape_drag_origin
+                    t.x = ox + delta.x()
+                    t.y = oy + delta.y()
 
             self.update()
             return
