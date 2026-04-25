@@ -65,6 +65,45 @@ def _styled_combo() -> QComboBox:
     return combo
 
 
+def _shape_icon(kind: str, color: QColor = None) -> QIcon:
+    """Create crisp toolbar icons for drawing tools without external assets."""
+    color = color or QColor(default_theme.text_primary)
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(color, 2.4, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    if kind == "arrow":
+        painter.drawLine(8, 24, 24, 8)
+        painter.drawLine(24, 8, 24, 17)
+        painter.drawLine(24, 8, 15, 8)
+    elif kind == "rectangle":
+        painter.drawRoundedRect(7, 9, 18, 14, 2, 2)
+    elif kind == "circle":
+        painter.drawEllipse(8, 8, 16, 16)
+    elif kind == "move":
+        painter.drawLine(16, 6, 16, 26)
+        painter.drawLine(6, 16, 26, 16)
+        painter.drawPolygon(QPolygonF([QPointF(16, 4), QPointF(12, 9), QPointF(20, 9)]))
+        painter.drawPolygon(QPolygonF([QPointF(16, 28), QPointF(12, 23), QPointF(20, 23)]))
+        painter.drawPolygon(QPolygonF([QPointF(4, 16), QPointF(9, 12), QPointF(9, 20)]))
+        painter.drawPolygon(QPolygonF([QPointF(28, 16), QPointF(23, 12), QPointF(23, 20)]))
+    elif kind == "erase":
+        painter.drawRoundedRect(9, 12, 15, 9, 2, 2)
+        painter.drawLine(12, 10, 25, 23)
+        painter.drawLine(7, 24, 26, 24)
+    elif kind == "clear":
+        painter.drawLine(11, 12, 21, 12)
+        painter.drawRoundedRect(10, 14, 12, 12, 2, 2)
+        painter.drawLine(13, 17, 13, 23)
+        painter.drawLine(16, 17, 16, 23)
+        painter.drawLine(19, 17, 19, 23)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class ScaleSidebar(QWidget):
     """Sidebar controls for Drawing Scale mode."""
 
