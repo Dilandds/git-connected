@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
-from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF, QFont
 from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
 from i18n import t, on_language_changed
 from ui.technical_sidebar import (
@@ -83,6 +83,9 @@ def _shape_icon(kind: str, color: QColor = None) -> QIcon:
         painter.drawRoundedRect(7, 9, 18, 14, 2, 2)
     elif kind == "circle":
         painter.drawEllipse(8, 8, 16, 16)
+    elif kind == "text":
+        painter.setFont(QFont("Segoe UI", 17, QFont.Bold))
+        painter.drawText(7, 24, "T")
     elif kind == "move":
         painter.drawLine(16, 6, 16, 26)
         painter.drawLine(6, 16, 26, 16)
@@ -390,6 +393,10 @@ class ScaleSidebar(QWidget):
         self.circle_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("circle"))
         tools_layout.addWidget(self.circle_btn)
 
+        self.text_btn = self._create_tool_button("text", "Add text")
+        self.text_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("text"))
+        tools_layout.addWidget(self.text_btn)
+
         self.move_btn = self._create_tool_button("move", "Move drawings")
         self.move_btn.clicked.connect(lambda: self._on_drawing_mode_clicked("move"))
         tools_layout.addWidget(self.move_btn)
@@ -418,6 +425,7 @@ class ScaleSidebar(QWidget):
             "arrow": self.arrow_btn,
             "rectangle": self.rectangle_btn,
             "circle": self.circle_btn,
+            "text": self.text_btn,
             "move": self.move_btn,
             "erase": self.erase_btn,
         }
