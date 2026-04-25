@@ -737,10 +737,9 @@ class ScaleSidebar(QWidget):
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {default_theme.button_primary};
-                    border: none;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 14px;
+                    border: 1px solid {default_theme.button_primary_hover};
+                    border-radius: 8px;
+                    padding: 6px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -753,9 +752,8 @@ class ScaleSidebar(QWidget):
                 QPushButton {{
                     background-color: {default_theme.row_bg_standard};
                     border: 1px solid {default_theme.border_light};
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 14px;
+                    border-radius: 8px;
+                    padding: 6px;
                     color: {default_theme.text_primary};
                 }}
                 QPushButton:hover {{
