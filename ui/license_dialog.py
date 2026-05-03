@@ -5,24 +5,21 @@ License activation dialog for subscription-based commercial seats.
 import sys
 from typing import Optional
 
-from PyQt5.QtCore import QThread, Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import QSize, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices, QFont
 from PyQt5.QtWidgets import (
     QDialog,
-    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QProgressBar,
     QVBoxLayout,
 )
 
 from core.license_validator import (
     activate_subscription,
     get_buy_url,
-    get_manage_url,
     get_machine_fingerprint,
     get_support_url,
 )
