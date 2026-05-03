@@ -1,59 +1,94 @@
-
-
 ## Goal
-Fix unreadable rulers at scale ratios 1:5 and 1:10 (and prevent the same issue at any future high ratio) by making the tick/label spacing **adaptive to actual pixel density** instead of fixed to the unit.
+Redesign the License Activation dialog to be minimal and Lemon Squeezy–native: **a single license key field**. Drop the work email field, drop the "Manage Seats" button, and clean up the layout to feel like a focused first-run activation screen.
 
-## Root Cause
-In `ui/scale_canvas.py → _draw_ruler_frame()`:
-- `pixels_per_unit (ppu)` shrinks linearly with the scale ratio.
-- At 1:1 (cm): ~38 px/cm → readable.
-- At 1:5 (cm): ~7.5 px/cm → minor mm ticks clamp to 2 px, major labels every ~7.5 px.
-- At 1:10 (cm): ~3.78 px/cm → major labels drawn ~4 px apart → black smear.
+Seat allocation / per-user identity is deferred — the machine fingerprint (already in `core/machine_id.py`) handles seat enforcement on its own via Lemon Squeezy's `activation_limit`.
 
-The label-emission logic assumes fixed `1 cm`, `1 mm`, `1 inch`, `10 cm` major intervals regardless of how visually close that is.
+## New Layout
 
-## Fix Strategy
+```text
+┌──────────────────────────────────────────┐
+│           [ ECTOFORM icon ]              │
+│                                          │
+│           Activate ECTOFORM              │
+│   Enter your license key to get started  │
+│                                          │
+│   ┌────────────────────────────────────┐ │
+│   │ XXXX-XXXX-XXXX-XXXX                │ │
+│   └────────────────────────────────────┘ │
+│                                          │
+│   [    Activate this device         ]    │
+│                                          │
+│   ─── status / error message here ───    │
+│                                          │
+│   Don't have a key?  Buy a subscription  │
+│   Need help?         Contact support     │
+│                                          │
+│                              Cancel      │
+└──────────────────────────────────────────┘
+```
 
-Introduce an **adaptive labeling step** so labels are emitted only when their real-world spacing produces enough on-screen pixels (target: ≥ 40 px between labels).
+## Concrete changes — `ui/license_dialog.py`
 
-### Algorithm (per unit)
-Compute `label_step_units` from a "nice number" sequence so that `label_step_units * ppu_per_base_unit ≥ MIN_LABEL_PX (40)`:
+1. **Window**
+   - Title: `Activate ECTOFORM`.
+   - Size: ~460×420, fixed-feel (not the current 560×360 minimum).
 
-- **cm**: candidates `[1, 2, 5, 10, 20, 50, 100, 200, 500]` cm
-- **mm**: candidates `[1, 2, 5, 10, 20, 50, 100, 200] mm` (label text = value mm or convert to cm if ≥ 100)
-- **inches**: candidates `[1, 2, 5, 10, 20, 50] in`
-- **m**: candidates `[10, 20, 50, 100, 200, 500] cm` (label text in cm or m if ≥ 100 cm)
+2. **Header**
+   - App icon centered (~56px) using `get_app_window_icon()`.
+   - H1 "Activate ECTOFORM" (16pt bold).
+   - One-line subtitle: "Enter your license key to activate this device."
+   - Drop the "company seat is tied to a user identity" line.
 
-Tick hierarchy (3 levels, all derived from chosen `label_step`):
-- **Major** (long tick + label) every `label_step`.
-- **Medium** (mid tick, no label) every `label_step / 2`.
-- **Minor** (short tick) every `label_step / 10` — but only drawn if `≥ 3 px` apart, otherwise skipped.
+3. **Single input**
+   - Remove `QFormLayout`, remove `self.user_input` entirely.
+   - Keep only `self.key_input`, label above it: "License key".
+   - Placeholder `XXXX-XXXX-XXXX-XXXX`, monospace font, auto-uppercase on input.
+   - Full width, 44px height.
 
-This guarantees labels never overlap and the ruler stays clean at every ratio (1:1 → 1:10 → 1:100).
+4. **Primary action**
+   - One full-width button: **"Activate this device"**.
+   - While validating, button text becomes "Activating…" and is disabled (replaces the separate `QProgressBar`).
+   - Remove `QProgressBar` entirely.
 
-### Implementation Changes (single file: `ui/scale_canvas.py`)
+5. **Inline status**
+   - Single status label under the button. Red on error, green on success, secondary color while idle/empty.
+   - Replace the modal `QMessageBox.information` success popup with: show success inline for ~800ms, then `accept()`. Less interruptive.
+   - Keep `QMessageBox.warning` for hard failures (clearer than inline only).
 
-1. **Add helper** `_compute_label_step(ppu_per_base_unit) → (step_value, base_unit_name)` that picks the smallest "nice" step so `step * ppu ≥ 40 px`.
+6. **Footer links**
+   - Replace the row of three big primary buttons with two small flat text buttons:
+     - "Don't have a key? **Buy a subscription**" → `get_buy_url()`
+     - "Need help? **Contact support**" → `get_support_url()`
+   - **Remove "Manage Seats" entirely** (admin-only action, doesn't belong in end-user activation).
+   - Style: `flat=True`, transparent background, primary-color text.
 
-2. **Refactor `_draw_ruler_frame()`** to compute:
-   - `label_step_px` (pixel spacing between labels)
-   - `medium_step_px = label_step_px / 2`
-   - `minor_step_px = label_step_px / 10` (skip if `< 3 px`)
-   - Pass these + a `format_label(major_idx) → str` callback into the tick drawers.
+7. **Cancel**
+   - Move Cancel to a small, low-emphasis text-style button bottom-right (not a primary blue button next to Activate).
 
-3. **Refactor `_draw_ruler_ticks_horizontal/vertical()`** to use the new step values and the formatter callback (replaces the hard-coded `"mm"/"m"/"inches"/"cm"` branches inside).
+8. **Validation logic (`validate_license` / `on_validation_complete`)**
+   - Drop the `user_identifier` requirement check.
+   - Pass empty string `""` (or hostname) to `LicenseValidationThread` for `user_identifier` so backend signature doesn't change. `core/license_validator.activate_subscription` already accepts an empty user but currently rejects it — see "Backend tweak" below.
 
-4. **Bonus polish**: use a slightly larger font (`Segoe UI 8`) for major labels at higher steps to keep them legible.
+## Backend tweak — `core/license_validator.py`
 
-### Files Changed
-- `ui/scale_canvas.py` — only file that needs editing.
+`activate_subscription()` currently does:
+```python
+if not user_identifier:
+    return False, None, "Work email or user ID is required"
+```
+Change this to fall back to the machine fingerprint as the identifier when none is provided:
+```python
+if not user_identifier:
+    user_identifier = machine_fingerprint
+```
+This keeps the existing API/payload shape (`user_identifier` still sent to the server) and unblocks the single-field UI without seat tracking changes.
 
-### Validation
-- Switch unit/ratio in the Drawing Scale workspace and verify:
-  - 1:1 cm → labels every 1 cm.
-  - 1:5 cm → labels auto-promote to every 5 cm.
-  - 1:10 cm → labels auto-promote to every 10 cm.
-  - 1:1 mm → labels every 10 mm.
-  - 1:10 m → labels every 100 cm or 1 m.
-- Confirm no overlapping numbers on top, bottom, left and right rulers at any ratio.
+No changes needed to the legacy Gist path — it already works without an email.
 
+## Files to edit
+- `ui/license_dialog.py` — rewrite `init_ui`, simplify `validate_license` and `on_validation_complete`, drop `user_input` / `manage_button` / `progress_bar`.
+- `core/license_validator.py` — relax the empty-`user_identifier` guard in `activate_subscription`.
+
+## Out of scope (deferred)
+- Seat allocation UI / admin "Manage Seats" entry (will live in a future Settings/Account menu, not first-run dialog).
+- Per-user email identity (revisit when introducing real login).
