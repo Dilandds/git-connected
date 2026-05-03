@@ -1,34 +1,51 @@
 """
-License Key Entry Dialog
-
-PyQt5 dialog for entering and validating license keys.
+License activation dialog for subscription-based commercial seats.
 """
 
 import sys
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QMessageBox, QProgressBar
-)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
 from typing import Optional
 
-from core.license_validator import check_license_validity, store_license_key
+from PyQt5.QtCore import QThread, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QDesktopServices, QFont
+from PyQt5.QtWidgets import (
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QProgressBar,
+    QVBoxLayout,
+)
+
+from core.license_validator import (
+    activate_subscription,
+    get_buy_url,
+    get_manage_url,
+    get_machine_fingerprint,
+    get_support_url,
+)
 
 
 class LicenseValidationThread(QThread):
     """Background thread for license validation to prevent UI freezing."""
     
-    validation_complete = pyqtSignal(bool, str)  # is_valid, error_message
+    validation_complete = pyqtSignal(bool, str, object)  # is_valid, error_message, response
     
-    def __init__(self, license_key: str):
+    def __init__(self, license_key: str, user_identifier: str):
         super().__init__()
         self.license_key = license_key
+        self.user_identifier = user_identifier
     
     def run(self):
         """Run license validation in background thread."""
-        is_valid, error = check_license_validity(self.license_key, use_cache=True)
-        self.validation_complete.emit(is_valid, error or "")
+        is_valid, response, error = activate_subscription(
+            self.license_key,
+            self.user_identifier,
+            machine_fingerprint=get_machine_fingerprint(),
+        )
+        self.validation_complete.emit(is_valid, error or "", response or {})
 
 
 class LicenseDialog(QDialog):
@@ -38,14 +55,15 @@ class LicenseDialog(QDialog):
         super().__init__(parent)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)  # Remove ? help button on Windows
         self.license_key = None
+        self.activation_response = None
         self.validation_thread = None
         self.init_ui()
     
     def init_ui(self):
         """Initialize the dialog UI."""
         self.setWindowTitle("License Activation")
-        self.setMinimumWidth(500)
-        self.setMinimumHeight(250)
+        self.setMinimumWidth(560)
+        self.setMinimumHeight(360)
         self.setModal(True)
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
@@ -109,23 +127,56 @@ class LicenseDialog(QDialog):
         
         # Instructions
         instructions = QLabel(
-            "Please enter your license key to activate the application.\n"
-            "You can obtain a license key from the software vendor."
+            "Enter your commercial subscription key and work email to activate this device.\n"
+            "Each company seat is tied to a user identity."
         )
         instructions.setAlignment(Qt.AlignCenter)
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
         
-        # License key input
-        key_layout = QVBoxLayout()
-        key_label = QLabel("License Key:")
-        key_layout.addWidget(key_label)
+        # Activation inputs
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(Qt.AlignLeft)
+        form_layout.setFormAlignment(Qt.AlignTop)
         
         self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("Enter your license key (e.g., STL-XXXX-XXXX-XXXX-XXXX)")
+        self.key_input.setPlaceholderText("Enter your subscription key")
         self.key_input.returnPressed.connect(self.validate_license)
-        key_layout.addWidget(self.key_input)
-        layout.addLayout(key_layout)
+        form_layout.addRow("Subscription Key:", self.key_input)
+
+        self.user_input = QLineEdit()
+        self.user_input.setPlaceholderText("name@company.com")
+        self.user_input.returnPressed.connect(self.validate_license)
+        form_layout.addRow("Work Email / User ID:", self.user_input)
+
+        layout.addLayout(form_layout)
+
+        helper_label = QLabel(
+            "Buy the subscription if you do not have a key yet, or contact your company admin to assign a seat."
+        )
+        helper_label.setAlignment(Qt.AlignCenter)
+        helper_label.setWordWrap(True)
+        layout.addWidget(helper_label)
+
+        # Link buttons
+        link_layout = QHBoxLayout()
+        link_layout.setSpacing(10)
+        link_layout.addStretch()
+
+        self.buy_button = QPushButton("Buy Subscription")
+        self.buy_button.clicked.connect(lambda: self.open_external_url(get_buy_url(), "Buy Subscription"))
+        link_layout.addWidget(self.buy_button)
+
+        self.manage_button = QPushButton("Manage Seats")
+        self.manage_button.clicked.connect(lambda: self.open_external_url(self.resolve_manage_url(), "Manage Seats"))
+        link_layout.addWidget(self.manage_button)
+
+        self.support_button = QPushButton("Support")
+        self.support_button.clicked.connect(lambda: self.open_external_url(get_support_url(), "Support"))
+        link_layout.addWidget(self.support_button)
+
+        link_layout.addStretch()
+        layout.addLayout(link_layout)
         
         # Status label
         self.status_label = QLabel("")
@@ -159,19 +210,47 @@ class LicenseDialog(QDialog):
         
         # Set focus on input
         self.key_input.setFocus()
+
+    def resolve_manage_url(self) -> str:
+        """Resolve the current manage-seats URL from the backend response or config."""
+        if isinstance(self.activation_response, dict):
+            subscription = self.activation_response.get("subscription")
+            if isinstance(subscription, dict):
+                manage_url = subscription.get("management_url")
+                if manage_url:
+                    return str(manage_url)
+        return get_manage_url()
+
+    def open_external_url(self, url: str, label: str) -> None:
+        """Open a URL in the system browser if configured."""
+        if not url:
+            QMessageBox.information(
+                self,
+                f"{label} Unavailable",
+                f"{label} is not configured yet.",
+            )
+            return
+
+        QDesktopServices.openUrl(QUrl(url))
     
     def validate_license(self):
         """Validate the entered license key."""
         license_key = self.key_input.text().strip()
+        user_identifier = self.user_input.text().strip()
         
         if not license_key:
-            from ui.styles import default_theme
             self.status_label.setText("Please enter a license key")
+            self.status_label.setStyleSheet("color: #FF0000;")
+            return
+
+        if not user_identifier:
+            self.status_label.setText("Please enter your work email or user ID")
             self.status_label.setStyleSheet("color: #FF0000;")
             return
         
         # Disable UI during validation
         self.key_input.setEnabled(False)
+        self.user_input.setEnabled(False)
         self.validate_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -180,14 +259,15 @@ class LicenseDialog(QDialog):
         self.status_label.setStyleSheet(f"color: {default_theme.text_secondary};")
         
         # Create and start validation thread
-        self.validation_thread = LicenseValidationThread(license_key)
+        self.validation_thread = LicenseValidationThread(license_key, user_identifier)
         self.validation_thread.validation_complete.connect(self.on_validation_complete)
         self.validation_thread.start()
     
-    def on_validation_complete(self, is_valid: bool, error_message: str):
+    def on_validation_complete(self, is_valid: bool, error_message: str, activation_response: object):
         """Handle validation completion."""
         # Re-enable UI
         self.key_input.setEnabled(True)
+        self.user_input.setEnabled(True)
         self.validate_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
         self.progress_bar.setVisible(False)
@@ -195,7 +275,28 @@ class LicenseDialog(QDialog):
         if is_valid:
             # Valid key
             self.license_key = self.key_input.text().strip()
-            self.status_label.setText("License key validated successfully!")
+            self.activation_response = activation_response if isinstance(activation_response, dict) else None
+
+            subscription = {}
+            if isinstance(self.activation_response, dict):
+                subscription = self.activation_response.get("subscription") if isinstance(self.activation_response.get("subscription"), dict) else {}
+
+            status = str(subscription.get("status", "active")).strip().lower()
+            seat_limit = subscription.get("seat_limit")
+            seats_used = subscription.get("seats_used")
+            expires_at = subscription.get("expires_at")
+
+            success_message = "Subscription activated successfully!"
+            if status != "active":
+                success_message = f"Subscription activated with status: {status}"
+
+            if seat_limit is not None and seats_used is not None:
+                success_message += f"\nSeats: {seats_used}/{seat_limit}"
+
+            if expires_at:
+                success_message += f"\nRenews/Expires: {expires_at}"
+
+            self.status_label.setText(success_message)
             self.status_label.setStyleSheet("color: #00AA00;")
             
             # Close dialog after a brief delay
@@ -205,13 +306,13 @@ class LicenseDialog(QDialog):
             # Accept dialog (returns QDialog.Accepted)
             QMessageBox.information(
                 self,
-                "License Activated",
-                "Your license has been activated successfully!\n"
+                "Subscription Activated",
+                "Your subscription has been activated successfully!\n"
                 "You can now use the application."
             )
             self.accept()
         else:
-            # Invalid key
+            # Invalid key or subscription issue
             error_msg = error_message or "Invalid license key"
             self.status_label.setText(f"Validation failed: {error_msg}")
             self.status_label.setStyleSheet("color: #FF0000;")
@@ -219,10 +320,10 @@ class LicenseDialog(QDialog):
             # Show error message
             QMessageBox.warning(
                 self,
-                "Invalid License Key",
-                f"The license key you entered is invalid.\n\n"
+                "Subscription Activation Failed",
+                f"The subscription key could not be activated.\n\n"
                 f"Error: {error_msg}\n\n"
-                f"Please check your license key and try again."
+                f"Please verify your subscription status or contact your company admin."
             )
     
     def get_license_key(self) -> Optional[str]:

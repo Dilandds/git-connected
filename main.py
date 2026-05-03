@@ -203,8 +203,8 @@ def main():
                 splash.finish(None)
                 QMessageBox.information(
                     None,
-                    "License Required",
-                    "A valid license key is required to use this application.\n"
+                    "Subscription Required",
+                    "An active commercial subscription is required to use this application.\n"
                     "The application will now exit."
                 )
                 return 0  # Exit application
