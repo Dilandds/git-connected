@@ -440,7 +440,11 @@ def activate_subscription(
         return False, None, "License key is empty"
 
     if not user_identifier:
-        return False, None, "Work email or user ID is required"
+        # Fall back to the machine fingerprint as the activation identity.
+        # The machine fingerprint already enforces per-device seat limits via
+        # Lemon Squeezy's activation_limit, so a separate user identifier is
+        # not required at activation time.
+        user_identifier = machine_fingerprint
 
     if not LICENSE_API_BASE_URL:
         is_valid, error = _legacy_validate(normalized_key, use_cache=True)
