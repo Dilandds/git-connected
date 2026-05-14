@@ -166,7 +166,7 @@ class LicenseDialog(QDialog):
         layout.addWidget(key_label)
 
         self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("XXXX-XXXX-XXXX-XXXX")
+        self.key_input.setPlaceholderText("XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX")
         self.key_input.setFixedHeight(44)
         mono_font = QFont("Menlo, Consolas, monospace")
         mono_font.setStyleHint(QFont.Monospace)
