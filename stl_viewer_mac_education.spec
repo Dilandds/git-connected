@@ -14,6 +14,12 @@ block_cipher = None
 # This is more reliable than SPECPATH which may have path resolution issues
 project_root = Path(os.getcwd())
 
+# License API endpoint — baked into the binary so it works out-of-the-box
+os.environ.setdefault(
+    'ECTOFORM_LICENSE_API_URL',
+    'https://license-validator.ectoform.workers.dev/api/public/validate-license'
+)
+
 # Debug: Print what we're checking
 print(f"[PyInstaller] Project root: {project_root}")
 print(f"[PyInstaller] Checking for assets/splash.png: {(project_root / 'assets' / 'splash.png').exists()}")
