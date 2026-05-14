@@ -27,9 +27,7 @@ _env_license_url = os.environ.get("ECTOFORM_LICENSE_API_URL", "").strip().rstrip
 if not _env_license_url or "supabase.co" in _env_license_url:
     _env_license_url = _DEFAULT_LICENSE_API_URL
 LICENSE_API_BASE_URL = _env_license_url
-BUY_URL = os.environ.get("ECTOFORM_BUY_URL", "").strip()
-MANAGE_URL = os.environ.get("ECTOFORM_MANAGE_URL", "").strip()
-SUPPORT_URL = os.environ.get("ECTOFORM_SUPPORT_URL", "").strip()
+from core.branding import BUY_URL, MANAGE_URL, SUPPORT_URL  # noqa: E402
 APP_VERSION = os.environ.get("ECTOFORM_APP_VERSION", "1.0.0")
 
 _ALLOWED_ACTIVE_STATUSES = {"active", "trialing", "past_due", "offline_grace"}
