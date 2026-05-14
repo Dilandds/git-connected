@@ -21,7 +21,12 @@ LEGACY_GIST_URL = "https://gist.githubusercontent.com/Dilandds/bd5c8db0157c16dc2
 REQUEST_TIMEOUT = int(os.environ.get("ECTOFORM_LICENSE_TIMEOUT", "10"))
 CACHE_EXPIRY_DAYS = int(os.environ.get("ECTOFORM_LICENSE_CACHE_DAYS", "7"))
 OFFLINE_GRACE_DAYS = int(os.environ.get("ECTOFORM_LICENSE_OFFLINE_GRACE_DAYS", "7"))
-LICENSE_API_BASE_URL = os.environ.get("ECTOFORM_LICENSE_API_URL", "").strip().rstrip("/")
+_DEFAULT_LICENSE_API_URL = "https://license-validator.ectoform.workers.dev/api/public/validate-license"
+_env_license_url = os.environ.get("ECTOFORM_LICENSE_API_URL", "").strip().rstrip("/")
+# Migrate away from the legacy Supabase functions endpoint if it's lingering in the env.
+if not _env_license_url or "supabase.co" in _env_license_url:
+    _env_license_url = _DEFAULT_LICENSE_API_URL
+LICENSE_API_BASE_URL = _env_license_url
 BUY_URL = os.environ.get("ECTOFORM_BUY_URL", "").strip()
 MANAGE_URL = os.environ.get("ECTOFORM_MANAGE_URL", "").strip()
 SUPPORT_URL = os.environ.get("ECTOFORM_SUPPORT_URL", "").strip()
