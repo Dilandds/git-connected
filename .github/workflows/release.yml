@@ -226,3 +226,57 @@ jobs:
             release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/version.json
             release/SHA256SUMS.txt
+
+      # ─── Mirror to Cloudflare R2 ─────────────────────────────────────────
+      # Uploads to two paths:
+      #   releases/<version>/...  (immutable, original filenames)
+      #   latest/...              (overwritten, filenames stripped of version)
+      # Public via custom domain: https://downloads.ectoform.studio/...
+      - name: Configure AWS CLI for R2
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          mkdir -p ~/.aws
+          cat > ~/.aws/credentials <<EOF
+          [default]
+          aws_access_key_id = ${AWS_ACCESS_KEY_ID}
+          aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+          EOF
+          cat > ~/.aws/config <<EOF
+          [default]
+          region = auto
+          output = json
+          EOF
+
+      - name: Upload to R2 (versioned + latest)
+        env:
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ectoform-downloads
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          V="$VERSION"
+
+          # 1) Versioned copy — original filenames, immutable
+          aws s3 cp release/ "s3://${BUCKET}/releases/${V}/" \
+            --recursive --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # 2) Latest copy — strip version from filenames so URLs are stable
+          STAGE=$(mktemp -d)
+          cp "release/ECTOFORM-Setup-${V}.exe"                       "$STAGE/ECTOFORM-Setup.exe"
+          cp "release/ECTOFORM-Education-Setup-${V}.exe"             "$STAGE/ECTOFORM-Education-Setup.exe"
+          cp "release/ECTOFORM-${V}-macOS-arm64.dmg"                 "$STAGE/ECTOFORM-macOS-arm64.dmg"
+          cp "release/ECTOFORM-Education-${V}-macOS-arm64.dmg"       "$STAGE/ECTOFORM-Education-macOS-arm64.dmg"
+          cp "release/version.json"                                  "$STAGE/version.json"
+          cp "release/SHA256SUMS.txt"                                "$STAGE/SHA256SUMS.txt"
+
+          aws s3 cp "$STAGE/" "s3://${BUCKET}/latest/" \
+            --recursive --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=300"
+
+          echo "✅ Mirrored to R2:"
+          echo "   https://downloads.ectoform.studio/releases/${V}/"
+          echo "   https://downloads.ectoform.studio/latest/"
+
