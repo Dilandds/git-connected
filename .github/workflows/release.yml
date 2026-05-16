@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13, macos-14]   # 13 = Intel (x64), 14 = Apple Silicon (arm64)
+        os: [macos-14]   # 14 = Apple Silicon (arm64) only; Intel macos-13 runners retired
     steps:
       - uses: actions/checkout@v4
 
@@ -192,12 +192,10 @@ jobs:
               "notes_url":   f"https://github.com/{repo}/releases/tag/v{version}",
               "commercial": {
                   "windows":     info(f"ECTOFORM-Setup-{version}.exe"),
-                  "macos_x64":   info(f"ECTOFORM-{version}-macOS-x64.dmg"),
                   "macos_arm64": info(f"ECTOFORM-{version}-macOS-arm64.dmg"),
               },
               "education": {
                   "windows":     info(f"ECTOFORM-Education-Setup-{version}.exe"),
-                  "macos_x64":   info(f"ECTOFORM-Education-{version}-macOS-x64.dmg"),
                   "macos_arm64": info(f"ECTOFORM-Education-{version}-macOS-arm64.dmg"),
               },
           }
@@ -222,10 +220,8 @@ jobs:
           generate_release_notes: true
           files: |
             release/ECTOFORM-Setup-${{ steps.ver.outputs.version }}.exe
-            release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-x64.dmg
             release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/ECTOFORM-Education-Setup-${{ steps.ver.outputs.version }}.exe
-            release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-x64.dmg
             release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/version.json
             release/SHA256SUMS.txt

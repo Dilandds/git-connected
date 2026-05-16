@@ -1,17 +1,16 @@
 # Phase 1 — Steps 1–3: Tag → Build → GitHub Release
 
-Goal: pushing a git tag like `v1.0.1` triggers GitHub Actions to build **all six installers** (Commercial + Education × Windows + macOS-13 + macOS-14) and publish them as a single GitHub Release with a `version.json` manifest. No in-app updater code and no R2 yet — this step only proves the release pipeline works end-to-end and you can see/download the assets in the GitHub Releases UI.
+Goal: pushing a git tag like `v1.0.1` triggers GitHub Actions to build **four installers** (Commercial + Education × Windows + macOS Apple Silicon) and publish them as a single GitHub Release with a `version.json` manifest.
 
-## Editions & platforms (6 installers per release)
+## Editions & platforms (4 installers per release)
 
-| Edition | Windows | macOS Intel (macos-13) | macOS Apple Silicon (macos-14) |
-|---|---|---|---|
-| Commercial | `ECTOFORM-Setup-<v>.exe` | `ECTOFORM-<v>-macOS-x64.dmg` | `ECTOFORM-<v>-macOS-arm64.dmg` |
-| Education  | `ECTOFORM-Education-Setup-<v>.exe` | `ECTOFORM-Education-<v>-macOS-x64.dmg` | `ECTOFORM-Education-<v>-macOS-arm64.dmg` |
+| Edition | Windows | macOS Apple Silicon (macos-14) |
+|---|---|---|
+| Commercial | `ECTOFORM-Setup-<v>.exe` | `ECTOFORM-<v>-macOS-arm64.dmg` |
+| Education  | `ECTOFORM-Education-Setup-<v>.exe` | `ECTOFORM-Education-<v>-macOS-arm64.dmg` |
 
-Education is **not dropped** — first-class release artifact, parity with Commercial.
+Intel macOS (`macos-13`) dropped due to GitHub runner retirement / unreliable queueing. Intel Mac users should use the Windows build.
 
-Why both Mac runners: `macos-13` produces an Intel (x86_64) DMG, `macos-14` produces an Apple Silicon (arm64) DMG. PyInstaller doesn't cross-compile or produce universal binaries by default — each runner builds for its own CPU. Shipping both means Intel Mac users get a native build (no Rosetta) and M-series users get a native arm64 build.
 
 ## What gets added to the desktop repo
 
