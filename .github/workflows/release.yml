@@ -220,10 +220,8 @@ jobs:
           generate_release_notes: true
           files: |
             release/ECTOFORM-Setup-${{ steps.ver.outputs.version }}.exe
-            release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-x64.dmg
             release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/ECTOFORM-Education-Setup-${{ steps.ver.outputs.version }}.exe
-            release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-x64.dmg
             release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/version.json
             release/SHA256SUMS.txt
