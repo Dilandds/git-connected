@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13, macos-14]   # 13 = Intel (x64), 14 = Apple Silicon (arm64)
+        os: [macos-14]   # 14 = Apple Silicon (arm64) only; Intel macos-13 runners retired
     steps:
       - uses: actions/checkout@v4
 
