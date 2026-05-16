@@ -22,6 +22,12 @@ if [ -f "assets/logo.png" ]; then
     fi
 fi
 
+# Read version from single source of truth
+VERSION=$(python3 -c "from core.version import __version__; print(__version__)")
+RAW_ARCH=$(uname -m)
+if [ "$RAW_ARCH" = "arm64" ]; then ARCH="arm64"; else ARCH="x64"; fi
+echo "Version: $VERSION  Arch: $ARCH"
+
 # Clean previous education build
 rm -rf build dist ECTOFORM-Education-*.dmg
 
@@ -36,6 +42,8 @@ fi
 
 echo "✓ ECTOFORM Education .app created successfully"
 
+DMG_NAME="ECTOFORM-Education-${VERSION}-macOS-${ARCH}.dmg"
+
 # Create DMG (optional)
 if command -v create-dmg &> /dev/null; then
     echo "Creating DMG..."
@@ -49,11 +57,11 @@ if command -v create-dmg &> /dev/null; then
         --icon-size 100 \
         --app-drop-link 425 175 \
         --icon "ECTOFORM-Education.app" 175 175 \
-        "ECTOFORM-Education-1.0.0-macOS.dmg" \
+        "${DMG_NAME}" \
         "dist/dmg_temp/" || echo "Warning: DMG creation had issues"
 
     rm -rf dist/dmg_temp
-    [ -f "ECTOFORM-Education-1.0.0-macOS.dmg" ] && echo "✓ DMG created" || echo "Warning: DMG not found"
+    [ -f "${DMG_NAME}" ] && echo "✓ DMG created: ${DMG_NAME}" || echo "Warning: DMG not found"
 else
     echo "Skipping DMG (install create-dmg via: brew install create-dmg)"
 fi

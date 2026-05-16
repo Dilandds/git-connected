@@ -1,0 +1,231 @@
+name: Release (Tag → Build → GitHub Release)
+
+# Triggered when a semver tag is pushed:
+#   git tag v1.0.1 && git push origin v1.0.1
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write  # needed to create a GitHub Release
+
+jobs:
+  # ─── Windows: builds Commercial + Education EXEs ──────────────────────────
+  build-windows:
+    name: Build Windows (Commercial + Education)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pyinstaller>=6.0.0"
+
+      - name: Read version
+        id: ver
+        shell: bash
+        run: echo "version=$(python -c 'from core.version import __version__; print(__version__)')" >> $GITHUB_OUTPUT
+
+      - name: Build Commercial + Education EXEs into release-staging
+        shell: pwsh
+        run: |
+          $V = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path release-staging | Out-Null
+
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+          powershell -ExecutionPolicy Bypass -File build_windows.ps1
+          Copy-Item "dist\ECTOFORM-Setup-$V.exe" "release-staging\ECTOFORM-Setup-$V.exe" -Force
+
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+          powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
+          Copy-Item "dist\ECTOFORM-Education-Setup-$V.exe" "release-staging\ECTOFORM-Education-Setup-$V.exe" -Force
+
+          Get-ChildItem release-staging
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: release-staging/*.exe
+          retention-days: 7
+
+  # ─── macOS: builds Commercial + Education DMGs for Intel + Apple Silicon ──
+  build-macos:
+    name: Build macOS ${{ matrix.os }} (Commercial + Education)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-13, macos-14]   # 13 = Intel (x64), 14 = Apple Silicon (arm64)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pyinstaller>=6.0.0"
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Read version & arch
+        id: meta
+        run: |
+          V=$(python3 -c 'from core.version import __version__; print(__version__)')
+          RAW=$(uname -m)
+          if [ "$RAW" = "arm64" ]; then ARCH="arm64"; else ARCH="x64"; fi
+          echo "version=$V"   >> $GITHUB_OUTPUT
+          echo "arch=$ARCH"   >> $GITHUB_OUTPUT
+
+      - name: Build Commercial DMG
+        run: |
+          chmod +x build_mac.sh
+          ./build_mac.sh
+
+      - name: Build Education DMG
+        run: |
+          rm -rf build dist
+          chmod +x build_mac_education.sh
+          ./build_mac_education.sh
+
+      - name: Stage installers
+        run: |
+          mkdir -p release-staging
+          V="${{ steps.meta.outputs.version }}"
+          A="${{ steps.meta.outputs.arch }}"
+          cp "ECTOFORM-${V}-macOS-${A}.dmg"           "release-staging/"
+          cp "ECTOFORM-Education-${V}-macOS-${A}.dmg" "release-staging/"
+          ls -la release-staging
+
+      - name: Upload macOS installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-macos-${{ steps.meta.outputs.arch }}
+          path: release-staging/*.dmg
+          retention-days: 7
+
+  # ─── Publish: gather all 6 installers, generate manifest, create Release ──
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Read version
+        id: ver
+        run: echo "version=$(python -c 'from core.version import __version__; print(__version__)')" >> $GITHUB_OUTPUT
+
+      - name: Sanity-check tag matches core/version.py
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="${{ steps.ver.outputs.version }}"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match core/version.py ($PKG). Bump core/version.py and re-tag."
+            exit 1
+          fi
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect installers into ./release
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' \) -exec cp {} release/ \;
+          ls -la release
+
+      - name: Generate version.json + SHA256SUMS.txt
+        env:
+          REPO: ${{ github.repository }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          python3 <<'PY'
+          import hashlib, json, os, sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          repo    = os.environ["REPO"]
+          version = os.environ["VERSION"]
+          base    = f"https://github.com/{repo}/releases/download/v{version}"
+          rel     = Path("release")
+
+          def info(filename):
+              p = rel / filename
+              if not p.exists():
+                  sys.exit(f"MISSING installer: {filename}")
+              h = hashlib.sha256()
+              with p.open("rb") as f:
+                  for chunk in iter(lambda: f.read(65536), b""):
+                      h.update(chunk)
+              return {
+                  "url":    f"{base}/{filename}",
+                  "sha256": h.hexdigest(),
+                  "size":   p.stat().st_size,
+              }
+
+          manifest = {
+              "version":     version,
+              "released_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "notes_url":   f"https://github.com/{repo}/releases/tag/v{version}",
+              "commercial": {
+                  "windows":     info(f"ECTOFORM-Setup-{version}.exe"),
+                  "macos_x64":   info(f"ECTOFORM-{version}-macOS-x64.dmg"),
+                  "macos_arm64": info(f"ECTOFORM-{version}-macOS-arm64.dmg"),
+              },
+              "education": {
+                  "windows":     info(f"ECTOFORM-Education-Setup-{version}.exe"),
+                  "macos_x64":   info(f"ECTOFORM-Education-{version}-macOS-x64.dmg"),
+                  "macos_arm64": info(f"ECTOFORM-Education-{version}-macOS-arm64.dmg"),
+              },
+          }
+
+          (rel / "version.json").write_text(json.dumps(manifest, indent=2))
+          print(json.dumps(manifest, indent=2))
+
+          # SHA256SUMS.txt (one line per installer)
+          lines = []
+          for fn in sorted(p.name for p in rel.iterdir() if p.suffix in {".exe", ".dmg"}):
+              h = hashlib.sha256((rel / fn).read_bytes()).hexdigest()
+              lines.append(f"{h}  {fn}")
+          (rel / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n")
+          PY
+          echo "--- release/ ---"; ls -la release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ECTOFORM ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          files: |
+            release/ECTOFORM-Setup-${{ steps.ver.outputs.version }}.exe
+            release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-x64.dmg
+            release/ECTOFORM-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
+            release/ECTOFORM-Education-Setup-${{ steps.ver.outputs.version }}.exe
+            release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-x64.dmg
+            release/ECTOFORM-Education-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
+            release/version.json
+            release/SHA256SUMS.txt

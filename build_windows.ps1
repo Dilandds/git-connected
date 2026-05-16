@@ -67,6 +67,12 @@ if (-not (Test-Path $ExePath)) {
 
 Write-Host "EXE created successfully: $ExePath" -ForegroundColor Green
 
+# Read version from single source of truth and rename to versioned filename
+$Version = (python -c "from core.version import __version__; print(__version__)").Trim()
+$VersionedExe = "dist\ECTOFORM-Setup-$Version.exe"
+Copy-Item $ExePath $VersionedExe -Force
+Write-Host "Versioned EXE: $VersionedExe" -ForegroundColor Green
+
 # Get file size
 $FileInfo = Get-Item $ExePath
 $SizeMB = [math]::Round($FileInfo.Length / 1MB, 2)
@@ -75,3 +81,4 @@ Write-Host "Size: $SizeMB MB" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Build complete! File:" -ForegroundColor Green
 Write-Host "  - EXE: $ExePath" -ForegroundColor White
+Write-Host "  - Versioned: $VersionedExe" -ForegroundColor White

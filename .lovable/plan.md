@@ -1,94 +1,88 @@
-## Goal
-Redesign the License Activation dialog to be minimal and Lemon Squeezy–native: **a single license key field**. Drop the work email field, drop the "Manage Seats" button, and clean up the layout to feel like a focused first-run activation screen.
+# Phase 1 — Steps 1–3: Tag → Build → GitHub Release
 
-Seat allocation / per-user identity is deferred — the machine fingerprint (already in `core/machine_id.py`) handles seat enforcement on its own via Lemon Squeezy's `activation_limit`.
+Goal: pushing a git tag like `v1.0.1` triggers GitHub Actions to build **all six installers** (Commercial + Education × Windows + macOS-13 + macOS-14) and publish them as a single GitHub Release with a `version.json` manifest. No in-app updater code and no R2 yet — this step only proves the release pipeline works end-to-end and you can see/download the assets in the GitHub Releases UI.
 
-## New Layout
+## Editions & platforms (6 installers per release)
 
-```text
-┌──────────────────────────────────────────┐
-│           [ ECTOFORM icon ]              │
-│                                          │
-│           Activate ECTOFORM              │
-│   Enter your license key to get started  │
-│                                          │
-│   ┌────────────────────────────────────┐ │
-│   │ XXXX-XXXX-XXXX-XXXX                │ │
-│   └────────────────────────────────────┘ │
-│                                          │
-│   [    Activate this device         ]    │
-│                                          │
-│   ─── status / error message here ───    │
-│                                          │
-│   Don't have a key?  Buy a subscription  │
-│   Need help?         Contact support     │
-│                                          │
-│                              Cancel      │
-└──────────────────────────────────────────┘
-```
+| Edition | Windows | macOS Intel (macos-13) | macOS Apple Silicon (macos-14) |
+|---|---|---|---|
+| Commercial | `ECTOFORM-Setup-<v>.exe` | `ECTOFORM-<v>-macOS-x64.dmg` | `ECTOFORM-<v>-macOS-arm64.dmg` |
+| Education  | `ECTOFORM-Education-Setup-<v>.exe` | `ECTOFORM-Education-<v>-macOS-x64.dmg` | `ECTOFORM-Education-<v>-macOS-arm64.dmg` |
 
-## Concrete changes — `ui/license_dialog.py`
+Education is **not dropped** — first-class release artifact, parity with Commercial.
 
-1. **Window**
-   - Title: `Activate ECTOFORM`.
-   - Size: ~460×420, fixed-feel (not the current 560×360 minimum).
+Why both Mac runners: `macos-13` produces an Intel (x86_64) DMG, `macos-14` produces an Apple Silicon (arm64) DMG. PyInstaller doesn't cross-compile or produce universal binaries by default — each runner builds for its own CPU. Shipping both means Intel Mac users get a native build (no Rosetta) and M-series users get a native arm64 build.
 
-2. **Header**
-   - App icon centered (~56px) using `get_app_window_icon()`.
-   - H1 "Activate ECTOFORM" (16pt bold).
-   - One-line subtitle: "Enter your license key to activate this device."
-   - Drop the "company seat is tied to a user identity" line.
+## What gets added to the desktop repo
 
-3. **Single input**
-   - Remove `QFormLayout`, remove `self.user_input` entirely.
-   - Keep only `self.key_input`, label above it: "License key".
-   - Placeholder `XXXX-XXXX-XXXX-XXXX`, monospace font, auto-uppercase on input.
-   - Full width, 44px height.
-
-4. **Primary action**
-   - One full-width button: **"Activate this device"**.
-   - While validating, button text becomes "Activating…" and is disabled (replaces the separate `QProgressBar`).
-   - Remove `QProgressBar` entirely.
-
-5. **Inline status**
-   - Single status label under the button. Red on error, green on success, secondary color while idle/empty.
-   - Replace the modal `QMessageBox.information` success popup with: show success inline for ~800ms, then `accept()`. Less interruptive.
-   - Keep `QMessageBox.warning` for hard failures (clearer than inline only).
-
-6. **Footer links**
-   - Replace the row of three big primary buttons with two small flat text buttons:
-     - "Don't have a key? **Buy a subscription**" → `get_buy_url()`
-     - "Need help? **Contact support**" → `get_support_url()`
-   - **Remove "Manage Seats" entirely** (admin-only action, doesn't belong in end-user activation).
-   - Style: `flat=True`, transparent background, primary-color text.
-
-7. **Cancel**
-   - Move Cancel to a small, low-emphasis text-style button bottom-right (not a primary blue button next to Activate).
-
-8. **Validation logic (`validate_license` / `on_validation_complete`)**
-   - Drop the `user_identifier` requirement check.
-   - Pass empty string `""` (or hostname) to `LicenseValidationThread` for `user_identifier` so backend signature doesn't change. `core/license_validator.activate_subscription` already accepts an empty user but currently rejects it — see "Backend tweak" below.
-
-## Backend tweak — `core/license_validator.py`
-
-`activate_subscription()` currently does:
+### 1. `core/version.py` (new — single source of truth)
 ```python
-if not user_identifier:
-    return False, None, "Work email or user ID is required"
+__version__ = "1.0.1"
 ```
-Change this to fall back to the machine fingerprint as the identifier when none is provided:
-```python
-if not user_identifier:
-    user_identifier = machine_fingerprint
+Spec files and build scripts read from this. No more hard-coded `"1.0.0"` scattered across 4 spec files and 4 build scripts.
+
+### 2. Spec + build script changes
+- All 4 `.spec` files: replace literal `'1.0.0'` in `CFBundleShortVersionString` / `CFBundleVersion` with a read from `core/version.py`.
+- `build_mac.sh`, `build_mac_education.sh`, `build_windows.ps1`, `build_windows_education.ps1`: read version from `core/version.py` and emit versioned, arch-suffixed output filenames. Arch suffix (`-x64` / `-arm64`) is detected from `uname -m` so the same script works on both Mac runners.
+
+### 3. `.github/workflows/release.yml` (new — leaves existing `build.yml` untouched)
+Trigger: tag push matching `v*.*.*`. Existing `build.yml` (manual `workflow_dispatch`, with mac matrix) stays as the dev sanity-check workflow.
+
+Jobs:
+- **build-windows** (`windows-latest`) — builds Commercial EXE, then Education EXE. Uploads both as workflow artifacts.
+- **build-macos** (matrix: `macos-13`, `macos-14`) — each runner builds Commercial `.app`+`.dmg`, then Education `.app`+`.dmg`. Uploads 2 DMGs per runner with arch-tagged artifact names.
+- **publish-release** (needs both) — downloads the 6 installer artifacts, computes SHA-256 for each, generates `version.json` + `SHA256SUMS.txt`, then uses `softprops/action-gh-release@v2` to create the GitHub Release with all 8 files attached.
+
+Permissions: `contents: write`. Uses built-in `GITHUB_TOKEN` — no secrets to configure.
+
+### `version.json` shape (Phase 1)
+```json
+{
+  "version": "1.0.1",
+  "released_at": "2026-05-16T12:00:00Z",
+  "notes_url": "https://github.com/<owner>/<repo>/releases/tag/v1.0.1",
+  "commercial": {
+    "windows":      { "url": "...ECTOFORM-Setup-1.0.1.exe",          "sha256": "<hex>", "size": 0 },
+    "macos_x64":    { "url": "...ECTOFORM-1.0.1-macOS-x64.dmg",      "sha256": "<hex>", "size": 0 },
+    "macos_arm64":  { "url": "...ECTOFORM-1.0.1-macOS-arm64.dmg",    "sha256": "<hex>", "size": 0 }
+  },
+  "education": {
+    "windows":      { "url": "...ECTOFORM-Education-Setup-1.0.1.exe",        "sha256": "<hex>", "size": 0 },
+    "macos_x64":    { "url": "...ECTOFORM-Education-1.0.1-macOS-x64.dmg",    "sha256": "<hex>", "size": 0 },
+    "macos_arm64":  { "url": "...ECTOFORM-Education-1.0.1-macOS-arm64.dmg",  "sha256": "<hex>", "size": 0 }
+  }
+}
 ```
-This keeps the existing API/payload shape (`user_identifier` still sent to the server) and unblocks the single-field UI without seat tracking changes.
+Splitting `commercial` vs `education` and `macos_x64` vs `macos_arm64` lets the in-app updater (Phase 1 Step 5) pick the right installer using `ECTOFORM_EDITION` + `platform.machine()`.
 
-No changes needed to the legacy Gist path — it already works without an email.
+### Release assets (8 files)
+1. `ECTOFORM-Setup-1.0.1.exe`
+2. `ECTOFORM-1.0.1-macOS-x64.dmg`
+3. `ECTOFORM-1.0.1-macOS-arm64.dmg`
+4. `ECTOFORM-Education-Setup-1.0.1.exe`
+5. `ECTOFORM-Education-1.0.1-macOS-x64.dmg`
+6. `ECTOFORM-Education-1.0.1-macOS-arm64.dmg`
+7. `version.json`
+8. `SHA256SUMS.txt`
 
-## Files to edit
-- `ui/license_dialog.py` — rewrite `init_ui`, simplify `validate_license` and `on_validation_complete`, drop `user_input` / `manage_button` / `progress_bar`.
-- `core/license_validator.py` — relax the empty-`user_identifier` guard in `activate_subscription`.
+## How to verify it works
 
-## Out of scope (deferred)
-- Seat allocation UI / admin "Manage Seats" entry (will live in a future Settings/Account menu, not first-run dialog).
-- Per-user email identity (revisit when introducing real login).
+1. Bump `core/version.py` to `1.0.1`, commit, then:
+   ```
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+2. Open the Actions tab — `build-windows` runs once and `build-macos` runs twice (one per matrix entry); total ~15–20 min.
+3. Open the Releases page — `v1.0.1` should show all 8 assets attached.
+4. Download one EXE, one Intel DMG, one arm64 DMG; install on real hardware; confirm both editions launch.
+5. `curl -L https://github.com/<owner>/<repo>/releases/latest/download/version.json` returns the JSON above. This is the URL the updater will hit in Step 5.
+
+## Open question
+
+I need the **desktop repo's `<owner>/<repo>` slug** to hard-code into the `version.json` asset URLs (e.g. `your-org/ectoform-desktop`). What's the GitHub path?
+
+## Out of scope for this step
+- `core/updater.py` (in-app update prompt) — Step 5
+- R2 mirror upload — Phase 2
+- Code signing (Windows EV cert / Apple Developer ID) — separate decision
+- Website `/download` page changes — none, per your earlier message
