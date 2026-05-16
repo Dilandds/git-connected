@@ -35,32 +35,7 @@ jobs:
         shell: bash
         run: echo "version=$(python -c 'from core.version import __version__; print(__version__)')" >> $GITHUB_OUTPUT
 
-      - name: Build Commercial EXE
-        run: powershell -ExecutionPolicy Bypass -File build_windows.ps1
-
-      - name: Build Education EXE
-        run: |
-          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-          powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
-
-      - name: Stage installers
-        shell: bash
-        run: |
-          mkdir -p release-staging
-          V="${{ steps.ver.outputs.version }}"
-          # Commercial built first then overwritten by Education's `dist` reset.
-          # The versioned copies remain because build scripts emit them before reset.
-          # However Education's "Remove-Item dist" wipes them, so we re-run Commercial copy
-          # by relying on the dist artifact NOT yet wiped. To be safe, copy after each build.
-          echo "Files in repo root:"; ls -la
-          # Find any versioned EXE produced earlier (Commercial step) — copy script also writes to dist\
-          # Since dist was wiped by Education step, Commercial versioned EXE is gone.
-          # We instead rebuild Commercial into release-staging in a single shot:
-          true
-
-      # Robust two-pass: build Commercial → copy out, then build Education → copy out
-      # (Replaces the two separate build steps above)
-      - name: Rebuild & collect both EXEs into release-staging
+      - name: Build Commercial + Education EXEs into release-staging
         shell: pwsh
         run: |
           $V = "${{ steps.ver.outputs.version }}"
