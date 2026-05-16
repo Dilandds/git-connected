@@ -192,12 +192,10 @@ jobs:
               "notes_url":   f"https://github.com/{repo}/releases/tag/v{version}",
               "commercial": {
                   "windows":     info(f"ECTOFORM-Setup-{version}.exe"),
-                  "macos_x64":   info(f"ECTOFORM-{version}-macOS-x64.dmg"),
                   "macos_arm64": info(f"ECTOFORM-{version}-macOS-arm64.dmg"),
               },
               "education": {
                   "windows":     info(f"ECTOFORM-Education-Setup-{version}.exe"),
-                  "macos_x64":   info(f"ECTOFORM-Education-{version}-macOS-x64.dmg"),
                   "macos_arm64": info(f"ECTOFORM-Education-{version}-macOS-arm64.dmg"),
               },
           }
