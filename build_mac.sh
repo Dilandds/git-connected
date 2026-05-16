@@ -33,6 +33,13 @@ else
     echo -e "${YELLOW}Warning: assets/logo.png not found. Icon files may not be available.${NC}"
 fi
 
+# Read version from single source of truth
+VERSION=$(python3 -c "from core.version import __version__; print(__version__)")
+# Detect CPU arch (arm64 on Apple Silicon, x64 on Intel)
+RAW_ARCH=$(uname -m)
+if [ "$RAW_ARCH" = "arm64" ]; then ARCH="arm64"; else ARCH="x64"; fi
+echo "Version: $VERSION  Arch: $ARCH"
+
 # Clean previous builds
 echo "Cleaning previous builds..."
 rm -rf build dist *.dmg
@@ -66,7 +73,7 @@ fi
 
 # Create DMG
 echo "Creating DMG installer..."
-DMG_NAME="ECTOFORM-1.0.0-macOS.dmg"
+DMG_NAME="ECTOFORM-${VERSION}-macOS-${ARCH}.dmg"
 
 # Create a temporary folder for DMG contents
 DMG_TEMP="dist/dmg_temp"
