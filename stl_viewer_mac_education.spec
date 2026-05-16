@@ -7,6 +7,10 @@ import sys
 import os
 from pathlib import Path
 
+# Read version from single source of truth (core/version.py)
+sys.path.insert(0, os.getcwd())
+from core.version import __version__ as APP_VERSION
+
 block_cipher = None
 
 # Get project root directory (where spec file is located)
@@ -199,8 +203,8 @@ app = BUNDLE(
     info_plist={
         'NSPrincipalClass': 'NSApplication',
         'NSHighResolutionCapable': 'True',
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': APP_VERSION,
+        'CFBundleVersion': APP_VERSION,
         'NSHumanReadableCopyright': 'Copyright © 2024',
         'LSMinimumSystemVersion': '10.13',
     },
