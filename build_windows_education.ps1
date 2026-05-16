@@ -42,6 +42,12 @@ $fileInfo = Get-Item $exePath
 $sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
 Write-Host ("EXE created: {0} ({1} MB)" -f $exePath, $sizeMB) -ForegroundColor Green
 
+# Read version and produce versioned filename
+$Version = (python -c "from core.version import __version__; print(__version__)").Trim()
+$VersionedExe = "dist\ECTOFORM-Education-Setup-$Version.exe"
+Copy-Item $exePath $VersionedExe -Force
+Write-Host "Versioned EXE: $VersionedExe" -ForegroundColor Green
+
 # Create ZIP
 $zipPath = "ECTOFORM-Education-Windows.zip"
 if (Test-Path $zipPath) {
