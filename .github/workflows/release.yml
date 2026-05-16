@@ -169,7 +169,8 @@ jobs:
 
           repo    = os.environ["REPO"]
           version = os.environ["VERSION"]
-          base    = f"https://github.com/{repo}/releases/download/v{version}"
+          # Public R2 mirror (custom domain) — stable, fast, CDN-backed.
+          base    = f"https://downloads.ectoform.studio/releases/{version}"
           rel     = Path("release")
 
           def info(filename):
