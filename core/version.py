@@ -10,4 +10,4 @@ to trigger the GitHub Actions release workflow.
 Follow semver: MAJOR.MINOR.PATCH. Never re-tag a published version.
 """
 
-__version__ = "1.0.4"
+__version__ = "1.0.5"
