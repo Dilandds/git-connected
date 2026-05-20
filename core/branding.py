@@ -31,7 +31,7 @@ import os
 # ---- Single source of truth for the public website ----
 MARKETING_SITE_URL = os.environ.get(
     "ECTOFORM_MARKETING_SITE_URL",
-    "https://web-palette-probe.lovable.app",
+    "https://ectoform.studio",
 ).rstrip("/")
 
 # ---- Derived URLs (override individually via env if needed) ----
