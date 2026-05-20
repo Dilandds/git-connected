@@ -5,10 +5,10 @@ Centralised branding / marketing URLs for ECTOFORM.
 SWITCHING THE PUBLIC WEBSITE DOMAIN
 ==============================================================
 All public-facing URLs (pricing page, support page, etc.) are
-derived from MARKETING_SITE_URL below. To point the desktop app
-at a new domain (e.g. when moving from the Lovable preview to
-the production domain), change MARKETING_SITE_URL in ONE place
-here. Nothing else in the Python codebase needs to be touched.
+derived from MARKETING_SITE_URL below. The current production
+domain is https://ectoform.studio. To point the desktop app at
+a different domain, change MARKETING_SITE_URL in ONE place here.
+Nothing else in the Python codebase needs to be touched.
 
 The PyInstaller .spec files do NOT bake these URLs into the
 binary — they read from this module at runtime — so a rebuild
@@ -31,7 +31,7 @@ import os
 # ---- Single source of truth for the public website ----
 MARKETING_SITE_URL = os.environ.get(
     "ECTOFORM_MARKETING_SITE_URL",
-    "https://web-palette-probe.lovable.app",
+    "https://ectoform.studio",
 ).rstrip("/")
 
 # ---- Derived URLs (override individually via env if needed) ----
