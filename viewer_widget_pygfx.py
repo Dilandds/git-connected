@@ -3341,6 +3341,8 @@ class STLViewerWidget(QWidget):
         point = arrow['point']
         direction = arrow['direction']
         color = arrow.get('color', '#E53935')
+        label_value = arrow.get('label_value', '')
+        label_unit = arrow.get('label_unit', 'mm')
 
         try:
             self._scene.remove(arrow['group'])
@@ -3355,6 +3357,13 @@ class STLViewerWidget(QWidget):
         self._arrow_next_id = arrow_id
         self._add_arrow(point, direction, color=color, length_factor=new_factor)
         self._arrow_next_id = old_next if old_next > arrow_id else arrow_id + 1
+
+        # Restore label
+        new_arrow = self._find_arrow(arrow_id)
+        if new_arrow is not None and label_value:
+            new_arrow['label_value'] = label_value
+            new_arrow['label_unit'] = label_unit
+            self._apply_arrow_label(new_arrow)
 
     def move_arrow(self, arrow_id, dx, dy, dz):
         """Move an arrow by (dx, dy, dz) scaled relative to model size."""
