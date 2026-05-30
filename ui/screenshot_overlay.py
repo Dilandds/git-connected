@@ -11,18 +11,23 @@ class ScreenshotOverlay(QWidget):
 
     region_selected = pyqtSignal(QRect)  # emitted with the selected rectangle
 
-    def __init__(self, parent=None, zoom_callback=None):
+    def __init__(self, parent=None, zoom_callback=None, rotate_callback=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setStyleSheet("background: transparent;")
         self.setCursor(Qt.CrossCursor)
         self.setMouseTracking(True)
+        # Need keyboard focus so arrow keys can rotate the 3D camera
+        self.setFocusPolicy(Qt.StrongFocus)
 
         self._origin = QPoint()
         self._current = QPoint()
         self._drawing = False
         self._zoom_callback = zoom_callback
+        self._rotate_callback = rotate_callback
+        # Arrow-key rotation step (pixels of equivalent drag)
+        self._key_rotate_step = 18.0
 
     # ---- painting ----
 
@@ -88,9 +93,37 @@ class ScreenshotOverlay(QWidget):
             super().wheelEvent(event)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape:
+        key = event.key()
+        if key == Qt.Key_Escape:
             self._drawing = False
             self.update()
+            return
+        # Arrow keys rotate the 3D camera (replaces the on-screen 3D Control gizmo)
+        if self._rotate_callback is not None:
+            step = self._key_rotate_step
+            if event.modifiers() & Qt.ShiftModifier:
+                step *= 2.5
+            dx = dy = 0.0
+            if key == Qt.Key_Left:
+                dx = -step
+            elif key == Qt.Key_Right:
+                dx = step
+            elif key == Qt.Key_Up:
+                dy = -step
+            elif key == Qt.Key_Down:
+                dy = step
+            else:
+                super().keyPressEvent(event)
+                return
+            self._rotate_callback(dx, dy)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Grab focus so arrow keys reach this overlay immediately
+        self.setFocus(Qt.OtherFocusReason)
 
     def hideEvent(self, event):
         """Reset cursor when overlay is hidden - CrossCursor can persist on some platforms."""
