@@ -6,8 +6,9 @@ from i18n import t, on_language_changed
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QScrollArea, QFrame, QSizePolicy
+    QScrollArea, QFrame, QSizePolicy, QLineEdit, QComboBox
 )
+from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor
 from ui.styles import default_theme, FONTS
