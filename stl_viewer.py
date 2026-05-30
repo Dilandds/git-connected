@@ -2128,7 +2128,7 @@ class STLViewerWindow(QMainWindow):
                     # event filter would stay installed (clicks still annotate).
                     if getattr(vw, 'annotation_mode', False):
                         self._exit_annotation_mode()
-                    if self.toolbar.draw_mode_enabled:
+                    if getattr(vw, 'draw_mode', False):
                         self._exit_draw_mode()
                     self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
                     self.right_panel_stack.show()
