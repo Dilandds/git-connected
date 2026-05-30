@@ -166,7 +166,7 @@ class TechnicalPDFExporter:
 
             story.append(Image(annotated_img_path, width=img_w, height=img_h))
 
-            # ==================== PAGE 2: Details + Annotations ====================
+            # ==================== PAGE 2: metadata + annotation table ====================
             story.append(PageBreak())
 
             prop_val = metadata.get("property") or ""
@@ -193,8 +193,6 @@ class TechnicalPDFExporter:
             )
 
             if has_details:
-                story.append(Paragraph("Details", section_style))
-                story.append(Spacer(1, 4))
                 col_w = page_width / 3.0
                 grid_row1 = [
                     _detail_cell("Property", prop_val),
@@ -225,7 +223,7 @@ class TechnicalPDFExporter:
                     ("LINEAFTER", (1, 0), (1, -1), 0.25, colors.HexColor("#E2E8F0")),
                 ]))
                 story.append(details_table)
-                story.append(Spacer(1, 10))
+                story.append(Spacer(1, 6))
 
                 sep_line = Table([[""]], colWidths=[page_width])
                 sep_line.setStyle(TableStyle([
@@ -234,11 +232,10 @@ class TechnicalPDFExporter:
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                 ]))
                 story.append(sep_line)
-                story.append(Spacer(1, 10))
+                story.append(Spacer(1, 4))
 
             # --- Annotations (table unchanged below) ---
-            story.append(Paragraph("Annotations", section_style))
-            story.append(Spacer(1, 6))
+            story.append(Spacer(1, 2))
 
             # --- Annotations table (N° | Annotations | Photos) ---
             # Only show actual annotation rows, no empty filler
@@ -258,7 +255,7 @@ class TechnicalPDFExporter:
 
             ann_header = [
                 Paragraph("<b>N°</b>", cell_bold_style),
-                Paragraph("<b>Annotations</b>", cell_bold_style),
+                Paragraph("<b>Notes</b>", cell_bold_style),
                 Paragraph("<b>Photos</b>", cell_bold_style),
             ]
 
@@ -331,7 +328,6 @@ class TechnicalPDFExporter:
                     spaceAfter=6,
                     textColor=colors.HexColor("#64748B"),
                 )
-                story.append(Paragraph("Annotation photos", photo_title_style))
                 story.append(Paragraph(
                     "<i>(Photos uploaded for the relevant annotation — please match with the annotation number from the table.)</i>",
                     photo_caption_style,

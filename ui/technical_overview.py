@@ -27,6 +27,9 @@ ARROW_COLOR = "#5294E2"
 ARROW_SELECTED_COLOR = "#E53E3E"
 ARROW_BADGE_BG = "#5294E2"
 ARROW_BADGE_TEXT = "#FFFFFF"
+IS_WINDOWS = os.name == "nt"
+ARROW_BADGE_SIZE = 30 if IS_WINDOWS else 26
+ARROW_BADGE_FONT_PX = 17 if IS_WINDOWS else 14
 
 
 @dataclass
@@ -72,7 +75,7 @@ class ImageCanvas(QWidget):
         self.setFocusPolicy(Qt.StrongFocus)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(400, 300)
-        self.setStyleSheet(f"background-color: {default_theme.background};")
+        self.setStyleSheet("background-color: #ffffff;")
 
     # ---- public API ----
 
@@ -264,7 +267,7 @@ class ImageCanvas(QWidget):
         self._draw_arrow_end(painter, target, color, line_width)
 
         # Draw numbered badge at origin
-        badge_size = 22
+        badge_size = ARROW_BADGE_SIZE
         badge_rect = QRectF(origin.x() - badge_size / 2, origin.y() - badge_size / 2, badge_size, badge_size)
         painter.setPen(Qt.NoPen)
         badge_color = QColor(ann.color if ann.color else ARROW_COLOR) if not is_selected else QColor(ARROW_SELECTED_COLOR)
@@ -272,7 +275,7 @@ class ImageCanvas(QWidget):
         painter.drawEllipse(badge_rect)
 
         painter.setPen(QColor(ARROW_BADGE_TEXT))
-        font = make_font(size=9, bold=True)
+        font = make_font(pixel_size=ARROW_BADGE_FONT_PX, bold=True)
         painter.setFont(font)
         painter.drawText(badge_rect, Qt.AlignCenter, str(number))
 
@@ -438,15 +441,10 @@ class TechnicalAnnotationPanel(QWidget):
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 4, 8, 8)
+        layout.setSpacing(4)
 
-        # Header
-        header = QLabel("📌 Annotations")
-        header.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {default_theme.text_title};")
-        layout.addWidget(header)
-
-        hint = QLabel("Click on the image to place arrow annotations.\nClick a card to edit text & photos.")
+        hint = QLabel("Click on the image to place arrows.\nClick a card to edit text & photos.")
         hint.setWordWrap(True)
         hint.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary};")
         layout.addWidget(hint)
@@ -663,6 +661,7 @@ class TechnicalOverviewWidget(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        self.setStyleSheet("background-color: #ffffff;")
 
         # Image canvas
         self.canvas = ImageCanvas()
