@@ -166,7 +166,7 @@
   },
   "screenshot": {
     "panel_title": "Captures d'Écran",
-    "instruction": "Dessinez un carré sur le modèle pour capturer une image.",
+    "instruction": "Glissez pour pivoter, molette pour zoomer. Maintenez Espace et glissez pour capturer un carré.",
     "clear_all": "Tout Effacer",
     "delete_title": "Supprimer la Capture",
     "delete_msg": "Supprimer cette capture d'écran ?",

@@ -314,7 +314,7 @@ class ScreenshotPanel(QWidget):
         self._screenshot_banner_divider = divider
 
         self.instruction = QLabel(
-            "Draw a square on the model to capture a screenshot."
+            "Drag to rotate, scroll to zoom. Hold Space and drag to capture a square."
         )
         self.instruction.setWordWrap(True)
         self.instruction.setStyleSheet(

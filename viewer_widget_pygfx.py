@@ -2369,21 +2369,32 @@ class STLViewerWidget(QWidget):
     # ========== Screenshot Mode ==========
 
     def enable_screenshot_mode(self):
-        """Enable screenshot mode: show overlay for rubber-band selection."""
+        """Enable screenshot mode.
+
+        Input model:
+          - Left-drag / wheel pass through the overlay to the pygfx canvas
+            for native rotate + zoom.
+          - Hold Space and drag to draw the capture square.
+          - Esc cancels the current draw.
+        The on-screen 3D Control gizmo and zoom buttons are hidden — keyboard
+        + native mouse handle everything.
+        """
         if not self._model_loaded:
             return False
         from ui.screenshot_overlay import ScreenshotOverlay
         if self._screenshot_overlay is None:
-            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container, zoom_callback=self._screenshot_zoom)
+            self._screenshot_overlay = ScreenshotOverlay(self.viewer_container)
             self._screenshot_overlay.region_selected.connect(self._on_screenshot_region_selected)
         self._screenshot_overlay.setGeometry(self.viewer_container.rect())
         self._screenshot_overlay.raise_()
         self._screenshot_overlay.show()
+        self._screenshot_overlay.setFocus(Qt.OtherFocusReason)
         self.screenshot_mode = True
-        # Zoom buttons removed in screenshot mode; keep rotation gizmo only
+        # Hide the on-screen 3D Control gizmo and the zoom buttons —
+        # native mouse + Space-to-capture replace them.
         self._zoom_controls_overlay.hide()
-        self._object_control_overlay.show()
-        self._object_control_overlay.raise_()
+        if not self.annotation_mode:
+            self._object_control_overlay.hide()
         return True
 
     def disable_screenshot_mode(self):
