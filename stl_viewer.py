@@ -1818,6 +1818,7 @@ class STLViewerWindow(QMainWindow):
         panel.move_requested.connect(lambda aid, dx, dy, dz: self._arrow_move(aid, dx, dy, dz))
         panel.color_changed.connect(lambda aid, color: self._arrow_set_color(aid, color))
         panel.delete_requested.connect(lambda aid: self._arrow_delete(aid))
+        panel.label_changed.connect(lambda aid, val, unit: self._arrow_set_label(aid, val, unit))
         panel.clear_all_requested.connect(self._arrow_clear_all)
         panel.undo_last_requested.connect(self._arrow_undo_last)
         panel.exit_arrow_mode.connect(self._exit_arrow_mode_from_panel)
@@ -1848,6 +1849,13 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'set_arrow_color'):
             vw.set_arrow_color(arrow_id, color)
+
+    def _arrow_set_label(self, arrow_id, value_text, unit):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_arrow_label'):
+            vw.set_arrow_label(arrow_id, value_text, unit)
+
+
 
     def _arrow_delete(self, arrow_id):
         vw = self.viewer_widget
