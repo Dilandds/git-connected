@@ -168,7 +168,8 @@ def main():
         safe_flush(sys.stderr)
         logger.info("Step 2.5: Checking license...")
         
-        if not is_license_valid_stored():
+        # License validation skipped per user request
+        if False:  # is_license_valid_stored():
             splash.showMessage("License validation required...", 
                               QtCore.AlignCenter | QtCore.AlignBottom, 
                               QColor("#5294E2"))

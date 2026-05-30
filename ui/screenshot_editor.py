@@ -36,7 +36,9 @@ class _EditorCanvas(QWidget):
         self._tool = TOOL_NONE
         self._color = '#FF0000'
         self._line_width = 20
-        self._font_size = 70
+        # Increase default font size so text remains readable when screenshots are scaled down
+        self._line_width = 28
+        self._font_size = 140
 
         # Annotation layers (stored in image coords)
         self._lines = []       # list of (QPointF start, QPointF end, color, width)
@@ -185,7 +187,9 @@ class _EditorCanvas(QWidget):
         # Texts
         for pos, text, color, font_size in self._texts:
             painter.save()
-            font = QFont("Arial", max(1, int(font_size * scale)))
+            # Compensate for image downscaling: scale up displayed font size
+            display_size = max(1, int(font_size * scale * 1.6))
+            font = QFont("Arial", display_size)
             font.setBold(True)
             painter.setFont(font)
             painter.setPen(QColor(color))

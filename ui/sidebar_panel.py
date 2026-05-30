@@ -71,6 +71,7 @@ class SidebarPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._settings = QSettings("ECTOFORM", "Sidebar")
+        self._surface_area_expanded = self._settings.value("surface_area_expanded", True, type=bool)
         self._adjust_weight_expanded = self._settings.value("adjust_weight_expanded", True, type=bool)
         self.current_volume_mm3 = 0.0
         self.current_weight_grams = 0.0
@@ -223,11 +224,12 @@ class SidebarPanel(QWidget):
         self.dimensions_group = self.create_dimensions_section()
         layout.addWidget(self.dimensions_group)
         
-        self.surface_area_group = self.create_surface_area_section()
-        layout.addWidget(self.surface_area_group)
-        
         self.weight_group = self.create_weight_section()
         layout.addWidget(self.weight_group)
+
+        # Surface area moved under weight per UX request
+        self.surface_area_group = self.create_surface_area_section()
+        layout.addWidget(self.surface_area_group)
         
         # Create Adjust to Target Weight section
         self.adjust_weight_group = self.create_adjust_weight_section()
@@ -303,38 +305,71 @@ class SidebarPanel(QWidget):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
         
-        # Header row with title and icon
-        header_layout = QHBoxLayout()
+        # Collapsible header row with title and collapse arrow (like adjust-to-target)
+        self._surface_header = QWidget()
+        self._surface_header.setObjectName("surfaceHeader")
+        self._surface_header.setCursor(Qt.PointingHandCursor)
+        self._surface_header.setStyleSheet("""
+            QWidget#surfaceHeader {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        self._surface_header.installEventFilter(self)
+        header_layout = QHBoxLayout(self._surface_header)
+        header_layout.setContentsMargins(0, 8, 0, 8)
         header_layout.setSpacing(8)
-        
+
+        self._surface_collapse_lbl = QLabel("▼" if self._surface_area_expanded else "▶")
+        self._surface_collapse_lbl.setObjectName("surfaceCollapseArrow")
+        self._surface_collapse_lbl.setFixedSize(24, 24)
+        self._surface_collapse_lbl.setCursor(Qt.PointingHandCursor)
+        self._surface_collapse_lbl.setAlignment(Qt.AlignCenter)
+        self._surface_collapse_lbl.setStyleSheet(f"""
+            QLabel#surfaceCollapseArrow {{
+                color: {default_theme.text_secondary};
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+                font-size: 12px;
+            }}
+        """)
+        self._surface_collapse_lbl.installEventFilter(self)
+
         self.surface_title_label = QLabel(t("sidebar.total_surface_area"))
         title_font = make_font(size=14, bold=True)
         self.surface_title_label.setFont(title_font)
         self.surface_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; margin-bottom: 4px; background: transparent; border: none;"
         )
-        
-        icon_label = QLabel("⬇")
-        icon_label.setStyleSheet(
-            f"color: {default_theme.icon_blue}; font-size: 16px; background: transparent; border: none;"
-        )
-        icon_label.setAlignment(Qt.AlignCenter)
-        
+        self.surface_title_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        header_layout.addWidget(self._surface_collapse_lbl)
         header_layout.addWidget(self.surface_title_label)
         header_layout.addWidget(self._make_help_badge(
             "Calculated surface area: Sum of the areas of all triangles in the 3D mesh. "
             "Useful for estimating galvanizing or surface treatment costs."
         ))
         header_layout.addStretch()
-        header_layout.addWidget(icon_label)
-        card_layout.addLayout(header_layout)
-        
+        card_layout.addWidget(self._surface_header)
+
+        # Collapsible content widget
+        self._surface_content = QWidget()
+        self._surface_content.setStyleSheet("background-color: transparent;")
+        content_layout = QVBoxLayout(self._surface_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(10)
+
         # Surface area rows using components
         self.surface_total_row = SurfaceAreaRow(t("sidebar.total_area"), "--", "total_area", self)
         self.surface_cm_row = SurfaceAreaRow(t("sidebar.area_cm2"), "--", "highlight", self)
-        
-        card_layout.addWidget(self.surface_total_row)
-        card_layout.addWidget(self.surface_cm_row)
+
+        content_layout.addWidget(self.surface_total_row)
+        content_layout.addWidget(self.surface_cm_row)
+
+        card_layout.addWidget(self._surface_content)
+        self._surface_content.setVisible(self._surface_area_expanded)
         
         self._style_section_card(card)
         
@@ -704,6 +739,13 @@ class SidebarPanel(QWidget):
         self._settings.setValue("adjust_weight_expanded", self._adjust_weight_expanded)
         self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
         self._adjust_weight_collapse_lbl.setText("▼" if self._adjust_weight_expanded else "▶")
+
+    def _toggle_surface_area(self):
+        """Toggle the surface area collapsible section."""
+        self._surface_area_expanded = not self._surface_area_expanded
+        self._settings.setValue("surface_area_expanded", self._surface_area_expanded)
+        self._surface_content.setVisible(self._surface_area_expanded)
+        self._surface_collapse_lbl.setText("▼" if self._surface_area_expanded else "▶")
     
     def create_pdf_report_section(self):
         """Create the 3D PDF export section. (UI currently commented out - uncomment in init to show)"""
@@ -822,6 +864,15 @@ class SidebarPanel(QWidget):
             header = getattr(self, "_adjust_weight_header", None)
             if header is not None and obj is header:
                 self._toggle_adjust_weight()
+                return True
+            # Surface area collapse handling
+            s_collapse = getattr(self, "_surface_collapse_lbl", None)
+            if s_collapse is not None and obj is s_collapse:
+                self._toggle_surface_area()
+                return True
+            s_header = getattr(self, "_surface_header", None)
+            if s_header is not None and obj is s_header:
+                self._toggle_surface_area()
                 return True
         return super().eventFilter(obj, event)
     

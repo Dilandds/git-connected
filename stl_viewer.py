@@ -582,7 +582,23 @@ class STLViewerWindow(QMainWindow):
         elif mode == "help":
             self._workspace_stack.setCurrentIndex(3)
             self.setWindowTitle("ECTOFORM - Help")
-        
+
+        # When leaving the 3D workspace ensure any 3D-only overlays/modes are disabled
+        if mode != "3d":
+            try:
+                vw = getattr(self, 'viewer_widget', None)
+                if vw is not None:
+                    if hasattr(vw, 'disable_annotation_mode'):
+                        vw.disable_annotation_mode()
+                    if hasattr(vw, 'disable_screenshot_mode'):
+                        vw.disable_screenshot_mode()
+                    if hasattr(vw, 'disable_draw_mode'):
+                        vw.disable_draw_mode()
+                    if hasattr(vw, 'disable_ruler_mode'):
+                        vw.disable_ruler_mode()
+            except Exception:
+                pass
+
         logger.info(f"_switch_mode: Switched to {mode} mode")
     
     def _toggle_language(self):

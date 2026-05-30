@@ -2541,10 +2541,7 @@ class STLViewerWidget(QWidget):
             self.viewer_container.installEventFilter(self)
             self._draw_event_filter_installed = True
 
-        # Show gizmo overlay for camera control
-        if self._object_control_overlay is not None:
-            self._object_control_overlay.show()
-            self._object_control_overlay.raise_()
+        # Do not show the 3D control overlay during draw mode — it interferes with drawing
 
         logger.info("enable_draw_mode: Draw mode enabled")
         return True
