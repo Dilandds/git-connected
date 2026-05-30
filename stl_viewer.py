@@ -2081,7 +2081,11 @@ class STLViewerWindow(QMainWindow):
                     vw._screenshot_captured_callback = self._on_screenshot_captured
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
-                    if self.toolbar.annotation_mode_enabled:
+                    # Use viewer state, not toolbar flag — toolbar clears
+                    # annotation_mode_enabled before emitting toggle_screenshot,
+                    # so the flag check would always be False and the annotation
+                    # event filter would stay installed (clicks still annotate).
+                    if getattr(vw, 'annotation_mode', False):
                         self._exit_annotation_mode()
                     if self.toolbar.draw_mode_enabled:
                         self._exit_draw_mode()
