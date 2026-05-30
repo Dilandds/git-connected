@@ -1776,7 +1776,7 @@ class STLViewerWindow(QMainWindow):
                     self.right_panel_stack.show()
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
-                    if self.toolbar.draw_mode_enabled:
+                    if getattr(vw, 'draw_mode', False):
                         self._exit_draw_mode()
                     if hasattr(vw, 'reframe_for_viewport'):
                         QTimer.singleShot(50, vw.reframe_for_viewport)
@@ -1824,7 +1824,7 @@ class STLViewerWindow(QMainWindow):
                     self._exit_ruler_mode()
                 if self.toolbar.screenshot_mode_enabled:
                     self._exit_screenshot_mode()
-                if self.toolbar.draw_mode_enabled:
+                if getattr(vw, 'draw_mode', False):
                     self._exit_draw_mode()
                 # Set callback so viewer notifies us of new arrows
                 vw._arrow_added_callback = lambda aid: self._on_arrow_placed(aid)
@@ -1966,7 +1966,7 @@ class STLViewerWindow(QMainWindow):
                 self._exit_ruler_mode()
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
-            if self.toolbar.draw_mode_enabled:
+            if getattr(vw, 'draw_mode', False):
                 self._exit_draw_mode()
             # Clear any previous cards — panel starts empty, populated on click
             tab.parts_panel.clear_all()
@@ -2128,7 +2128,7 @@ class STLViewerWindow(QMainWindow):
                     # event filter would stay installed (clicks still annotate).
                     if getattr(vw, 'annotation_mode', False):
                         self._exit_annotation_mode()
-                    if self.toolbar.draw_mode_enabled:
+                    if getattr(vw, 'draw_mode', False):
                         self._exit_draw_mode()
                     self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
                     self.right_panel_stack.show()
@@ -2187,7 +2187,7 @@ class STLViewerWindow(QMainWindow):
                 self._exit_ruler_mode()
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
-            if self.toolbar.draw_mode_enabled:
+            if getattr(vw, 'draw_mode', False):
                 self._exit_draw_mode()
             if self.toolbar.parts_mode_enabled:
                 self.toolbar.parts_mode_enabled = False
