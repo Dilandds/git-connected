@@ -1,5 +1,13 @@
 """
 Transparent overlay widget for rubber-band rectangle selection (screenshot capture).
+
+Input model in screenshot mode:
+  - Left-mouse drag / wheel pass through to the pygfx canvas (native rotate + zoom).
+  - Hold Space and drag to draw the capture square; release Space (or mouse) to commit.
+  - Esc cancels the current draw.
+
+Forwarding is achieved by toggling WA_TransparentForMouseEvents — the Qt-guaranteed
+way to let the QRenderWidget underneath receive mouse events natively.
 """
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPoint
@@ -7,27 +15,41 @@ from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QCursor
 
 
 class ScreenshotOverlay(QWidget):
-    """Transparent overlay that lets the user draw a rectangle on the 3D view."""
+    """Transparent overlay that lets the user draw a rectangle on the 3D view
+    while Space is held. Otherwise it is mouse-transparent so the 3D canvas
+    underneath handles rotate/zoom natively."""
 
     region_selected = pyqtSignal(QRect)  # emitted with the selected rectangle
 
     def __init__(self, parent=None, zoom_callback=None, rotate_callback=None):
         super().__init__(parent)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        # NOTE: zoom_callback / rotate_callback are accepted for backwards
+        # compatibility but no longer used — wheel + left-drag pass straight
+        # to the pygfx canvas via WA_TransparentForMouseEvents.
+        self._zoom_callback = zoom_callback
+        self._rotate_callback = rotate_callback
+
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setStyleSheet("background: transparent;")
-        self.setCursor(Qt.CrossCursor)
+        # Default: transparent to mouse so 3D canvas below handles rotate/zoom.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setMouseTracking(True)
-        # Need keyboard focus so arrow keys can rotate the 3D camera
+        # Need keyboard focus so Space / Esc reach the overlay.
         self.setFocusPolicy(Qt.StrongFocus)
 
         self._origin = QPoint()
         self._current = QPoint()
         self._drawing = False
-        self._zoom_callback = zoom_callback
-        self._rotate_callback = rotate_callback
-        # Arrow-key rotation step (pixels of equivalent drag)
-        self._key_rotate_step = 18.0
+        self._space_held = False
+
+    # ---- helpers ----
+
+    def _set_capture_mode(self, capture: bool):
+        """Toggle whether the overlay grabs the mouse (capture) or forwards it (navigate)."""
+        # When capturing: become opaque to mouse so we receive press/move/release.
+        # When not capturing: become transparent so events reach pygfx canvas below.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, not capture)
+        self.setCursor(Qt.CrossCursor if capture else Qt.ArrowCursor)
 
     # ---- painting ----
 
@@ -47,9 +69,12 @@ class ScreenshotOverlay(QWidget):
         painter.drawRect(rect)
         painter.end()
 
-    # ---- mouse events ----
+    # ---- mouse events (only reach us while Space is held) ----
 
     def mousePressEvent(self, event):
+        if not self._space_held:
+            event.ignore()
+            return
         if event.button() == Qt.LeftButton:
             self._origin = event.pos()
             self._current = event.pos()
@@ -72,63 +97,74 @@ class ScreenshotOverlay(QWidget):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._drawing:
-            self._drawing = False
-            final_pos = self._constrain_square(self._origin, event.pos())
-            rect = QRect(self._origin, final_pos).normalized()
-            self.update()
-            # Only emit if the square has a minimum size
-            if rect.width() > 10 and rect.height() > 10:
-                self.region_selected.emit(rect)
+            self._finalize_draw(event.pos())
+
+    def _finalize_draw(self, end_pos):
+        """Commit the rubber-band rectangle and emit region_selected if big enough."""
+        self._drawing = False
+        final_pos = self._constrain_square(self._origin, end_pos)
+        rect = QRect(self._origin, final_pos).normalized()
+        self.update()
+        if rect.width() > 10 and rect.height() > 10:
+            self.region_selected.emit(rect)
 
     def wheelEvent(self, event):
-        """Forward wheel events for zoom."""
-        if self._zoom_callback:
-            delta = event.angleDelta().y()
-            if delta > 0:
-                self._zoom_callback(1.15)
-            elif delta < 0:
-                self._zoom_callback(0.85)
-            event.accept()
-        else:
-            super().wheelEvent(event)
+        # Should rarely fire (we're mouse-transparent unless capturing), but if it
+        # does, just ignore so the canvas below handles native zoom.
+        event.ignore()
+
+    # ---- keyboard ----
 
     def keyPressEvent(self, event):
         key = event.key()
         if key == Qt.Key_Escape:
             self._drawing = False
+            self._space_held = False
+            self._set_capture_mode(False)
             self.update()
             return
-        # Arrow keys rotate the 3D camera (replaces the on-screen 3D Control gizmo)
-        if self._rotate_callback is not None:
-            step = self._key_rotate_step
-            if event.modifiers() & Qt.ShiftModifier:
-                step *= 2.5
-            dx = dy = 0.0
-            if key == Qt.Key_Left:
-                dx = -step
-            elif key == Qt.Key_Right:
-                dx = step
-            elif key == Qt.Key_Up:
-                dy = -step
-            elif key == Qt.Key_Down:
-                dy = step
-            else:
-                super().keyPressEvent(event)
-                return
-            self._rotate_callback(dx, dy)
+        if key == Qt.Key_Space and not event.isAutoRepeat():
+            self._space_held = True
+            self._set_capture_mode(True)
             event.accept()
             return
         super().keyPressEvent(event)
 
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            # If user was mid-draw, commit on space release.
+            if self._drawing:
+                self._finalize_draw(self._current)
+            self._space_held = False
+            self._set_capture_mode(False)
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    # ---- show / hide ----
+
     def showEvent(self, event):
         super().showEvent(event)
-        # Grab focus so arrow keys reach this overlay immediately
+        # Reset to navigate mode every time we appear.
+        self._drawing = False
+        self._space_held = False
+        self._set_capture_mode(False)
+        # Grab keyboard so Space/Esc reach us regardless of focused widget,
+        # and so Space doesn't trigger focused buttons elsewhere.
         self.setFocus(Qt.OtherFocusReason)
+        try:
+            self.grabKeyboard()
+        except Exception:
+            pass
 
     def hideEvent(self, event):
-        """Reset cursor when overlay is hidden - CrossCursor can persist on some platforms."""
+        """Release keyboard grab and reset cursor when overlay is hidden."""
+        try:
+            self.releaseKeyboard()
+        except Exception:
+            pass
         super().hideEvent(event)
-        self.setCursor(Qt.ArrowCursor)  # Clear CrossCursor before hide completes
+        self.setCursor(Qt.ArrowCursor)
         parent = self.parent()
         if parent and isinstance(parent, QWidget):
             parent.setCursor(Qt.ArrowCursor)
