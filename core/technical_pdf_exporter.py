@@ -65,14 +65,14 @@ class TechnicalPDFExporter:
             doc = SimpleDocTemplate(
                 output_path,
                 pagesize=A4,
-                rightMargin=15 * mm,
-                leftMargin=15 * mm,
-                topMargin=15 * mm,
-                bottomMargin=15 * mm,
+                rightMargin=5 * mm,
+                leftMargin=5 * mm,
+                topMargin=5 * mm,
+                bottomMargin=5 * mm,
             )
 
-            page_width = A4[0] - 30 * mm
-            page_height = A4[1] - 30 * mm
+            page_width = A4[0] - 10 * mm
+            page_height = A4[1] - 10 * mm
 
             styles = getSampleStyleSheet()
 
@@ -81,8 +81,9 @@ class TechnicalPDFExporter:
                 "TOTitle",
                 parent=styles["Heading1"],
                 fontName="Helvetica-Bold",
-                fontSize=24,
-                spaceAfter=4,
+                fontSize=14,
+                spaceBefore=0,
+                spaceAfter=2,
                 alignment=TA_CENTER,
                 textColor=colors.HexColor("#1E293B"),
             )
@@ -147,7 +148,7 @@ class TechnicalPDFExporter:
 
             # ==================== PAGE 1: Annotated Drawing ====================
             story.append(Paragraph("Technical overview", title_style))
-            story.append(Spacer(1, 4))
+            story.append(Spacer(1, 2))
 
             from PIL import Image as PILImage
             pil_img = PILImage.open(annotated_img_path)
@@ -155,7 +156,8 @@ class TechnicalPDFExporter:
             pil_img.close()
             aspect = ih / iw if iw else 1
 
-            available_h = page_height - 50
+            # Title (~14pt) + spacers ≈ 24pt total; leave a tiny breathing room
+            available_h = page_height - 28
             img_w = page_width
             img_h = img_w * aspect
             if img_h > available_h:
