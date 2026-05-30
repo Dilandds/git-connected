@@ -204,6 +204,7 @@ class ArrowPanel(QWidget):
     move_requested = pyqtSignal(int, float, float, float)  # arrow_id, dx, dy, dz
     color_changed = pyqtSignal(int, str)              # arrow_id, hex color
     delete_requested = pyqtSignal(int)                # arrow_id
+    label_changed = pyqtSignal(int, str, str)         # arrow_id, value_text, unit
     clear_all_requested = pyqtSignal()
     undo_last_requested = pyqtSignal()
     exit_arrow_mode = pyqtSignal()
