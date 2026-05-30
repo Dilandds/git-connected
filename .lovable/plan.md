@@ -1,48 +1,51 @@
-# Screenshot mode: keyboard-driven capture, native 3D nav
+# Fix: Annotation mode still active after switching to Screenshot mode
 
-## New input model
+## Root cause
 
-| Action | Input |
-|---|---|
-| Rotate view | Left-mouse drag (native pygfx) |
-| Zoom | Mouse wheel (native pygfx) |
-| Draw capture square | **Hold Space + drag mouse** |
-| Cancel current draw / exit | Esc |
-| On-screen 3D Control gizmo | Hidden in screenshot mode |
+In `ui/toolbar.py` (`_on_screenshot_clicked`, line ~1042), when the user turns Screenshot mode on while Annotation mode is already on, the toolbar silently clears its own `annotation_mode_enabled` flag and visually deactivates the button — **without emitting `toggle_annotation`**.
 
-## Changes
+Then in `stl_viewer.py` `_toggle_screenshot_mode` (line 2084):
 
-### 1. `ui/screenshot_overlay.py`
-- Add `_space_held` state flag; default cursor = `ArrowCursor`.
-- `setFocusPolicy(Qt.StrongFocus)`; call `grabKeyboard()` on `showEvent`, `releaseKeyboard()` on `hideEvent`. This guarantees Space reaches the overlay regardless of focus and prevents Space from triggering focused buttons elsewhere.
-- **Mouse forwarding fix:** set `WA_TransparentForMouseEvents = True` by default so left-drag / wheel pass straight to the `QRenderWidget` (pygfx canvas) underneath → native rotate + zoom work unchanged. Flip the attribute to `False` only while `_space_held` is True so rubber-band can be captured.
-- `keyPressEvent`:
-  - `Space` (ignore auto-repeat): `_space_held = True`, set `WA_TransparentForMouseEvents = False`, set `CrossCursor`.
-  - `Esc`: cancel current rubber-band, reset state.
-- `keyReleaseEvent`:
-  - `Space`: if mid-draw, finalize and emit `region_selected` when size > threshold. Then `_space_held = False`, restore `WA_TransparentForMouseEvents = True`, restore `ArrowCursor`.
-- Mouse handlers: only engage rubber-band when `_space_held` is True (otherwise the attribute makes them unreachable anyway — defense in depth).
-- Drop the `rotate_callback`/`zoom_callback` plumbing; both now go natively to the canvas.
+```python
+if self.toolbar.annotation_mode_enabled:   # already False — skipped
+    self._exit_annotation_mode()
+```
 
-### 2. `viewer_widget_pygfx.py` → `enable_screenshot_mode()` / `disable_screenshot_mode()`
-- Do **not** show `_object_control_overlay` (3D Control gizmo) when entering screenshot mode.
-- Do **not** show `_zoom_controls_overlay` either (wheel zoom replaces it).
-- Remove the `zoom_callback` / `rotate_callback` arguments passed to `ScreenshotOverlay`.
-- Keep `screenshot_mode = True/False` and the existing capture flow intact.
-- On `disable_screenshot_mode`, ensure `releaseKeyboard()` is called via overlay's `hideEvent` (already covered).
+So `_exit_annotation_mode()` → `vw.disable_annotation_mode()` never runs. The annotation event filter stays installed on the canvas, the `annotation_mode = True` flag on the viewer stays set, and every left-click on the mesh still drops an annotation pin — even though the screenshot overlay is up.
 
-### 3. UI text — `ui/screenshot_panel.py` + `i18n/en.json` + `i18n/fr.json`
-Update `screenshot.instruction`:
-- EN: `"Drag to rotate, scroll to zoom. Hold Space and drag to capture a square."`
-- FR: `"Glissez pour pivoter, molette pour zoomer. Maintenez Espace et glissez pour capturer un carré."`
+The same bug exists symmetrically in `_on_annotation_clicked` (line ~951): turning Annotation on while Screenshot is on clears the toolbar flag silently, so `_exit_screenshot_mode()` is never called.
+
+## Fix
+
+Make the handlers in `stl_viewer.py` rely on the **viewer's own state** (`vw.annotation_mode` / `vw.screenshot_mode`), not the toolbar flag — the toolbar flag is the thing that gets prematurely cleared.
+
+### `stl_viewer.py` — `_toggle_screenshot_mode` (~line 2084)
+
+Replace:
+```python
+if self.toolbar.annotation_mode_enabled:
+    self._exit_annotation_mode()
+```
+with:
+```python
+if getattr(vw, 'annotation_mode', False):
+    self._exit_annotation_mode()
+```
+
+### `stl_viewer.py` — `_toggle_annotation_mode` (~line 1731)
+
+Replace the comment block + call so it triggers based on viewer state:
+```python
+if getattr(vw, 'screenshot_mode', False):
+    self._exit_screenshot_mode()
+```
+
+## Why this fix
+
+- Single source of truth becomes the viewer widget's actual mode flag, which only `disable_*_mode()` clears. The toolbar's premature flag clearing no longer hides the transition from us.
+- No toolbar changes needed — the visual button state stays correct and the dependent handler still fires.
+- Symmetrical: also fixes the reverse case (screenshot active → enabling annotation didn't tear down the screenshot overlay/event filter properly).
 
 ## What stays the same
-- `region_selected` signal → `_on_screenshot_region_selected` → save pipeline: unchanged.
-- Camera math, sensitivity, pygfx TrackballController: unchanged (left-drag now reaches it natively).
-- Annotation mode's 3D Control gizmo: untouched.
-- Screenshot panel cards, editor, save flow: untouched.
 
-## Risks addressed
-- **Event forwarding:** `WA_TransparentForMouseEvents` (not `event.ignore()`) — Qt-guaranteed pass-through to the canvas.
-- **Focus fragility:** `grabKeyboard()` while screenshot mode is active.
-- **Space collisions:** `grabKeyboard()` intercepts Space globally only while the overlay is visible, and releases on exit — no leakage to focused buttons/toolbar.
+Screenshot overlay, Space-to-capture input model, annotation pin pipeline, panel switching — all untouched. This is a two-line behavioral fix in the two toggle handlers.
