@@ -166,7 +166,7 @@
   },
   "screenshot": {
     "panel_title": "Screenshots",
-    "instruction": "Draw a square on the model to capture a screenshot.",
+    "instruction": "Drag to rotate, scroll to zoom. Hold Space and drag to capture a square.",
     "clear_all": "Clear All",
     "delete_title": "Delete Screenshot",
     "delete_msg": "Delete this screenshot?",
