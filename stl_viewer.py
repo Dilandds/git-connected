@@ -2187,7 +2187,7 @@ class STLViewerWindow(QMainWindow):
                 self._exit_ruler_mode()
             if self.toolbar.screenshot_mode_enabled:
                 self._exit_screenshot_mode()
-            if self.toolbar.draw_mode_enabled:
+            if getattr(vw, 'draw_mode', False):
                 self._exit_draw_mode()
             if self.toolbar.parts_mode_enabled:
                 self.toolbar.parts_mode_enabled = False
