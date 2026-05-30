@@ -1824,7 +1824,7 @@ class STLViewerWindow(QMainWindow):
                     self._exit_ruler_mode()
                 if self.toolbar.screenshot_mode_enabled:
                     self._exit_screenshot_mode()
-                if self.toolbar.draw_mode_enabled:
+                if getattr(vw, 'draw_mode', False):
                     self._exit_draw_mode()
                 # Set callback so viewer notifies us of new arrows
                 vw._arrow_added_callback = lambda aid: self._on_arrow_placed(aid)
