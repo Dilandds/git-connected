@@ -11,18 +11,23 @@ class ScreenshotOverlay(QWidget):
 
     region_selected = pyqtSignal(QRect)  # emitted with the selected rectangle
 
-    def __init__(self, parent=None, zoom_callback=None):
+    def __init__(self, parent=None, zoom_callback=None, rotate_callback=None):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setStyleSheet("background: transparent;")
         self.setCursor(Qt.CrossCursor)
         self.setMouseTracking(True)
+        # Need keyboard focus so arrow keys can rotate the 3D camera
+        self.setFocusPolicy(Qt.StrongFocus)
 
         self._origin = QPoint()
         self._current = QPoint()
         self._drawing = False
         self._zoom_callback = zoom_callback
+        self._rotate_callback = rotate_callback
+        # Arrow-key rotation step (pixels of equivalent drag)
+        self._key_rotate_step = 18.0
 
     # ---- painting ----
 
