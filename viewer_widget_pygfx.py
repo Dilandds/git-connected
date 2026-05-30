@@ -20,7 +20,6 @@ SCREENSHOT_CAPTURE_SCALE = 8
 _SCREENSHOT_MAX_EDGE_PX = 8192
 _SCREENSHOT_MAX_PIXELS = 67_000_000  # ~8k × 8k — safe for most GPUs
 
-from ui.orientation_gizmo import OrientationGizmoWidget
 
 
 def _get_zoom_icon_path(filename: str) -> Path:
@@ -253,46 +252,6 @@ class STLViewerWidget(QWidget):
         self._zoom_in_btn.clicked.connect(lambda: self._screenshot_zoom(1.15))
         self._zoom_out_btn.clicked.connect(lambda: self._screenshot_zoom(0.85))
 
-        # Object control overlay (gizmo + label, shown in annotation mode)
-        self._object_control_overlay = QFrame(self.viewer_container)
-        self._object_control_overlay.setObjectName("ObjectControlOverlay")
-        self._object_control_overlay.setStyleSheet("""
-            QFrame#ObjectControlOverlay {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #050B1A, stop:0.45 #0A1838, stop:1 #1B4FA0);
-                border-radius: 14px;
-                border: 2px solid #0B1A33;
-            }
-            QLabel#ObjectControlTitle {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1A2A45, stop:1 #0E1A30);
-                color: #FFFFFF;
-                font-size: 13px;
-                font-weight: bold;
-                border: 1px solid #2A3F60;
-                border-radius: 10px;
-                padding: 3px 8px;
-                letter-spacing: 0.5px;
-            }
-        """)
-        overlay_layout = QVBoxLayout(self._object_control_overlay)
-        overlay_layout.setContentsMargins(4, 4, 4, 4)
-        overlay_layout.setSpacing(2)
-        self._object_control_title = QLabel("3D Control")
-        self._object_control_title.setObjectName("ObjectControlTitle")
-        self._object_control_title.setAlignment(Qt.AlignCenter)
-        overlay_layout.addWidget(self._object_control_title)
-        self._orientation_gizmo = OrientationGizmoWidget(self._object_control_overlay)
-        overlay_layout.addWidget(self._orientation_gizmo, 0, Qt.AlignCenter)
-        self._object_control_overlay.hide()
-        title_h = self._object_control_title.sizeHint().height()
-        overlay_h = 4 + title_h + 2 + OrientationGizmoWidget.SIZE + 4
-        self._object_control_overlay.setFixedSize(
-            OrientationGizmoWidget.SIZE + 12,
-            overlay_h
-        )
-        self._orientation_gizmo.rotation_delta.connect(self._on_gizmo_rotate)
-
         _debug_print("STLViewerWidget (pygfx): Basic init complete")
 
     def showEvent(self, event):
@@ -330,11 +289,6 @@ class STLViewerWidget(QWidget):
 
             self._canvas = QRenderWidget(parent=self.viewer_container)
             self.viewer_layout.addWidget(self._canvas)
-            # Overlay for 3D control gizmo (annotation mode) - bottom-right corner
-            self.viewer_layout.addWidget(
-                self._object_control_overlay, 0, 0, 1, 1,
-                Qt.AlignRight | Qt.AlignBottom
-            )
             # Overlay for zoom controls (screenshot mode) - bottom-right corner
             self.viewer_layout.addWidget(
                 self._zoom_controls_overlay, 0, 0, 1, 1,
@@ -1909,11 +1863,6 @@ class STLViewerWidget(QWidget):
             self.viewer_container.installEventFilter(self)
             self._annotation_event_filter_installed = True
 
-        # Show 3D control overlay
-        if self._object_control_overlay is not None:
-            self._object_control_overlay.show()
-            self._object_control_overlay.raise_()
-
         logger.info("enable_annotation_mode (pygfx): Annotation mode enabled")
         return True
 
@@ -1948,10 +1897,6 @@ class STLViewerWidget(QWidget):
             self.removeEventFilter(self)
             self.viewer_container.removeEventFilter(self)
             self._annotation_event_filter_installed = False
-
-        # Hide 3D control overlay
-        if self._object_control_overlay is not None:
-            self._object_control_overlay.hide()
 
         logger.info("disable_annotation_mode (pygfx): Annotation mode disabled")
 
@@ -2390,11 +2335,8 @@ class STLViewerWidget(QWidget):
         self._screenshot_overlay.show()
         self._screenshot_overlay.setFocus(Qt.OtherFocusReason)
         self.screenshot_mode = True
-        # Hide the on-screen 3D Control gizmo and the zoom buttons —
-        # native mouse + Space-to-capture replace them.
+        # Hide the zoom buttons — native mouse + Space-to-capture replace them.
         self._zoom_controls_overlay.hide()
-        if not self.annotation_mode:
-            self._object_control_overlay.hide()
         return True
 
     def disable_screenshot_mode(self):
@@ -2405,9 +2347,6 @@ class STLViewerWidget(QWidget):
             # Reset cursor - CrossCursor from overlay can persist after hide on some platforms
             self.viewer_container.setCursor(Qt.ArrowCursor)
         self._zoom_controls_overlay.hide()
-        # Only hide gizmo if annotation mode is not active
-        if not self.annotation_mode:
-            self._object_control_overlay.hide()
 
     def _screenshot_zoom(self, factor):
         """Zoom the camera by the given factor (>1 = zoom in, <1 = zoom out)."""
@@ -2571,9 +2510,6 @@ class STLViewerWidget(QWidget):
             self.removeEventFilter(self)
             self.viewer_container.removeEventFilter(self)
             self._draw_event_filter_installed = False
-
-        if self._object_control_overlay is not None:
-            self._object_control_overlay.hide()
 
         logger.info("disable_draw_mode: Draw mode disabled")
 

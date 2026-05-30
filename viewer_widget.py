@@ -10,7 +10,6 @@ from pyvistaqt import QtInteractor
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QStackedLayout, QGridLayout, QFrame
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from ui.drop_zone_overlay import DropZoneOverlay
-from ui.orientation_gizmo import OrientationGizmoWidget
 
 # Set PyVista environment variables for macOS compatibility
 os.environ.setdefault('PYVISTA_OFF_SCREEN', 'false')
@@ -135,46 +134,6 @@ class STLViewerWidget(QWidget):
         self.drop_overlay.error_occurred.connect(self._on_drop_error)
         self.layout.addWidget(self.drop_overlay)
         
-        # Object control overlay (gizmo + label, shown in annotation mode)
-        self._object_control_overlay = QFrame()
-        self._object_control_overlay.setObjectName("ObjectControlOverlay")
-        self._object_control_overlay.setStyleSheet("""
-            QFrame#ObjectControlOverlay {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #050B1A, stop:0.45 #0A1838, stop:1 #1B4FA0);
-                border-radius: 14px;
-                border: 2px solid #0B1A33;
-            }
-            QLabel#ObjectControlTitle {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1A2A45, stop:1 #0E1A30);
-                color: #FFFFFF;
-                font-size: 13px;
-                font-weight: bold;
-                border: 1px solid #2A3F60;
-                border-radius: 10px;
-                padding: 3px 8px;
-                letter-spacing: 0.5px;
-            }
-        """)
-        overlay_layout = QVBoxLayout(self._object_control_overlay)
-        overlay_layout.setContentsMargins(4, 4, 4, 4)
-        overlay_layout.setSpacing(2)
-        self._object_control_title = QLabel("3D Control")
-        self._object_control_title.setObjectName("ObjectControlTitle")
-        self._object_control_title.setAlignment(Qt.AlignCenter)
-        overlay_layout.addWidget(self._object_control_title)
-        self._orientation_gizmo = OrientationGizmoWidget(self._object_control_overlay)
-        overlay_layout.addWidget(self._orientation_gizmo, 0, Qt.AlignCenter)
-        title_h = self._object_control_title.sizeHint().height()
-        overlay_h = 4 + title_h + 2 + OrientationGizmoWidget.SIZE + 4
-        self._object_control_overlay.setFixedSize(
-            OrientationGizmoWidget.SIZE + 12,
-            overlay_h
-        )
-        self._orientation_gizmo.rotation_delta.connect(self._on_gizmo_rotate)
-        self._object_control_overlay.hide()
-        
         # Show overlay on top initially
         self.layout.setCurrentWidget(self.drop_overlay)
         
@@ -183,7 +142,6 @@ class STLViewerWidget(QWidget):
         self.current_mesh = None
         self.current_actor = None  # Track the mesh actor to remove it specifically
         self._mesh_parts = []  # list of {'id', 'name', 'actor', 'visible', 'face_count'} for Parts panel
-        self._orientation_widget = None  # Bottom-right rotation gizmo (annotation mode only)
         self._initialized = False
         self._model_loaded = False
         self._current_is_2d = False  # Track whether currently loaded model is 2D
@@ -302,11 +260,6 @@ class STLViewerWidget(QWidget):
             
             # Add plotter to viewer container layout
             self.viewer_layout.addWidget(self.plotter.interactor, 0, 0)
-            # Add 3D control overlay in bottom-right (on top of plotter)
-            self.viewer_layout.addWidget(
-                self._object_control_overlay, 0, 0, 1, 1,
-                Qt.AlignRight | Qt.AlignBottom
-            )
             QApplication.processEvents()
             
             # Windows: WA_PaintOnScreen=False can reduce black screen during resize/maximize
@@ -738,7 +691,6 @@ class STLViewerWidget(QWidget):
             return
         logger.info("clear_viewer: Clearing viewer...")
         # Remove orientation gizmo if present
-        self._remove_orientation_gizmo()
         # Remove mesh actor(s)
         if self._mesh_parts:
             for p in self._mesh_parts:
@@ -1808,12 +1760,6 @@ class STLViewerWidget(QWidget):
                 self.plotter.hide_axes()
             except Exception:
                 pass
-            # Add interactive orientation cube in bottom right for rotating when zoomed in
-            # (clicking on model adds annotations, so use this to rotate view instead)
-            self._add_orientation_gizmo()
-            if self._object_control_overlay is not None:
-                self._object_control_overlay.show()
-                self._object_control_overlay.raise_()
             logger.info("enable_annotation_mode: Annotation mode enabled")
             return True
         
@@ -1838,9 +1784,6 @@ class STLViewerWidget(QWidget):
         except Exception:
             pass
         
-        self._remove_orientation_gizmo()
-        if self._object_control_overlay is not None:
-            self._object_control_overlay.hide()
         # Restore bottom-left XYZ axes
         try:
             self.plotter.show_axes()
@@ -1848,10 +1791,6 @@ class STLViewerWidget(QWidget):
             pass
         logger.info("disable_annotation_mode: Annotation mode disabled")
     
-    def _add_orientation_gizmo(self):
-        """Show custom orientation gizmo overlay (no-op; overlay shown in enable_annotation_mode)."""
-        pass
-
     def _on_gizmo_rotate(self, dx: float, dy: float):
         """Handle drag on orientation gizmo - rotate the camera (matches main canvas drag direction)."""
         if self.plotter is None:
@@ -1864,10 +1803,6 @@ class STLViewerWidget(QWidget):
             self.plotter.render()
         except Exception as e:
             logger.debug(f"_on_gizmo_rotate: {e}")
-
-    def _remove_orientation_gizmo(self):
-        """Hide the orientation gizmo overlay (no-op; overlay hidden in disable_annotation_mode)."""
-        pass
 
     def _install_annotation_click_picking(self) -> bool:
         """Install VTK observer for annotation point picking."""

@@ -377,15 +377,22 @@ class STLViewerWindow(QMainWindow):
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()  # No blank space when neither mode active
         
-        viewer_h_layout = QHBoxLayout()
-        viewer_h_layout.setContentsMargins(0, 0, 0, 0)
-        viewer_h_layout.setSpacing(0)
-        viewer_h_layout.addWidget(self.viewer_stack, 1)
-        viewer_h_layout.addWidget(self.right_panel_stack)
-        
-        viewer_container = QWidget()
-        viewer_container.setLayout(viewer_h_layout)
-        self.right_layout.addWidget(viewer_container, 1)
+        # Use an inner splitter so the right-side panels are draggable/resizable
+        inner_splitter = QSplitter(Qt.Horizontal)
+        inner_splitter.setOpaqueResize(False)
+        inner_splitter.addWidget(self.viewer_stack)
+        inner_splitter.addWidget(self.right_panel_stack)
+        # Make the right panel collapsible so when hidden it uses zero width
+        try:
+            inner_splitter.setCollapsible(0, False)
+            inner_splitter.setCollapsible(1, True)
+        except Exception:
+            pass
+        # Favor the viewer taking available space
+        inner_splitter.setStretchFactor(0, 1)
+        inner_splitter.setStretchFactor(1, 0)
+        inner_splitter.setSizes([1000, 0])
+        self.right_layout.addWidget(inner_splitter, 1)
         
         # ---- Education watermark below 3D viewer ----
         if is_education():

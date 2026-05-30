@@ -133,7 +133,7 @@ class ScaleSidebar(QWidget):
         self._moving_border_visible = True
         self._ref_lines_visible = True
         self._pdf_locked = False
-        self._drawing_color = QColor("#FFFF00")
+        self._drawing_color = QColor("#000000")
         self._init_ui()
 
     def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):

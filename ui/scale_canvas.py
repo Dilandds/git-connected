@@ -166,7 +166,7 @@ class ScaleCanvas(QWidget):
         
         # Drawing shapes mode
         self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle" | "text"
-        self._drawing_color = QColor("#FFFF00")  # Current drawing color
+        self._drawing_color = QColor("#000000")  # Current drawing color (default black)
         self._arrows: List[DrawingArrow] = []
         self._rectangles: List[DrawingRectangle] = []
         self._circles: List[DrawingCircle] = []
@@ -529,6 +529,12 @@ class ScaleCanvas(QWidget):
         ppu = self._pixels_per_unit()
         return pixel_dist / ppu if ppu > 0 else 0.0
 
+    def _format_real_dimension(self, pixel_value: float, decimals: int = 2) -> str:
+        """Format a screen-pixel length using the current calibration and unit."""
+        real_value = self._pixel_distance_to_real(pixel_value)
+        unit_abbr = {"cm": "cm", "mm": "mm", "inches": "in", "m": "m"}.get(self._unit, "cm")
+        return f"{real_value:.{decimals}f} {unit_abbr}"
+
     def _recalc_measurements(self):
         """Recalculate all measurement distances with current scale/unit."""
         for m in self._measurements:
@@ -716,8 +722,8 @@ class ScaleCanvas(QWidget):
         painter.setPen(QColor("#000000"))
         
         dims = rect.get_dimensions()
-        width_label = f"{dims['width']:.0f}px"
-        height_label = f"{dims['height']:.0f}px"
+        width_label = self._format_real_dimension(dims['width'], decimals=2)
+        height_label = self._format_real_dimension(dims['height'], decimals=2)
         
         painter.drawText(int(norm_x + norm_w / 2 - 20), int(norm_y - 8), width_label)
         painter.drawText(int(norm_x + norm_w + 5), int(norm_y + norm_h / 2 - 5), height_label)
@@ -741,8 +747,8 @@ class ScaleCanvas(QWidget):
         painter.setPen(QColor("#000000"))
         
         dims = circle.get_dimensions()
-        radius_label = f"r: {dims['radius']:.0f}px"
-        diameter_label = f"d: {dims['diameter']:.0f}px"
+        radius_label = f"r: {self._format_real_dimension(dims['radius'], decimals=2)}"
+        diameter_label = f"d: {self._format_real_dimension(dims['diameter'], decimals=2)}"
         
         painter.drawText(int(circle.cx - 35), int(circle.cy), radius_label)
         painter.drawText(int(circle.cx - 35), int(circle.cy + circle.radius + 15), diameter_label)
@@ -1474,7 +1480,7 @@ class ScaleCanvas(QWidget):
 
     def wheelEvent(self, event: QWheelEvent):
         """Zoom drawing proportionally (homothetic)."""
-        if not self._pixmap or self._pdf_locked:
+        if not self._pixmap:
             return
         delta = event.angleDelta().y()
         factor = 1.1 if delta > 0 else 0.9
@@ -1605,7 +1611,7 @@ class ScaleCanvas(QWidget):
 
             # Red reference line is static — no dragging
 
-        if event.button() == Qt.MiddleButton or (
+        if (event.button() == Qt.MiddleButton and not self._pdf_locked) or (
             event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._pdf_locked and not self._drawing_mode
         ):
             self._panning = True
