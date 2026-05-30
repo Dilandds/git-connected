@@ -20,31 +20,39 @@ class ArrowCard(QFrame):
     """A single arrow entry in the list."""
     selected = pyqtSignal(int)
     delete_requested = pyqtSignal(int)
+    label_changed = pyqtSignal(int, str, str)  # arrow_id, value_text, unit
+
+    UNITS = ("mm", "cm", "inch", "m")
 
     def __init__(self, arrow_id: int, display_number: int, color: str = '#E53935', parent=None):
         super().__init__(parent)
         self.arrow_id = arrow_id
         self._is_selected = False
         self.color = color
-        self.setFixedHeight(36)
+        self.setFixedHeight(64)
         self.setCursor(Qt.PointingHandCursor)
         self._build_ui(display_number)
         self._update_style()
 
     def _build_ui(self, display_number: int):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 4, 8, 4)
+        outer.setSpacing(4)
+
+        # Top row: dot + label + delete
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
 
         # Color dot
         self.color_dot = QLabel()
         self.color_dot.setFixedSize(14, 14)
         self._update_color_dot()
-        layout.addWidget(self.color_dot)
+        top.addWidget(self.color_dot)
 
         self.label = QLabel(f"Arrow {display_number}")
         self.label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 12px; border: none; background: transparent;")
-        layout.addWidget(self.label, 1)
+        top.addWidget(self.label, 1)
 
         del_btn = QPushButton("\u00D7")  # × - cleaner close icon
         del_btn.setFixedSize(22, 22)
@@ -54,7 +62,68 @@ class ArrowCard(QFrame):
             QPushButton:hover {{ background: #FEE2E2; color: #DC2626; }}
         """)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.arrow_id))
-        layout.addWidget(del_btn)
+        top.addWidget(del_btn)
+        outer.addLayout(top)
+
+        # Bottom row: value input + unit selector
+        bottom = QHBoxLayout()
+        bottom.setContentsMargins(20, 0, 0, 0)
+        bottom.setSpacing(4)
+
+        self.value_input = QLineEdit()
+        self.value_input.setPlaceholderText("Value")
+        self.value_input.setFixedHeight(22)
+        self.value_input.setFixedWidth(70)
+        validator = QDoubleValidator(0.0, 1e9, 4)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.value_input.setValidator(validator)
+        self.value_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {default_theme.background};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 4px; padding: 1px 5px; font-size: 11px;
+            }}
+            QLineEdit:focus {{ border-color: {default_theme.button_primary}; }}
+        """)
+        self.value_input.textChanged.connect(self._emit_label_changed)
+        # Click on input shouldn't bubble selection (still allow it, but stop propagation in mousePressEvent)
+        self.value_input.mousePressEvent = self._wrap_child_press(self.value_input.mousePressEvent)
+        bottom.addWidget(self.value_input)
+
+        self.unit_combo = QComboBox()
+        self.unit_combo.addItems(self.UNITS)
+        self.unit_combo.setFixedHeight(22)
+        self.unit_combo.setFixedWidth(64)
+        self.unit_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {default_theme.background};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 4px; padding: 1px 4px; font-size: 11px;
+            }}
+            QComboBox:focus {{ border-color: {default_theme.button_primary}; }}
+            QComboBox::drop-down {{ border: none; width: 14px; }}
+        """)
+        self.unit_combo.currentIndexChanged.connect(self._emit_label_changed)
+        bottom.addWidget(self.unit_combo)
+        bottom.addStretch()
+        outer.addLayout(bottom)
+
+    def _wrap_child_press(self, original):
+        def handler(event):
+            # Select this arrow when interacting with its inputs
+            self.selected.emit(self.arrow_id)
+            original(event)
+        return handler
+
+    def _emit_label_changed(self, *_):
+        self.label_changed.emit(
+            self.arrow_id,
+            self.value_input.text().strip(),
+            self.unit_combo.currentText(),
+        )
+
 
     def _update_color_dot(self):
         self.color_dot.setStyleSheet(
