@@ -3204,6 +3204,10 @@ class STLViewerWidget(QWidget):
             'direction': dir_arr.tolist(),
             'length_factor': length_factor,
             'color': color,
+            'arrow_length': arrow_length,
+            'label_obj': None,
+            'label_value': '',
+            'label_unit': 'mm',
         })
 
         if self._canvas:
@@ -3211,6 +3215,58 @@ class STLViewerWidget(QWidget):
 
         logger.info(f"_add_arrow: Added arrow {arrow_id} at {point}")
         return arrow_id
+
+    def _apply_arrow_label(self, arrow):
+        """Create/update/remove the 3D text label attached to an arrow's tip."""
+        import pygfx as gfx
+        group = arrow['group']
+        # Remove previous label if any
+        prev = arrow.get('label_obj')
+        if prev is not None:
+            try:
+                group.remove(prev)
+            except Exception:
+                pass
+            arrow['label_obj'] = None
+
+        value = (arrow.get('label_value') or '').strip()
+        if not value:
+            if self._canvas:
+                self._canvas.request_draw()
+            return
+
+        unit = arrow.get('label_unit') or 'mm'
+        text = f"{value} {unit}"
+
+        arrow_length = arrow.get('arrow_length', 0.0)
+        r, g, b = self._hex_to_rgb_normalized(arrow.get('color', '#E53935'))
+        try:
+            mat = gfx.TextMaterial(color=(r, g, b))
+            lbl = gfx.Text(
+                text=text, material=mat,
+                font_size=14, anchor="middle-center", screen_space=True,
+            )
+            # Place slightly beyond the arrow tip along local +Y
+            lbl.local.position = np.array(
+                [0, arrow_length * 1.15, 0], dtype=np.float32
+            )
+            group.add(lbl)
+            arrow['label_obj'] = lbl
+        except Exception as e:
+            logger.warning(f"_apply_arrow_label: {e}")
+
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def set_arrow_label(self, arrow_id, value_text, unit):
+        """Set/update the numeric label (value + unit) shown on a 3D arrow."""
+        arrow = self._find_arrow(arrow_id)
+        if arrow is None:
+            return
+        arrow['label_value'] = (value_text or '').strip()
+        arrow['label_unit'] = unit or 'mm'
+        self._apply_arrow_label(arrow)
+
 
     def _apply_arrow_rotation(self, group, direction):
         """Rotate group so local +Y aligns with direction vector."""
