@@ -378,21 +378,24 @@ class STLViewerWindow(QMainWindow):
         self.right_panel_stack.hide()  # No blank space when neither mode active
         
         # Use an inner splitter so the right-side panels are draggable/resizable
-        inner_splitter = QSplitter(Qt.Horizontal)
-        inner_splitter.setOpaqueResize(False)
-        inner_splitter.addWidget(self.viewer_stack)
-        inner_splitter.addWidget(self.right_panel_stack)
+        self._viewer_splitter = QSplitter(Qt.Horizontal)
+        self._viewer_splitter.setOpaqueResize(False)
+        self._viewer_splitter.addWidget(self.viewer_stack)
+        self._viewer_splitter.addWidget(self.right_panel_stack)
         # Make the right panel collapsible so when hidden it uses zero width
         try:
-            inner_splitter.setCollapsible(0, False)
-            inner_splitter.setCollapsible(1, True)
+            self._viewer_splitter.setCollapsible(0, False)
+            self._viewer_splitter.setCollapsible(1, True)
         except Exception:
             pass
         # Favor the viewer taking available space
-        inner_splitter.setStretchFactor(0, 1)
-        inner_splitter.setStretchFactor(1, 0)
-        inner_splitter.setSizes([1000, 0])
-        self.right_layout.addWidget(inner_splitter, 1)
+        self._viewer_splitter.setStretchFactor(0, 1)
+        self._viewer_splitter.setStretchFactor(1, 0)
+        self._right_panel_default_width = 320
+        self._right_panel_last_width = self._right_panel_default_width
+        self._viewer_splitter.setSizes([1000, self._right_panel_default_width])
+        self._viewer_splitter.splitterMoved.connect(self._on_viewer_splitter_moved)
+        self.right_layout.addWidget(self._viewer_splitter, 1)
         
         # ---- Education watermark below 3D viewer ----
         if is_education():
@@ -607,6 +610,39 @@ class STLViewerWindow(QMainWindow):
                 pass
 
         logger.info(f"_switch_mode: Switched to {mode} mode")
+
+    def _on_viewer_splitter_moved(self, _pos: int, _index: int):
+        """Remember the last non-zero right panel width."""
+        splitter = getattr(self, "_viewer_splitter", None)
+        if splitter is None:
+            return
+        sizes = splitter.sizes()
+        if len(sizes) >= 2 and sizes[1] > 0:
+            self._right_panel_last_width = sizes[1]
+
+    def _restore_right_panel_width(self):
+        """Restore the right panel to a usable width if it was collapsed to zero."""
+        splitter = getattr(self, "_viewer_splitter", None)
+        if splitter is None or not self.right_panel_stack.isVisible():
+            return
+        sizes = splitter.sizes()
+        if len(sizes) < 2:
+            return
+        if sizes[1] > 0:
+            self._right_panel_last_width = sizes[1]
+            return
+
+        total_width = sum(sizes)
+        if total_width <= 0:
+            total_width = splitter.width()
+        if total_width <= 0:
+            return
+
+        preferred_right = max(self._right_panel_default_width, getattr(self, "_right_panel_last_width", 0))
+        preferred_right = min(preferred_right, max(260, total_width - 260))
+        preferred_left = max(260, total_width - preferred_right)
+        splitter.setSizes([preferred_left, preferred_right])
+        self._right_panel_last_width = preferred_right
     
     def _toggle_language(self):
         """Toggle between English and French."""
@@ -896,22 +932,27 @@ class STLViewerWindow(QMainWindow):
             tab.parts_panel.show()
             self.right_panel_stack.setCurrentWidget(self.parts_stack)
             self.right_panel_stack.show()
+            self._restore_right_panel_width()
         elif tab.arrow_mode_active:
             tab.arrow_panel.show()
             self.right_panel_stack.setCurrentWidget(self.arrow_stack)
             self.right_panel_stack.show()
+            self._restore_right_panel_width()
         elif tab.annotation_mode_active:
             tab.annotation_panel.show()
             self.right_panel_stack.setCurrentWidget(self.annotation_stack)
             self.right_panel_stack.show()
+            self._restore_right_panel_width()
         elif tab.screenshot_mode_active:
             self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
             self.right_panel_stack.show()
             self.screenshot_panel.show()
+            self._restore_right_panel_width()
         elif tab.texture_mode_active:
             self.right_panel_stack.setCurrentWidget(self.texture_stack)
             self.right_panel_stack.show()
             self.texture_panel.show()
+            self._restore_right_panel_width()
         else:
             tab.annotation_panel.hide()
             tab.arrow_panel.hide()
