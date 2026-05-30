@@ -1850,6 +1850,13 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'set_arrow_color'):
             vw.set_arrow_color(arrow_id, color)
 
+    def _arrow_set_label(self, arrow_id, value_text, unit):
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_arrow_label'):
+            vw.set_arrow_label(arrow_id, value_text, unit)
+
+
+
     def _arrow_delete(self, arrow_id):
         vw = self.viewer_widget
         tab = self._current_tab
