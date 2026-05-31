@@ -617,88 +617,90 @@ class TechnicalAnnotationPanel(QWidget):
 
     def _create_card(self, ann: ArrowAnnotation, number: int) -> QFrame:
         from PyQt5.QtWidgets import QColorDialog
-        from PyQt5.QtGui import QFont
-        from ui.annotation_panel import _format_annotation_date, _format_annotation_time
+        from ui.annotation_panel import (
+            _format_annotation_date, _format_annotation_time,
+            _ANNO_CARD_PENDING, _ANNO_CARD_HOVER,
+            _ANNO_CARD_BORDER, _ANNO_CARD_BORDER_HOVER,
+            _rounded_text_pixmap,
+        )
+
+        ann_color = ann.color or ARROW_COLOR
 
         card = QFrame()
+        card.setObjectName("technicalAnnoCard")
+        card.setAttribute(Qt.WA_StyledBackground, True)
         card.setProperty("ann_id", ann.id)
         card.installEventFilter(self)
         card.setStyleSheet(f"""
-            QFrame {{
-                background-color: {default_theme.row_bg_standard};
-                border: 1px solid {default_theme.border_light};
-                border-radius: 6px;
+            QFrame#technicalAnnoCard {{
+                background: {_ANNO_CARD_PENDING};
+                {_ANNO_CARD_BORDER}
+            }}
+            QFrame#technicalAnnoCard:hover {{
+                background: {_ANNO_CARD_HOVER};
+                {_ANNO_CARD_BORDER_HOVER}
+            }}
+            QFrame#technicalAnnoCard QLabel {{
+                background-color: transparent;
             }}
         """)
         card.setCursor(Qt.PointingHandCursor)
-        card.setMinimumHeight(70)
+        card.setMinimumHeight(64)
 
         layout = QHBoxLayout(card)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(8)
 
         # Color swatch (change arrow color)
-        ann_color = ann.color or ARROW_COLOR
         color_btn = QPushButton()
-        color_btn.setFixedSize(20, 20)
+        color_btn.setFixedSize(18, 18)
         color_btn.setCursor(Qt.PointingHandCursor)
         color_btn.setToolTip("Change arrow color")
         color_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {ann_color};
-                border: 2px solid {default_theme.border_light};
-                border-radius: 10px;
+                border: 2px solid rgba(255,255,255,0.35);
+                border-radius: 9px;
             }}
-            QPushButton:hover {{ border: 2px solid {default_theme.border_highlight}; }}
+            QPushButton:hover {{ border: 2px solid rgba(255,255,255,0.7); }}
         """)
 
         def _pick_color(aid=ann.id, btn=color_btn):
             c = QColorDialog.getColor(QColor(ann_color), self, "Arrow Color")
             if c.isValid():
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {c.name()};
-                        border: 2px solid {default_theme.border_light};
-                        border-radius: 10px;
-                    }}
-                    QPushButton:hover {{ border: 2px solid {default_theme.border_highlight}; }}
-                """)
                 self.annotation_color_changed.emit(aid, c.name())
 
         color_btn.clicked.connect(_pick_color)
         layout.addWidget(color_btn)
 
-        # Number badge
-        badge = QLabel(str(number))
-        badge.setFixedSize(24, 24)
+        # Rounded number badge (matches 3D annotation card)
+        badge = QLabel()
+        badge.setPixmap(_rounded_text_pixmap(str(number), fill_color=ann_color))
+        badge.setFixedSize(28, 28)
         badge.setAlignment(Qt.AlignCenter)
-        badge.setStyleSheet(f"""
-            QLabel {{
-                background-color: {ann_color}; color: {ARROW_BADGE_TEXT};
-                border-radius: 12px; font-weight: bold; font-size: 11px;
-            }}
-        """)
+        badge.setStyleSheet("background-color: transparent;")
         layout.addWidget(badge)
 
-        # Title and description (like 3D annotation viewer)
+        # Title + description
         info = QVBoxLayout()
-        info.setSpacing(4)
+        info.setContentsMargins(0, 0, 0, 0)
+        info.setSpacing(2)
 
-        title = QLabel(ann.label or f"Annotation {number}")
-        title_font = make_font(size=11, bold=True)
-        title.setFont(title_font)
-        title.setStyleSheet(f"color: {default_theme.text_primary}; border: none;")
+        title = QLabel(ann.label or "Point")
+        title.setFont(make_font(size=11, bold=True))
+        title.setStyleSheet(f"color: {default_theme.text_primary}; background-color: transparent; border: none;")
         info.addWidget(title)
 
-        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or "No description")
+        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or "Click to edit")
         desc = QLabel(desc_text)
-        desc.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary}; border: none;")
+        desc.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
         desc.setWordWrap(True)
         info.addWidget(desc)
 
         layout.addLayout(info, 1)
+        layout.addStretch()
 
-        # Date and time (like 3D annotation viewer)
+        # Date and time
         if ann.created_at:
             date_text = _format_annotation_date(ann.created_at, include_time=False)
             time_text = _format_annotation_time(ann.created_at)
@@ -707,25 +709,33 @@ class TechnicalAnnotationPanel(QWidget):
             date_time_text = str(number)
         date_label = QLabel(date_time_text)
         date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px; border: none;")
+        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; background-color: transparent; border: none;")
         layout.addWidget(date_label)
 
-        # Delete button
+        # Delete button (transparent, matches 3D annotation card)
         del_btn = QPushButton("✕")
-        del_btn.setFixedSize(26, 26)
+        del_btn.setFixedSize(28, 28)
         del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setToolTip("Remove annotation")
         del_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: #2A1518; border: none; border-radius: 13px;
-                color: #F87171; font-size: 14px; font-weight: bold;
-                padding: 0; min-width: 26px; min-height: 26px;
+                background-color: transparent;
+                border: none;
+                font-size: 15px;
+                font-weight: bold;
+                color: {default_theme.text_secondary};
+                padding: 0; min-width: 28px; min-height: 28px;
             }}
-            QPushButton:hover {{ background-color: #351E22; }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.12);
+                color: #F87171;
+                border-radius: 14px;
+            }}
         """)
         del_btn.clicked.connect(lambda: self.annotation_deleted.emit(ann.id))
-        layout.addWidget(del_btn, 0, Qt.AlignTop)
+        layout.addWidget(del_btn)
 
-        # Click card to open popup (not on buttons)
+        # Click card to open popup
         card.mousePressEvent = lambda e, aid=ann.id: self.open_popup_requested.emit(aid)
 
         return card
