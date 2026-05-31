@@ -1,29 +1,51 @@
-## Problem
+## Efficiency improvements
 
-Switching from screenshot mode back to render mode feels laggy when the screenshot panel has captured images. The cause is in `ui/screenshot_panel.py` — each `ScreenshotCard` re-scales the **full-resolution** captured pixmap with `Qt.SmoothTransformation` every time the card receives a `resizeEvent`. When the right panel stack hides / switches widgets, every card resizes, so Qt does a high-quality downscale of every full-res screenshot synchronously on the UI thread. With several captures (each potentially multi-megapixel), this stalls the transition.
+Targeted fixes across the four areas you picked, ordered by impact. The biggest win — and the one that fixes your "moving is slow with many annotations" report — is #1.
 
-Lines involved:
-- `ScreenshotCard._update_thumbnail` (l. 186–189) — rescales `self.pixmap` (the full-res capture) on every call.
-- `ScreenshotCard.resizeEvent` (l. 191–193) — calls `_update_thumbnail` on every resize tick, with no debounce and no size check.
+---
 
-## Fix
+### 1. Render loop: stop raycasting every annotation, every frame  (HIGH impact)
 
-Edit only `ui/screenshot_panel.py`:
+**Problem**: `animate()` in `viewer_widget_pygfx.py` (l. 341–346) runs on every redraw and calls `_update_annotation_label_visibility()`, which loops over every annotation and runs a separate CPU trimesh raycast (`_is_dot_visible`, l. 1956–1980). With N annotations and 60 fps rotation, that's 60 × N raycasts/second on the UI thread — the exact reason rotating slows down as annotations accumulate.
 
-1. **Cache a downscaled thumbnail** on the card. Pre-scale the full-res pixmap once to a reasonable max size (e.g. 512 px on the long edge) and store as `self._thumb_source`. Use that as the source for `_update_thumbnail` rescales — Qt's smooth scale on a 512 px source is effectively instant.
-2. **Skip redundant rescales** in `_update_thumbnail`: only rescale when the target width actually changed since the last scale; cache the last-produced pixmap.
-3. **Refresh the cached source** in `_on_pixmap_updated` (after the editor returns) so edits stay reflected.
-4. Optional micro-fix: keep `Qt.SmoothTransformation` but apply it to the cached small source so it stays cheap.
+**Fix** (`viewer_widget_pygfx.py`):
+- **Batch raycasts**: `trimesh.ray.intersects_location` accepts arrays. Rewrite `_update_annotation_label_visibility` to build one `ray_origins` (camera position repeated) and one `ray_directions` array (one normalized vector per annotation), and call it once instead of N times.
+- **Skip during camera motion**: hide labels (or freeze last visibility state) while the trackball controller is actively dragging/zooming, and recompute once on release. Detect motion by hooking the controller's input events or by comparing camera matrix between frames; only run the visibility pass when the camera changed AND no motion happened in the last ~150 ms (QTimer single-shot debounce).
+- **Throttle redundant work**: skip the visibility pass entirely when `len(self.annotations) == 0` (already short-circuited) and when the camera matrix hasn't changed since the last pass.
 
-No changes to `stl_viewer.py`, the viewer widget, or the overlay — the transition logic itself is already minimal (`_exit_screenshot_mode` already skips `reframe_for_viewport`). This is purely a UI rendering cost in the panel that gets hidden.
+### 2. Mode switching responsiveness  (MEDIUM impact)
 
-## Why this is the right fix
+- **Lazy-build heavy panels**. Today `_init_ui` creates every right-side panel (annotation, screenshot, texture, parts, arrow…) up front. Convert them to lazy properties so each panel is constructed on first use, then cached. Cuts first-paint cost and switching overhead.
+- **Defer `reframe_for_viewport` calls** that are still wired into other mode transitions (annotation/ruler/arrow). They recenter the camera and force a full redraw; only call them when the *viewport size* truly changed, not just when overlay widgets toggle. (We already fixed this for screenshot mode.)
+- **Decouple toolbar state from teardown**. Standardize all mode-exit checks on `getattr(vw, '<mode>', False)` (the viewer's truth) instead of `self.toolbar.*_enabled`, which is cleared before the toggle signal — same root cause as the recent draw/annotation bugs. Audit the remaining mode transitions for this pattern.
 
-- The lag scales with number and resolution of captured screenshots — matches the user's "image assets" suspicion.
-- `request_draw()` on the canvas is already cheap; the heavy work is Qt repainting/resizing the cards as the stacked widget swaps.
-- Caching a small thumbnail source eliminates the per-resize full-res `scaled()` call without changing any visible behavior.
+### 3. 3D viewer rendering  (MEDIUM impact)
 
-## Out of scope
+- **Single `request_draw`**. ~25 call sites issue `self._canvas.request_draw()`. Add a tiny coalescer: a flag + 0 ms QTimer that fires once per event loop tick, so rapid sequential calls collapse into one draw.
+- **Lower idle GPU**. Confirm pygfx isn't re-rendering when nothing changes (auto_update + request_draw should already gate this — verify by logging frame count when idle).
+- **Texture compression in preview**. Cap material texture upload size in `texture_panel`/material loader (e.g. max 2K for preview, full-res only during export). Big PBR maps cost both VRAM and upload time.
+- **Annotation marker LOD**. When annotation count > ~30, use a single `gfx.Points` cloud for markers instead of one mesh per dot. Labels can be hidden past a distance threshold.
 
-- No changes to capture resolution (`SCREENSHOT_CAPTURE_SCALE`) — full-res is still kept on `self.pixmap` for save/edit.
-- No changes to mode-switch flow in `stl_viewer.py`.
+### 4. Memory & image handling  (MEDIUM impact)
+
+- **Generalize the thumbnail cache** we just added in `screenshot_panel.py`: apply the same "pre-scale once, cache, skip if width unchanged" pattern to `annotation_panel`, `arrow_panel`, `parts_panel`, `texture_panel` (any QLabel that does `pixmap.scaled(...)` in `resizeEvent`).
+- **Free heavy buffers on tab close**. When a viewer tab is closed, explicitly null out `_annotation_trimesh`, `_mesh_data`, captured screenshot QPixmaps, and call `gc.collect()`.
+- **Limit captured screenshot resolution per device**. Keep the current `_SCREENSHOT_MAX_PIXELS` cap but also store an explicit *display* copy (1024 px long edge) separate from the *export* copy; UI always uses display copy.
+
+### 5. Startup & file loading  (LOW–MEDIUM impact)
+
+- **Lazy-import heavy modules**. In `stl_viewer.py` / `main.py`, defer imports of `pygfx`, `trimesh`, format loaders (`step_loader`, `iges_loader`, `rhino3dm_loader`, `dxf_loader`, `obj_loader`, `pdf3d_exporter`, `technical_pdf_exporter`) until the user actually opens a file of that type. Cuts cold-start measurably (pygfx alone pulls wgpu).
+- **Splash earlier**. Show the `QSplashScreen` *before* importing `stl_viewer` so it appears within ~200 ms of launch.
+- **Cache parsed meshes**. For `.ecto` reopen, keep a small LRU of parsed `trimesh.Trimesh` keyed by file path + mtime; skip re-tessellation when the file is unchanged. (Respects PyInstaller paths via `sys._MEIPASS` rule.)
+
+---
+
+## Suggested implementation order
+
+1. **Annotation render-loop fix** (#1) — biggest perceived win, isolated to `viewer_widget_pygfx.py`.
+2. **Coalesced `request_draw` + audit mode-exit checks** (#2, #3 first bullet).
+3. **Lazy panels + lazy heavy imports** (#2, #5).
+4. **Thumbnail cache generalization + memory cleanup on tab close** (#4).
+5. **Texture/material caps + marker LOD** (#3 tail).
+
+Pick which slice you want me to implement first — I'd recommend (1) since it directly addresses the slowdown you actually feel, and we can iterate from there.
