@@ -185,8 +185,10 @@ class ImageCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
+        # Always fill background white
+        painter.fillRect(self.rect(), QColor("#ffffff"))
+
         if not self._pixmap:
-            painter.fillRect(self.rect(), QColor("#ffffff"))
             self._draw_drop_zone(painter)
             painter.end()
             return
