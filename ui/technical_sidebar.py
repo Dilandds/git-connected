@@ -139,17 +139,25 @@ class TechnicalSidebar(QWidget):
         self.upload_btn = QPushButton("📄 Upload Image / PDF / .ecto")
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {default_theme.row_bg_standard};
-                border: 1px solid {default_theme.border_light};
-                border-radius: 6px;
-                padding: 6px 12px; font-size: 11px; font-weight: bold;
-                color: {default_theme.text_primary};
-            }}
-            QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
-            }}
+        self.upload_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #7ab8f0, stop:0.5 #4a90d9, stop:0.51 #3a7cc8, stop:1 #2e6cb5);
+                border: 1px solid #1f4f8a;
+                border-radius: 24px;
+                padding: 10px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                color: white;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #8cc4f5, stop:0.5 #5a9fe6, stop:0.51 #4a8ad4, stop:1 #3a7cc8);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #2e6cb5, stop:1 #4a90d9);
+            }
         """)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(lambda: self.upload_requested.emit())
