@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF, QFont
-from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style
 from i18n import t, on_language_changed
 from ui.technical_sidebar import (
     _FIELD_BG,
@@ -211,27 +211,10 @@ class ScaleSidebar(QWidget):
         # Upload button (same pattern as Technical Overview)
         self.upload_btn = QPushButton(t("scale.upload_btn"))
         self.upload_btn.setMinimumHeight(50)
+        self.upload_btn.setObjectName("uploadBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #7ab8f0, stop:0.5 #4a90d9, stop:0.51 #3a7cc8, stop:1 #2e6cb5);
-                border: 1px solid #1f4f8a;
-                border-radius: 24px;
-                padding: 10px 16px;
-                font-size: 14px;
-                font-weight: bold;
-                color: white;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #8cc4f5, stop:0.5 #5a9fe6, stop:0.51 #4a8ad4, stop:1 #3a7cc8);
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2e6cb5, stop:1 #4a90d9);
-            }
-        """)
+        self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
+        self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(self.upload_requested.emit)
         upload_card_layout.addWidget(self.upload_btn)
