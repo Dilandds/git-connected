@@ -166,6 +166,26 @@ class SidebarPanel(QWidget):
             QScrollArea#sidebarScrollArea > QWidget > QWidget {{
                 background-color: {default_theme.background};
             }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 10px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: #5b6470;
+                border-radius: 5px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: #7a8594;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+                background: none;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
         """)
         scroll_area.viewport().setStyleSheet(f"background-color: {default_theme.background};")
         
