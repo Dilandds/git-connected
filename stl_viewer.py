@@ -2331,9 +2331,17 @@ class STLViewerWindow(QMainWindow):
             vw.clear_drawings()
 
     
-    def _on_screenshot_captured(self, pixmap):
+    def _on_screenshot_pending(self):
+        """Called the instant a screenshot region is released, before the heavy
+        offscreen render runs — add a buffering placeholder card immediately."""
+        return self.screenshot_panel.add_pending_card()
+
+    def _on_screenshot_captured(self, pixmap, pending_token=None):
         """Handle a captured screenshot from the viewer overlay."""
-        self.screenshot_panel.add_screenshot(pixmap)
+        if pending_token is not None:
+            self.screenshot_panel.complete_pending_card(pending_token, pixmap)
+        else:
+            self.screenshot_panel.add_screenshot(pixmap)
         logger.info("_on_screenshot_captured: Screenshot added to panel")
 
     def _on_annotation_point_picked(self, point: tuple):
