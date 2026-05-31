@@ -1708,7 +1708,7 @@ class TexturePanel(QWidget):
         except ImportError:
             pass
 
-        pixmap = QPixmap(image_path)
+        pixmap = _load_preview_pixmap(image_path, max_edge=512)
         if pixmap.isNull():
             logger.warning(f"add_texture: Could not load {image_path}")
             return
