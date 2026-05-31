@@ -271,7 +271,7 @@ class ArrowPanel(QWidget):
         layout.addLayout(header)
 
         # Info label
-        info = QLabel("Click on model to place arrows.\nSelect an arrow below to adjust it.")
+        info = QLabel("Click on model to place arrows.\nClick the colored dot to change an arrow's color.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; border: none; background: transparent;")
         layout.addWidget(info)
