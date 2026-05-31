@@ -253,6 +253,8 @@ class ScreenshotCard(QFrame):
     def _update_thumbnail(self, smooth: bool = True):
         if not hasattr(self, '_thumb_source') or self._thumb_source is None:
             self._rebuild_thumb_source(smooth=smooth)
+        if self._thumb_source is None or self._thumb_source.isNull():
+            return
         card_w = max(self.width() - 16, 80)
         if getattr(self, '_last_thumb_width', -1) == card_w:
             return
@@ -265,15 +267,31 @@ class ScreenshotCard(QFrame):
 
     def _upgrade_thumbnail_quality(self):
         """Rebuild the cached thumb at high quality after the card is on screen."""
+        if self.pixmap is None or self.pixmap.isNull():
+            return
         self._thumb_source = None
         self._last_thumb_width = -1
         self._update_thumbnail(smooth=True)
 
+    def set_pixmap(self, pixmap: QPixmap):
+        """Swap in the real screenshot pixmap and hide the buffering overlay."""
+        self.pixmap = pixmap
+        self._thumb_source = None
+        self._last_thumb_width = -1
+        self._update_thumbnail(smooth=False)
+        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
+        if hasattr(self, 'spinner_overlay'):
+            self.spinner_overlay.hide()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._update_thumbnail()
+        if self.pixmap is not None and not self.pixmap.isNull():
+            self._update_thumbnail()
 
     def mousePressEvent(self, event):
+        if self.pixmap is None or self.pixmap.isNull():
+            super().mousePressEvent(event)
+            return
         if event.button() == Qt.LeftButton:
             thumb_pos = self.thumb_label.mapFrom(self, event.pos())
             if self.thumb_label.rect().contains(thumb_pos):
