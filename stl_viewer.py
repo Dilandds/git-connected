@@ -2126,6 +2126,7 @@ class STLViewerWindow(QMainWindow):
                 success = vw.enable_screenshot_mode()
                 if success:
                     vw._screenshot_captured_callback = self._on_screenshot_captured
+                    vw._screenshot_pending_cb = self._on_screenshot_pending
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
                     # Use viewer state, not toolbar flag — toolbar clears
