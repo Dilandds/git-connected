@@ -1068,7 +1068,24 @@ class TexturePanel(QWidget):
         self.setMinimumWidth(280)
         self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
+        self._materials_loaded = False
+        self._material_grid = None
         self._init_ui()
+
+    def prepare_for_show(self):
+        """Populate heavy material cards on first use, then reuse them on later mode switches."""
+        if self._materials_loaded:
+            return
+        self._materials_loaded = True
+
+        def _populate():
+            if self._material_grid is None:
+                return
+            for i, preset in enumerate(MATERIAL_PRESETS):
+                card = MaterialPresetCard(preset)
+                self._material_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+
+        QTimer.singleShot(0, _populate)
 
     def _create_slider_row(self, label_text, min_val, max_val, default_val, suffix="", divisor=1):
         """Helper to create a labeled slider row. Returns (container, slider, value_label)."""
@@ -1422,15 +1439,12 @@ class TexturePanel(QWidget):
         mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(mat_label)
 
-        mat_grid = QGridLayout()
-        mat_grid.setContentsMargins(0, 0, 0, 0)
-        mat_grid.setSpacing(6)
-        mat_grid.setColumnStretch(0, 1)
-        mat_grid.setColumnStretch(1, 1)
-        for i, preset in enumerate(MATERIAL_PRESETS):
-            card = MaterialPresetCard(preset)
-            mat_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
-        layout.addLayout(mat_grid)
+        self._material_grid = QGridLayout()
+        self._material_grid.setContentsMargins(0, 0, 0, 0)
+        self._material_grid.setSpacing(6)
+        self._material_grid.setColumnStretch(0, 1)
+        self._material_grid.setColumnStretch(1, 1)
+        layout.addLayout(self._material_grid)
 
         # ---- Upload button ----
         upload_label = QLabel("Custom Textures")
