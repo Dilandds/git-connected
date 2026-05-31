@@ -1,51 +1,29 @@
-# Fix: Annotation mode still active after switching to Screenshot mode
+## Problem
 
-## Root cause
+Switching from screenshot mode back to render mode feels laggy when the screenshot panel has captured images. The cause is in `ui/screenshot_panel.py` — each `ScreenshotCard` re-scales the **full-resolution** captured pixmap with `Qt.SmoothTransformation` every time the card receives a `resizeEvent`. When the right panel stack hides / switches widgets, every card resizes, so Qt does a high-quality downscale of every full-res screenshot synchronously on the UI thread. With several captures (each potentially multi-megapixel), this stalls the transition.
 
-In `ui/toolbar.py` (`_on_screenshot_clicked`, line ~1042), when the user turns Screenshot mode on while Annotation mode is already on, the toolbar silently clears its own `annotation_mode_enabled` flag and visually deactivates the button — **without emitting `toggle_annotation`**.
-
-Then in `stl_viewer.py` `_toggle_screenshot_mode` (line 2084):
-
-```python
-if self.toolbar.annotation_mode_enabled:   # already False — skipped
-    self._exit_annotation_mode()
-```
-
-So `_exit_annotation_mode()` → `vw.disable_annotation_mode()` never runs. The annotation event filter stays installed on the canvas, the `annotation_mode = True` flag on the viewer stays set, and every left-click on the mesh still drops an annotation pin — even though the screenshot overlay is up.
-
-The same bug exists symmetrically in `_on_annotation_clicked` (line ~951): turning Annotation on while Screenshot is on clears the toolbar flag silently, so `_exit_screenshot_mode()` is never called.
+Lines involved:
+- `ScreenshotCard._update_thumbnail` (l. 186–189) — rescales `self.pixmap` (the full-res capture) on every call.
+- `ScreenshotCard.resizeEvent` (l. 191–193) — calls `_update_thumbnail` on every resize tick, with no debounce and no size check.
 
 ## Fix
 
-Make the handlers in `stl_viewer.py` rely on the **viewer's own state** (`vw.annotation_mode` / `vw.screenshot_mode`), not the toolbar flag — the toolbar flag is the thing that gets prematurely cleared.
+Edit only `ui/screenshot_panel.py`:
 
-### `stl_viewer.py` — `_toggle_screenshot_mode` (~line 2084)
+1. **Cache a downscaled thumbnail** on the card. Pre-scale the full-res pixmap once to a reasonable max size (e.g. 512 px on the long edge) and store as `self._thumb_source`. Use that as the source for `_update_thumbnail` rescales — Qt's smooth scale on a 512 px source is effectively instant.
+2. **Skip redundant rescales** in `_update_thumbnail`: only rescale when the target width actually changed since the last scale; cache the last-produced pixmap.
+3. **Refresh the cached source** in `_on_pixmap_updated` (after the editor returns) so edits stay reflected.
+4. Optional micro-fix: keep `Qt.SmoothTransformation` but apply it to the cached small source so it stays cheap.
 
-Replace:
-```python
-if self.toolbar.annotation_mode_enabled:
-    self._exit_annotation_mode()
-```
-with:
-```python
-if getattr(vw, 'annotation_mode', False):
-    self._exit_annotation_mode()
-```
+No changes to `stl_viewer.py`, the viewer widget, or the overlay — the transition logic itself is already minimal (`_exit_screenshot_mode` already skips `reframe_for_viewport`). This is purely a UI rendering cost in the panel that gets hidden.
 
-### `stl_viewer.py` — `_toggle_annotation_mode` (~line 1731)
+## Why this is the right fix
 
-Replace the comment block + call so it triggers based on viewer state:
-```python
-if getattr(vw, 'screenshot_mode', False):
-    self._exit_screenshot_mode()
-```
+- The lag scales with number and resolution of captured screenshots — matches the user's "image assets" suspicion.
+- `request_draw()` on the canvas is already cheap; the heavy work is Qt repainting/resizing the cards as the stacked widget swaps.
+- Caching a small thumbnail source eliminates the per-resize full-res `scaled()` call without changing any visible behavior.
 
-## Why this fix
+## Out of scope
 
-- Single source of truth becomes the viewer widget's actual mode flag, which only `disable_*_mode()` clears. The toolbar's premature flag clearing no longer hides the transition from us.
-- No toolbar changes needed — the visual button state stays correct and the dependent handler still fires.
-- Symmetrical: also fixes the reverse case (screenshot active → enabling annotation didn't tear down the screenshot overlay/event filter properly).
-
-## What stays the same
-
-Screenshot overlay, Space-to-capture input model, annotation pin pipeline, panel switching — all untouched. This is a two-line behavioral fix in the two toggle handlers.
+- No changes to capture resolution (`SCREENSHOT_CAPTURE_SCALE`) — full-res is still kept on `self.pixmap` for save/edit.
+- No changes to mode-switch flow in `stl_viewer.py`.

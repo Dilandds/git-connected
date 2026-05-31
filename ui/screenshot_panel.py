@@ -183,10 +183,33 @@ class ScreenshotCard(QFrame):
 
         layout.addLayout(actions)
 
+    def _rebuild_thumb_source(self):
+        """Pre-scale the full-res pixmap to a small cached source (<=512px long edge)
+        so per-resize rescales are cheap."""
+        src = self.pixmap
+        if src is None or src.isNull():
+            self._thumb_source = src
+            return
+        max_edge = 512
+        if max(src.width(), src.height()) > max_edge:
+            self._thumb_source = src.scaled(
+                max_edge, max_edge, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+        else:
+            self._thumb_source = src
+        self._last_thumb_width = -1
+
     def _update_thumbnail(self):
+        if not hasattr(self, '_thumb_source') or self._thumb_source is None:
+            self._rebuild_thumb_source()
         card_w = max(self.width() - 16, 80)
-        scaled = self.pixmap.scaled(card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if getattr(self, '_last_thumb_width', -1) == card_w:
+            return
+        scaled = self._thumb_source.scaled(
+            card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
         self.thumb_label.setPixmap(scaled)
+        self._last_thumb_width = card_w
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
