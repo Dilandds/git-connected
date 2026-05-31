@@ -499,6 +499,38 @@ class ScreenshotPanel(QWidget):
         _show_hint = len(self.screenshots) == 0
         self.instruction.setVisible(_show_hint)
         self._screenshot_banner_divider.setVisible(_show_hint)
+        return card
+
+    def add_pending_card(self):
+        """Add a placeholder card with a buffering spinner. Returns the card so the
+        caller can finalize it via complete_pending_card() once the pixmap is ready."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        # Reserve a slot in screenshots with a null pixmap; index stays stable.
+        self.screenshots.append((QPixmap(), ts))
+        idx = len(self.screenshots) - 1
+        card = ScreenshotCard(idx, None, ts)
+        card.delete_requested.connect(self._on_delete)
+        card.save_requested.connect(self._on_save)
+        self.cards.append(card)
+        row = idx // GRID_COLUMNS
+        col = idx % GRID_COLUMNS
+        self.grid_layout.addWidget(card, row, col)
+        self.clear_btn.setVisible(True)
+        self.instruction.hide()
+        self._screenshot_banner_divider.hide()
+        return card
+
+    def complete_pending_card(self, card, pixmap: QPixmap):
+        """Finalize a pending card by injecting its real screenshot pixmap."""
+        if card is None or pixmap is None or pixmap.isNull():
+            return
+        try:
+            idx = self.cards.index(card)
+        except ValueError:
+            return
+        ts = self.screenshots[idx][1]
+        self.screenshots[idx] = (pixmap, ts)
+        card.set_pixmap(pixmap)
 
     def clear_all(self):
         """Remove all screenshots."""
