@@ -237,7 +237,7 @@ class ArrowPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(240)
+        self.setMinimumWidth(220)
         self._selected_arrow_id = None
         self._arrow_cards = {}  # arrow_id -> ArrowCard
         self._arrow_color = '#E53935'
