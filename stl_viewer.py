@@ -150,6 +150,11 @@ class STLViewerWindow(QMainWindow):
         tab = self._current_tab
         return tab.annotation_panel if tab else None
 
+    def _ensure_texture_panel_ready(self):
+        panel = getattr(self, 'texture_panel', None)
+        if panel and hasattr(panel, 'prepare_for_show'):
+            panel.prepare_for_show()
+
     @property
     def _annotations_exported(self):
         tab = self._current_tab
@@ -1017,6 +1022,7 @@ class STLViewerWindow(QMainWindow):
         if tab.texture_mode_active:
             self.toolbar.texture_mode_enabled = True
             self.toolbar.texture_btn.set_active(True)
+            self._ensure_texture_panel_ready()
             self._apply_current_texture_settings()
         else:
             if self.toolbar.texture_mode_enabled:
@@ -2201,12 +2207,11 @@ class STLViewerWindow(QMainWindow):
             # Enable texture drop on viewer
             if hasattr(vw, 'enable_texture_drop_mode'):
                 vw.enable_texture_drop_mode()
+            self._ensure_texture_panel_ready()
             self.texture_panel.show()
             self.right_panel_stack.setCurrentWidget(self.texture_stack)
             self.right_panel_stack.show()
             self._apply_current_texture_settings()
-            if hasattr(vw, 'reframe_for_viewport'):
-                QTimer.singleShot(50, vw.reframe_for_viewport)
             logger.info("_toggle_texture_mode: Texture mode enabled")
         else:
             self._exit_texture_mode()
@@ -2219,8 +2224,16 @@ class STLViewerWindow(QMainWindow):
         self.texture_panel.hide()
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()
-        if vw and hasattr(vw, 'reframe_for_viewport'):
-            QTimer.singleShot(50, vw.reframe_for_viewport)
+        if vw and hasattr(vw, '_safe_set_aspect'):
+            try:
+                vw._safe_set_aspect()
+            except Exception:
+                pass
+        if vw and hasattr(vw, '_canvas') and vw._canvas is not None:
+            try:
+                vw._canvas.request_draw()
+            except Exception:
+                pass
         self.toolbar.reset_texture_state()
         logger.info("_exit_texture_mode: Texture mode disabled")
 
