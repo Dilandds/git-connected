@@ -185,8 +185,10 @@ class ImageCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
+        # Always fill background white
+        painter.fillRect(self.rect(), QColor("#ffffff"))
+
         if not self._pixmap:
-            painter.fillRect(self.rect(), QColor("#ffffff"))
             self._draw_drop_zone(painter)
             painter.end()
             return
@@ -433,20 +435,28 @@ class TechnicalAnnotationPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(260)
+        self.setFixedWidth(280)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.setObjectName("technicalAnnotationPanel")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            QWidget#technicalAnnotationPanel {{
+                background-color: {default_theme.background};
+                border-left: 1px solid {default_theme.border_light};
+            }}
+        """)
         self._cards: List[QFrame] = []
         self._annotations: List[ArrowAnnotation] = []
         self._init_ui()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         hint = QLabel("Click on the image to place arrows.\nClick a card to edit text & photos.")
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary};")
+        hint.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary}; background: transparent; border: none;")
         layout.addWidget(hint)
 
         # Scroll area for cards
@@ -454,42 +464,44 @@ class TechnicalAnnotationPanel(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         self._scroll_widget = QWidget()
+        self._scroll_widget.setStyleSheet("background: transparent;")
         self._scroll_layout = QVBoxLayout(self._scroll_widget)
         self._scroll_layout.setContentsMargins(0, 0, 0, 0)
-        self._scroll_layout.setSpacing(4)
+        self._scroll_layout.setSpacing(6)
         self._scroll_layout.addStretch()
         self._scroll.setWidget(self._scroll_widget)
         layout.addWidget(self._scroll, 1)
 
         # Bottom buttons
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         clear_btn = QPushButton("Clear All")
-        clear_btn.setFixedHeight(28)
+        clear_btn.setFixedHeight(32)
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #2A1518; border: 1px solid #3A2528;
-                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: #F87171;
+                border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: bold; color: #F87171;
             }}
             QPushButton:hover {{ background-color: #351E22; }}
         """)
         clear_btn.clicked.connect(self._on_clear_all)
-        btn_row.addWidget(clear_btn)
-        btn_row.addStretch()
+        btn_row.addWidget(clear_btn, 1)
 
         exit_btn = QPushButton("Exit")
-        exit_btn.setFixedHeight(28)
+        exit_btn.setFixedHeight(32)
         exit_btn.setCursor(Qt.PointingHandCursor)
         exit_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {default_theme.row_bg_standard}; border: 1px solid {default_theme.border_light};
-                border-radius: 4px; padding: 4px 10px; font-size: 10px; color: {default_theme.text_primary};
+                border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: bold; color: {default_theme.text_primary};
             }}
             QPushButton:hover {{ background-color: {default_theme.row_bg_hover}; }}
         """)
         exit_btn.clicked.connect(lambda: self.exit_mode.emit())
-        btn_row.addWidget(exit_btn)
+        btn_row.addWidget(exit_btn, 1)
         layout.addLayout(btn_row)
 
     def eventFilter(self, obj, event):
