@@ -12,8 +12,8 @@ from PyQt5.QtWidgets import (
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
     QGridLayout, QApplication, QSlider,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint
-from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QTimer, QSize
+from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen, QImageReader
 from i18n import t, on_language_changed
 from ui.styles import default_theme, make_font
 from ui.annotation_panel import (
@@ -26,6 +26,48 @@ from ui.annotation_panel import (
 logger = logging.getLogger(__name__)
 
 GRID_COLUMNS = 2
+_SWATCH_CACHE = {}
+_PREVIEW_PIXMAP_CACHE = {}
+
+
+def _resolve_asset_path(image_path: str) -> str:
+    import sys as _sys
+    if hasattr(_sys, '_MEIPASS'):
+        _base = _sys._MEIPASS
+    else:
+        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return image_path if os.path.isabs(image_path) else os.path.join(_base, image_path)
+
+
+def _file_cache_key(path: str, size_hint: int):
+    try:
+        st = os.stat(path)
+        return (os.path.abspath(path), size_hint, st.st_size, getattr(st, 'st_mtime_ns', int(st.st_mtime * 1e9)))
+    except Exception:
+        return (os.path.abspath(path), size_hint, 0, 0)
+
+
+def _load_preview_pixmap(image_path: str, max_edge: int = 512) -> QPixmap:
+    """Load a bounded preview pixmap; keep full-res files on disk until actually applied."""
+    full_path = _resolve_asset_path(image_path)
+    key = _file_cache_key(full_path, max_edge)
+    cached = _PREVIEW_PIXMAP_CACHE.get(key)
+    if cached is not None and not cached.isNull():
+        return cached
+
+    reader = QImageReader(full_path)
+    reader.setAutoTransform(True)
+    size = reader.size()
+    if size.isValid() and max(size.width(), size.height()) > max_edge:
+        if size.width() >= size.height():
+            scaled = QSize(max_edge, max(1, int(size.height() * max_edge / size.width())))
+        else:
+            scaled = QSize(max(1, int(size.width() * max_edge / size.height())), max_edge)
+        reader.setScaledSize(scaled)
+    image = reader.read()
+    pixmap = QPixmap.fromImage(image) if not image.isNull() else QPixmap(full_path)
+    _PREVIEW_PIXMAP_CACHE[key] = pixmap
+    return pixmap
 
 # Teal/cyan banner palette for texture mode
 _TEX_TEAL_TOP = "#4DD0E1"
