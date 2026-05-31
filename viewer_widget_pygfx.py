@@ -343,7 +343,9 @@ class STLViewerWidget(QWidget):
 
             def animate():
                 if self._renderer and self._scene and self._camera:
-                    self._update_annotation_label_visibility()
+                    # Schedule (debounced) annotation label visibility update
+                    # instead of running a CPU raycast per annotation every frame.
+                    self._schedule_annotation_visibility_update()
                     self._renderer.render(self._scene, self._camera)
 
             self._canvas.request_draw(animate)
