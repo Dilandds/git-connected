@@ -174,9 +174,9 @@ class STLViewerWindow(QMainWindow):
         _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
         self.setWindowTitle(_title)
         if sys.platform == 'win32':
-            min_w, min_h = 1200, 750
+            min_w, min_h = 900, 600
         else:
-            min_w, min_h = 1200, 750
+            min_w, min_h = 900, 600
         self.setMinimumSize(min_w, min_h)
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()

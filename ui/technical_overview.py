@@ -564,6 +564,8 @@ class TechnicalAnnotationPanel(QWidget):
 
         # ---- Clear All button (matches 3D viewer) ----
         btn_frame = QFrame()
+        btn_frame.setAttribute(Qt.WA_StyledBackground, True)
+        btn_frame.setStyleSheet(f"background-color: {default_theme.background};")
         btn_layout = QHBoxLayout(btn_frame)
         btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setSpacing(8)
