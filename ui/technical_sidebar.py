@@ -135,41 +135,11 @@ class TechnicalSidebar(QWidget):
         self.header.setStyleSheet(f"background: transparent; border: none; color: {default_theme.text_title};")
         upload_card_layout.addWidget(self.header)
 
-        # Upload button — dedicated object name so the shared `uploadBtn`
-        # QSS margins (which clipped the longer label) don't apply here.
         self.upload_btn = QPushButton(t("technical.upload_btn"))
         self.upload_btn.setObjectName("technicalUploadBtn")
-        self.upload_btn.setFixedHeight(50)
+        self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet("""
-            QPushButton#technicalUploadBtn {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #5DADE2,
-                    stop:0.4 #3B8ED0,
-                    stop:0.6 #2E78B8,
-                    stop:1 #1A5F9E);
-                color: white;
-                border: 1px solid #1A5F9E;
-                border-radius: 22px;
-                padding: 6px 16px;
-                font-size: 15px;
-                font-weight: bold;
-            }
-            QPushButton#technicalUploadBtn:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #6BB8E8,
-                    stop:0.4 #4A9AD8,
-                    stop:0.6 #3888C8,
-                    stop:1 #2068A8);
-            }
-            QPushButton#technicalUploadBtn:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2E78B8,
-                    stop:0.4 #1A5F9E,
-                    stop:0.6 #155288,
-                    stop:1 #104572);
-            }
-        """)
+        self.upload_btn.setStyleSheet(get_button_style("technicalUploadBtn"))
         self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
         self.upload_btn.clicked.connect(lambda: self.upload_requested.emit())

@@ -3,15 +3,102 @@ Color picker popup for the freehand drawing tool.
 Displays a grid of preset color swatches and a custom color option.
 """
 from PyQt5.QtWidgets import (
-    QWidget, QGridLayout, QPushButton, QVBoxLayout, QColorDialog, QLabel,
-    QSpinBox, QLineEdit, QToolButton
+    QWidget, QGridLayout, QPushButton, QVBoxLayout, QHBoxLayout,
+    QColorDialog, QLabel, QDialog, QAbstractButton
 )
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt, QTimer
 from PyQt5.QtGui import QColor
 from ui.styles import default_theme
 
 
 from ui.color_palette import PALETTE as PRESET_COLORS
+
+_TEXT = '#b8ccd8'
+_BG = '#22262c'
+_CARD = '#2a2e34'
+_INPUT_BG = '#1e2228'
+_BORDER = '#3a4050'
+_ACCENT = default_theme.button_primary        # '#2596BE'
+_ACCENT_HOVER = default_theme.button_primary_hover  # '#1E7FA3'
+_ACCENT_PRESS = default_theme.button_primary_pressed  # '#186A8A'
+_BTN_BG = '#32363e'
+_BTN_HOVER = '#3d4350'
+
+_DIALOG_STYLESHEET = f"""
+    QDialog, QWidget {{
+        background-color: {_BG};
+        color: {_TEXT};
+        font-size: 12px;
+    }}
+    QLabel {{
+        color: {_TEXT};
+        background: transparent;
+        border: none;
+    }}
+    QLineEdit, QSpinBox, QDoubleSpinBox {{
+        background-color: {_INPUT_BG};
+        color: {_TEXT};
+        border: 1px solid {_BORDER};
+        border-radius: 4px;
+        padding: 2px 6px;
+        selection-background-color: {_ACCENT};
+    }}
+    QToolButton {{
+        background-color: {_BTN_BG};
+        color: {_TEXT};
+        border: 1px solid {_BORDER};
+        border-radius: 5px;
+        padding: 4px 10px;
+    }}
+    QToolButton:hover {{
+        background-color: {_BTN_HOVER};
+        border-color: {_ACCENT};
+        color: white;
+    }}
+    QToolButton:pressed {{
+        background-color: {_ACCENT_PRESS};
+    }}
+    QScrollBar:vertical {{
+        background: {_BG};
+        width: 6px;
+        border-radius: 3px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {_BORDER};
+        border-radius: 3px;
+    }}
+"""
+
+_OK_BTN_STYLE = f"""
+    QPushButton {{
+        background-color: {_ACCENT};
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 7px 24px;
+    }}
+    QPushButton:hover {{ background-color: {_ACCENT_HOVER}; }}
+    QPushButton:pressed {{ background-color: {_ACCENT_PRESS}; }}
+"""
+
+_CANCEL_BTN_STYLE = f"""
+    QPushButton {{
+        background-color: {_BTN_BG};
+        color: {_TEXT};
+        border: 1px solid {_BORDER};
+        border-radius: 6px;
+        font-size: 13px;
+        padding: 7px 24px;
+    }}
+    QPushButton:hover {{
+        background-color: {_BTN_HOVER};
+        border-color: {_ACCENT};
+        color: white;
+    }}
+    QPushButton:pressed {{ background-color: {_ACCENT_PRESS}; color: white; }}
+"""
 
 
 class DrawColorPicker(QWidget):
@@ -37,7 +124,7 @@ class DrawColorPicker(QWidget):
         layout.setSpacing(6)
 
         title = QLabel("Pen Color")
-        title.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px; font-weight: bold; border: none;")
+        title.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: bold; border: none;")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
@@ -47,7 +134,6 @@ class DrawColorPicker(QWidget):
             btn = QPushButton()
             btn.setFixedSize(24, 24)
             border_color = '#aaa' if color.upper() == '#FFFFFF' else 'transparent'
-            # Hover shows a prominent outline to indicate selection affordance
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
@@ -71,14 +157,20 @@ class DrawColorPicker(QWidget):
         custom_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {default_theme.row_bg_standard};
-                color: {default_theme.text_primary};
+                color: {_TEXT};
                 border: 1px solid {default_theme.border_standard};
                 border-radius: 6px;
                 font-size: 11px;
                 padding: 5px 10px 6px 10px;
             }}
             QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
+                background-color: {_BTN_HOVER};
+                border-color: {_ACCENT};
+                color: white;
+            }}
+            QPushButton:pressed {{
+                background-color: {_ACCENT_PRESS};
+                color: white;
             }}
         """)
         custom_btn.clicked.connect(self._pick_custom)
@@ -89,57 +181,77 @@ class DrawColorPicker(QWidget):
         self.close()
 
     def _pick_custom(self):
-        # Use a Qt-based (non-native) QColorDialog so we can enforce readable text
-        dialog = QColorDialog(self.parent())
-        dialog.setWindowTitle("Choose Pen Color")
-        dialog.setCurrentColor(QColor('#FF0000'))
-        # Force Qt dialog (don't use the OS native color picker) so stylesheet applies
-        dialog.setOption(QColorDialog.DontUseNativeDialog, True)
-        # Force black text color for labels/inputs/buttons inside the dialog (Windows native pickers can be unreadable)
-        dialog.setStyleSheet("""
-            QWidget, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QToolButton, QPushButton {
-                color: #000000 !important;
-            }
-        """)
-        # Remove advanced controls (HSV/RGB spinners, HTML field, custom colors grid)
-        # by hiding common widget classes used in that panel. This keeps the
-        # dialog minimal (picker + OK/Cancel) as requested.
-        try:
-            # Hide labels that match the unwanted controls
-            banned_labels = ('Hue', 'Hue:', 'Sat', 'Sat:', 'Val', 'Val:', 'Red', 'Green', 'Blue', 'HTML', 'Custom colors', 'Add to Custom Colors', 'Pick Screen Color')
-            for lbl in dialog.findChildren(QLabel):
-                try:
-                    txt = lbl.text() or ''
-                    if any(b in txt for b in banned_labels):
-                        parent = lbl.parent()
-                        if parent is not None:
-                            parent.setVisible(False)
-                        else:
-                            lbl.setVisible(False)
-                except Exception:
-                    continue
+        wrapper = QDialog(self.parent())
+        wrapper.setWindowTitle("Choose Pen Color")
+        wrapper.setWindowFlags(wrapper.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        wrapper.setStyleSheet(_DIALOG_STYLESHEET)
 
-            # Hide numeric inputs and free-form HTML field if present
-            for sp in dialog.findChildren(QSpinBox):
-                sp.setVisible(False)
-            for le in dialog.findChildren(QLineEdit):
-                # Hide the HTML field and any small text inputs used for RGB/HSV
-                le.setVisible(False)
-            # Hide small tool buttons that belong to the advanced panel
-            for tb in dialog.findChildren(QToolButton):
-                tb.setVisible(False)
-        except Exception:
-            # If anything goes wrong with hiding heuristics, fall back to showing the dialog as-is
-            pass
+        outer = QVBoxLayout(wrapper)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(14)
 
-        # Exec the dialog and emit the selected color if accepted
+        # Embed QColorDialog as a plain widget (NoButtons so we supply our own)
+        picker = QColorDialog(wrapper)
+        picker.setWindowFlags(Qt.Widget)
+        picker.setOptions(QColorDialog.DontUseNativeDialog | QColorDialog.NoButtons)
+        picker.setCurrentColor(QColor('#FF0000'))
+        outer.addWidget(picker)
+
+        # Defer hiding until the event loop starts (widgets not fully built yet at this point)
+        def _hide_unwanted():
+            from PyQt5.QtWidgets import QWidget as _QWidget
+
+            # 1. Hide "Custom colors" label directly
+            for lbl in picker.findChildren(QLabel):
+                txt = (lbl.text() or '').strip()
+                if txt in ('Custom colors', 'Custom Colors'):
+                    lbl.setVisible(False)
+
+            # 2. Hide "Add to Custom Colors" + "Pick Screen Color" buttons
+            for btn in picker.findChildren(QAbstractButton):
+                txt = (btn.text() or '').strip()
+                if ('Add' in txt and 'Custom' in txt) or 'Screen' in txt or 'Pick' in txt:
+                    btn.setVisible(False)
+
+            # 3. Hide the custom-colours swatch grid (Qt calls it QWellArray internally).
+            #    Qt places two QWellArray widgets in the dialog: standard colours first,
+            #    custom colours second.  We hide the second one.
+            well_arrays = [
+                c for c in picker.findChildren(_QWidget)
+                if 'Well' in c.metaObject().className()
+            ]
+            if len(well_arrays) >= 2:
+                for wa in well_arrays[1:]:
+                    wa.setVisible(False)
+
+        QTimer.singleShot(0, _hide_unwanted)
+
+        # Styled OK / Cancel row
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        cancel_btn = QPushButton("Cancel")
+        ok_btn = QPushButton("OK")
+        for b in (cancel_btn, ok_btn):
+            b.setFixedHeight(36)
+            b.setMinimumWidth(100)
+            b.setCursor(Qt.PointingHandCursor)
+        cancel_btn.setStyleSheet(_CANCEL_BTN_STYLE)
+        ok_btn.setStyleSheet(_OK_BTN_STYLE)
+        btn_row.addStretch()
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(ok_btn)
+        outer.addLayout(btn_row)
+
+        cancel_btn.clicked.connect(wrapper.reject)
+        ok_btn.clicked.connect(wrapper.accept)
+
         try:
-            accepted = dialog.exec_()
+            accepted = wrapper.exec_()
         except TypeError:
-            accepted = dialog.exec()
+            accepted = wrapper.exec()
 
-        if accepted == QColorDialog.Accepted:
-            col = dialog.selectedColor()
+        if accepted == QDialog.Accepted:
+            col = picker.selectedColor()
             if col.isValid():
                 self.color_selected.emit(col.name())
         self.close()

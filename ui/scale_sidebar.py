@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QFrame, QSizePolicy, QScrollArea, QColorDialog,
+    QComboBox, QFrame, QSizePolicy, QScrollArea,
     QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF

@@ -726,11 +726,22 @@ def get_global_stylesheet(theme=None):
     """
 
 
-def get_button_style(object_name="uploadBtn", theme=None):
-    """Get button-specific stylesheet."""
+def get_button_style(object_name="uploadBtn", theme=None, include_margins=None):
+    """Get upload button stylesheet.
+
+    include_margins controls the margin-top/margin-bottom that reserve space
+    for the drop shadow below the pill.  Defaults to True for the legacy
+    'uploadBtn' name (sidebar + scale cards) and False for any other name,
+    so callers using a custom object name get identical visuals without the
+    margins that caused overflow in tighter card layouts.
+    """
     if theme is None:
         theme = default_theme
-    
+    if include_margins is None:
+        include_margins = (object_name == "uploadBtn")
+
+    margins = "margin-top: 2px;\n            margin-bottom: 14px;" if include_margins else ""
+
     return f"""
         QPushButton#{object_name} {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -744,8 +755,7 @@ def get_button_style(object_name="uploadBtn", theme=None):
             padding: 12px 20px;
             font-size: 15px;
             font-weight: bold;
-            margin-top: 2px;
-            margin-bottom: 14px;
+            {margins}
         }}
         QPushButton#{object_name}:hover {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,

@@ -1615,7 +1615,9 @@ class ScaleCanvas(QWidget):
                 self._rotate_selected_shape(15)
                 return
 
-        if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode and not self._pdf_locked:
+        # Extra reference lines are overlays — dragging and deleting them is
+        # independent of zoom lock, so this check runs before the _pdf_locked guard.
+        if event.button() == Qt.LeftButton and self._pixmap and not self._ruler_mode:
             # Check if clicking delete button on any extra ref line
             for ref in self._extra_ref_lines:
                 ppu = self._pixels_per_unit()
