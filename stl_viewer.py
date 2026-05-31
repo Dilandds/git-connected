@@ -2126,6 +2126,7 @@ class STLViewerWindow(QMainWindow):
                 success = vw.enable_screenshot_mode()
                 if success:
                     vw._screenshot_captured_callback = self._on_screenshot_captured
+                    vw._screenshot_pending_cb = self._on_screenshot_pending
                     if self.toolbar.ruler_mode_enabled:
                         self._exit_ruler_mode()
                     # Use viewer state, not toolbar flag — toolbar clears
@@ -2155,6 +2156,7 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'disable_screenshot_mode'):
             vw.disable_screenshot_mode()
             vw._screenshot_captured_callback = None
+            vw._screenshot_pending_cb = None
         self.screenshot_panel.hide()
         if self.toolbar.annotation_mode_enabled:
             self.right_panel_stack.setCurrentWidget(self.annotation_stack)
@@ -2329,9 +2331,17 @@ class STLViewerWindow(QMainWindow):
             vw.clear_drawings()
 
     
-    def _on_screenshot_captured(self, pixmap):
+    def _on_screenshot_pending(self):
+        """Called the instant a screenshot region is released, before the heavy
+        offscreen render runs — add a buffering placeholder card immediately."""
+        return self.screenshot_panel.add_pending_card()
+
+    def _on_screenshot_captured(self, pixmap, pending_token=None):
         """Handle a captured screenshot from the viewer overlay."""
-        self.screenshot_panel.add_screenshot(pixmap)
+        if pending_token is not None:
+            self.screenshot_panel.complete_pending_card(pending_token, pixmap)
+        else:
+            self.screenshot_panel.add_screenshot(pixmap)
         logger.info("_on_screenshot_captured: Screenshot added to panel")
 
     def _on_annotation_point_picked(self, point: tuple):

@@ -7,7 +7,8 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
-    QDialog, QApplication, QLineEdit, QGridLayout,
+    QDialog, QApplication, QLineEdit, QGridLayout, QProgressBar,
+    QStackedLayout,
 )
 from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
@@ -124,17 +125,64 @@ class ScreenshotCard(QFrame):
         header.addWidget(close_btn)
         layout.addLayout(header)
 
-        # Square thumbnail — compact
+        # Square thumbnail — compact. Uses a stacked layout so we can overlay a
+        # buffering spinner while the screenshot is still being captured.
+        self.thumb_container = QWidget()
+        self.thumb_container.setFixedHeight(90)
+        self.thumb_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.thumb_container.setStyleSheet("background: transparent;")
+        thumb_stack = QStackedLayout(self.thumb_container)
+        thumb_stack.setStackingMode(QStackedLayout.StackAll)
+        thumb_stack.setContentsMargins(0, 0, 0, 0)
+
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
         self.thumb_label.setStyleSheet("background: transparent;")
         self.thumb_label.setCursor(Qt.PointingHandCursor)
-        self.thumb_label.setFixedHeight(90)
-        self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        # Fast first paint — schedule a high-quality upgrade once the card is on screen
-        self._update_thumbnail(smooth=False)
-        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
-        layout.addWidget(self.thumb_label)
+        thumb_stack.addWidget(self.thumb_label)
+
+        # Buffering overlay (indeterminate spinner + label)
+        self.spinner_overlay = QWidget()
+        self.spinner_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.spinner_overlay.setStyleSheet("""
+            QWidget { background: rgba(0,0,0,0.18); border-radius: 6px; }
+            QLabel { color: white; font-size: 10px; font-weight: bold; background: transparent; }
+            QProgressBar {
+                background: rgba(255,255,255,0.25);
+                border: none;
+                border-radius: 3px;
+                max-height: 4px;
+            }
+            QProgressBar::chunk {
+                background: white;
+                border-radius: 3px;
+            }
+        """)
+        ov = QVBoxLayout(self.spinner_overlay)
+        ov.setContentsMargins(20, 30, 20, 30)
+        ov.setSpacing(6)
+        ov.addStretch()
+        self._spinner_label = QLabel("📷 Capturing…")
+        self._spinner_label.setAlignment(Qt.AlignCenter)
+        ov.addWidget(self._spinner_label)
+        self._spinner_bar = QProgressBar()
+        self._spinner_bar.setRange(0, 0)  # indeterminate
+        self._spinner_bar.setTextVisible(False)
+        ov.addWidget(self._spinner_bar)
+        ov.addStretch()
+        thumb_stack.addWidget(self.spinner_overlay)
+
+        if self.pixmap is not None and not self.pixmap.isNull():
+            # Fast first paint — schedule a high-quality upgrade once the card is on screen
+            self._update_thumbnail(smooth=False)
+            QTimer.singleShot(0, self._upgrade_thumbnail_quality)
+            self.spinner_overlay.hide()
+        else:
+            # Pending — show spinner until set_pixmap() is called
+            self.thumb_label.setText("")
+            self.spinner_overlay.show()
+
+        layout.addWidget(self.thumb_container)
 
         # Action buttons
         actions = QHBoxLayout()
@@ -205,6 +253,8 @@ class ScreenshotCard(QFrame):
     def _update_thumbnail(self, smooth: bool = True):
         if not hasattr(self, '_thumb_source') or self._thumb_source is None:
             self._rebuild_thumb_source(smooth=smooth)
+        if self._thumb_source is None or self._thumb_source.isNull():
+            return
         card_w = max(self.width() - 16, 80)
         if getattr(self, '_last_thumb_width', -1) == card_w:
             return
@@ -217,15 +267,31 @@ class ScreenshotCard(QFrame):
 
     def _upgrade_thumbnail_quality(self):
         """Rebuild the cached thumb at high quality after the card is on screen."""
+        if self.pixmap is None or self.pixmap.isNull():
+            return
         self._thumb_source = None
         self._last_thumb_width = -1
         self._update_thumbnail(smooth=True)
 
+    def set_pixmap(self, pixmap: QPixmap):
+        """Swap in the real screenshot pixmap and hide the buffering overlay."""
+        self.pixmap = pixmap
+        self._thumb_source = None
+        self._last_thumb_width = -1
+        self._update_thumbnail(smooth=False)
+        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
+        if hasattr(self, 'spinner_overlay'):
+            self.spinner_overlay.hide()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._update_thumbnail()
+        if self.pixmap is not None and not self.pixmap.isNull():
+            self._update_thumbnail()
 
     def mousePressEvent(self, event):
+        if self.pixmap is None or self.pixmap.isNull():
+            super().mousePressEvent(event)
+            return
         if event.button() == Qt.LeftButton:
             thumb_pos = self.thumb_label.mapFrom(self, event.pos())
             if self.thumb_label.rect().contains(thumb_pos):
@@ -433,6 +499,38 @@ class ScreenshotPanel(QWidget):
         _show_hint = len(self.screenshots) == 0
         self.instruction.setVisible(_show_hint)
         self._screenshot_banner_divider.setVisible(_show_hint)
+        return card
+
+    def add_pending_card(self):
+        """Add a placeholder card with a buffering spinner. Returns the card so the
+        caller can finalize it via complete_pending_card() once the pixmap is ready."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        # Reserve a slot in screenshots with a null pixmap; index stays stable.
+        self.screenshots.append((QPixmap(), ts))
+        idx = len(self.screenshots) - 1
+        card = ScreenshotCard(idx, None, ts)
+        card.delete_requested.connect(self._on_delete)
+        card.save_requested.connect(self._on_save)
+        self.cards.append(card)
+        row = idx // GRID_COLUMNS
+        col = idx % GRID_COLUMNS
+        self.grid_layout.addWidget(card, row, col)
+        self.clear_btn.setVisible(True)
+        self.instruction.hide()
+        self._screenshot_banner_divider.hide()
+        return card
+
+    def complete_pending_card(self, card, pixmap: QPixmap):
+        """Finalize a pending card by injecting its real screenshot pixmap."""
+        if card is None or pixmap is None or pixmap.isNull():
+            return
+        try:
+            idx = self.cards.index(card)
+        except ValueError:
+            return
+        ts = self.screenshots[idx][1]
+        self.screenshots[idx] = (pixmap, ts)
+        card.set_pixmap(pixmap)
 
     def clear_all(self):
         """Remove all screenshots."""
