@@ -597,6 +597,11 @@ MATERIAL_PRESETS = [
 
 def _generate_material_swatch(base_color: str, highlight_color: str, size: int = 80) -> QPixmap:
     """Create a photo-realistic metallic sphere swatch with specular highlight and shadow."""
+    cache_key = ("material", base_color, highlight_color, size)
+    cached = _SWATCH_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return cached
+
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
 
@@ -660,19 +665,19 @@ def _generate_material_swatch(base_color: str, highlight_color: str, size: int =
     painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
 
     painter.end()
+    _SWATCH_CACHE[cache_key] = pixmap
     return pixmap
 
 
 def _generate_image_swatch(image_path: str, size: int = 80) -> QPixmap:
     """Create a sphere swatch using a texture image mapped onto it."""
-    import sys as _sys
-    if hasattr(_sys, '_MEIPASS'):
-        _base = _sys._MEIPASS
-    else:
-        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    full_path = os.path.join(_base, image_path)
+    full_path = _resolve_asset_path(image_path)
+    cache_key = ("image",) + _file_cache_key(full_path, size)
+    cached = _SWATCH_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return cached
 
-    src = QPixmap(full_path)
+    src = _load_preview_pixmap(full_path, max_edge=256)
     if src.isNull():
         return QPixmap(size, size)
 
@@ -742,6 +747,7 @@ def _generate_image_swatch(image_path: str, size: int = 80) -> QPixmap:
     painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
 
     painter.end()
+    _SWATCH_CACHE[cache_key] = pixmap
     return pixmap
 
 
