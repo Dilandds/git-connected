@@ -324,22 +324,11 @@ class ArrowPanel(QWidget):
             _b.hide()
 
 
-        # Color
-        ctrl_layout.addWidget(_section_label("COLOR"))
-        color_row = QHBoxLayout()
-        color_row.setSpacing(6)
+        # Color picker now lives on each arrow card (click the colored dot).
+        # Keep hidden stub button to preserve external references.
         self._color_btn = QPushButton()
-        self._color_btn.setFixedSize(28, 28)
-        self._color_btn.setCursor(Qt.PointingHandCursor)
-        self._color_btn.setToolTip("Change arrow color")
+        self._color_btn.hide()
         self._update_color_btn_style()
-        self._color_btn.clicked.connect(self._pick_color)
-        color_row.addWidget(self._color_btn)
-        color_label = QLabel("Change color")
-        color_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; border: none; background: transparent;")
-        color_row.addWidget(color_label)
-        color_row.addStretch()
-        ctrl_layout.addLayout(color_row)
 
         layout.addWidget(self._controls_container)
         self._controls_container.setEnabled(False)
