@@ -432,7 +432,38 @@ class ArrowPanel(QWidget):
 
     def _pick_color(self):
         from PyQt5.QtWidgets import QColorDialog
-        color = QColorDialog.getColor(QColor(self._arrow_color), self, "Choose Arrow Color")
+        dlg = QColorDialog(QColor(self._arrow_color), self)
+        dlg.setWindowTitle("Choose Arrow Color")
+        # Force Qt's own dialog so our stylesheet applies consistently on Windows
+        dlg.setOption(QColorDialog.DontUseNativeDialog, True)
+        dlg.setStyleSheet(f"""
+            QDialog {{
+                background-color: {default_theme.card_background};
+                color: {default_theme.text_primary};
+            }}
+            QLabel {{
+                color: {default_theme.text_primary};
+                background: transparent;
+            }}
+            QPushButton {{
+                background-color: {default_theme.row_bg_standard};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard};
+                border-radius: 6px;
+                padding: 6px 16px;
+                min-width: 72px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {default_theme.row_bg_hover};
+                border-color: {default_theme.button_primary};
+            }}
+            QPushButton:pressed {{
+                background-color: {default_theme.button_primary};
+                color: white;
+            }}
+        """)
+        color = dlg.currentColor() if dlg.exec_() == QColorDialog.Accepted else QColor()
         if color.isValid():
             self._arrow_color = color.name()
             self._update_color_btn_style()

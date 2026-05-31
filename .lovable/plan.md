@@ -1,28 +1,54 @@
-## What is actually wrong
+## Problem
 
-The Technical Overview button is not broken because of card spacing anymore. The screenshot shows a Qt painting/layout issue inside the button itself: the text is vertically clipped and the rounded corners/border do not render like the other upload buttons.
+The OK / Cancel buttons in the Arrow Color picker (`QColorDialog`) have no visible hover state on Windows. On macOS the native color panel is used and looks fine; on Windows Qt renders its own dialog which inherits the app's dark stylesheet but doesn't define a `:hover` rule for those buttons, so they look flat/dead.
 
-## Why it happened
+## Fix
 
-- The button is using the shared `uploadBtn` stylesheet from `ui/styles.py`.
-- That shared style includes large vertical padding (`12px` top and bottom) plus Qt stylesheet margins (`margin-top: 2px`, `margin-bottom: 14px`).
-- The widget is only given `setMinimumHeight(50)`, not a real fixed safe height.
-- For this specific label, `Upload Image / PDF / .ecto`, Qt needs more internal height than the shorter `Upload Drawing` button.
-- Because the available paint area is too small, Qt clips the top of the bold text and the border radius looks flattened/wrong.
+Force Qt's own (non-native) color dialog and inject a small stylesheet so OK / Cancel get a proper hover background that matches the rest of the app.
 
-## Fix plan
+In `ui/arrow_panel.py`, inside `_pick_color()`:
 
-1. Change only `ui/technical_sidebar.py` for this button.
-2. Keep the surrounding card spacing exactly as it is, since you said the spaces are correct.
-3. Give the Technical Overview upload button a dedicated object name, for example `technicalUploadBtn`, so it does not inherit the problematic shared `uploadBtn` margin/padding assumptions.
-4. Apply a dedicated stylesheet with the same blue gradient, border, font weight, and visual style, but with safe internal metrics:
-   - no Qt stylesheet margins inside the button
-   - slightly smaller vertical padding
-   - a real fixed/minimum height around `56px`
-   - matching rounded radius around `22px`
-5. Keep the existing shadow and click behavior unchanged.
-6. Optionally set the text from the translation key immediately (`t("technical.upload_btn")`) instead of a hardcoded string, so startup and language refresh use the same label.
+1. Build the dialog explicitly instead of using `QColorDialog.getColor(...)`:
+   ```python
+   dlg = QColorDialog(QColor(self._arrow_color), self)
+   dlg.setWindowTitle(t("arrow.color_title"))   # existing i18n
+   dlg.setOption(QColorDialog.DontUseNativeDialog, True)   # consistent across OS
+   dlg.setStyleSheet(<dark theme QSS, see below>)
+   if dlg.exec_() == QColorDialog.Accepted:
+       color = dlg.currentColor()
+       ...
+   ```
 
-## Expected result
+2. The stylesheet only targets `QPushButton` (the OK / Cancel buttons inside the dialog) so the rest of the picker keeps Qt's default look:
+   ```css
+   QDialog { background-color: <card_background>; color: <text_primary>; }
+   QPushButton {
+       background-color: <row_bg_standard>;
+       color: <text_primary>;
+       border: 1px solid <border_standard>;
+       border-radius: 6px;
+       padding: 6px 16px;
+       min-width: 72px;
+   }
+   QPushButton:hover {
+       background-color: <row_bg_hover>;
+       border-color: <button_primary>;
+   }
+   QPushButton:pressed {
+       background-color: <button_primary>;
+       color: white;
+   }
+   ```
+   Values pulled from `ui/styles.default_theme` so it matches the rest of the app.
 
-The Technical Overview upload button will visually match the other upload buttons, but it will no longer clip the letters or flatten the rounded border because its own style will reserve enough paintable height for the longer text.
+## Why this works on Windows
+
+- `DontUseNativeDialog=True` makes Qt render the dialog itself on every OS, so our QSS reliably applies to its child `QPushButton`s (the native Windows dialog ignores stylesheets).
+- macOS already uses Qt's dialog (the native macOS color panel is only used in specific cases); the same QSS gives it consistent hover styling too.
+- We only override button styling — swatches, hue/sat picker, and spinboxes keep Qt's default rendering.
+
+## Files touched
+
+- `ui/arrow_panel.py` — replace the single `QColorDialog.getColor(...)` call with the explicit dialog + stylesheet block (≈15 lines).
+
+No other files change. No behavior change beyond styling.
