@@ -280,15 +280,16 @@ class ArrowPanel(QWidget):
         layout.addWidget(_section_label("PLACED ARROWS"))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(160)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self._list_widget = QWidget()
         self._list_layout = QVBoxLayout(self._list_widget)
         self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(3)
+        self._list_layout.setSpacing(6)
         self._list_layout.addStretch()
         scroll.setWidget(self._list_widget)
-        layout.addWidget(scroll)
+        layout.addWidget(scroll, 1)
 
         self._no_arrows_label = QLabel("No arrows placed yet")
         self._no_arrows_label.setAlignment(Qt.AlignCenter)
@@ -333,14 +334,14 @@ class ArrowPanel(QWidget):
         layout.addWidget(self._controls_container)
         self._controls_container.setEnabled(False)
 
-        layout.addStretch()
-
         # Bottom actions
         bottom = QHBoxLayout()
         bottom.setSpacing(6)
+        bottom.setContentsMargins(0, 4, 0, 0)
         undo_btn = QPushButton("Undo Last")
         undo_btn.setCursor(Qt.PointingHandCursor)
-        undo_btn.setFixedHeight(30)
+        undo_btn.setFixedHeight(34)
+        undo_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         undo_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {default_theme.row_bg_standard};
@@ -351,11 +352,12 @@ class ArrowPanel(QWidget):
             QPushButton:hover {{ background-color: {default_theme.row_bg_hover}; }}
         """)
         undo_btn.clicked.connect(self.undo_last_requested.emit)
-        bottom.addWidget(undo_btn)
+        bottom.addWidget(undo_btn, 1)
 
         clear_btn = QPushButton("Clear All")
         clear_btn.setCursor(Qt.PointingHandCursor)
-        clear_btn.setFixedHeight(30)
+        clear_btn.setFixedHeight(34)
+        clear_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         clear_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #2A1518;
@@ -366,7 +368,7 @@ class ArrowPanel(QWidget):
             QPushButton:hover {{ background-color: #351E22; color: white; }}
         """)
         clear_btn.clicked.connect(self.clear_all_requested.emit)
-        bottom.addWidget(clear_btn)
+        bottom.addWidget(clear_btn, 1)
         layout.addLayout(bottom)
 
     # ---- Public API ----
