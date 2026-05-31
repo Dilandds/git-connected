@@ -378,6 +378,7 @@ class ArrowPanel(QWidget):
         card.selected.connect(self._on_arrow_selected)
         card.delete_requested.connect(self.delete_requested.emit)
         card.label_changed.connect(self.label_changed.emit)
+        card.color_changed.connect(self._on_card_color_changed)
         self._arrow_cards[arrow_id] = card
         # Insert before the stretch
         self._list_layout.insertWidget(self._list_layout.count() - 1, card)
