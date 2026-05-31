@@ -2136,6 +2136,8 @@ class STLViewerWindow(QMainWindow):
                         self._exit_annotation_mode()
                     if getattr(vw, 'draw_mode', False):
                         self._exit_draw_mode()
+                    if getattr(vw, '_texture_drop_mode', False):
+                        self._exit_texture_mode()
                     self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
                     self.right_panel_stack.show()
                     self.screenshot_panel.show()
@@ -2197,7 +2199,7 @@ class STLViewerWindow(QMainWindow):
                 self._exit_arrow_mode()
             if self.toolbar.ruler_mode_enabled:
                 self._exit_ruler_mode()
-            if self.toolbar.screenshot_mode_enabled:
+            if getattr(vw, 'screenshot_mode', False):
                 self._exit_screenshot_mode()
             if getattr(vw, 'draw_mode', False):
                 self._exit_draw_mode()
