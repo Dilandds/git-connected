@@ -2440,6 +2440,24 @@ class STLViewerWidget(QWidget):
 
     def _on_screenshot_region_selected(self, rect):
         """Capture the selected region at high resolution from the canvas."""
+        from PyQt5.QtCore import QRect, QTimer
+        from PyQt5.QtGui import QImage, QPixmap
+        import numpy as np
+
+        # Fire a "pending" notification so the panel can show a buffering card
+        # immediately, then defer the heavy offscreen render to the next event
+        # loop tick so the UI gets a chance to paint the placeholder first.
+        pending_cb = getattr(self, '_screenshot_pending_cb', None)
+        pending_token = None
+        if pending_cb:
+            try:
+                pending_token = pending_cb()
+            except Exception as e:
+                logger.warning(f"screenshot pending callback failed: {e}")
+
+        QTimer.singleShot(0, lambda: self._do_capture_region(rect, pending_token))
+
+    def _do_capture_region(self, rect, pending_token=None):
         from PyQt5.QtCore import QRect
         from PyQt5.QtGui import QImage, QPixmap
         import numpy as np
