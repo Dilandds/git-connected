@@ -139,7 +139,7 @@ class TechnicalSidebar(QWidget):
         # QSS margins (which clipped the longer label) don't apply here.
         self.upload_btn = QPushButton(t("technical.upload_btn"))
         self.upload_btn.setObjectName("technicalUploadBtn")
-        self.upload_btn.setMinimumHeight(56)
+        self.upload_btn.setFixedHeight(50)
         self.upload_btn.setCursor(Qt.PointingHandCursor)
         self.upload_btn.setStyleSheet("""
             QPushButton#technicalUploadBtn {
@@ -151,7 +151,7 @@ class TechnicalSidebar(QWidget):
                 color: white;
                 border: 1px solid #1A5F9E;
                 border-radius: 22px;
-                padding: 8px 18px;
+                padding: 6px 16px;
                 font-size: 15px;
                 font-weight: bold;
             }
