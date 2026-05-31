@@ -2156,6 +2156,7 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'disable_screenshot_mode'):
             vw.disable_screenshot_mode()
             vw._screenshot_captured_callback = None
+            vw._screenshot_pending_cb = None
         self.screenshot_panel.hide()
         if self.toolbar.annotation_mode_enabled:
             self.right_panel_stack.setCurrentWidget(self.annotation_stack)
