@@ -2533,7 +2533,11 @@ class STLViewerWidget(QWidget):
                 cropped = full_pixmap.copy(rect)
 
         if self._screenshot_captured_callback:
-            self._screenshot_captured_callback(cropped)
+            try:
+                self._screenshot_captured_callback(cropped, pending_token)
+            except TypeError:
+                # Backwards-compat: callback that only accepts pixmap
+                self._screenshot_captured_callback(cropped)
 
     @property
     def _screenshot_captured_callback(self):
