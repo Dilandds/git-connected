@@ -1034,6 +1034,10 @@ class ScaleCanvas(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(int(x1 - radius), int(y1 - radius), int(radius * 2), int(radius * 2))
 
+        r_label = self._format_real_dimension(radius, decimals=2)
+        d_label = self._format_real_dimension(radius * 2, decimals=2)
+        self._draw_preview_label(painter, self._current_preview_pos, f"r: {r_label}  d: {d_label}")
+
     def _draw_image_projection_lines(self, painter: QPainter, ir: QRectF):
         """Draw dashed projection lines from the 4 edges of the image to the ruler frame."""
         canvas = self._canvas_rect()
