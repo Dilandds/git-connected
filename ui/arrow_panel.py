@@ -21,6 +21,7 @@ class ArrowCard(QFrame):
     selected = pyqtSignal(int)
     delete_requested = pyqtSignal(int)
     label_changed = pyqtSignal(int, str, str)  # arrow_id, value_text, unit
+    color_changed = pyqtSignal(int, str)        # arrow_id, hex color
 
     UNITS = ("mm", "cm", "inch", "m")
 
@@ -44,10 +45,13 @@ class ArrowCard(QFrame):
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(6)
 
-        # Color dot
-        self.color_dot = QLabel()
-        self.color_dot.setFixedSize(14, 14)
+        # Color dot (click to change color)
+        self.color_dot = QPushButton()
+        self.color_dot.setFixedSize(16, 16)
+        self.color_dot.setCursor(Qt.PointingHandCursor)
+        self.color_dot.setToolTip("Click to change color")
         self._update_color_dot()
+        self.color_dot.clicked.connect(self._open_color_picker)
         top.addWidget(self.color_dot)
 
         self.label = QLabel(f"Arrow {display_number}")
@@ -126,9 +130,31 @@ class ArrowCard(QFrame):
 
 
     def _update_color_dot(self):
-        self.color_dot.setStyleSheet(
-            f"background-color: {self.color}; border-radius: 7px; border: 1px solid {default_theme.border_standard};"
-        )
+        self.color_dot.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.color};
+                border-radius: 8px;
+                border: 1px solid {default_theme.border_standard};
+            }}
+            QPushButton:hover {{
+                border: 2px solid {default_theme.button_primary};
+            }}
+        """)
+
+    def _open_color_picker(self):
+        # Select this arrow first so user knows which is being edited
+        self.selected.emit(self.arrow_id)
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(self._on_color_selected)
+        # Position popup just below the dot
+        global_pos = self.color_dot.mapToGlobal(self.color_dot.rect().bottomLeft())
+        picker.move(global_pos)
+        picker.show()
+
+    def _on_color_selected(self, color: str):
+        self.set_color(color)
+        self.color_changed.emit(self.arrow_id, color)
 
     def _update_style(self):
         if self._is_selected:
@@ -245,7 +271,7 @@ class ArrowPanel(QWidget):
         layout.addLayout(header)
 
         # Info label
-        info = QLabel("Click on model to place arrows.\nSelect an arrow below to adjust it.")
+        info = QLabel("Click on model to place arrows.\nClick the colored dot to change an arrow's color.")
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 10px; border: none; background: transparent;")
         layout.addWidget(info)
@@ -298,22 +324,11 @@ class ArrowPanel(QWidget):
             _b.hide()
 
 
-        # Color
-        ctrl_layout.addWidget(_section_label("COLOR"))
-        color_row = QHBoxLayout()
-        color_row.setSpacing(6)
+        # Color picker now lives on each arrow card (click the colored dot).
+        # Keep hidden stub button to preserve external references.
         self._color_btn = QPushButton()
-        self._color_btn.setFixedSize(28, 28)
-        self._color_btn.setCursor(Qt.PointingHandCursor)
-        self._color_btn.setToolTip("Change arrow color")
+        self._color_btn.hide()
         self._update_color_btn_style()
-        self._color_btn.clicked.connect(self._pick_color)
-        color_row.addWidget(self._color_btn)
-        color_label = QLabel("Change color")
-        color_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; border: none; background: transparent;")
-        color_row.addWidget(color_label)
-        color_row.addStretch()
-        ctrl_layout.addLayout(color_row)
 
         layout.addWidget(self._controls_container)
         self._controls_container.setEnabled(False)
@@ -363,6 +378,7 @@ class ArrowPanel(QWidget):
         card.selected.connect(self._on_arrow_selected)
         card.delete_requested.connect(self.delete_requested.emit)
         card.label_changed.connect(self.label_changed.emit)
+        card.color_changed.connect(self._on_card_color_changed)
         self._arrow_cards[arrow_id] = card
         # Insert before the stretch
         self._list_layout.insertWidget(self._list_layout.count() - 1, card)
@@ -407,6 +423,14 @@ class ArrowPanel(QWidget):
         self._controls_container.setEnabled(True)
         for aid, card in self._arrow_cards.items():
             card.set_selected(aid == arrow_id)
+
+    def _on_card_color_changed(self, arrow_id: int, color: str):
+        # Update default color for future arrows + propagate to viewer
+        self._arrow_color = color
+        self._update_color_btn_style()
+        self.color_changed.emit(arrow_id, color)
+
+
 
     def _emit_rotate(self, axis: str, angle: float):
         if self._selected_arrow_id is not None:
