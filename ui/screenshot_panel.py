@@ -472,6 +472,7 @@ class ScreenshotPanel(QWidget):
             # Update the card with the annotated version
             if index < len(self.cards):
                 self.cards[index].pixmap = result_pixmap
+                self.cards[index]._rebuild_thumb_source()
                 self.cards[index]._update_thumbnail()
             if index < len(self.screenshots):
                 ts = self.screenshots[index][1]
