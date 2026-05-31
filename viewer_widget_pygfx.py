@@ -178,6 +178,9 @@ class STLViewerWidget(QWidget):
         self._annotation_callback = None
         self._annotation_event_filter_installed = False
         self._annotation_trimesh = None  # trimesh.Trimesh for raycasting
+        # Throttling for annotation label visibility (avoid per-frame raycasts)
+        self._annotation_vis_last_cam_key = None
+        self._annotation_vis_timer = None  # QTimer, lazy-created
 
         # Screenshot mode state
         self.screenshot_mode = False
