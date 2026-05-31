@@ -45,10 +45,13 @@ class ArrowCard(QFrame):
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(6)
 
-        # Color dot
-        self.color_dot = QLabel()
-        self.color_dot.setFixedSize(14, 14)
+        # Color dot (click to change color)
+        self.color_dot = QPushButton()
+        self.color_dot.setFixedSize(16, 16)
+        self.color_dot.setCursor(Qt.PointingHandCursor)
+        self.color_dot.setToolTip("Click to change color")
         self._update_color_dot()
+        self.color_dot.clicked.connect(self._open_color_picker)
         top.addWidget(self.color_dot)
 
         self.label = QLabel(f"Arrow {display_number}")
