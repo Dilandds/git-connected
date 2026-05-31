@@ -152,6 +152,7 @@ class STLViewerWidget(QWidget):
         self._initialized = False
         self._current_is_2d = False  # Track whether currently loaded model is 2D
         self._render_mode = 'shaded'  # Match toolbar default; Phong shading on load
+        self._last_shading_settings = None  # Avoid rebuilding normals on unchanged render-mode toggles
         self._grid_visible = False
         self._grid_objects = []  # All pygfx objects making up the bounding box grid
         self._axes_labels = []  # X, Y, Z text labels on the corner axes
@@ -4709,6 +4710,10 @@ class STLViewerWidget(QWidget):
         if not self._mesh_parts:
             return
 
+        cache_key = (round(float(smoothness), 4), int(crease_angle_deg), len(self._mesh_parts), id(self._mesh_obj))
+        if self._last_shading_settings == cache_key:
+            return
+
         for part in self._mesh_parts:
             mesh_obj = part.get('mesh_obj')
             tri = part.get('trimesh')
@@ -4853,6 +4858,8 @@ class STLViewerWidget(QWidget):
 
             if had_texture_maps:
                 self._ensure_texcoords(mesh_obj.geometry, gfx)
+
+        self._last_shading_settings = cache_key
 
     def remove_texture_from_part(self, part_id):
         """Revert a part to its original material (remove texture)."""

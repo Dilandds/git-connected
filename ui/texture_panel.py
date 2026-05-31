@@ -12,8 +12,8 @@ from PyQt5.QtWidgets import (
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
     QGridLayout, QApplication, QSlider,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint
-from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QTimer, QSize
+from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen, QImageReader
 from i18n import t, on_language_changed
 from ui.styles import default_theme, make_font
 from ui.annotation_panel import (
@@ -26,6 +26,48 @@ from ui.annotation_panel import (
 logger = logging.getLogger(__name__)
 
 GRID_COLUMNS = 2
+_SWATCH_CACHE = {}
+_PREVIEW_PIXMAP_CACHE = {}
+
+
+def _resolve_asset_path(image_path: str) -> str:
+    import sys as _sys
+    if hasattr(_sys, '_MEIPASS'):
+        _base = _sys._MEIPASS
+    else:
+        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return image_path if os.path.isabs(image_path) else os.path.join(_base, image_path)
+
+
+def _file_cache_key(path: str, size_hint: int):
+    try:
+        st = os.stat(path)
+        return (os.path.abspath(path), size_hint, st.st_size, getattr(st, 'st_mtime_ns', int(st.st_mtime * 1e9)))
+    except Exception:
+        return (os.path.abspath(path), size_hint, 0, 0)
+
+
+def _load_preview_pixmap(image_path: str, max_edge: int = 512) -> QPixmap:
+    """Load a bounded preview pixmap; keep full-res files on disk until actually applied."""
+    full_path = _resolve_asset_path(image_path)
+    key = _file_cache_key(full_path, max_edge)
+    cached = _PREVIEW_PIXMAP_CACHE.get(key)
+    if cached is not None and not cached.isNull():
+        return cached
+
+    reader = QImageReader(full_path)
+    reader.setAutoTransform(True)
+    size = reader.size()
+    if size.isValid() and max(size.width(), size.height()) > max_edge:
+        if size.width() >= size.height():
+            scaled = QSize(max_edge, max(1, int(size.height() * max_edge / size.width())))
+        else:
+            scaled = QSize(max(1, int(size.width() * max_edge / size.height())), max_edge)
+        reader.setScaledSize(scaled)
+    image = reader.read()
+    pixmap = QPixmap.fromImage(image) if not image.isNull() else QPixmap(full_path)
+    _PREVIEW_PIXMAP_CACHE[key] = pixmap
+    return pixmap
 
 # Teal/cyan banner palette for texture mode
 _TEX_TEAL_TOP = "#4DD0E1"
@@ -555,6 +597,11 @@ MATERIAL_PRESETS = [
 
 def _generate_material_swatch(base_color: str, highlight_color: str, size: int = 80) -> QPixmap:
     """Create a photo-realistic metallic sphere swatch with specular highlight and shadow."""
+    cache_key = ("material", base_color, highlight_color, size)
+    cached = _SWATCH_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return cached
+
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.transparent)
 
@@ -618,19 +665,19 @@ def _generate_material_swatch(base_color: str, highlight_color: str, size: int =
     painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
 
     painter.end()
+    _SWATCH_CACHE[cache_key] = pixmap
     return pixmap
 
 
 def _generate_image_swatch(image_path: str, size: int = 80) -> QPixmap:
     """Create a sphere swatch using a texture image mapped onto it."""
-    import sys as _sys
-    if hasattr(_sys, '_MEIPASS'):
-        _base = _sys._MEIPASS
-    else:
-        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    full_path = os.path.join(_base, image_path)
+    full_path = _resolve_asset_path(image_path)
+    cache_key = ("image",) + _file_cache_key(full_path, size)
+    cached = _SWATCH_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return cached
 
-    src = QPixmap(full_path)
+    src = _load_preview_pixmap(full_path, max_edge=256)
     if src.isNull():
         return QPixmap(size, size)
 
@@ -700,6 +747,7 @@ def _generate_image_swatch(image_path: str, size: int = 80) -> QPixmap:
     painter.drawEllipse(int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2))
 
     painter.end()
+    _SWATCH_CACHE[cache_key] = pixmap
     return pixmap
 
 
@@ -1020,7 +1068,24 @@ class TexturePanel(QWidget):
         self.setMinimumWidth(280)
         self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
+        self._materials_loaded = False
+        self._material_grid = None
         self._init_ui()
+
+    def prepare_for_show(self):
+        """Populate heavy material cards on first use, then reuse them on later mode switches."""
+        if self._materials_loaded:
+            return
+        self._materials_loaded = True
+
+        def _populate():
+            if self._material_grid is None:
+                return
+            for i, preset in enumerate(MATERIAL_PRESETS):
+                card = MaterialPresetCard(preset)
+                self._material_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+
+        QTimer.singleShot(0, _populate)
 
     def _create_slider_row(self, label_text, min_val, max_val, default_val, suffix="", divisor=1):
         """Helper to create a labeled slider row. Returns (container, slider, value_label)."""
@@ -1374,15 +1439,12 @@ class TexturePanel(QWidget):
         mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
         layout.addWidget(mat_label)
 
-        mat_grid = QGridLayout()
-        mat_grid.setContentsMargins(0, 0, 0, 0)
-        mat_grid.setSpacing(6)
-        mat_grid.setColumnStretch(0, 1)
-        mat_grid.setColumnStretch(1, 1)
-        for i, preset in enumerate(MATERIAL_PRESETS):
-            card = MaterialPresetCard(preset)
-            mat_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
-        layout.addLayout(mat_grid)
+        self._material_grid = QGridLayout()
+        self._material_grid.setContentsMargins(0, 0, 0, 0)
+        self._material_grid.setSpacing(6)
+        self._material_grid.setColumnStretch(0, 1)
+        self._material_grid.setColumnStretch(1, 1)
+        layout.addLayout(self._material_grid)
 
         # ---- Upload button ----
         upload_label = QLabel("Custom Textures")
@@ -1646,7 +1708,7 @@ class TexturePanel(QWidget):
         except ImportError:
             pass
 
-        pixmap = QPixmap(image_path)
+        pixmap = _load_preview_pixmap(image_path, max_edge=512)
         if pixmap.isNull():
             logger.warning(f"add_texture: Could not load {image_path}")
             return
