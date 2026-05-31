@@ -21,6 +21,7 @@ class ArrowCard(QFrame):
     selected = pyqtSignal(int)
     delete_requested = pyqtSignal(int)
     label_changed = pyqtSignal(int, str, str)  # arrow_id, value_text, unit
+    color_changed = pyqtSignal(int, str)        # arrow_id, hex color
 
     UNITS = ("mm", "cm", "inch", "m")
 
