@@ -1,26 +1,28 @@
-## Goal
-Make the "Upload Image / PDF / .ecto" button in Technical Overview look and space identically to the "Upload Drawing" button in Drawing Scale (the rounded glossy pill shown in the Drawing Scale screenshot).
+## What is actually wrong
 
-## Root cause
-`ui/scale_sidebar.py` uses the shared `get_button_style("uploadBtn")` from `ui/styles.py` (radius 22px, padding 12px 20px, no side margins, `setMinimumHeight(50)`).
+The Technical Overview button is not broken because of card spacing anymore. The screenshot shows a Qt painting/layout issue inside the button itself: the text is vertically clipped and the rounded corners/border do not render like the other upload buttons.
 
-`ui/technical_sidebar.py` instead defines its own inline stylesheet on `uploadTechBtn` with different metrics:
-- `setFixedHeight(56)` instead of `setMinimumHeight(50)`
-- `border-radius: 999px`, `padding: 10px 32px`
-- Extra `margin-left/right: 12px` (insets the button inside the card)
+## Why it happened
 
-That mismatch is what makes it appear more rectangular and narrower than the Drawing Scale pill.
+- The button is using the shared `uploadBtn` stylesheet from `ui/styles.py`.
+- That shared style includes large vertical padding (`12px` top and bottom) plus Qt stylesheet margins (`margin-top: 2px`, `margin-bottom: 14px`).
+- The widget is only given `setMinimumHeight(50)`, not a real fixed safe height.
+- For this specific label, `Upload Image / PDF / .ecto`, Qt needs more internal height than the shorter `Upload Drawing` button.
+- Because the available paint area is too small, Qt clips the top of the bold text and the border radius looks flattened/wrong.
 
-## Change
-In `ui/technical_sidebar.py`, replace the inline-styled `uploadTechBtn` block with the same setup the scale sidebar uses:
+## Fix plan
 
-- `self.upload_btn.setObjectName("uploadBtn")` (so the shared global stylesheet applies)
-- `self.upload_btn.setMinimumHeight(50)` (drop `setFixedHeight(56)`)
-- `self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))`
-- Keep `setAttribute(Qt.WA_StyledBackground, True)`, the pointing cursor, and the existing card shadow call
-- Remove the custom `qlineargradient` stylesheet and the extra left/right margins
+1. Change only `ui/technical_sidebar.py` for this button.
+2. Keep the surrounding card spacing exactly as it is, since you said the spaces are correct.
+3. Give the Technical Overview upload button a dedicated object name, for example `technicalUploadBtn`, so it does not inherit the problematic shared `uploadBtn` margin/padding assumptions.
+4. Apply a dedicated stylesheet with the same blue gradient, border, font weight, and visual style, but with safe internal metrics:
+   - no Qt stylesheet margins inside the button
+   - slightly smaller vertical padding
+   - a real fixed/minimum height around `56px`
+   - matching rounded radius around `22px`
+5. Keep the existing shadow and click behavior unchanged.
+6. Optionally set the text from the translation key immediately (`t("technical.upload_btn")`) instead of a hardcoded string, so startup and language refresh use the same label.
 
-No other layout changes — the surrounding `upload_card` / `upload_card_layout` already mirrors `scale_sidebar.py`, so spacing inside the card and around the title will match automatically once the button metrics align.
+## Expected result
 
-## Files
-- `ui/technical_sidebar.py` — swap the button styling block (≈30 lines) for the shared style.
+The Technical Overview upload button will visually match the other upload buttons, but it will no longer clip the letters or flatten the rounded border because its own style will reserve enough paintable height for the longer text.
