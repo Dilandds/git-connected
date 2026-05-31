@@ -1984,16 +1984,82 @@ class STLViewerWidget(QWidget):
         except Exception:
             return True
 
-    def _update_annotation_label_visibility(self):
-        """Update each annotation label's visibility: hide when dot is occluded by mesh."""
+    def _camera_state_key(self):
+        """Cheap hash of camera pose; used to skip work when the camera hasn't moved."""
+        if self._camera is None:
+            return None
+        try:
+            p = self._camera.local.position
+            r = self._camera.local.rotation
+            return (float(p[0]), float(p[1]), float(p[2]),
+                    float(r[0]), float(r[1]), float(r[2]), float(r[3]))
+        except Exception:
+            return None
+
+    def _schedule_annotation_visibility_update(self):
+        """Debounce visibility recompute: run once ~120ms after the camera stops moving.
+
+        Called from the per-frame animate() callback. Cheap when nothing to do.
+        """
         if not self.annotations or self._annotation_trimesh is None:
             return
-        for ann in self.annotations:
-            try:
-                visible = self._is_dot_visible(ann['point'])
-                ann['label'].visible = visible
-            except Exception:
-                pass
+        cam_key = self._camera_state_key()
+        if cam_key == self._annotation_vis_last_cam_key:
+            return  # camera didn't move since last scheduled update
+        self._annotation_vis_last_cam_key = cam_key
+        try:
+            from PyQt5.QtCore import QTimer
+            if self._annotation_vis_timer is None:
+                self._annotation_vis_timer = QTimer(self)
+                self._annotation_vis_timer.setSingleShot(True)
+                self._annotation_vis_timer.timeout.connect(self._update_annotation_label_visibility)
+            # Restart timer — only fires once camera has been still for the interval
+            self._annotation_vis_timer.start(120)
+        except Exception:
+            # Fallback: run inline if QTimer unavailable
+            self._update_annotation_label_visibility()
+
+    def _update_annotation_label_visibility(self):
+        """Update each annotation label's visibility: hide when dot is occluded by mesh.
+
+        Uses a single batched trimesh raycast (N rays in one call) instead of
+        one raycast per annotation, so cost is ~O(1) call regardless of count.
+        """
+        if not self.annotations or self._annotation_trimesh is None or self._camera is None:
+            return
+        try:
+            cam_pos = np.asarray(self._camera.local.position, dtype=np.float64)
+            pts = np.array([ann['point'] for ann in self.annotations], dtype=np.float64)
+            dirs = pts - cam_pos
+            dists_to_dots = np.linalg.norm(dirs, axis=1)
+            # Avoid divide-by-zero for degenerate rays
+            safe = np.where(dists_to_dots > 1e-9, dists_to_dots, 1.0)
+            dirs_n = dirs / safe[:, None]
+
+            origins = np.tile(cam_pos, (len(self.annotations), 1))
+            locations, index_ray, _ = self._annotation_trimesh.ray.intersects_location(
+                ray_origins=origins,
+                ray_directions=dirs_n,
+                multiple_hits=True,
+            )
+
+            # For each annotation, find min hit distance along its ray.
+            min_hit = np.full(len(self.annotations), np.inf, dtype=np.float64)
+            if len(locations) > 0:
+                hit_dists = np.linalg.norm(np.asarray(locations) - cam_pos, axis=1)
+                # np.minimum.at handles repeated indices correctly
+                np.minimum.at(min_hit, np.asarray(index_ray), hit_dists)
+
+            for i, ann in enumerate(self.annotations):
+                try:
+                    occluded = min_hit[i] < dists_to_dots[i] - 1e-6
+                    ann['label'].visible = not occluded
+                except Exception:
+                    pass
+            if self._canvas is not None:
+                self._canvas.request_draw()
+        except Exception as e:
+            logger.debug(f"_update_annotation_label_visibility (batched): {e}")
 
     def _screen_to_ray(self, x, y):
         """Convert screen (x, y) to a world-space ray (origin, direction). Returns (origin, direction) or (None, None)."""
