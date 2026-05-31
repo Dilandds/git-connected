@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QDialog, QApplication, QLineEdit, QGridLayout,
 )
 from ui.components import confirm_dialog
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap
 from ui.styles import default_theme, make_font
 from i18n import t, on_language_changed
