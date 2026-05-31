@@ -131,7 +131,9 @@ class ScreenshotCard(QFrame):
         self.thumb_label.setCursor(Qt.PointingHandCursor)
         self.thumb_label.setFixedHeight(90)
         self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._update_thumbnail()
+        # Fast first paint — schedule a high-quality upgrade once the card is on screen
+        self._update_thumbnail(smooth=False)
+        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
         layout.addWidget(self.thumb_label)
 
         # Action buttons
