@@ -2154,8 +2154,14 @@ class STLViewerWindow(QMainWindow):
         else:
             self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
             self.right_panel_stack.hide()
-        if vw and hasattr(vw, 'reframe_for_viewport'):
-            QTimer.singleShot(50, vw.reframe_for_viewport)
+        # Skip reframe_for_viewport: screenshot mode doesn't change viewport size,
+        # and reframing recenters the camera (undoing user rotate/zoom) which causes
+        # a noticeable delay/jump when switching back to render mode.
+        if vw and hasattr(vw, '_canvas') and vw._canvas is not None:
+            try:
+                vw._canvas.request_draw()
+            except Exception:
+                pass
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
 
