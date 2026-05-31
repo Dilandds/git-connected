@@ -765,6 +765,20 @@ class ScaleCanvas(QWidget):
         painter.setPen(text.color)
         painter.drawText(QPointF(text.x, text.y), text.text)
 
+    def _draw_preview_label(self, painter: QPainter, pos: QPointF, text: str):
+        """Draw a small dimension label with white background near the cursor."""
+        font = QFont("Segoe UI", 9, QFont.Bold)
+        painter.setFont(font)
+        fm = QFontMetrics(font)
+        tw = fm.horizontalAdvance(text) + 8
+        th = fm.height() + 4
+        bg = QRectF(pos.x() + 12, pos.y() + 12, tw, th)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 230))
+        painter.drawRoundedRect(bg, 4, 4)
+        painter.setPen(QColor("#000000"))
+        painter.drawText(bg, Qt.AlignCenter, text)
+
     def _draw_arrow_preview(self, painter: QPainter):
         """Draw preview of arrow being drawn."""
         preview_arrow = DrawingArrow(
@@ -783,6 +797,10 @@ class ScaleCanvas(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawPolygon(poly)
 
+        dims = preview_arrow.get_dimensions()
+        label = f"L: {self._format_real_dimension(dims['length'], decimals=2)}"
+        self._draw_preview_label(painter, self._current_preview_pos, label)
+
     def _draw_rectangle_preview(self, painter: QPainter):
         """Draw preview of rectangle being drawn."""
         x1, y1 = self._drawing_start_pos.x(), self._drawing_start_pos.y()
@@ -792,6 +810,10 @@ class ScaleCanvas(QWidget):
         painter.setPen(QPen(QColor("#000000"), 1.5, Qt.DashLine))
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(int(min(x1, x2)), int(min(y1, y2)), int(abs(x2 - x1)), int(abs(y2 - y1)))
+
+        w_label = self._format_real_dimension(abs(x2 - x1), decimals=2)
+        h_label = self._format_real_dimension(abs(y2 - y1), decimals=2)
+        self._draw_preview_label(painter, self._current_preview_pos, f"W: {w_label}  H: {h_label}")
 
     def _draw_selected_shape_highlight(self, painter: QPainter):
         """Draw selected-shape visual guide."""
