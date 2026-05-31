@@ -232,6 +232,7 @@ class ScreenshotCard(QFrame):
     def _on_pixmap_updated(self, new_pixmap: QPixmap):
         """Update the card's pixmap after editing."""
         self.pixmap = new_pixmap
+        self._rebuild_thumb_source()
         self._update_thumbnail()
 
     def update_index(self, new_index: int):
