@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QDialog, QApplication, QLineEdit, QGridLayout,
 )
 from ui.components import confirm_dialog
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap
 from ui.styles import default_theme, make_font
 from i18n import t, on_language_changed
@@ -131,7 +131,9 @@ class ScreenshotCard(QFrame):
         self.thumb_label.setCursor(Qt.PointingHandCursor)
         self.thumb_label.setFixedHeight(90)
         self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._update_thumbnail()
+        # Fast first paint — schedule a high-quality upgrade once the card is on screen
+        self._update_thumbnail(smooth=False)
+        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
         layout.addWidget(self.thumb_label)
 
         # Action buttons
@@ -183,33 +185,41 @@ class ScreenshotCard(QFrame):
 
         layout.addLayout(actions)
 
-    def _rebuild_thumb_source(self):
+    def _rebuild_thumb_source(self, smooth: bool = True):
         """Pre-scale the full-res pixmap to a small cached source (<=512px long edge)
-        so per-resize rescales are cheap."""
+        so per-resize rescales are cheap. Pass smooth=False for an instant first paint."""
         src = self.pixmap
         if src is None or src.isNull():
             self._thumb_source = src
             return
         max_edge = 512
+        mode = Qt.SmoothTransformation if smooth else Qt.FastTransformation
         if max(src.width(), src.height()) > max_edge:
             self._thumb_source = src.scaled(
-                max_edge, max_edge, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                max_edge, max_edge, Qt.KeepAspectRatio, mode
             )
         else:
             self._thumb_source = src
         self._last_thumb_width = -1
 
-    def _update_thumbnail(self):
+    def _update_thumbnail(self, smooth: bool = True):
         if not hasattr(self, '_thumb_source') or self._thumb_source is None:
-            self._rebuild_thumb_source()
+            self._rebuild_thumb_source(smooth=smooth)
         card_w = max(self.width() - 16, 80)
         if getattr(self, '_last_thumb_width', -1) == card_w:
             return
+        mode = Qt.SmoothTransformation if smooth else Qt.FastTransformation
         scaled = self._thumb_source.scaled(
-            card_w, card_w, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            card_w, card_w, Qt.KeepAspectRatio, mode
         )
         self.thumb_label.setPixmap(scaled)
         self._last_thumb_width = card_w
+
+    def _upgrade_thumbnail_quality(self):
+        """Rebuild the cached thumb at high quality after the card is on screen."""
+        self._thumb_source = None
+        self._last_thumb_width = -1
+        self._update_thumbnail(smooth=True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
