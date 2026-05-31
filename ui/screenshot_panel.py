@@ -125,17 +125,64 @@ class ScreenshotCard(QFrame):
         header.addWidget(close_btn)
         layout.addLayout(header)
 
-        # Square thumbnail — compact
+        # Square thumbnail — compact. Uses a stacked layout so we can overlay a
+        # buffering spinner while the screenshot is still being captured.
+        self.thumb_container = QWidget()
+        self.thumb_container.setFixedHeight(90)
+        self.thumb_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.thumb_container.setStyleSheet("background: transparent;")
+        thumb_stack = QStackedLayout(self.thumb_container)
+        thumb_stack.setStackingMode(QStackedLayout.StackAll)
+        thumb_stack.setContentsMargins(0, 0, 0, 0)
+
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignCenter)
         self.thumb_label.setStyleSheet("background: transparent;")
         self.thumb_label.setCursor(Qt.PointingHandCursor)
-        self.thumb_label.setFixedHeight(90)
-        self.thumb_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        # Fast first paint — schedule a high-quality upgrade once the card is on screen
-        self._update_thumbnail(smooth=False)
-        QTimer.singleShot(0, self._upgrade_thumbnail_quality)
-        layout.addWidget(self.thumb_label)
+        thumb_stack.addWidget(self.thumb_label)
+
+        # Buffering overlay (indeterminate spinner + label)
+        self.spinner_overlay = QWidget()
+        self.spinner_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.spinner_overlay.setStyleSheet("""
+            QWidget { background: rgba(0,0,0,0.18); border-radius: 6px; }
+            QLabel { color: white; font-size: 10px; font-weight: bold; background: transparent; }
+            QProgressBar {
+                background: rgba(255,255,255,0.25);
+                border: none;
+                border-radius: 3px;
+                max-height: 4px;
+            }
+            QProgressBar::chunk {
+                background: white;
+                border-radius: 3px;
+            }
+        """)
+        ov = QVBoxLayout(self.spinner_overlay)
+        ov.setContentsMargins(20, 30, 20, 30)
+        ov.setSpacing(6)
+        ov.addStretch()
+        self._spinner_label = QLabel("📷 Capturing…")
+        self._spinner_label.setAlignment(Qt.AlignCenter)
+        ov.addWidget(self._spinner_label)
+        self._spinner_bar = QProgressBar()
+        self._spinner_bar.setRange(0, 0)  # indeterminate
+        self._spinner_bar.setTextVisible(False)
+        ov.addWidget(self._spinner_bar)
+        ov.addStretch()
+        thumb_stack.addWidget(self.spinner_overlay)
+
+        if self.pixmap is not None and not self.pixmap.isNull():
+            # Fast first paint — schedule a high-quality upgrade once the card is on screen
+            self._update_thumbnail(smooth=False)
+            QTimer.singleShot(0, self._upgrade_thumbnail_quality)
+            self.spinner_overlay.hide()
+        else:
+            # Pending — show spinner until set_pixmap() is called
+            self.thumb_label.setText("")
+            self.spinner_overlay.show()
+
+        layout.addWidget(self.thumb_container)
 
         # Action buttons
         actions = QHBoxLayout()
