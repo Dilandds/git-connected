@@ -1105,22 +1105,41 @@ class ViewControlsToolbar(QWidget):
             }}
         """)
 
-        draw_action = menu.addAction("🖊  Draw")
+        from PyQt5.QtWidgets import QActionGroup
+
+        # Master on/off
+        draw_action = menu.addAction("🖊  Draw mode")
         draw_action.setCheckable(True)
         draw_action.setChecked(self.draw_mode_enabled)
         draw_action.triggered.connect(self._on_draw_toggled)
 
+        menu.addSeparator()
+
+        # Mutually exclusive tool selection (only meaningful when draw mode is on)
+        tool_group = QActionGroup(menu)
+        tool_group.setExclusive(True)
+
+        pen_active = self.draw_mode_enabled and not self._eraser_active and not self._draw_text_active
+        pen_action = menu.addAction("✏  Pen")
+        pen_action.setCheckable(True)
+        pen_action.setChecked(pen_active)
+        pen_action.setEnabled(self.draw_mode_enabled)
+        pen_action.triggered.connect(self._on_pen_tool_selected)
+        tool_group.addAction(pen_action)
+
         eraser_action = menu.addAction("🧹  Eraser")
         eraser_action.setCheckable(True)
-        eraser_action.setChecked(self._eraser_active)
+        eraser_action.setChecked(self.draw_mode_enabled and self._eraser_active)
         eraser_action.setEnabled(self.draw_mode_enabled)
-        eraser_action.triggered.connect(self._on_eraser_toggled)
+        eraser_action.triggered.connect(self._on_eraser_tool_selected)
+        tool_group.addAction(eraser_action)
 
         text_action = menu.addAction("T  Text")
         text_action.setCheckable(True)
-        text_action.setChecked(self._draw_text_active)
+        text_action.setChecked(self.draw_mode_enabled and self._draw_text_active)
         text_action.setEnabled(self.draw_mode_enabled)
-        text_action.triggered.connect(self._on_text_toggled)
+        text_action.triggered.connect(self._on_text_tool_selected)
+        tool_group.addAction(text_action)
 
         menu.addSeparator()
 
@@ -1138,6 +1157,36 @@ class ViewControlsToolbar(QWidget):
         menu.exec_(self.draw_btn.mapToGlobal(
             self.draw_btn.rect().bottomLeft()
         ))
+
+    def _on_pen_tool_selected(self):
+        """Switch to pen (default draw) tool."""
+        if not self.draw_mode_enabled:
+            return
+        self._eraser_active = False
+        self._draw_text_active = False
+        self.draw_btn.set_label("Drawing ▼")
+        self.draw_eraser_toggled.emit(False)
+        self.draw_text_toggled.emit(False)
+
+    def _on_eraser_tool_selected(self):
+        """Switch to eraser tool (exclusive with pen/text)."""
+        if not self.draw_mode_enabled:
+            return
+        self._eraser_active = True
+        self._draw_text_active = False
+        self.draw_btn.set_label("Eraser ▼")
+        self.draw_text_toggled.emit(False)
+        self.draw_eraser_toggled.emit(True)
+
+    def _on_text_tool_selected(self):
+        """Switch to text tool (exclusive with pen/eraser)."""
+        if not self.draw_mode_enabled:
+            return
+        self._eraser_active = False
+        self._draw_text_active = True
+        self.draw_btn.set_label("Text ▼")
+        self.draw_eraser_toggled.emit(False)
+        self.draw_text_toggled.emit(True)
 
     def _on_draw_toggled(self):
         """Toggle draw mode on/off."""
