@@ -130,9 +130,31 @@ class ArrowCard(QFrame):
 
 
     def _update_color_dot(self):
-        self.color_dot.setStyleSheet(
-            f"background-color: {self.color}; border-radius: 7px; border: 1px solid {default_theme.border_standard};"
-        )
+        self.color_dot.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.color};
+                border-radius: 8px;
+                border: 1px solid {default_theme.border_standard};
+            }}
+            QPushButton:hover {{
+                border: 2px solid {default_theme.button_primary};
+            }}
+        """)
+
+    def _open_color_picker(self):
+        # Select this arrow first so user knows which is being edited
+        self.selected.emit(self.arrow_id)
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(self._on_color_selected)
+        # Position popup just below the dot
+        global_pos = self.color_dot.mapToGlobal(self.color_dot.rect().bottomLeft())
+        picker.move(global_pos)
+        picker.show()
+
+    def _on_color_selected(self, color: str):
+        self.set_color(color)
+        self.color_changed.emit(self.arrow_id, color)
 
     def _update_style(self):
         if self._is_selected:
