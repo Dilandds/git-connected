@@ -9,74 +9,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal
 from PyQt5.QtGui import QFont, QPainter, QColor, QDoubleValidator
 from ui.styles import default_theme
+from ui.modal_utils import ask_yes_no_dialog
 from i18n import t
 
 
 def confirm_dialog(parent, title: str, message: str) -> bool:
     """Show a confirmation dialog with visible Yes/No buttons. Returns True for Yes, False for No."""
-    dlg = QDialog(parent)
-    dlg.setWindowTitle(title)
-    dlg.setModal(True)
-    dlg.setStyleSheet(f"QDialog {{ background-color: {default_theme.background}; }}")
-    layout = QVBoxLayout(dlg)
-    layout.setSpacing(16)
-    layout.setContentsMargins(20, 20, 20, 20)
-    msg_label = QLabel(message)
-    msg_label.setWordWrap(True)
-    msg_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 13px; background: transparent;")
-    layout.addWidget(msg_label)
-    btn_layout = QHBoxLayout()
-    btn_layout.addStretch()
-    no_btn = QPushButton("No")
-    yes_btn = QPushButton("Yes")
-    for btn in (no_btn, yes_btn):
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setMinimumWidth(80)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {default_theme.button_default_bg};
-                color: {default_theme.text_primary};
-                border: 1px solid {default_theme.button_default_border};
-                border-radius: 6px;
-                padding: 8px 20px;
-                font-size: 13px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {default_theme.row_bg_hover};
-            }}
-        """)
-    yes_btn.setStyleSheet(f"""
-        QPushButton {{
-            background-color: {default_theme.button_primary};
-            color: {default_theme.text_white};
-            border: none;
-            border-radius: 6px;
-            padding: 8px 20px;
-            font-size: 13px;
-            font-weight: bold;
-        }}
-        QPushButton:hover {{
-            background-color: {default_theme.button_primary_hover};
-        }}
-    """)
-    btn_layout.addWidget(no_btn)
-    btn_layout.addWidget(yes_btn)
-    layout.addLayout(btn_layout)
-    result = [False]
-
-    def on_yes():
-        result[0] = True
-        dlg.accept()
-
-    def on_no():
-        result[0] = False
-        dlg.reject()
-
-    yes_btn.clicked.connect(on_yes)
-    no_btn.clicked.connect(on_no)
-    dlg.exec_()
-    return result[0]
+    return ask_yes_no_dialog(parent, title, message)
 
 
 class DimensionRow(QFrame):

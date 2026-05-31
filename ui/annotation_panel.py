@@ -147,6 +147,7 @@ class Annotation:
     is_read: bool = False  # For reader mode: Green (unread) vs Blue (read)
     label: str = "Point"  # Editable display name (default "Point")
     created_at: datetime = field(default_factory=datetime.now)
+    color: Optional[str] = None  # Optional hex color for this annotation
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -157,6 +158,7 @@ class Annotation:
             'is_validated': self.is_validated,
             'image_paths': self.image_paths,
             'label': self.label,
+            'color': self.color,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
     
@@ -184,6 +186,7 @@ class Annotation:
             is_validated=data.get('is_validated', False),
             image_paths=data.get('image_paths', []),
             label=data.get('label', 'Point'),
+            color=data.get('color'),
             created_at=created,
         )
 
@@ -197,6 +200,7 @@ class AnnotationCard(QFrame):
     focus_requested = pyqtSignal(int)    # annotation_id
     label_edited = pyqtSignal(int, str)  # annotation_id, new_label
     hover_changed = pyqtSignal(int, bool)  # annotation_id, is_hovered
+    color_changed = pyqtSignal(int, str)  # annotation_id, hex color
     
     def __init__(self, annotation: Annotation, reader_mode: bool = False, display_number: int = None, parent=None):
         super().__init__(parent)
@@ -219,12 +223,13 @@ class AnnotationCard(QFrame):
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(8)
         
-        # Point indicator (colored dot) - Gray for pending, Black for validated
-        # Larger on Windows (font rendering differs from Mac)
-        _dot_width = 22 if sys.platform == 'win32' else 16
-        self.point_indicator = QLabel("●")
-        self.point_indicator.setFixedWidth(_dot_width)
-        self.point_indicator.setAlignment(Qt.AlignCenter)
+        # Point indicator (colored dot) - clickable to change color
+        dot_size = 22 if sys.platform == 'win32' else 16
+        self.point_indicator = QPushButton()
+        self.point_indicator.setFixedSize(dot_size, dot_size)
+        self.point_indicator.setCursor(Qt.PointingHandCursor)
+        self.point_indicator.setToolTip("Click to change color")
+        self.point_indicator.clicked.connect(self._open_color_picker)
         layout.addWidget(self.point_indicator)
         
         # Rounded number badge (display number: 1, 2, 3...) - color matches dot
@@ -319,6 +324,26 @@ class AnnotationCard(QFrame):
             self.annotation.label = new_label
             self.label_edited.emit(self.annotation.id, new_label)
         self.label_edit.setText(self.annotation.label)
+
+    def _open_color_picker(self):
+        """Open the shared DrawColorPicker and emit color changes."""
+        try:
+            from ui.draw_color_picker import DrawColorPicker
+        except Exception:
+            return
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(self._on_color_selected)
+        global_pos = self.point_indicator.mapToGlobal(self.point_indicator.rect().bottomLeft())
+        picker.move(global_pos)
+        picker.show()
+
+    def _on_color_selected(self, color: str):
+        # Store color on the annotation and update visuals
+        self.annotation.color = color
+        # Update badge and dot appearance
+        self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), fill_color=color))
+        self.point_indicator.setStyleSheet(f"background-color: {color}; border-radius: 8px; border: 1px solid {default_theme.border_standard};")
+        self.color_changed.emit(self.annotation.id, color)
     
     def mousePressEvent(self, event):
         """Handle click to open popup."""
@@ -346,6 +371,9 @@ class AnnotationCard(QFrame):
     
     def _get_indicator_color(self) -> str:
         """Return the dot/badge color based on annotation state."""
+        # If annotation has an explicit color, use it
+        if getattr(self.annotation, 'color', None):
+            return self.annotation.color
         if self._reader_mode:
             return READER_READ_COLOR if self.annotation.is_read else READER_UNREAD_COLOR
         if self.annotation.is_validated:
@@ -378,8 +406,17 @@ class AnnotationCard(QFrame):
             self.status_icon.setVisible(False)
             self.status_label.setText("Click to edit")
 
-        _dot_font = 20 if sys.platform == 'win32' else 14
-        self.point_indicator.setStyleSheet(f"color: {indicator_color}; font-size: {_dot_font}px; background-color: transparent;")
+        # Style the clickable dot as a colored round button
+        self.point_indicator.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {indicator_color};
+                border-radius: 8px;
+                border: 1px solid {default_theme.border_standard};
+            }}
+            QPushButton:hover {{
+                border: 2px solid {default_theme.button_primary};
+            }}
+        """)
         self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), fill_color=indicator_color))
         self.setStyleSheet(f"""
             QFrame#annotationCard {{
@@ -444,6 +481,7 @@ class AnnotationPanel(QWidget):
     annotation_added = pyqtSignal(object)  # Annotation
     annotation_deleted = pyqtSignal(int)   # annotation_id
     annotation_validated = pyqtSignal(int, str, list, str)  # annotation_id, text, image_paths, label
+    annotation_color_changed = pyqtSignal(int, str)  # annotation_id, hex color
     open_popup_requested = pyqtSignal(int)  # annotation_id - request to open popup
     open_viewer_popup_requested = pyqtSignal(int)  # annotation_id - request to open viewer popup (reader mode)
     focus_annotation = pyqtSignal(int)     # annotation_id
@@ -693,6 +731,7 @@ class AnnotationPanel(QWidget):
         card.delete_requested.connect(self._on_delete_requested)
         card.focus_requested.connect(self._on_focus_requested)
         card.label_edited.connect(self._on_label_edited)
+        card.color_changed.connect(self._on_card_color_changed)
         card.hover_changed.connect(self.annotation_hovered.emit)
         
         self.annotation_cards[annotation.id] = card
@@ -785,6 +824,7 @@ class AnnotationPanel(QWidget):
             card.delete_requested.connect(self._on_delete_requested)
             card.focus_requested.connect(self._on_focus_requested)
             card.label_edited.connect(self._on_label_edited)
+            card.color_changed.connect(self._on_card_color_changed)
             card.hover_changed.connect(self.annotation_hovered.emit)
             
             self.annotation_cards[annotation.id] = card
@@ -823,6 +863,20 @@ class AnnotationPanel(QWidget):
     def _on_delete_requested(self, annotation_id: int):
         """Handle delete request from a card."""
         self.remove_annotation(annotation_id)
+
+    def _on_card_color_changed(self, annotation_id: int, color: str):
+        """Handle color change from a card: update model, UI and emit panel signal."""
+        annotation = self.get_annotation_by_id(annotation_id)
+        if not annotation:
+            return
+        annotation.color = color
+        # Update the card display
+        card = self.annotation_cards.get(annotation_id)
+        if card:
+            card.update_annotation(annotation)
+        # Emit panel-level signal for external listeners (viewer)
+        self.annotation_color_changed.emit(annotation_id, color)
+        logger.info(f"Annotation color changed: id={annotation_id}, color={color}")
     
     def _on_focus_requested(self, annotation_id: int):
         """Handle focus request from a card."""

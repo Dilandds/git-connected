@@ -10,7 +10,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFrame, QFileDialog, QSizePolicy, QMessageBox,
+    QScrollArea, QFrame, QFileDialog, QSizePolicy,
+    QGridLayout,
     QTextEdit, QApplication
 )
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QEvent
@@ -19,6 +20,7 @@ from PyQt5.QtGui import (
     QBrush, QPainterPath, QPolygonF, QImage, QWheelEvent, QMouseEvent
 )
 from ui.styles import default_theme, make_font
+from ui.modal_utils import show_message_dialog, ask_yes_no_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -445,9 +447,33 @@ class TechnicalAnnotationPanel(QWidget):
                 border-left: 1px solid {default_theme.border_light};
             }}
         """)
+        self._palette_popup = None
         self._cards: List[QFrame] = []
         self._annotations: List[ArrowAnnotation] = []
         self._init_ui()
+
+    def _show_color_palette(self, anchor: QPushButton, ann_id: int, current_color: str):
+        if self._palette_popup is not None:
+            try:
+                self._palette_popup.close()
+            except Exception:
+                pass
+            self._palette_popup = None
+
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+
+        def _apply_color(color: str):
+            self.annotation_color_changed.emit(ann_id, color)
+            picker.close()
+
+        picker.color_selected.connect(_apply_color)
+        picker.destroyed.connect(lambda *_: setattr(self, "_palette_popup", None))
+        self._palette_popup = picker
+
+        pos = anchor.mapToGlobal(QPoint(0, anchor.height()))
+        picker.move(pos + QPoint(-6, 8))
+        picker.show()
 
     def _init_ui(self):
         from ui.annotation_panel import (
@@ -618,7 +644,6 @@ class TechnicalAnnotationPanel(QWidget):
             self._scroll_layout.insertWidget(self._scroll_layout.count() - 1, card)
 
     def _create_card(self, ann: ArrowAnnotation, number: int) -> QFrame:
-        from PyQt5.QtWidgets import QColorDialog
         from ui.annotation_panel import (
             _format_annotation_date, _format_annotation_time,
             _ANNO_CARD_PENDING, _ANNO_CARD_HOVER,
@@ -667,12 +692,7 @@ class TechnicalAnnotationPanel(QWidget):
             QPushButton:hover {{ border: 2px solid rgba(255,255,255,0.7); }}
         """)
 
-        def _pick_color(aid=ann.id, btn=color_btn):
-            c = QColorDialog.getColor(QColor(ann_color), self, "Arrow Color")
-            if c.isValid():
-                self.annotation_color_changed.emit(aid, c.name())
-
-        color_btn.clicked.connect(_pick_color)
+        color_btn.clicked.connect(lambda checked=False, aid=ann.id, btn=color_btn, color=ann_color: self._show_color_palette(btn, aid, color))
         layout.addWidget(color_btn)
 
         # Rounded number badge (matches 3D annotation card)
@@ -744,12 +764,8 @@ class TechnicalAnnotationPanel(QWidget):
 
     def _on_clear_all(self):
         if self._annotations:
-            reply = QMessageBox.question(
-                self, "Clear All Annotations",
-                f"Delete all {len(self._annotations)} annotations?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
+            if ask_yes_no_dialog(self, "Clear All Annotations",
+                                 f"Delete all {len(self._annotations)} annotations?"):
                 for ann in list(self._annotations):
                     self.annotation_deleted.emit(ann.id)
 
@@ -811,7 +827,7 @@ class TechnicalOverviewWidget(QWidget):
             self.annotation_panel.refresh(self._annotations)
             logger.info(f"TechnicalOverview: Loaded image {path}")
         else:
-            QMessageBox.warning(self, "Load Error", f"Could not load image:\n{path}")
+            show_message_dialog(self, "Load Error", f"Could not load image:\n{path}")
 
     def enter_annotation_mode(self):
         self._annotation_mode = True
@@ -913,7 +929,7 @@ class TechnicalOverviewWidget(QWidget):
             return QPixmap.fromImage(img)
         except ImportError:
             logger.warning("PyMuPDF (fitz) not installed; PDF rendering unavailable")
-            QMessageBox.warning(self, "PDF Support",
+            show_message_dialog(self, "PDF Support",
                                 "PDF rendering requires PyMuPDF.\nInstall with: pip install PyMuPDF")
             return None
         except Exception as e:

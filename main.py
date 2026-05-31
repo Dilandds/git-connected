@@ -47,13 +47,14 @@ print(f"Log file: {log_file}", file=sys.stderr)
 print("=" * 50, file=sys.stderr)
 safe_flush(sys.stderr)
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, QDialog, QSplashScreen
+from PyQt5.QtWidgets import QApplication, QDialog, QSplashScreen
 from PyQt5.QtCore import QTimer, Qt as QtCore, Qt
 from PyQt5.QtGui import QPixmap, QColor
 from stl_viewer import STLViewerWindow, USE_PYGFX
 from core.license_validator import is_license_valid_stored
 from ui.license_dialog import LicenseDialog
 from ui.styles import get_global_stylesheet
+from ui.modal_utils import show_message_dialog
 
 
 def main():
@@ -202,7 +203,7 @@ def main():
                 safe_flush(sys.stderr)
                 logger.info("License dialog cancelled, exiting application")
                 splash.finish(None)
-                QMessageBox.information(
+                show_message_dialog(
                     None,
                     "Subscription Required",
                     "An active commercial subscription is required to use this application.\n"

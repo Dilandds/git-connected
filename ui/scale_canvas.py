@@ -162,7 +162,7 @@ class ScaleCanvas(QWidget):
         self._show_static_border = True  # Show/hide static border
         self._show_moving_border = True  # Show/hide moving border
         self._show_ref_lines = True  # Show/hide dotted reference lines
-        self._pdf_locked = False  # Lock PDF position (disable panning)
+        self._pdf_locked = False  # Lock zooming only
         
         # Drawing shapes mode
         self._drawing_mode: Optional[str] = None  # None | "arrow" | "rectangle" | "circle" | "text"
@@ -269,7 +269,7 @@ class ScaleCanvas(QWidget):
         self.update()
 
     def set_pdf_locked(self, locked: bool):
-        """Lock or unlock PDF position (disable/enable panning)."""
+        """Lock or unlock zooming for the drawing scale canvas."""
         self._pdf_locked = locked
         self.update()
 
@@ -1506,7 +1506,7 @@ class ScaleCanvas(QWidget):
 
     def wheelEvent(self, event: QWheelEvent):
         """Zoom drawing proportionally (homothetic)."""
-        if not self._pixmap:
+        if not self._pixmap or self._pdf_locked:
             return
         delta = event.angleDelta().y()
         factor = 1.1 if delta > 0 else 0.9
@@ -1637,8 +1637,8 @@ class ScaleCanvas(QWidget):
 
             # Red reference line is static — no dragging
 
-        if (event.button() == Qt.MiddleButton and not self._pdf_locked) or (
-            event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._pdf_locked and not self._drawing_mode
+        if (event.button() == Qt.MiddleButton) or (
+            event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._drawing_mode
         ):
             self._panning = True
             self._pan_start = event.pos() - self._pan_offset.toPoint()

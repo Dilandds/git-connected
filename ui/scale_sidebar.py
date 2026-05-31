@@ -120,7 +120,7 @@ class ScaleSidebar(QWidget):
     static_border_toggled = pyqtSignal(bool)  # hide/show static border
     moving_border_toggled = pyqtSignal(bool)  # hide/show moving border
     ref_lines_toggled = pyqtSignal(bool)  # hide/show dotted reference lines
-    pdf_locked = pyqtSignal(bool)  # lock/unlock PDF position
+    pdf_locked = pyqtSignal(bool)  # lock/unlock zooming
     drawing_mode_changed = pyqtSignal(str)  # "arrow" | "rectangle" | "circle" | "move" | "erase" | ""
     drawing_color_changed = pyqtSignal(QColor)  # color for drawing shapes
 
@@ -278,8 +278,8 @@ class ScaleSidebar(QWidget):
         self.ref_lines_btn.clicked.connect(self._on_ref_lines_toggled)
         layout.addWidget(self.ref_lines_btn)
 
-        # Lock document position toggle
-        self.lock_btn = QPushButton("🔓 Unlock Document")
+        # Lock zoom toggle
+        self.lock_btn = QPushButton("🔓 Unlock Zoom")
         self.lock_btn.setFixedHeight(34)
         self.lock_btn.setCheckable(True)
         self.lock_btn.setChecked(False)
@@ -735,10 +735,10 @@ class ScaleSidebar(QWidget):
                 }}
             """
         self.lock_btn.setStyleSheet(style)
-        self.lock_btn.setText("🔒 Lock Document" if not locked else "🔓 Unlock Document")
+        self.lock_btn.setText("🔒 Lock Zoom" if not locked else "🔓 Unlock Zoom")
 
     def _on_pdf_locked(self):
-        """Handle PDF lock/unlock toggle."""
+        """Handle zoom lock/unlock toggle."""
         self._pdf_locked = self.lock_btn.isChecked()
         self._update_lock_btn_style(self._pdf_locked)
         self.pdf_locked.emit(self._pdf_locked)
@@ -811,16 +811,23 @@ class ScaleSidebar(QWidget):
             """)
 
     def _on_color_picker(self):
-        """Open color picker dialog."""
-        color = QColorDialog.getColor(
-            self._drawing_color,
-            self,
-            "Select Drawing Color"
-        )
-        if color.isValid():
-            self._drawing_color = color
-            self._update_color_btn_style()
-            self.drawing_color_changed.emit(color)
+        """Open color picker popup using shared palette."""
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+
+        def _on_pick(c_hex: str):
+            from PyQt5.QtGui import QColor
+            color = QColor(c_hex)
+            if color.isValid():
+                self._drawing_color = color
+                self._update_color_btn_style()
+                self.drawing_color_changed.emit(color)
+
+        picker.color_selected.connect(_on_pick)
+        # Position popup under the color button
+        pos = self.color_btn.mapToGlobal(self.color_btn.rect().bottomLeft())
+        picker.move(pos + QPoint(-6, 8))
+        picker.show()
 
     def _update_color_btn_style(self):
         """Update color button to show current color."""

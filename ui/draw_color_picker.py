@@ -3,18 +3,15 @@ Color picker popup for the freehand drawing tool.
 Displays a grid of preset color swatches and a custom color option.
 """
 from PyQt5.QtWidgets import (
-    QWidget, QGridLayout, QPushButton, QVBoxLayout, QColorDialog, QLabel
+    QWidget, QGridLayout, QPushButton, QVBoxLayout, QColorDialog, QLabel,
+    QSpinBox, QLineEdit, QToolButton
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor
 from ui.styles import default_theme
 
 
-PRESET_COLORS = [
-    '#FF0000', '#FF6600', '#FFCC00', '#33CC33',
-    '#0099FF', '#6633FF', '#FF33CC', '#00CCCC',
-    '#FFFFFF', '#000000', '#888888', '#8B4513',
-]
+from ui.color_palette import PALETTE as PRESET_COLORS
 
 
 class DrawColorPicker(QWidget):
@@ -50,6 +47,7 @@ class DrawColorPicker(QWidget):
             btn = QPushButton()
             btn.setFixedSize(24, 24)
             border_color = '#aaa' if color.upper() == '#FFFFFF' else 'transparent'
+            # Hover shows a prominent outline to indicate selection affordance
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
@@ -58,6 +56,7 @@ class DrawColorPicker(QWidget):
                 }}
                 QPushButton:hover {{
                     border: 2px solid {default_theme.button_primary};
+                    padding: 0px;
                 }}
             """)
             btn.setCursor(Qt.PointingHandCursor)
@@ -90,7 +89,57 @@ class DrawColorPicker(QWidget):
         self.close()
 
     def _pick_custom(self):
-        color = QColorDialog.getColor(QColor('#FF0000'), self.parent(), "Choose Pen Color")
-        if color.isValid():
-            self.color_selected.emit(color.name())
+        # Use a Qt-based (non-native) QColorDialog so we can enforce readable text
+        dialog = QColorDialog(self.parent())
+        dialog.setWindowTitle("Choose Pen Color")
+        dialog.setCurrentColor(QColor('#FF0000'))
+        # Force Qt dialog (don't use the OS native color picker) so stylesheet applies
+        dialog.setOption(QColorDialog.DontUseNativeDialog, True)
+        # Force black text color for labels/inputs/buttons inside the dialog (Windows native pickers can be unreadable)
+        dialog.setStyleSheet("""
+            QWidget, QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QToolButton, QPushButton {
+                color: #000000 !important;
+            }
+        """)
+        # Remove advanced controls (HSV/RGB spinners, HTML field, custom colors grid)
+        # by hiding common widget classes used in that panel. This keeps the
+        # dialog minimal (picker + OK/Cancel) as requested.
+        try:
+            # Hide labels that match the unwanted controls
+            banned_labels = ('Hue', 'Hue:', 'Sat', 'Sat:', 'Val', 'Val:', 'Red', 'Green', 'Blue', 'HTML', 'Custom colors', 'Add to Custom Colors', 'Pick Screen Color')
+            for lbl in dialog.findChildren(QLabel):
+                try:
+                    txt = lbl.text() or ''
+                    if any(b in txt for b in banned_labels):
+                        parent = lbl.parent()
+                        if parent is not None:
+                            parent.setVisible(False)
+                        else:
+                            lbl.setVisible(False)
+                except Exception:
+                    continue
+
+            # Hide numeric inputs and free-form HTML field if present
+            for sp in dialog.findChildren(QSpinBox):
+                sp.setVisible(False)
+            for le in dialog.findChildren(QLineEdit):
+                # Hide the HTML field and any small text inputs used for RGB/HSV
+                le.setVisible(False)
+            # Hide small tool buttons that belong to the advanced panel
+            for tb in dialog.findChildren(QToolButton):
+                tb.setVisible(False)
+        except Exception:
+            # If anything goes wrong with hiding heuristics, fall back to showing the dialog as-is
+            pass
+
+        # Exec the dialog and emit the selected color if accepted
+        try:
+            accepted = dialog.exec_()
+        except TypeError:
+            accepted = dialog.exec()
+
+        if accepted == QColorDialog.Accepted:
+            col = dialog.selectedColor()
+            if col.isValid():
+                self.color_selected.emit(col.name())
         self.close()

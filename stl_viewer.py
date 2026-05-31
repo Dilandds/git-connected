@@ -9,9 +9,21 @@ from typing import Optional, List, Any
 from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFileDialog,
-    QMessageBox, QSplitter, QFrame, QApplication, QStackedWidget, QTabBar,
+    QSplitter, QFrame, QApplication, QStackedWidget, QTabBar,
     QPushButton, QLabel
 )
+from ui.modal_utils import (
+    show_message_dialog, show_warning_dialog, show_error_dialog,
+    ask_yes_no_dialog, ask_yes_no_cancel_dialog
+)
+# Use native QFileDialog for file upload/save flows to preserve OS-native behavior.
+# Backwards-compatible small shims so existing call sites keep working.
+def get_open_file_name(parent, title: str, directory: str = "", filter: str = "All Files (*)"):
+    return QFileDialog.getOpenFileName(parent, title, directory, filter)
+
+
+def get_save_file_name(parent, title: str, directory: str = "", filter: str = "All Files (*)"):
+    return QFileDialog.getSaveFileName(parent, title, directory, filter)
 from PyQt5.QtCore import Qt, QEvent, QTimer
 
 # Force PyInstaller to bundle pygfx and deps (imported lazily in viewer_widget_pygfx._init_pygfx)
@@ -666,8 +678,7 @@ class STLViewerWindow(QMainWindow):
     
     def _tech_upload_image(self):
         """Handle upload request from technical sidebar — supports images, PDFs, and .ecto files."""
-        from PyQt5.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = get_open_file_name(
             self, "Select Image, PDF, or .ecto File", "",
             "Supported Files (*.png *.jpg *.jpeg *.bmp *.pdf *.ecto);;Images & PDFs (*.png *.jpg *.jpeg *.bmp *.pdf);;ECTO Files (*.ecto);;All Files (*)"
         )
@@ -689,7 +700,7 @@ class STLViewerWindow(QMainWindow):
         """Export technical overview as a passcode-protected .ecto file."""
         doc_path = self.technical_overview.get_document_path()
         if not doc_path:
-            QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
+            show_warning_dialog(self, "No Document", "Please upload an image or PDF first.")
             return
 
         passcode_hash = None
@@ -703,7 +714,7 @@ class STLViewerWindow(QMainWindow):
 
         # Pick save location
         default_name = Path(doc_path).stem + '.ecto'
-        save_path, _ = QFileDialog.getSaveFileName(
+        save_path, _ = get_save_file_name(
             self, "Export Technical Overview .ecto", default_name,
             "ECTO Files (*.ecto);;All Files (*)"
         )
@@ -723,20 +734,20 @@ class STLViewerWindow(QMainWindow):
         )
         if success:
             self._tech_ecto_exported = True
-            QMessageBox.information(self, "Export Successful",
-                                    f"Technical overview exported to:\n{msg}")
+            show_message_dialog(self, "Export Successful",
+                                f"Technical overview exported to:\n{msg}")
         else:
-            QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
+            show_error_dialog(self, "Export Failed", f"Error: {msg}")
 
     def _tech_export_pdf(self):
         """Export technical overview as a PDF report with annotated image and table."""
         if is_education():
-            QMessageBox.information(self, "Education Version",
-                                    "PDF export is not available in the Education version.")
+            show_message_dialog(self, "Education Version",
+                                "PDF export is not available in the Education version.")
             return
         pixmap = self.technical_overview.canvas._pixmap
         if pixmap is None or pixmap.isNull():
-            QMessageBox.warning(self, "No Document", "Please upload an image or PDF first.")
+            show_warning_dialog(self, "No Document", "Please upload an image or PDF first.")
             return
 
         metadata = self.technical_sidebar.get_metadata()
@@ -745,7 +756,7 @@ class STLViewerWindow(QMainWindow):
         if doc_path:
             default_name = Path(doc_path).stem + "_report.pdf"
 
-        save_path, _ = QFileDialog.getSaveFileName(
+        save_path, _ = get_save_file_name(
             self, "Export PDF Report", default_name,
             "PDF Files (*.pdf);;All Files (*)"
         )
@@ -761,9 +772,9 @@ class STLViewerWindow(QMainWindow):
             output_path=save_path,
         )
         if success:
-            QMessageBox.information(self, "PDF Exported", f"Report saved to:\n{msg}")
+            show_message_dialog(self, "PDF Exported", f"Report saved to:\n{msg}")
         else:
-            QMessageBox.critical(self, "Export Failed", f"Error: {msg}")
+            show_error_dialog(self, "Export Failed", f"Error: {msg}")
 
     def _tech_reset(self):
         """Reset the technical overview workspace with unsaved-changes warning."""
@@ -773,14 +784,12 @@ class STLViewerWindow(QMainWindow):
         )
 
         if has_content and not self._tech_ecto_exported:
-            reply = QMessageBox.warning(
+            if not ask_yes_no_dialog(
                 self, "Unsaved Changes",
                 "You have not exported this workspace as an .ecto file.\n\n"
                 "All annotations, metadata, and the loaded document will be lost.\n\n"
-                "Do you want to reset anyway?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-            )
-            if reply != QMessageBox.Yes:
+                "Do you want to reset anyway?"
+            ):
                 return
 
         # Reset everything
@@ -793,7 +802,7 @@ class STLViewerWindow(QMainWindow):
 
     def _scale_upload(self):
         """Upload a drawing file for scale calibration."""
-        path, _ = QFileDialog.getOpenFileName(
+        path, _ = get_open_file_name(
             self, "Select Drawing", "",
             "Drawings (*.png *.jpg *.jpeg *.bmp *.pdf);;All Files (*)"
         )
@@ -1034,8 +1043,7 @@ class STLViewerWindow(QMainWindow):
         """Export the scaled drawing with measurements."""
         if not self.scale_canvas.has_image():
             return
-        from PyQt5.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getSaveFileName(
+        path, _ = get_save_file_name(
             self, "Export Scaled Drawing", "",
             "PNG Image (*.png);;JPEG Image (*.jpg);;PDF Document (*.pdf)"
         )
@@ -1075,7 +1083,7 @@ class STLViewerWindow(QMainWindow):
         # Check for unsaved annotations
         annotations = tab.annotation_panel.get_annotations()
         if annotations and not tab.annotations_exported:
-            reply = QMessageBox.warning(
+            choice = ask_yes_no_cancel_dialog(
                 self,
                 "Unsaved Annotations",
                 f"Tab '{tab.filename or 'Untitled'}' has {len(annotations)} annotation(s) that have not been exported.\n\n"
@@ -1083,15 +1091,13 @@ class STLViewerWindow(QMainWindow):
                 "• Click 'Yes' to export first\n"
                 "• Click 'No' to close without exporting\n"
                 "• Click 'Cancel' to go back",
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                QMessageBox.Yes
             )
-            if reply == QMessageBox.Yes:
+            if choice == 'yes':
                 # Switch to this tab first so sidebar export works
                 self.tab_bar.setCurrentIndex(index)
                 self.sidebar_panel.export_as_ecto()
                 return
-            elif reply == QMessageBox.Cancel:
+            elif choice == 'cancel':
                 return
         
         self._close_tab(index)
@@ -1175,6 +1181,9 @@ class STLViewerWindow(QMainWindow):
         panel.annotation_added.connect(self._on_annotation_added)
         panel.annotation_deleted.connect(self._on_annotation_deleted)
         panel.annotation_validated.connect(self._on_annotation_validated)
+        # Annotation color changes from panel -> update viewer marker
+        if hasattr(panel, 'annotation_color_changed'):
+            panel.annotation_color_changed.connect(self._on_annotation_color_changed)
         panel.open_popup_requested.connect(self._on_open_popup_requested)
         panel.open_viewer_popup_requested.connect(self._on_open_viewer_popup_requested)
         panel.focus_annotation.connect(self._on_focus_annotation)
@@ -1185,6 +1194,15 @@ class STLViewerWindow(QMainWindow):
     def apply_styling(self):
         """Apply minimalistic styling with floating card design."""
         self.setStyleSheet(get_global_stylesheet())
+
+    def _on_annotation_color_changed(self, annotation_id: int, color: str):
+        """Update the viewer's annotation marker color when panel emits a change."""
+        vw = getattr(self, 'viewer_widget', None)
+        if vw and hasattr(vw, 'update_annotation_marker_color'):
+            try:
+                vw.update_annotation_marker_color(annotation_id, color)
+            except Exception:
+                logger.exception("_on_annotation_color_changed: failed to update viewer color")
     
     def eventFilter(self, obj, event):
         """Resize education watermark overlay when workspace stack resizes."""
@@ -1280,7 +1298,7 @@ class STLViewerWindow(QMainWindow):
             annotations = self.annotation_panel.get_annotations()
             if annotations:
                 if not self._annotations_exported:
-                    reply = QMessageBox.warning(
+                    choice = ask_yes_no_cancel_dialog(
                         self,
                         "Unsaved Annotations",
                         f"You have {len(annotations)} annotation(s) that have not been exported.\n\n"
@@ -1288,23 +1306,18 @@ class STLViewerWindow(QMainWindow):
                         "• Click 'Yes' to export first\n"
                         "• Click 'No' to clear without exporting\n"
                         "• Click 'Cancel' to go back",
-                        QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                        QMessageBox.Yes
                     )
-                    if reply == QMessageBox.Yes:
+                    if choice == 'yes':
                         self.sidebar_panel.export_as_ecto()
                         return
-                    elif reply == QMessageBox.Cancel:
+                    elif choice == 'cancel':
                         return
                 else:
-                    reply = QMessageBox.question(
+                    if not ask_yes_no_dialog(
                         self,
                         "Clear Model",
                         f"You have {len(annotations)} annotation(s). Are you sure you want to clear everything?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No
-                    )
-                    if reply == QMessageBox.No:
+                    ):
                         return
         
         # Screenshot warning (second warning, after annotation)
@@ -1385,7 +1398,7 @@ class STLViewerWindow(QMainWindow):
             return
         
         if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
-            QMessageBox.warning(
+            show_warning_dialog(
                 self,
                 "Invalid File",
                 "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
@@ -1440,7 +1453,7 @@ class STLViewerWindow(QMainWindow):
                 file_type = "IGES"
             else:
                 file_type = "STL"
-            QMessageBox.critical(
+            show_error_dialog(
                 self,
                 "Error",
                 f"Failed to load {file_type} file:\n{file_path}\n\nPlease ensure the file is a valid {file_type} format."
@@ -1487,7 +1500,7 @@ class STLViewerWindow(QMainWindow):
     
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
-        QMessageBox.warning(self, "Upload Error", error_msg)
+        show_warning_dialog(self, "Upload Error", error_msg)
     
     def _toggle_grid(self):
         """Toggle the background grid."""
@@ -2509,7 +2522,7 @@ class STLViewerWindow(QMainWindow):
         annotations = self.annotation_panel.get_annotations()
         if annotations:
             if not self._annotations_exported:
-                reply = QMessageBox.warning(
+                choice = ask_yes_no_cancel_dialog(
                     self,
                     "Unsaved Annotations",
                     f"You have {len(annotations)} annotation(s) that have not been exported.\n\n"
@@ -2517,23 +2530,18 @@ class STLViewerWindow(QMainWindow):
                     "• Click 'Yes' to export first\n"
                     "• Click 'No' to clear without exporting\n"
                     "• Click 'Cancel' to go back",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                    QMessageBox.Yes
                 )
-                if reply == QMessageBox.Yes:
+                if choice == 'yes':
                     self.sidebar_panel.export_as_ecto()
                     return
-                elif reply == QMessageBox.Cancel:
+                elif choice == 'cancel':
                     return
             else:
-                reply = QMessageBox.question(
+                if not ask_yes_no_dialog(
                     self,
                     "Clear All",
                     f"You have {len(annotations)} annotation(s). Are you sure you want to clear everything?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if reply == QMessageBox.No:
+                ):
                     return
         # Screenshot warning (second, after annotation)
         if len(self.screenshot_panel.screenshots) > 0:
@@ -2580,7 +2588,7 @@ class STLViewerWindow(QMainWindow):
     def upload_stl_file(self):
         """Open file dialog and load selected 3D or .ecto file."""
         logger.info("upload_stl_file: Opening file dialog...")
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = get_open_file_name(
             self,
             "Select 3D File",
             "",
@@ -2597,7 +2605,7 @@ class STLViewerWindow(QMainWindow):
             file_ext = file_path.lower()
             if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
                 logger.warning(f"upload_stl_file: Invalid file extension: {file_path}")
-                QMessageBox.warning(
+                show_warning_dialog(
                     self,
                     "Invalid File",
                     "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
@@ -2621,11 +2629,7 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if not vw or not hasattr(vw, 'current_mesh') or vw.current_mesh is None:
             logger.error("export_scaled_stl: No mesh loaded")
-            QMessageBox.warning(
-                self,
-                "No Mesh Loaded",
-                "Please load an STL file first before exporting."
-            )
+            show_warning_dialog(self, "No Mesh Loaded", "Please load an STL file first before exporting.")
             return
         
         try:
@@ -2633,11 +2637,7 @@ class STLViewerWindow(QMainWindow):
             
             if scaled_mesh is None:
                 logger.error("export_scaled_stl: Failed to scale mesh")
-                QMessageBox.critical(
-                    self,
-                    "Export Error",
-                    "Failed to scale the mesh. Please try again."
-                )
+                show_error_dialog(self, "Export Error", "Failed to scale the mesh. Please try again.")
                 return
             
             success = MeshCalculator.export_stl(scaled_mesh, file_path)
@@ -2657,21 +2657,13 @@ class STLViewerWindow(QMainWindow):
                 msg = f"Scaled STL file exported successfully to:\n{file_path}"
                 if annotations:
                     msg += f"\n\n{len(annotations)} annotations saved."
-                QMessageBox.information(self, "Export Successful", msg)
+                show_message_dialog(self, "Export Successful", msg)
             else:
                 logger.error(f"export_scaled_stl: Failed to export to {file_path}")
-                QMessageBox.critical(
-                    self,
-                    "Export Error",
-                    f"Failed to export STL file to:\n{file_path}"
-                )
+                show_error_dialog(self, "Export Error", f"Failed to export STL file to:\n{file_path}")
         except Exception as e:
             logger.error(f"export_scaled_stl: Error during export: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Export Error",
-                f"Error during export:\n{str(e)}"
-            )
+            show_error_dialog(self, "Export Error", f"Error during export:\n{str(e)}")
     
     def _load_annotations_for_file(self, file_path: str):
         """Load annotations for a file if they exist and handle reader mode."""
@@ -2738,7 +2730,7 @@ class STLViewerWindow(QMainWindow):
             model_path, annotations, reader_mode, temp_dir, drawings, texture_data = EctoFormat.import_ecto(ecto_path)
             
             if model_path is None:
-                QMessageBox.critical(
+                show_error_dialog(
                     self,
                     "Error",
                     f"Failed to open .ecto file:\n{temp_dir}"
@@ -2764,7 +2756,7 @@ class STLViewerWindow(QMainWindow):
             success = vw.load_stl(model_path)
             
             if not success:
-                QMessageBox.critical(
+                show_error_dialog(
                     self,
                     "Error",
                     f"Failed to load model from .ecto bundle"
@@ -2859,11 +2851,7 @@ class STLViewerWindow(QMainWindow):
             
         except Exception as e:
             logger.error(f"_load_ecto_file: Error loading .ecto file: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to open .ecto file:\n{str(e)}"
-            )
+            show_error_dialog(self, "Error", f"Failed to open .ecto file:\n{str(e)}")
     
     def _load_technical_ecto(self, ecto_path: str):
         """Load a technical-overview .ecto file into the Technical Overview workspace."""
@@ -2871,7 +2859,7 @@ class STLViewerWindow(QMainWindow):
 
         doc_path, annotations, metadata, passcode_hash, temp_dir = EctoFormat.import_technical(ecto_path)
         if doc_path is None:
-            QMessageBox.critical(self, "Error", f"Failed to open technical .ecto:\n{temp_dir}")
+            show_error_dialog(self, "Error", f"Failed to open technical .ecto:\n{temp_dir}")
             return
 
         # Switch to technical mode
@@ -2893,9 +2881,9 @@ class STLViewerWindow(QMainWindow):
             else:
                 # Lock editing: disable sidebar fields and annotation mode
                 self.technical_sidebar.setEnabled(False)
-                QMessageBox.information(self, "View Only",
-                                        "You can view this file but editing is locked.\n"
-                                        "Enter the correct passcode to edit.")
+                show_message_dialog(self, "View Only",
+                                    "You can view this file but editing is locked.\n"
+                                    "Enter the correct passcode to edit.")
 
         self.setWindowTitle(f"ECTOFORM - {Path(ecto_path).name}")
         # Store temp dir for cleanup
@@ -2911,7 +2899,7 @@ class STLViewerWindow(QMainWindow):
             annotations = tab.annotation_panel.get_annotations()
             if annotations and not tab.annotations_exported:
                 tab_name = tab.filename or 'Untitled'
-                reply = QMessageBox.warning(
+                choice = ask_yes_no_cancel_dialog(
                     self,
                     "Unsaved Annotations",
                     f"Tab '{tab_name}' has {len(annotations)} annotation(s) that have not been exported.\n\n"
@@ -2919,16 +2907,14 @@ class STLViewerWindow(QMainWindow):
                     "• Click 'Yes' to export first\n"
                     "• Click 'No' to close without exporting\n"
                     "• Click 'Cancel' to stay",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                    QMessageBox.Yes
                 )
-                if reply == QMessageBox.Yes:
+                if choice == 'yes':
                     event.ignore()
                     # Switch to that tab and export
                     self.tab_bar.setCurrentIndex(i)
                     self.sidebar_panel.export_as_ecto()
                     return
-                if reply == QMessageBox.Cancel:
+                if choice == 'cancel':
                     event.ignore()
                     return
         
