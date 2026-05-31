@@ -424,6 +424,14 @@ class ArrowPanel(QWidget):
         for aid, card in self._arrow_cards.items():
             card.set_selected(aid == arrow_id)
 
+    def _on_card_color_changed(self, arrow_id: int, color: str):
+        # Update default color for future arrows + propagate to viewer
+        self._arrow_color = color
+        self._update_color_btn_style()
+        self.color_changed.emit(arrow_id, color)
+
+
+
     def _emit_rotate(self, axis: str, angle: float):
         if self._selected_arrow_id is not None:
             self.rotate_requested.emit(self._selected_arrow_id, axis, angle)
