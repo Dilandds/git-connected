@@ -7,7 +7,8 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QFileDialog, QSizePolicy,
-    QDialog, QApplication, QLineEdit, QGridLayout,
+    QDialog, QApplication, QLineEdit, QGridLayout, QProgressBar,
+    QStackedLayout,
 )
 from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
