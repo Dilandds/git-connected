@@ -215,23 +215,21 @@ class ScaleSidebar(QWidget):
         self.upload_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #a8d0f2, stop:0.08 #7bb3e8, stop:0.5 #4f93d6,
-                    stop:0.51 #3d82c8, stop:0.92 #2e6cb5, stop:1 #5a9ad8);
-                border: 1px solid #1c4778;
-                border-radius: 26px;
-                padding: 12px 22px;
+                    stop:0 #7ab8f0, stop:0.5 #4a90d9, stop:0.51 #3a7cc8, stop:1 #2e6cb5);
+                border: 1px solid #1f4f8a;
+                border-radius: 24px;
+                padding: 10px 16px;
                 font-size: 14px;
                 font-weight: bold;
                 color: white;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #b8dcf7, stop:0.08 #8cc0ee, stop:0.5 #5ea3e0,
-                    stop:0.51 #4d90d4, stop:0.92 #3a7cc8, stop:1 #6aa8e0);
+                    stop:0 #8cc4f5, stop:0.5 #5a9fe6, stop:0.51 #4a8ad4, stop:1 #3a7cc8);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2e6cb5, stop:0.5 #3d82c8, stop:1 #4f93d6);
+                    stop:0 #2e6cb5, stop:1 #4a90d9);
             }
         """)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
