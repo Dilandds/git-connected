@@ -21,6 +21,7 @@
     "area_cm2": "Surface (cm²)",
     "surface_disclaimer": "Surface calculée : somme des aires de tous les triangles du maillage 3D. Utile pour estimer les coûts de galvanisation ou de traitement de surface.",
     "estimated_weight": "Poids Estimé",
+    "material": "Matériau",
     "density": "Densité",
     "estimated_weight_result": "Poids estimé",
     "adjust_target_weight": "Ajuster au Poids Cible",

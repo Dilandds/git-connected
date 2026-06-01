@@ -21,6 +21,7 @@
     "area_cm2": "Area (cm²)",
     "surface_disclaimer": "Calculated surface area: Sum of the areas of all triangles in the 3D mesh. Useful for estimating galvanizing or surface treatment costs.",
     "estimated_weight": "Estimated Weight",
+    "material": "Material",
     "density": "Density",
     "estimated_weight_result": "Estimated weight",
     "adjust_target_weight": "Adjust to Target Weight",

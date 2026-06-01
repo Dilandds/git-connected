@@ -20,83 +20,62 @@ def confirm_dialog(parent, title: str, message: str) -> bool:
 
 class DimensionRow(QFrame):
     """A reusable dimension row component with hover effect."""
-    
+
+    _NORMAL = "QFrame#dimensionRow { background-color: #ffffff; border-radius: 10px; border: none; }"
+    _HOVER  = "QFrame#dimensionRow { background-color: #f0f4f8; border-radius: 10px; border: none; }"
+
     def __init__(self, label_text, value_text="--", parent=None):
         super().__init__(parent)
         self.setObjectName("dimensionRow")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(44)
-        self.setStyleSheet(f"""
-            QFrame#dimensionRow {{
-                background-color: #ffffff;
-                border-radius: 8px;
-                border: none;
-            }}
-        """)
-        
+        self.setFixedHeight(54)
+        self.setStyleSheet(self._NORMAL)
+
         row_layout = QHBoxLayout(self)
-        row_layout.setContentsMargins(14, 8, 14, 8)
+        row_layout.setContentsMargins(16, 0, 16, 0)
         row_layout.setSpacing(0)
-        
+
         # Label
         self._label = QLabel(label_text)
         self._label.setObjectName("dimensionLabel")
-        self._label.setStyleSheet("background-color: transparent; color: #000000;")
+        self._label.setStyleSheet("background: transparent; color: #111827; border: none;")
         label_font = QFont()
-        label_font.setPointSize(11)
+        label_font.setPointSize(13)
         label_font.setBold(True)
         self._label.setFont(label_font)
-        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(label_text) + 8)
-        
+
         # Spacer
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        
+
         # Value
         self.value_label = QLabel(value_text)
         self.value_label.setObjectName("dimensionValue")
-        self.value_label.setStyleSheet("background-color: transparent; color: #000000;")
+        self.value_label.setStyleSheet("background: transparent; color: #111827; border: none;")
         value_font = QFont()
         value_font.setPointSize(13)
         value_font.setBold(True)
         self.value_label.setFont(value_font)
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(value_text) + 8)
-        
+
         row_layout.addWidget(self._label)
         row_layout.addItem(spacer)
         row_layout.addWidget(self.value_label)
-        
-        # Install event filter for hover effect
+
         self.installEventFilter(self)
-    
+
     def eventFilter(self, obj, event):
-        """Handle hover events."""
         if obj == self:
             if event.type() == QEvent.Enter:
-                self.setStyleSheet(f"""
-                    QFrame#dimensionRow {{
-                        background-color: #f0f0f0;
-                        border-radius: 8px;
-                    }}
-                """)
+                self.setStyleSheet(self._HOVER)
             elif event.type() == QEvent.Leave:
-                self.setStyleSheet(f"""
-                    QFrame#dimensionRow {{
-                        background-color: #ffffff;
-                        border-radius: 8px;
-                    }}
-                """)
+                self.setStyleSheet(self._NORMAL)
         return super().eventFilter(obj, event)
-    
+
     def set_value(self, text):
-        """Update the value label text."""
         self.value_label.setText(text)
-        self.value_label.setMinimumWidth(self.value_label.fontMetrics().horizontalAdvance(text) + 8)
 
     def set_label(self, text):
-        """Update the label text."""
         self._label.setText(text)
-        self._label.setMinimumWidth(self._label.fontMetrics().horizontalAdvance(text) + 8)
 
 
 class SurfaceAreaRow(QFrame):
