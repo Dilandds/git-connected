@@ -2,7 +2,7 @@
 Reusable styled modal helpers for ECTOFORM.
 """
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit
 )
 from PyQt5.QtCore import Qt
 from ui.styles import default_theme
@@ -196,3 +196,132 @@ def ask_yes_no_cancel_dialog(parent, title: str, message: str, *, light: bool = 
         dlg.tertiary_btn.clicked.connect(_cancel)
     dlg.exec_()
     return result["value"]
+
+
+def ask_text_input_dialog(parent, title: str, label: str,
+                          placeholder: str = "", *, light: bool = True) -> tuple:
+    """Styled single-line text input. Returns (text, accepted)."""
+    colors = _modal_colors(light)
+    accent = default_theme.button_primary
+    accent_h = default_theme.button_primary_hover
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setFixedWidth(360)
+    dlg.setStyleSheet(f"""
+        QDialog {{ background: {colors['bg']}; color: {colors['fg']}; }}
+        QLabel  {{ color: {colors['muted']}; font-size: 10px; font-weight: bold;
+                   background: transparent; border: none; }}
+    """)
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(16, 16, 16, 16)
+    lay.setSpacing(10)
+
+    lay.addWidget(QLabel(label.upper()))
+    inp = QLineEdit()
+    inp.setPlaceholderText(placeholder)
+    inp.setStyleSheet(f"""
+        QLineEdit {{
+            background: {'#f5f6f8' if light else '#1e2228'};
+            color: {colors['fg']}; border: 1px solid {colors['border']};
+            border-radius: 4px; padding: 4px 8px; font-size: 11px;
+        }}
+        QLineEdit:focus {{ border-color: {accent}; }}
+    """)
+    inp.setFixedHeight(30)
+    lay.addWidget(inp)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setCursor(Qt.PointingHandCursor)
+    cancel_btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {colors['secondary_bg']}; color: {colors['secondary_fg']};
+            border: 1px solid {colors['secondary_border']}; border-radius: 5px;
+            padding: 6px 16px; font-size: 11px;
+        }}
+        QPushButton:hover {{ background: {colors['border']}; }}
+    """)
+    ok_btn = QPushButton("OK")
+    ok_btn.setCursor(Qt.PointingHandCursor)
+    ok_btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {accent}; color: white; border: none;
+            border-radius: 5px; padding: 6px 16px; font-size: 11px; font-weight: bold;
+        }}
+        QPushButton:hover {{ background: {accent_h}; }}
+    """)
+    cancel_btn.clicked.connect(dlg.reject)
+    ok_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(cancel_btn)
+    btn_row.addWidget(ok_btn)
+    lay.addLayout(btn_row)
+
+    inp.setFocus()
+    accepted = dlg.exec_() == QDialog.Accepted
+    return inp.text().strip(), accepted
+
+
+def ask_password_dialog(parent, title: str, label: str, *, light: bool = True) -> tuple:
+    """Styled password input (masked). Returns (text, accepted)."""
+    colors = _modal_colors(light)
+    accent = default_theme.button_primary
+    accent_h = default_theme.button_primary_hover
+
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(title)
+    dlg.setFixedWidth(360)
+    dlg.setStyleSheet(f"""
+        QDialog {{ background: {colors['bg']}; color: {colors['fg']}; }}
+        QLabel  {{ color: {colors['muted']}; font-size: 10px; font-weight: bold;
+                   background: transparent; border: none; }}
+    """)
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(16, 16, 16, 16)
+    lay.setSpacing(10)
+
+    lay.addWidget(QLabel(label.upper()))
+    inp = QLineEdit()
+    inp.setEchoMode(QLineEdit.Password)
+    inp.setStyleSheet(f"""
+        QLineEdit {{
+            background: {'#f5f6f8' if light else '#1e2228'};
+            color: {colors['fg']}; border: 1px solid {colors['border']};
+            border-radius: 4px; padding: 4px 8px; font-size: 11px;
+        }}
+        QLineEdit:focus {{ border-color: {accent}; }}
+    """)
+    inp.setFixedHeight(30)
+    lay.addWidget(inp)
+
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setCursor(Qt.PointingHandCursor)
+    cancel_btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {colors['secondary_bg']}; color: {colors['secondary_fg']};
+            border: 1px solid {colors['secondary_border']}; border-radius: 5px;
+            padding: 6px 16px; font-size: 11px;
+        }}
+        QPushButton:hover {{ background: {colors['border']}; }}
+    """)
+    ok_btn = QPushButton("OK")
+    ok_btn.setCursor(Qt.PointingHandCursor)
+    ok_btn.setStyleSheet(f"""
+        QPushButton {{
+            background: {accent}; color: white; border: none;
+            border-radius: 5px; padding: 6px 16px; font-size: 11px; font-weight: bold;
+        }}
+        QPushButton:hover {{ background: {accent_h}; }}
+    """)
+    cancel_btn.clicked.connect(dlg.reject)
+    ok_btn.clicked.connect(dlg.accept)
+    btn_row.addWidget(cancel_btn)
+    btn_row.addWidget(ok_btn)
+    lay.addLayout(btn_row)
+
+    inp.setFocus()
+    accepted = dlg.exec_() == QDialog.Accepted
+    return inp.text(), accepted

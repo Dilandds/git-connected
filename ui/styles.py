@@ -17,6 +17,15 @@ def _dropdown_arrow_url():
     p = _get_assets_dir() / 'dropdown_arrow.png'
     return str(p).replace('\\', '/')
 
+# Public aliases — import these in UI files
+dropdown_arrow_url = _dropdown_arrow_url
+
+def arrow_up_url() -> str:
+    return str(_get_assets_dir() / 'arrow_up.png').replace('\\', '/')
+
+def arrow_down_url() -> str:
+    return str(_get_assets_dir() / 'arrow_down.png').replace('\\', '/')
+
 
 class Theme:
     """Centralized theme with all color definitions."""

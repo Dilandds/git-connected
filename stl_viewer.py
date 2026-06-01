@@ -67,6 +67,7 @@ from ui.technical_sidebar import TechnicalSidebar
 from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
 from ui.help_panel import HelpWidget
+from ui.project_widget import TheProjectWidget
 from i18n import t, set_language, get_language, on_language_changed
 from core.edition import is_education, WATERMARK_TEXT
 
@@ -244,24 +245,29 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
         self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
         self._mode_scale_btn = QPushButton(t("mode_bar.drawing_scale"))
+        self._mode_project_btn = QPushButton(t("mode_bar.project"))
         self._mode_help_btn = QPushButton(t("mode_bar.help"))
-        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn, self._mode_help_btn):
+        for btn in (self._mode_3d_btn, self._mode_tech_btn, self._mode_scale_btn, self._mode_project_btn, self._mode_help_btn):
             btn.setFixedHeight(30)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
             btn.setAttribute(Qt.WA_StyledBackground, True)
         self._mode_3d_btn.setChecked(True)
         self._current_mode = "3d"
-        
+        self._project_authenticated = False   # login required once per session
+        self._project_user = None
+
         self._update_mode_btn_styles()
         self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
         self._mode_tech_btn.clicked.connect(lambda: self._switch_mode("technical"))
         self._mode_scale_btn.clicked.connect(lambda: self._switch_mode("scale"))
+        self._mode_project_btn.clicked.connect(lambda: self._switch_mode("project"))
         self._mode_help_btn.clicked.connect(lambda: self._switch_mode("help"))
-        
+
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
+        mode_bar_layout.addWidget(self._mode_project_btn)
         mode_bar_layout.addStretch()
 
         # Language toggle button (EN/FR)
@@ -483,6 +489,11 @@ class STLViewerWindow(QMainWindow):
         
         self._workspace_stack.addWidget(scale_workspace)
         
+        # ==== The Project Workspace ====
+        self.project_widget = TheProjectWidget()
+        self.project_widget.open_in_viewer.connect(self._open_file_from_project)
+        self._workspace_stack.addWidget(self.project_widget)
+
         # ==== Help Workspace ====
         self.help_widget = HelpWidget()
         self._workspace_stack.addWidget(self.help_widget)
@@ -514,8 +525,62 @@ class STLViewerWindow(QMainWindow):
         
         logger.info("init_ui: UI initialization complete")
     
+    # ======================== User Account Widget ========================
+
+    def _build_user_account_widget(self) -> QWidget:
+        """Builds the user account pill shown on the right of the mode bar."""
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        # Avatar circle — coloured initials badge
+        avatar = QLabel("A")
+        avatar.setFixedSize(24, 24)
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setStyleSheet(f"""
+            QLabel {{
+                background-color: {default_theme.button_primary};
+                color: white;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: bold;
+                border: none;
+            }}
+        """)
+
+        # Name + dropdown button
+        self._user_btn = QPushButton("Admin  ▾")
+        self._user_btn.setFlat(True)
+        self._user_btn.setCursor(Qt.PointingHandCursor)
+        self._user_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {default_theme.text_primary};
+                border: none;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 0 2px;
+            }}
+            QPushButton:hover {{
+                color: white;
+            }}
+        """)
+
+        # Separator line before avatar
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFixedHeight(18)
+        sep.setStyleSheet(f"color: {default_theme.border_light}; background: {default_theme.border_light}; max-width: 1px; border: none;")
+
+        layout.addWidget(sep)
+        layout.addWidget(avatar)
+        layout.addWidget(self._user_btn)
+        return container
+
     # ======================== Mode Switching ========================
-    
+
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
         # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
@@ -584,19 +649,33 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
         self._mode_tech_btn.setStyleSheet(active_style if self._current_mode == "technical" else inactive_style)
         self._mode_scale_btn.setStyleSheet(active_style if self._current_mode == "scale" else inactive_style)
+        self._mode_project_btn.setStyleSheet(active_style if self._current_mode == "project" else inactive_style)
         self._mode_help_btn.setStyleSheet(active_style if self._current_mode == "help" else inactive_style)
-    
+
     def _switch_mode(self, mode: str):
-        """Switch between '3d', 'technical', 'scale', and 'help' workspace modes."""
+        """Switch between '3d', 'technical', 'scale', 'project', and 'help' workspace modes."""
         if mode == self._current_mode:
             return
+
+        if mode == "project" and not self._project_authenticated:
+            from ui.project_widget import ProjectLoginDialog
+            dlg = ProjectLoginDialog(self)
+            if dlg.exec_() != dlg.Accepted:
+                # User cancelled — keep current mode active
+                self._mode_project_btn.setChecked(False)
+                self._update_mode_btn_styles()
+                return
+            self._project_authenticated = True
+            self._project_user = dlg.get_username()
+            self.project_widget.set_user(self._project_user)
         self._current_mode = mode
         self._mode_3d_btn.setChecked(mode == "3d")
         self._mode_tech_btn.setChecked(mode == "technical")
         self._mode_scale_btn.setChecked(mode == "scale")
+        self._mode_project_btn.setChecked(mode == "project")
         self._mode_help_btn.setChecked(mode == "help")
         self._update_mode_btn_styles()
-        
+
         if mode == "3d":
             self._workspace_stack.setCurrentIndex(0)
             self.setWindowTitle(f"ECTOFORM - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "ECTOFORM")
@@ -606,8 +685,11 @@ class STLViewerWindow(QMainWindow):
         elif mode == "scale":
             self._workspace_stack.setCurrentIndex(2)
             self.setWindowTitle("ECTOFORM - Drawing Scale")
-        elif mode == "help":
+        elif mode == "project":
             self._workspace_stack.setCurrentIndex(3)
+            self.setWindowTitle("ECTOFORM - The Project")
+        elif mode == "help":
+            self._workspace_stack.setCurrentIndex(4)
             self.setWindowTitle("ECTOFORM - Help")
 
         # When leaving the 3D workspace ensure any 3D-only overlays/modes are disabled
@@ -673,6 +755,7 @@ class STLViewerWindow(QMainWindow):
         self._mode_3d_btn.setText(t("mode_bar.viewer_3d"))
         self._mode_tech_btn.setText(t("mode_bar.technical"))
         self._mode_scale_btn.setText(t("mode_bar.drawing_scale"))
+        self._mode_project_btn.setText(t("mode_bar.project"))
         self._mode_help_btn.setText(t("mode_bar.help"))
         self._lang_btn.setText("FR" if get_language() == "en" else "EN")
     
@@ -1433,6 +1516,19 @@ class STLViewerWindow(QMainWindow):
             self._create_new_tab()
         self._load_file_into_current_tab(output_path, from_conversion=True)
     
+    def _open_file_from_project(self, file_path: str):
+        """Open a file from the Files & Versions screen in the 3D viewer."""
+        import os
+        if not os.path.exists(file_path):
+            from ui.modal_utils import show_message_dialog
+            show_message_dialog(self, "File Not Found",
+                                f"The file could not be found on disk:\n{file_path}")
+            return
+        self._switch_mode("3d")
+        if self._current_tab and self._current_tab.file_path is not None:
+            self._create_new_tab()
+        self._load_file_into_current_tab(file_path, from_conversion=False)
+
     def _load_file_into_current_tab(self, file_path: str, from_conversion: bool = False):
         """Load a 3D file into the current tab's viewer."""
         tab = self._current_tab

@@ -45,6 +45,8 @@ splash_image_paths = [
     ('assets/annotation_icon.png', 'assets'),
     ('assets/xyz_gizmo.png', 'assets'),
     ('assets/dropdown_arrow.png', 'assets'),
+    ('assets/arrow_up.png', 'assets'),
+    ('assets/arrow_down.png', 'assets'),
 ]
 
 # Add entire textures directory if it exists
