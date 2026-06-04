@@ -14,9 +14,10 @@ from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QLineEdit, QSizePolicy, QFileDialog,
-    QMenu, QAction, QDialog, QDialogButtonBox, QComboBox,
+    QMenu, QAction, QDialog, QComboBox,
     QStackedWidget, QApplication, QAbstractItemView,
 )
+from ui.modal_utils import FormModal
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint
 from PyQt5.QtGui import QColor, QPainter, QBrush, QPen, QFont, QPixmap, QIcon, QCursor
 
@@ -1073,29 +1074,12 @@ class FilesVersionsWidget(QWidget):
         non_trash = [f for f in self._folders if not f.is_trash]
         if not non_trash:
             return
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Move to Folder")
-        dlg.setFixedWidth(300)
-        dlg.setStyleSheet(f"QDialog {{ background: {_CARD}; }}")
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(16, 14, 16, 14)
-        lay.setSpacing(10)
-        lay.addWidget(QLabel("Select destination folder:"))
-        combo = QComboBox()
-        combo.setStyleSheet(_INPUT)
-        combo.setFixedHeight(28)
+        dlg = FormModal(self, "Move to Folder",
+                        theme=FormModal.LIGHT, min_width=300)
+        combo = dlg.add_field("DESTINATION FOLDER", QComboBox())
         for f in non_trash:
             combo.addItem(f.name, f.id)
-        lay.addWidget(combo)
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.setStyleSheet(f"""
-            QPushButton {{ background: {_ACCENT}; color: white; border: none;
-                           border-radius: 4px; padding: 5px 14px; font-size: 11px; font-weight: bold; }}
-            QPushButton:hover {{ background: {_ACCENT_H}; }}
-        """)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        lay.addWidget(btns)
+        dlg.finish()
         if dlg.exec_() == QDialog.Accepted:
             pf.folder_id = combo.currentData()
             self._refresh()

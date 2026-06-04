@@ -254,8 +254,6 @@ class STLViewerWindow(QMainWindow):
             btn.setAttribute(Qt.WA_StyledBackground, True)
         self._mode_3d_btn.setChecked(True)
         self._current_mode = "3d"
-        self._project_authenticated = False   # login required once per session
-        self._project_user = None
 
         self._update_mode_btn_styles()
         self._mode_3d_btn.clicked.connect(lambda: self._switch_mode("3d"))
@@ -657,17 +655,6 @@ class STLViewerWindow(QMainWindow):
         if mode == self._current_mode:
             return
 
-        if mode == "project" and not self._project_authenticated:
-            from ui.project_widget import ProjectLoginDialog
-            dlg = ProjectLoginDialog(self)
-            if dlg.exec_() != dlg.Accepted:
-                # User cancelled — keep current mode active
-                self._mode_project_btn.setChecked(False)
-                self._update_mode_btn_styles()
-                return
-            self._project_authenticated = True
-            self._project_user = dlg.get_username()
-            self.project_widget.set_user(self._project_user)
         self._current_mode = mode
         self._mode_3d_btn.setChecked(mode == "3d")
         self._mode_tech_btn.setChecked(mode == "technical")

@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QLineEdit, QDoubleSpinBox, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QStackedWidget, QMessageBox, QSizePolicy, QDialog,
+    QStackedWidget, QMessageBox, QSizePolicy, QDialog, QInputDialog,
     QDialogButtonBox, QDateEdit, QSpacerItem
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
@@ -174,6 +174,7 @@ class CostPartner:
     start_date:    str   = ""
     delivery_date: str   = ""
     is_best:       bool  = False
+    tax_rate:      float = 0.0
     tasks:         List[CostTask] = field(default_factory=list)
 
     @property
@@ -183,6 +184,10 @@ class CostPartner:
     @property
     def total_cost(self) -> float:
         return sum(t.total for t in self.tasks)
+
+    @property
+    def total_cost_with_tax(self) -> float:
+        return round(self.total_cost * (1 + self.tax_rate / 100), 2)
 
     @property
     def rate(self) -> float:
@@ -460,6 +465,45 @@ class PartnerPanel(QScrollArea):
         totals_row.addSpacing(24)
         totals_row.addWidget(self._total_cost_lbl)
         cl.addLayout(totals_row)
+
+        # Tax row
+        tax_row = QHBoxLayout()
+        tax_row.addStretch()
+        tax_row.addWidget(_lbl("Tax:", muted=True, size=11))
+        self._tax_spin = QDoubleSpinBox()
+        self._tax_spin.setRange(0.0, 30.0)
+        self._tax_spin.setDecimals(1)
+        self._tax_spin.setSingleStep(0.5)
+        self._tax_spin.setSuffix(" %")
+        self._tax_spin.setValue(self._partner.tax_rate)
+        self._tax_spin.setFixedWidth(80)
+        self._tax_spin.setFixedHeight(24)
+        self._tax_spin.setStyleSheet(f"""
+            QDoubleSpinBox {{
+                background: #f5f6f8; color: {_TEXT};
+                border: 1px solid {_BORDER}; border-radius: 4px;
+                padding: 2px 4px; font-size: 11px;
+            }}
+            QDoubleSpinBox:focus {{ border-color: {_ACCENT}; }}
+        """)
+        self._tax_spin.valueChanged.connect(self._on_tax_changed)
+        tax_row.addSpacing(8)
+        tax_row.addWidget(self._tax_spin)
+        self._tax_amount_lbl = _lbl("", muted=True, size=11)
+        tax_row.addSpacing(8)
+        tax_row.addWidget(self._tax_amount_lbl)
+        cl.addLayout(tax_row)
+
+        # Total with tax row
+        total_tax_row = QHBoxLayout()
+        total_tax_row.addStretch()
+        self._total_with_tax_lbl = _lbl("Total with tax:  —", muted=False, bold=True, size=12)
+        self._total_with_tax_lbl.setStyleSheet(
+            f"color: {_ACCENT}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
+        )
+        total_tax_row.addWidget(self._total_with_tax_lbl)
+        cl.addLayout(total_tax_row)
+
         self._refresh_totals()
         return card
 
@@ -530,11 +574,27 @@ class PartnerPanel(QScrollArea):
         self._refresh_totals()
         self.changed.emit()
 
+    def _on_tax_changed(self, value: float):
+        self._partner.tax_rate = value
+        self._refresh_totals()
+        self.changed.emit()
+
     def _refresh_totals(self):
         h = sum(t.hours for t in self._partner.tasks)
         c = sum(t.total for t in self._partner.tasks)
+        tax_rate = self._partner.tax_rate
+        tax_amount = round(c * tax_rate / 100, 2)
+        total_with_tax = round(c + tax_amount, 2)
+        cur = self._currency_fn()
         self._total_hours_lbl.setText(f"Total hours:  {h:,.1f}")
-        self._total_cost_lbl.setText(f"Total cost:  {_fmt(c, self._currency_fn())}")
+        self._total_cost_lbl.setText(f"Total cost:  {_fmt(c, cur)}")
+        if tax_rate > 0:
+            self._tax_amount_lbl.setText(f"(+{_fmt(tax_amount, cur)})")
+            self._total_with_tax_lbl.setText(f"Total with tax:  {_fmt(total_with_tax, cur)}")
+            self._total_with_tax_lbl.setVisible(True)
+        else:
+            self._tax_amount_lbl.setText("")
+            self._total_with_tax_lbl.setVisible(False)
 
     def _fmt_total(self, value: float) -> str:
         return _fmt(value, self._currency_fn())
@@ -943,6 +1003,7 @@ class TradeWidget(QWidget):
         """Refresh Overview live when partner costs change and Overview is visible."""
         if self._current_sub == 0:
             self._overview_panel.refresh(self._all_trades(), self._currency_fn())
+        self._refresh_sub_tabs()
 
     def _on_best_toggled(self, partner_id: int):
         for p in self._trade.partners:
@@ -988,7 +1049,6 @@ class EstimatedCostWidget(QWidget):
         self._trades:        List[CostTrade]   = [_default_trade(1)]
         self._trade_widgets: List[TradeWidget] = []
         self._current_trade  = 0
-        self._next_trade_id  = 2
         self._currency       = "EUR"
         self._project_info: dict = {}
         self.setStyleSheet(f"background-color: {_BG};")
@@ -1091,8 +1151,6 @@ class EstimatedCostWidget(QWidget):
             tw.changed.connect(self.changed)
             self._stack.addWidget(tw)
             self._trade_widgets.append(tw)
-            if trade.id >= self._next_trade_id:
-                self._next_trade_id = trade.id + 1
 
     def _refresh_trade_tabs(self):
         while self._trade_layout.count():
@@ -1112,7 +1170,9 @@ class EstimatedCostWidget(QWidget):
             btn.setFixedHeight(28)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_TAB_ACTIVE_L if is_active else _TAB_INACTIVE_L)
+            btn.setToolTip("Double-click to rename")
             btn.clicked.connect(lambda _, idx=i: self._switch_trade(idx))
+            btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_trade(idx)
 
             close = QPushButton("×")
             close.setFixedSize(22, 28)
@@ -1139,9 +1199,28 @@ class EstimatedCostWidget(QWidget):
             self._stack.setCurrentWidget(self._trade_widgets[idx])
         self._refresh_trade_tabs()
 
+    def _next_available_id(self) -> int:
+        """Return the lowest positive integer not already used as a trade id."""
+        used = {t.id for t in self._trades}
+        n = 1
+        while n in used:
+            n += 1
+        return n
+
+    def _rename_trade(self, idx: int):
+        if idx < 0 or idx >= len(self._trades):
+            return
+        trade = self._trades[idx]
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Trade", "Trade name:", text=trade.name
+        )
+        if ok and new_name.strip():
+            trade.name = new_name.strip()
+            self._refresh_trade_tabs()
+            self.changed.emit()
+
     def _add_trade(self):
-        trade = _default_trade(self._next_trade_id)
-        self._next_trade_id += 1
+        trade = _default_trade(self._next_available_id())
         self._trades.append(trade)
         tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency)
         tw.changed.connect(self.changed)
@@ -1206,7 +1285,8 @@ class EstimatedCostWidget(QWidget):
         def _ser_partner(p: CostPartner) -> dict:
             return {"id": p.id, "name": p.name, "activity": p.activity,
                     "start_date": p.start_date, "delivery_date": p.delivery_date,
-                    "is_best": p.is_best, "tasks": [_ser_task(t) for t in p.tasks]}
+                    "is_best": p.is_best, "tax_rate": p.tax_rate,
+                    "tasks": [_ser_task(t) for t in p.tasks]}
 
         def _ser_trade(t: CostTrade) -> dict:
             return {"id": t.id, "name": t.name,
@@ -1234,6 +1314,7 @@ class EstimatedCostWidget(QWidget):
                     start_date=pd.get("start_date", ""),
                     delivery_date=pd.get("delivery_date", ""),
                     is_best=pd.get("is_best", False),
+                    tax_rate=pd.get("tax_rate", 0.0),
                     tasks=tasks,
                 )
                 partners.append(p)

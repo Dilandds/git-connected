@@ -9,11 +9,12 @@ from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QLineEdit, QTextEdit, QFileDialog,
-    QSizePolicy, QMessageBox, QSpinBox, QDialog, QDialogButtonBox,
+    QSizePolicy, QMessageBox, QSpinBox, QDialog,
 )
 from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPainterPath, QBrush, QFont
 from ui.styles import default_theme, make_font
+from ui.modal_utils import FormModal
 
 logger = logging.getLogger(__name__)
 
@@ -354,55 +355,26 @@ class VersionCardWidget(QFrame):
         self.changed.emit()
 
     def _edit_star(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Set Star Ranking")
-        dlg.setFixedWidth(280)
-        dlg.setStyleSheet(f"QDialog {{ background: {_CARD}; color: {_TEXT}; }}")
+        dlg = FormModal(self, "Set Star Ranking",
+                        theme=FormModal.LIGHT, min_width=280)
 
-        lay = QVBoxLayout(dlg)
-        lay.setSpacing(10)
-        lay.setContentsMargins(16, 16, 16, 16)
+        hint = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        dlg.add_widget(hint)
 
-        lbl = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
-        lbl.setWordWrap(True)
-        lbl.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
-        lay.addWidget(lbl)
-
-        # Live star preview
         preview = StarBadge(self._card.star_number)
         preview_row = QHBoxLayout()
-        preview_row.addStretch()
-        preview_row.addWidget(preview)
-        preview_row.addStretch()
-        lay.addLayout(preview_row)
+        preview_row.addStretch(); preview_row.addWidget(preview); preview_row.addStretch()
+        dlg.add_layout(preview_row)
 
         spin = QSpinBox()
         spin.setRange(0, 20)
         spin.setValue(self._card.star_number)
-        spin.setStyleSheet(f"""
-            QSpinBox {{
-                background: #f5f6f8; color: {_TEXT};
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                padding: 4px 8px; font-size: 14px; font-weight: bold;
-            }}
-            QSpinBox:focus {{ border-color: {_ACCENT}; }}
-            QSpinBox::up-button, QSpinBox::down-button {{ width: 20px; }}
-        """)
         spin.valueChanged.connect(preview.set_number)
-        lay.addWidget(spin)
+        dlg.add_field("RANKING", spin)
 
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.setStyleSheet(f"""
-            QPushButton {{
-                background: {_ACCENT}; color: white; border: none;
-                border-radius: 4px; padding: 5px 14px; font-size: 11px;
-            }}
-            QPushButton:hover {{ background: {_ACCENT_H}; }}
-        """)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        lay.addWidget(btns)
-
+        dlg.finish()
         if dlg.exec_() == QDialog.Accepted:
             n = spin.value()
             self._card.star_number = n

@@ -542,6 +542,8 @@ def get_global_stylesheet(theme=None):
         QDialog QLabel {{
             color: {theme.text_primary};
             background-color: transparent;
+            border: none;
+            text-decoration: none;
         }}
         QDialog QLineEdit, QDialog QTextEdit, QDialog QPlainTextEdit, QDialog QSpinBox, QDialog QDoubleSpinBox, QDialog QComboBox {{
             background-color: {theme.input_bg};
@@ -555,23 +557,10 @@ def get_global_stylesheet(theme=None):
         QDialog QLineEdit:focus, QDialog QTextEdit:focus, QDialog QPlainTextEdit:focus, QDialog QSpinBox:focus, QDialog QDoubleSpinBox:focus, QDialog QComboBox:focus {{
             border: 2px solid {theme.button_primary};
         }}
+        /* Dialog buttons: intentionally unset — each dialog applies its own
+           MODAL_BTN_PRIMARY / MODAL_BTN_SECONDARY / MODAL_BTN_CANCEL style. */
         QDialog QPushButton {{
-            background-color: {theme.button_primary};
-            color: {theme.text_white};
             border: none;
-            border-radius: 6px;
-            padding: 8px 20px;
-            font-size: 13px;
-            font-weight: bold;
-            min-width: 80px;
-        }}
-        QDialog QPushButton:hover {{
-            background-color: {theme.button_primary_hover};
-            color: {theme.text_white};
-        }}
-        QDialog QPushButton:pressed {{
-            background-color: {theme.button_primary_pressed};
-            color: {theme.text_white};
         }}
         QDialog QCheckBox, QDialog QRadioButton {{
             color: {theme.text_primary};
@@ -642,13 +631,15 @@ def get_global_stylesheet(theme=None):
         QFileDialog QPushButton:hover {{
             background-color: {theme.button_primary_hover};
         }}
-        /* Tooltips: white text on dark background */
+        /* Tooltips: dark text on near-white bg — works on both macOS (platform overrides
+           background) and Windows/Linux (QSS background applies). */
         QToolTip {{
-            color: {theme.text_white};
-            background-color: {theme.card_background};
-            border: 1px solid {theme.border_medium};
+            color: #1e2430;
+            background-color: #f8f9fa;
+            border: 1px solid #d1d5db;
             padding: 4px 8px;
             border-radius: 4px;
+            font-size: 11px;
         }}
         /* ---- Tab Bar: glossy / dimensional (same palette as mode switcher + sidebar cards) ---- */
         QTabBar#ectoTabBar {{

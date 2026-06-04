@@ -1344,24 +1344,8 @@ class ViewControlsToolbar(QWidget):
             self.load_btn.setToolTip("Load or replace 3D file (STL/STEP/3DM/OBJ/IGES)")
     
     def _apply_tooltip_style(self):
-        """Apply tooltip styling with black text."""
-        app = QApplication.instance()
-        if not app:
-            return
-
-        tooltip_style = """
-            QToolTip {
-                background-color: #2a2e34;
-                color: #E0ECF4;
-                border: 1px solid #3a3e48;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-        """
-        existing = app.styleSheet() or ""
-        if "QToolTip" not in existing:
-            app.setStyleSheet(existing + "\n" + tooltip_style)
+        """Tooltip style is defined centrally in get_global_stylesheet — nothing to do here."""
+        pass
 
     def retranslate(self):
         """Update all toolbar button labels for the current language."""

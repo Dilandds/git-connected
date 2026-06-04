@@ -7,10 +7,10 @@ from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QLineEdit, QTextEdit, QSizePolicy,
-    QDialog, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from ui.styles import default_theme, make_font
+from ui.modal_utils import FormModal
 
 logger = logging.getLogger(__name__)
 
@@ -66,55 +66,22 @@ class GlossaryTerm:
 
 # ── Edit dialog ───────────────────────────────────────────────────────────────
 
-class _TermDialog(QDialog):
+class _TermDialog(FormModal):
     """Add / Edit a glossary term."""
 
     def __init__(self, term: Optional[GlossaryTerm] = None, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Edit Term" if term else "Add Term")
-        self.setMinimumWidth(420)
-        self.setStyleSheet(f"""
-            QDialog {{ background: {_CARD}; color: {_TEXT}; }}
-            QLabel {{ color: {_TEXT}; font-size: 11px; background: transparent; border: none; }}
-        """)
+        super().__init__(parent, "Edit Term" if term else "Add Term",
+                         theme=FormModal.LIGHT, min_width=420)
 
-        lay = QVBoxLayout(self)
-        lay.setSpacing(10)
-        lay.setContentsMargins(16, 16, 16, 16)
-
-        lay.addWidget(self._lbl("Term"))
-        self.f_term = QLineEdit(term.term if term else "")
+        self.f_term = self.add_field("TERM", QLineEdit(term.term if term else ""), height=30)
         self.f_term.setPlaceholderText("e.g. CAD")
-        self.f_term.setStyleSheet(_INPUT)
-        self.f_term.setFixedHeight(30)
-        lay.addWidget(self.f_term)
 
-        lay.addWidget(self._lbl("Definition"))
-        self.f_def = QTextEdit()
+        self.f_def = self.add_field("DEFINITION", QTextEdit(), height_override=100)
         self.f_def.setPlaceholderText("Enter definition here...")
-        self.f_def.setStyleSheet(_INPUT)
-        self.f_def.setFixedHeight(100)
         if term:
             self.f_def.setPlainText(term.definition)
-        lay.addWidget(self.f_def)
 
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.setStyleSheet(f"""
-            QPushButton {{
-                background: {_ACCENT}; color: white; border: none;
-                border-radius: 4px; padding: 5px 16px; font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:hover {{ background: {_ACCENT_H}; }}
-        """)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        lay.addWidget(btns)
-
-    @staticmethod
-    def _lbl(text):
-        l = QLabel(text)
-        l.setStyleSheet(f"color: {_MUTED}; font-size: 10px; font-weight: bold; background: transparent; border: none;")
-        return l
+        self.finish()
 
     def get_data(self):
         return {

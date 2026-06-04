@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QSplitter, QDialog, QDialogButtonBox,
+    QFrame, QScrollArea, QSplitter,
     QLineEdit, QTextEdit, QComboBox, QCheckBox, QDateEdit,
     QSizePolicy, QAbstractScrollArea
 )
@@ -16,6 +16,7 @@ from PyQt5.QtGui import (
     QPainterPath, QCursor
 )
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
+from ui.modal_utils import FormModal
 _ARROW_URL = _get_arrow()
 
 logger = logging.getLogger(__name__)
@@ -498,7 +499,7 @@ class GanttCanvas(QWidget):
 
 # ── Task form dialog ──────────────────────────────────────────────────────────
 
-class TaskFormDialog(QDialog):
+class TaskFormDialog(FormModal):
     """Form to add or edit a task.
 
     Pass `operations` when adding a new task so the user can pick which row
@@ -507,120 +508,45 @@ class TaskFormDialog(QDialog):
 
     def __init__(self, task: Optional[Task] = None,
                  operations: Optional[List[Operation]] = None, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Edit Task" if task else "Add Task")
-        self.setMinimumWidth(380)
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {_CARD}; color: {_TEXT}; }}
-            QLabel {{ color: {_TEXT}; font-size: 11px; background: transparent; border: none; }}
-            QLineEdit, QTextEdit, QDateEdit {{
-                background-color: #f5f6f8; color: {_TEXT};
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                padding: 4px 8px; font-size: 11px;
-            }}
-            QLineEdit:focus, QTextEdit:focus, QDateEdit:focus {{
-                border-color: {_ACCENT};
-            }}
-            QComboBox {{
-                background-color: {_CARD}; color: {_TEXT};
-                border: 1px solid {_BORDER}; border-radius: 5px;
-                padding: 4px 28px 4px 8px; font-size: 11px;
-            }}
-            QComboBox:hover {{ border-color: #9ca3af; }}
-            QComboBox:focus {{ border-color: {_ACCENT}; }}
-            QComboBox::drop-down {{
-                subcontrol-origin: padding; subcontrol-position: top right;
-                width: 22px; background: #f1f3f5;
-                border-left: 1px solid {_BORDER};
-                border-top-right-radius: 5px; border-bottom-right-radius: 5px;
-            }}
-            QComboBox::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 10px; }}
-            QDateEdit::drop-down {{ border: none; width: 22px; }}
-            QDateEdit::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 10px; }}
-            QComboBox QAbstractItemView {{
-                background-color: {_CARD}; color: {_TEXT};
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                outline: none; padding: 2px;
-                selection-background-color: #dbeafe; selection-color: {_TEXT};
-                font-size: 11px;
-            }}
-            QComboBox QAbstractItemView::item {{
-                padding: 5px 10px; min-height: 24px; border-radius: 3px;
-            }}
-            QComboBox QAbstractItemView::item:hover {{ background-color: #eff6ff; }}
-            QComboBox QAbstractItemView::item:selected {{
-                background-color: #dbeafe; font-weight: bold;
-            }}
-            QCheckBox {{ color: {_TEXT}; font-size: 11px; background: transparent; }}
-            QDialogButtonBox QPushButton {{
-                background-color: {_ACCENT}; color: white;
-                border: none; border-radius: 5px;
-                padding: 6px 16px; font-size: 11px; font-weight: bold;
-            }}
-            QDialogButtonBox QPushButton:hover {{ background-color: {default_theme.button_primary_hover}; }}
-        """)
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        def row(label, widget):
-            r = QHBoxLayout()
-            lbl = QLabel(label)
-            lbl.setFixedWidth(100)
-            r.addWidget(lbl)
-            r.addWidget(widget, 1)
-            layout.addLayout(r)
-
-        # ── Operation selector (add mode only) ──
-        self.f_operation: Optional[QComboBox] = None
+        super().__init__(parent, "Edit Task" if task else "Add Task",
+                         theme=FormModal.LIGHT, min_width=380)
         self._operations: List[Operation] = operations or []
+
+        # Operation selector (add mode only)
+        self.f_operation: Optional[QComboBox] = None
         if operations:
             self.f_operation = QComboBox()
             for op in operations:
                 self.f_operation.addItem(op.name)
-            row("Operation", self.f_operation)
+            self.add_hfield("Operation", self.f_operation)
+            self.add_separator()
 
-            sep = QFrame()
-            sep.setFrameShape(QFrame.HLine)
-            sep.setStyleSheet(f"color: {_BORDER}; background: {_BORDER}; max-height: 1px; border: none;")
-            layout.addWidget(sep)
-
-        # ── Task fields ──
-        self.f_name = QLineEdit(task.name if task else "")
+        self.f_name = self.add_hfield("Name", QLineEdit(task.name if task else ""))
         self.f_name.setPlaceholderText("Task name")
-        row("Name", self.f_name)
 
-        self.f_type = QComboBox()
+        self.f_type = self.add_hfield("Type", QComboBox())
         self.f_type.addItems(list(TASK_TYPES.keys()))
         if task:
             self.f_type.setCurrentText(task.task_type)
-        row("Type", self.f_type)
 
-        self.f_start = QDateEdit(task.start if task else _today())
+        self.f_start = self.add_hfield("Start", QDateEdit(task.start if task else _today()))
         self.f_start.setDisplayFormat("dd/MM/yyyy")
         self.f_start.setCalendarPopup(True)
-        row("Start", self.f_start)
 
-        self.f_end = QDateEdit(task.end if task else _today().addDays(3))
+        self.f_end = self.add_hfield("End", QDateEdit(task.end if task else _today().addDays(3)))
         self.f_end.setDisplayFormat("dd/MM/yyyy")
         self.f_end.setCalendarPopup(True)
-        row("End", self.f_end)
 
-        self.f_status = QComboBox()
+        self.f_status = self.add_hfield("Status", QComboBox())
         self.f_status.addItems(["In progress", "Awaiting", "Completed", "Cancelled"])
         if task:
             self.f_status.setCurrentText(task.status)
-        row("Status", self.f_status)
 
         self.f_urgent = QCheckBox("Mark as urgent")
         self.f_urgent.setChecked(task.is_urgent if task else False)
-        layout.addWidget(self.f_urgent)
+        self.add_widget(self.f_urgent)
 
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
+        self.finish()
 
     def selected_operation(self) -> Optional[Operation]:
         """Returns the chosen Operation when in add mode, else None."""
