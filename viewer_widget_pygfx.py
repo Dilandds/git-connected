@@ -201,6 +201,8 @@ class STLViewerWidget(QWidget):
         self._text_mode = False  # When True, clicks place text labels on mesh surface
         self._draw_texts = []  # list of pygfx.Text objects in scene
         self._draw_texts_data = []  # parallel list for export: [{'text': '...', 'position': [x,y,z], 'color': '...', 'font_size': N}]
+        self._draw_pending_pos = None   # last unprocessed mouse pos for throttling
+        self._draw_throttle_timer = None  # QTimer, lazy-created
 
         # Parts pick mode state
         self.parts_pick_mode = False
@@ -2820,7 +2822,15 @@ class STLViewerWidget(QWidget):
             return hit
         elif t == QEvent.MouseMove and self._drawing_active:
             pos = event.pos()
-            self._draw_continue_stroke(pos.x(), pos.y())
+            self._draw_pending_pos = (pos.x(), pos.y())
+            if self._draw_throttle_timer is None:
+                from PyQt5.QtCore import QTimer
+                self._draw_throttle_timer = QTimer(self)
+                self._draw_throttle_timer.setSingleShot(True)
+                self._draw_throttle_timer.setInterval(16)
+                self._draw_throttle_timer.timeout.connect(self._draw_flush_pending)
+            if not self._draw_throttle_timer.isActive():
+                self._draw_throttle_timer.start()
             return True
         elif t == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton and self._drawing_active:
             self._draw_finish_stroke()
@@ -2880,8 +2890,18 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             logger.debug(f"_draw_continue_stroke: {e}")
 
+    def _draw_flush_pending(self):
+        """Process the last buffered mouse position during a draw stroke."""
+        if self._draw_pending_pos is not None and self._drawing_active:
+            x, y = self._draw_pending_pos
+            self._draw_pending_pos = None
+            self._draw_continue_stroke(x, y)
+
     def _draw_finish_stroke(self):
         """Finalize the current stroke and add it permanently to the scene."""
+        if self._draw_throttle_timer is not None:
+            self._draw_throttle_timer.stop()
+        self._draw_pending_pos = None
         self._drawing_active = False
         if len(self._current_stroke_points) < 2:
             self._current_stroke_points = []
@@ -2915,38 +2935,40 @@ class STLViewerWidget(QWidget):
             self._canvas.request_draw()
 
     def _update_current_stroke_line(self):
-        """Update the live preview line for the current stroke being drawn."""
-        self._remove_current_stroke_line()
-        if len(self._current_stroke_points) < 2:
+        """Append only the newest segment to the live preview — no full rebuild."""
+        pts = self._current_stroke_points
+        if len(pts) < 2:
             return
         import pygfx as gfx
         try:
-            positions = np.array(self._current_stroke_points, dtype=np.float32)
-            segments = []
-            for i in range(len(positions) - 1):
-                segments.append(positions[i])
-                segments.append(positions[i + 1])
-            seg_positions = np.array(segments, dtype=np.float32)
-            geom = gfx.Geometry(positions=seg_positions)
+            seg = np.array([pts[-2], pts[-1]], dtype=np.float32)
+            geom = gfx.Geometry(positions=seg)
             mat = gfx.LineSegmentMaterial(
                 color=self._draw_color, thickness=3.0,
                 depth_test=True, depth_write=True
             )
-            self._current_stroke_line = gfx.Line(geom, mat)
-            self._scene.add(self._current_stroke_line)
+            seg_line = gfx.Line(geom, mat)
+            self._scene.add(seg_line)
+            if not isinstance(self._current_stroke_line, list):
+                self._current_stroke_line = []
+            self._current_stroke_line.append(seg_line)
         except Exception as e:
             logger.debug(f"_update_current_stroke_line: {e}")
         if self._canvas:
             self._canvas.request_draw()
 
     def _remove_current_stroke_line(self):
-        """Remove the live preview stroke line from the scene."""
-        if self._current_stroke_line is not None:
+        """Remove all live preview segment lines from the scene."""
+        if self._current_stroke_line is None:
+            return
+        items = self._current_stroke_line if isinstance(self._current_stroke_line, list) \
+                else [self._current_stroke_line]
+        for obj in items:
             try:
-                self._scene.remove(self._current_stroke_line)
+                self._scene.remove(obj)
             except Exception:
                 pass
-            self._current_stroke_line = None
+        self._current_stroke_line = None
 
     def _get_draw_normal_offset(self):
         """Get a small offset along surface normal to prevent z-fighting."""
