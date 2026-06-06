@@ -4,18 +4,19 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QInputDialog, QDialog,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint
 from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceStage, TraceSubStage
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _ACCENT_H,
-    _BTN_SMALL,
+    _BTN_SMALL, tab_active_style, tab_inactive_style,
 )
 from .parts_table import _PartsTable
 
 
 class _SubStagePanel(QWidget):
-    changed = pyqtSignal()
+    changed     = pyqtSignal()
+    tab_switched = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,24 +79,11 @@ class _SubStagePanel(QWidget):
             return
 
         snum = self._stage.number
+        _ta = tab_active_style(_ACCENT)
+        _ti = tab_inactive_style(_BORDER, _MUTED, _TEXT, _ACCENT)
+
         for i, sub in enumerate(self._stage.sub_stages):
             is_active = (i == self._current_sub)
-
-            _ta = f"""
-                QPushButton {{
-                    background: {_ACCENT}; color: white; border: none;
-                    border-radius: 5px 0 0 5px; padding: 4px 10px;
-                    font-size: 10px; font-weight: bold;
-                }}
-            """
-            _ti = f"""
-                QPushButton {{
-                    background: transparent; color: {_MUTED};
-                    border: 1px solid {_BORDER}; border-radius: 5px 0 0 5px;
-                    padding: 4px 10px; font-size: 10px;
-                }}
-                QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; background: #e8f0fe; }}
-            """
             _ca = f"""
                 QPushButton {{
                     background: {_ACCENT}; color: rgba(255,255,255,0.6);
@@ -124,7 +112,7 @@ class _SubStagePanel(QWidget):
             btn.clicked.connect(lambda _, idx=i: self._switch_sub(idx))
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_sub(idx)
 
-            close = QPushButton('×')
+            close = QPushButton('✕')
             close.setFixedSize(20, 26)
             close.setCursor(Qt.PointingHandCursor)
             close.setStyleSheet(_ca if is_active else _ci)
@@ -141,10 +129,21 @@ class _SubStagePanel(QWidget):
         self._tab_layout.addWidget(add_btn)
         self._tab_layout.addStretch()
 
+    def selected_tab_center_x(self) -> int:
+        """X-center (in this widget's coordinates) of the active sub-stage tab."""
+        idx = self._current_sub
+        if idx < self._tab_layout.count():
+            item = self._tab_layout.itemAt(idx)
+            if item and item.widget():
+                w = item.widget()
+                return w.mapTo(self, QPoint(w.width() // 2, 0)).x()
+        return self.width() // 2
+
     def _switch_sub(self, idx: int):
         self._current_sub = idx
         self._refresh_tabs()
         self._refresh_table()
+        self.tab_switched.emit()
 
     def _rename_sub(self, idx: int):
         if not self._stage or idx >= len(self._stage.sub_stages):
@@ -166,6 +165,7 @@ class _SubStagePanel(QWidget):
         self._refresh_tabs()
         self._refresh_table()
         self.changed.emit()
+        self.tab_switched.emit()
 
     def _remove_sub(self, idx: int):
         if not self._stage:
@@ -197,7 +197,9 @@ class _SubStagePanel(QWidget):
 
         idx = min(self._current_sub, len(self._stage.sub_stages) - 1)
         sub = self._stage.sub_stages[idx]
-        table = _PartsTable(sub)
+        table = _PartsTable(sub,
+                            stage_num=self._stage.number,
+                            sub_num=idx + 1)
         table.changed.connect(self.changed)
         self._content_layout.addWidget(table)
         self._content_layout.addStretch()

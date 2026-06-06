@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPainterPath, QBrush, QFont
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 
 logger = logging.getLogger(__name__)
@@ -57,14 +57,14 @@ _BTN_ICON = f"""
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 4px; }}
     QPushButton:disabled {{ color: #d1d5db; }}
-"""
+""" + TOOLTIP_STYLE
 _BTN_DELETE = f"""
     QPushButton {{
         background: transparent; border: none;
         color: {_MUTED}; font-size: 14px; padding: 2px 4px;
     }}
     QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-radius: 4px; }}
-"""
+""" + TOOLTIP_STYLE
 
 
 # ── data model ────────────────────────────────────────────────────────────────
@@ -188,6 +188,35 @@ class PhotoSlot(QPushButton):
         if path:
             self.set_path(path)
             self.photo_changed.emit(path)
+
+
+# ── Star ranking dialog ───────────────────────────────────────────────────────
+
+class _StarRankingDialog(FormModal):
+    def __init__(self, current_number: int, parent=None):
+        super().__init__(parent, 'Set Star Ranking', min_width=280)
+        hint = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(
+            f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
+        )
+        self.add_widget(hint)
+        self._preview = StarBadge(current_number)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self._preview)
+        row.addStretch()
+        self.add_layout(row)
+        self.f_spin = QSpinBox()
+        self.f_spin.setRange(0, 20)
+        self.f_spin.setValue(current_number)
+        self.f_spin.valueChanged.connect(self._preview.set_number)
+        self.add_field('RANKING', self.f_spin)
+        self.finish()
+
+    @property
+    def ranking(self) -> int:
+        return self.f_spin.value()
 
 
 # ── Version card widget ───────────────────────────────────────────────────────
@@ -355,28 +384,9 @@ class VersionCardWidget(QFrame):
         self.changed.emit()
 
     def _edit_star(self):
-        dlg = FormModal(self, "Set Star Ranking",
-                        theme=FormModal.LIGHT, min_width=280)
-
-        hint = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
-        hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
-        dlg.add_widget(hint)
-
-        preview = StarBadge(self._card.star_number)
-        preview_row = QHBoxLayout()
-        preview_row.addStretch(); preview_row.addWidget(preview); preview_row.addStretch()
-        dlg.add_layout(preview_row)
-
-        spin = QSpinBox()
-        spin.setRange(0, 20)
-        spin.setValue(self._card.star_number)
-        spin.valueChanged.connect(preview.set_number)
-        dlg.add_field("RANKING", spin)
-
-        dlg.finish()
+        dlg = _StarRankingDialog(self._card.star_number, self)
         if dlg.exec_() == QDialog.Accepted:
-            n = spin.value()
+            n = dlg.ranking
             self._card.star_number = n
             self._star.set_number(n)
             self.changed.emit()

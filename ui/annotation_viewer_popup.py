@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QRectF
 from PyQt5.QtGui import QFont, QPixmap, QCursor, QPainter
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +247,7 @@ class ImageViewThumbnail(QFrame):
             QFrame:hover {{
                 border: 2px solid #5294E2;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)

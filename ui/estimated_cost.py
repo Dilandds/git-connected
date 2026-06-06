@@ -19,12 +19,16 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QLineEdit, QDoubleSpinBox, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QStackedWidget, QMessageBox, QSizePolicy, QDialog, QInputDialog,
-    QDialogButtonBox, QDateEdit, QSpacerItem
+    QStackedWidget, QMessageBox, QSizePolicy, QDialog,
+    QDateEdit, QSpacerItem
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtGui import QColor, QFont
-from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
+from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
+from ui.modal_utils import (
+    ask_yes_no_dialog, ask_password_dialog,
+    show_warning_dialog, show_message_dialog, ask_text_input_dialog,
+)
 _ARROW_URL = _get_arrow()
 
 logger = logging.getLogger(__name__)
@@ -118,14 +122,14 @@ _TAB_ACTIVE = f"""
         background-color: {_ACCENT}; color: white; border: none;
         border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
     }}
-"""
+""" + TOOLTIP_STYLE
 _TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
         border: 1px solid {_BORDER}; border-radius: 5px; padding: 5px 14px; font-size: 11px;
     }}
     QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; background-color: #e8f0fe; }}
-"""
+""" + TOOLTIP_STYLE
 _TAB_ACTIVE_L   = _TAB_ACTIVE.replace("border-radius: 5px;", "border-radius: 5px 0 0 5px;")
 _TAB_INACTIVE_L = _TAB_INACTIVE.replace("border-radius: 5px;", "border-radius: 5px 0 0 5px;")
 _CLOSE_TAB_ACTIVE = f"""
@@ -135,7 +139,7 @@ _CLOSE_TAB_ACTIVE = f"""
         border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: white; background-color: #ef4444; }}
-"""
+""" + TOOLTIP_STYLE
 _CLOSE_TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
@@ -143,7 +147,23 @@ _CLOSE_TAB_INACTIVE = f"""
         border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: #ef4444; background-color: #fee2e2; border-color: #fca5a5; }}
-"""
+""" + TOOLTIP_STYLE
+_RENAME_TAB_ACTIVE = f"""
+    QPushButton {{
+        background-color: {_ACCENT}; color: rgba(255,255,255,0.55);
+        border: none; border-left: 1px solid rgba(255,255,255,0.18);
+        border-radius: 0; font-size: 11px; padding: 0 5px;
+    }}
+    QPushButton:hover {{ color: white; background-color: {_ACCENT_H}; }}
+""" + TOOLTIP_STYLE
+_RENAME_TAB_INACTIVE = f"""
+    QPushButton {{
+        background-color: transparent; color: {_MUTED};
+        border: 1px solid {_BORDER}; border-left: none;
+        border-radius: 0; font-size: 11px; padding: 0 5px;
+    }}
+    QPushButton:hover {{ color: {_ACCENT}; background-color: #e8f0fe; border-color: {_ACCENT}; }}
+""" + TOOLTIP_STYLE
 
 CURRENCIES = ["EUR", "USD", "GBP", "CHF", "JPY", "CNY", "AED", "CAD", "AUD"]
 _CURRENCY_SYMBOLS = {
@@ -425,7 +445,7 @@ class PartnerPanel(QScrollArea):
         add_row_btn.setStyleSheet(_BTN_OUTLINE)
         add_row_btn.setFixedHeight(26)
         add_row_btn.setCursor(Qt.PointingHandCursor)
-        add_row_btn.clicked.connect(self._add_task_row)
+        add_row_btn.clicked.connect(lambda _: self._add_task_row())
         hdr.addSpacing(8)
         hdr.addWidget(add_row_btn)
         cl.addLayout(hdr)
@@ -476,8 +496,8 @@ class PartnerPanel(QScrollArea):
         self._tax_spin.setSingleStep(0.5)
         self._tax_spin.setSuffix(" %")
         self._tax_spin.setValue(self._partner.tax_rate)
-        self._tax_spin.setFixedWidth(80)
-        self._tax_spin.setFixedHeight(24)
+        self._tax_spin.setFixedWidth(90)
+        self._tax_spin.setFixedHeight(26)
         self._tax_spin.setStyleSheet(f"""
             QDoubleSpinBox {{
                 background: #f5f6f8; color: {_TEXT};
@@ -485,6 +505,18 @@ class PartnerPanel(QScrollArea):
                 padding: 2px 4px; font-size: 11px;
             }}
             QDoubleSpinBox:focus {{ border-color: {_ACCENT}; }}
+            QDoubleSpinBox::up-button {{
+                subcontrol-origin: border; subcontrol-position: top right;
+                width: 16px; border-left: 1px solid {_BORDER};
+                border-top-right-radius: 4px; background: #f1f3f5;
+            }}
+            QDoubleSpinBox::up-button:hover   {{ background: {_ACCENT}; }}
+            QDoubleSpinBox::down-button {{
+                subcontrol-origin: border; subcontrol-position: bottom right;
+                width: 16px; border-left: 1px solid {_BORDER};
+                border-bottom-right-radius: 4px; background: #f1f3f5;
+            }}
+            QDoubleSpinBox::down-button:hover  {{ background: {_ACCENT}; }}
         """)
         self._tax_spin.valueChanged.connect(self._on_tax_changed)
         tax_row.addSpacing(8)
@@ -795,7 +827,6 @@ class OverviewPanel(QWidget):
             self._overlay.setVisible(False)
 
     def _try_unlock(self):
-        from ui.modal_utils import ask_password_dialog, show_warning_dialog
         pwd, ok = ask_password_dialog(self, "Password Required", "Enter password to view Overview")
         if ok and pwd == self._password:
             self._unlocked = True
@@ -804,7 +835,6 @@ class OverviewPanel(QWidget):
             show_warning_dialog(self, "Incorrect Password", "The password you entered is incorrect.")
 
     def _manage_password(self):
-        from ui.modal_utils import ask_password_dialog, show_warning_dialog, show_message_dialog
         if self._password:
             current, ok = ask_password_dialog(
                 self, "Confirm Password", "Enter current password to change or clear it"
@@ -984,7 +1014,6 @@ class TradeWidget(QWidget):
     def _remove_partner(self, idx: int):
         if idx < 0 or idx >= len(self._trade.partners):
             return
-        from ui.modal_utils import ask_yes_no_dialog
         partner = self._trade.partners[idx]
         if not ask_yes_no_dialog(
             self, "Remove Partner",
@@ -1170,9 +1199,15 @@ class EstimatedCostWidget(QWidget):
             btn.setFixedHeight(28)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_TAB_ACTIVE_L if is_active else _TAB_INACTIVE_L)
-            btn.setToolTip("Double-click to rename")
             btn.clicked.connect(lambda _, idx=i: self._switch_trade(idx))
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_trade(idx)
+
+            rename = QPushButton("✎")
+            rename.setFixedSize(22, 28)
+            rename.setCursor(Qt.PointingHandCursor)
+            rename.setToolTip("Rename trade")
+            rename.setStyleSheet(_RENAME_TAB_ACTIVE if is_active else _RENAME_TAB_INACTIVE)
+            rename.clicked.connect(lambda _, idx=i: self._rename_trade(idx))
 
             close = QPushButton("×")
             close.setFixedSize(22, 28)
@@ -1182,6 +1217,7 @@ class EstimatedCostWidget(QWidget):
             close.clicked.connect(lambda _, idx=i: self._remove_trade(idx))
 
             ch.addWidget(btn)
+            ch.addWidget(rename)
             ch.addWidget(close)
             self._trade_layout.addWidget(container)
 
@@ -1211,11 +1247,11 @@ class EstimatedCostWidget(QWidget):
         if idx < 0 or idx >= len(self._trades):
             return
         trade = self._trades[idx]
-        new_name, ok = QInputDialog.getText(
-            self, "Rename Trade", "Trade name:", text=trade.name
+        new_name, ok = ask_text_input_dialog(
+            self, "Rename Trade", "TRADE NAME", default_text=trade.name
         )
-        if ok and new_name.strip():
-            trade.name = new_name.strip()
+        if ok and new_name:
+            trade.name = new_name
             self._refresh_trade_tabs()
             self.changed.emit()
 
@@ -1234,7 +1270,6 @@ class EstimatedCostWidget(QWidget):
     def _remove_trade(self, idx: int):
         if idx < 0 or idx >= len(self._trades):
             return
-        from ui.modal_utils import ask_yes_no_dialog
         if not ask_yes_no_dialog(
             self, "Remove Trade",
             f"Remove trade '{self._trades[idx].name}' and all its partners?\n\nThis cannot be undone."

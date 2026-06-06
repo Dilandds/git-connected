@@ -5,13 +5,61 @@ Assembles the 4-row layout from its sub-modules.
 import logging
 from typing import List
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QTimer, QPoint, Qt
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
 from .models import TracePart, TraceSubStage, TraceStage, TraceComponent
-from .shared import _BG
+from .shared import _BG, _ACCENT
 from .row1_product_info import _ProductInfoRow
 from .row2_components import _ComponentsRow
 from .row3_timeline import _StageTimelineRow
 from .row4_substages import _SubStagePanel
+
+
+class _ArrowConnector(QWidget):
+    """Horizontal band that draws a curved connector arrow between two x positions."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._x_from = -1
+        self._x_to   = -1
+        self.setFixedHeight(26)
+        self.setStyleSheet(f'background: {_BG};')
+
+    def set_positions(self, x_from: int, x_to: int):
+        self._x_from = x_from
+        self._x_to   = x_to
+        self.update()
+
+    def paintEvent(self, _):
+        if self._x_from < 0 or self._x_to < 0:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        x1, y1 = float(self._x_from), 0.0
+        x2, y2 = float(self._x_to),   float(self.height() - 8)
+
+        # Cubic bezier — control points at mid-height create a smooth S-curve
+        mid_y = (y1 + y2) / 2.0
+        curve = QPainterPath()
+        curve.moveTo(x1, y1)
+        curve.cubicTo(x1, mid_y, x2, mid_y, x2, y2)
+
+        p.setPen(QPen(QColor(_ACCENT), 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(curve)
+
+        # Filled arrowhead pointing down
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor(_ACCENT)))
+        head = QPainterPath()
+        tip_y = float(self.height())
+        head.moveTo(x2,     tip_y)
+        head.lineTo(x2 - 6, tip_y - 9)
+        head.lineTo(x2 + 6, tip_y - 9)
+        head.closeSubpath()
+        p.drawPath(head)
+        p.end()
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +99,27 @@ class TraceabilityWidget(QWidget):
         self._comp_row.changed.connect(self.changed)
         root.addWidget(self._comp_row)
 
+        self._arrow1 = _ArrowConnector()
+        root.addWidget(self._arrow1)
+
         self._stage_row = _StageTimelineRow()
         self._stage_row.stage_selected.connect(self._on_stage_selected)
         self._stage_row.changed.connect(self.changed)
         root.addWidget(self._stage_row)
 
+        self._arrow2 = _ArrowConnector()
+        root.addWidget(self._arrow2)
+
         self._sub_panel = _SubStagePanel()
         self._sub_panel.changed.connect(self.changed)
+        self._sub_panel.tab_switched.connect(lambda: QTimer.singleShot(0, self._update_arrow2))
         root.addWidget(self._sub_panel, 1)
+
+        # Update arrows when either row is scrolled
+        self._comp_row._scroll.horizontalScrollBar().valueChanged.connect(
+            lambda _: self._update_arrow1())
+        self._stage_row._scroll_area.horizontalScrollBar().valueChanged.connect(
+            lambda _: self._update_arrow2())
 
     def _load_component(self, idx: int):
         if not self._components:
@@ -69,11 +130,29 @@ class TraceabilityWidget(QWidget):
         self._comp_row.load_components(self._components, idx)
         self._stage_row.load_stages(comp.stages, selected=0)
         self._sub_panel.load_stage(comp.stages[0] if comp.stages else None)
+        QTimer.singleShot(0, self._update_arrows)
 
     def _on_stage_selected(self, stage_idx: int):
         comp  = self._components[self._current_component]
         stage = comp.stages[stage_idx] if 0 <= stage_idx < len(comp.stages) else None
         self._sub_panel.load_stage(stage)
+        QTimer.singleShot(0, self._update_arrows)   # both arrows: comp→stage and stage→sub
+
+    def _update_arrow1(self):
+        self._arrow1.set_positions(
+            self._comp_row.selected_center_x(),
+            self._stage_row.selected_center_x(),
+        )
+
+    def _update_arrow2(self):
+        self._arrow2.set_positions(
+            self._stage_row.selected_center_x(),
+            self._sub_panel.selected_tab_center_x(),
+        )
+
+    def _update_arrows(self):
+        self._update_arrow1()
+        self._update_arrow2()
 
     # ── public API (called by TheProjectWidget) ────────────────────────────────
 

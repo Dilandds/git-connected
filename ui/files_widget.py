@@ -17,11 +17,11 @@ from PyQt5.QtWidgets import (
     QMenu, QAction, QDialog, QComboBox,
     QStackedWidget, QApplication, QAbstractItemView,
 )
-from ui.modal_utils import FormModal
+from ui.modal_utils import FormModal, BaseModal
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint
 from PyQt5.QtGui import QColor, QPainter, QBrush, QPen, QFont, QPixmap, QIcon, QCursor
 
-from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
+from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import ask_yes_no_dialog, ask_text_input_dialog, show_message_dialog
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ _BTN_ICON = f"""
         color: {_MUTED}; font-size: 13px; padding: 2px 5px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 4px; }}
-"""
+""" + TOOLTIP_STYLE
 _FOLDER_ITEM_ACTIVE = f"""
     QPushButton {{
         background: {_ACCENT}22; color: {_ACCENT};
@@ -365,12 +365,9 @@ class _FileRow(QFrame):
         menu.exec_(QCursor.pos())
 
     def _show_history(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle(f"Version History — {self._pf.name}")
-        dlg.setMinimumWidth(420)
-        dlg.setStyleSheet(f"QDialog {{ background: {_CARD}; }}")
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(16, 14, 16, 14)
+        dlg = BaseModal(self, f"Version History — {self._pf.name}",
+                        theme=BaseModal.LIGHT, min_width=420)
+        lay = dlg._root
         lay.setSpacing(6)
 
         hdr = QLabel(f"Version history for  {self._pf.name}{self._pf.extension}")

@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QLineEdit, QTextEdit, QSizePolicy,
+    QFrame, QScrollArea, QLineEdit, QTextEdit, QSizePolicy, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 
 logger = logging.getLogger(__name__)
@@ -45,14 +45,14 @@ _BTN_ICON = f"""
         color: {_MUTED}; font-size: 13px; padding: 2px 6px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 4px; }}
-"""
+""" + TOOLTIP_STYLE
 _BTN_DELETE = f"""
     QPushButton {{
         background: transparent; border: none;
         color: {_MUTED}; font-size: 13px; padding: 2px 6px;
     }}
     QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-radius: 4px; }}
-"""
+""" + TOOLTIP_STYLE
 
 
 # ── data model ────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ class _TermDialog(FormModal):
 
     def __init__(self, term: Optional[GlossaryTerm] = None, parent=None):
         super().__init__(parent, "Edit Term" if term else "Add Term",
-                         theme=FormModal.LIGHT, min_width=420)
+                         min_width=420)
 
         self.f_term = self.add_field("TERM", QLineEdit(term.term if term else ""), height=30)
         self.f_term.setPlaceholderText("e.g. CAD")

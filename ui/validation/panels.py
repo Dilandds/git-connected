@@ -1,0 +1,829 @@
+"""
+PreparationPanel and ReportPanel for the Validation module.
+"""
+import logging
+from typing import List, Optional
+
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFrame, QScrollArea, QLineEdit, QTextEdit,
+    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
+    QGridLayout, QFileDialog, QAbstractItemView,
+)
+from PyQt5.QtCore import Qt, QDate, QTime, pyqtSignal
+from PyQt5.QtGui import QColor, QPixmap, QIcon
+
+from ui.styles import make_font
+
+from .models import (
+    Stakeholder, ModificationRow, ActionRow, ValidationSession,
+    COST_CATEGORIES, SCHEDULE_MILESTONES,
+)
+from .shared import (
+    _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT,
+    _INPUT, _TABLE_STYLE, _BTN_OUTLINE, _BTN_SMALL,
+    _TIMEEDIT_STYLE, _COMBO_STYLE, _ARROW_URL,
+    _sep, _vdiv, _card_frame, _section_title, _lbl, _combo,
+    _ProgressCell,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── Preparation Panel ─────────────────────────────────────────────────────────
+
+class PreparationPanel(QScrollArea):
+
+    changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._session: Optional[ValidationSession] = None
+        self._progress_cells: List[_ProgressCell] = []
+
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setStyleSheet(f"""
+            QScrollArea {{ background: {_BG}; border: none; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
+            QScrollBar::handle:vertical {{ background: {_BORDER}; border-radius: 3px; }}
+        """)
+        self._body = QWidget()
+        self._body.setStyleSheet(f"background: {_BG};")
+        self._layout = QVBoxLayout(self._body)
+        self._layout.setContentsMargins(16, 16, 16, 16)
+        self._layout.setSpacing(14)
+        self.setWidget(self._body)
+        self._build_static()
+
+    def _build_static(self):
+        hdr = QLabel("Validation preparation")
+        hdr.setFont(make_font(size=14, bold=True))
+        hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none; padding-bottom: 4px;")
+        self._layout.addWidget(hdr)
+
+        # ── 1. Stakeholders & Contributors ──────────────────────────────────
+        card = _card_frame()
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(14, 12, 14, 12)
+        cl.setSpacing(8)
+
+        sh = QHBoxLayout()
+        sh.addWidget(_section_title("Stakeholders & Contributors"))
+        self._add_contributor_btn = QPushButton("+ Add contributor")
+        self._add_contributor_btn.setStyleSheet(_BTN_OUTLINE)
+        self._add_contributor_btn.setCursor(Qt.PointingHandCursor)
+        self._add_contributor_btn.clicked.connect(self._add_stakeholder)
+        sh.addStretch()
+        sh.addWidget(self._add_contributor_btn)
+        cl.addLayout(sh)
+        cl.addWidget(_sep())
+
+        self._stakeholder_table = QTableWidget(0, 7)
+        self._stakeholder_table.setHorizontalHeaderLabels(
+            ["Role", "Name / Company", "Responsibility", "Status", "Progress", "Deliverables", "Comments"]
+        )
+        self._stakeholder_table.setStyleSheet(_TABLE_STYLE)
+        hdr_h = self._stakeholder_table.horizontalHeader()
+        hdr_h.setSectionResizeMode(QHeaderView.Interactive)
+        hdr_h.setStretchLastSection(True)
+        hdr_h.setMinimumSectionSize(50)
+        for col, w in enumerate([80, 120, 140, 114, 96, 120]):
+            self._stakeholder_table.setColumnWidth(col, w)
+        self._stakeholder_table.verticalHeader().setDefaultSectionSize(44)
+        self._stakeholder_table.verticalHeader().setVisible(False)
+        self._stakeholder_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._stakeholder_table.setAlternatingRowColors(True)
+        self._stakeholder_table.setMinimumHeight(220)
+        self._stakeholder_table.itemChanged.connect(lambda: self.changed.emit())
+        cl.addWidget(self._stakeholder_table)
+        self._layout.addWidget(card)
+
+        # ── 2. Presentation Elements ────────────────────────────────────────
+        card2 = _card_frame()
+        cl2 = QVBoxLayout(card2)
+        cl2.setContentsMargins(14, 12, 14, 12)
+        cl2.setSpacing(8)
+        cl2.addWidget(_section_title("Presentation Elements"))
+        cl2.addWidget(_sep())
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        self._photo_btns:   List[QPushButton] = []
+        self._photo_labels: List[QLineEdit]   = []
+
+        for i in range(8):
+            btn = QPushButton("+\nAdd photo")
+            btn.setFixedSize(112, 88)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: #f1f3f5; border: 1px dashed {_BORDER};
+                    border-radius: 6px; color: {_MUTED}; font-size: 10px;
+                }}
+                QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
+            """)
+            btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
+
+            lbl_inp = QLineEdit()
+            lbl_inp.setPlaceholderText("Stakeholders")
+            lbl_inp.setFixedWidth(112)
+            lbl_inp.setStyleSheet(_INPUT)
+            lbl_inp.textChanged.connect(lambda _: self.changed.emit())
+
+            col = i % 4
+            row = (i // 4) * 2
+            grid.addWidget(btn,     row,     col)
+            grid.addWidget(lbl_inp, row + 1, col)
+            self._photo_btns.append(btn)
+            self._photo_labels.append(lbl_inp)
+
+        cl2.addLayout(grid)
+        self._layout.addWidget(card2)
+
+        # ── 3. Estimated Cost & Lead Time ───────────────────────────────────
+        card3 = _card_frame()
+        cl3 = QVBoxLayout(card3)
+        cl3.setContentsMargins(14, 12, 14, 12)
+        cl3.setSpacing(8)
+
+        hdr3 = QHBoxLayout()
+        hdr3.addWidget(_section_title("Estimated Cost & Lead Time"))
+        hdr3.addStretch()
+        auto_note = QLabel("Auto-populated from Estimated Cost screen and Timeline")
+        auto_note.setStyleSheet(
+            f"color: {_MUTED}; font-size: 9px; background: transparent; border: none; font-style: italic;"
+        )
+        hdr3.addWidget(auto_note)
+        cl3.addLayout(hdr3)
+        cl3.addWidget(_sep())
+
+        split = QHBoxLayout()
+        split.setSpacing(16)
+
+        # Left — cost table
+        cost_side = QVBoxLayout()
+        cost_side.setSpacing(6)
+        cost_cap = QLabel("Cost estimation (EUR)")
+        cost_cap.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+        cost_side.addWidget(cost_cap)
+
+        self._cost_table = QTableWidget(len(COST_CATEGORIES) + 3, 2)
+        self._cost_table.setHorizontalHeaderLabels(["Category", "Amount"])
+        self._cost_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self._cost_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self._cost_table.setColumnWidth(1, 90)
+        self._cost_table.verticalHeader().setVisible(False)
+        self._cost_table.setMinimumHeight(240)
+        self._cost_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._cost_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self._cost_table.setStyleSheet(_TABLE_STYLE)
+
+        for i, cat in enumerate(COST_CATEGORIES):
+            self._cost_table.setItem(i, 0, QTableWidgetItem(cat))
+            self._cost_table.setItem(i, 1, QTableWidgetItem("—"))
+
+        total_row = len(COST_CATEGORIES)
+        bold_font = make_font(size=11, bold=True)
+        for col, txt in enumerate(["Total est.", "—"]):
+            it = QTableWidgetItem(txt)
+            it.setFont(bold_font)
+            it.setBackground(QColor("#f1f3f5"))
+            self._cost_table.setItem(total_row, col, it)
+
+        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem("Target budget"))
+        self._cost_table.setItem(total_row + 1, 1, QTableWidgetItem("—"))
+        var_label = QTableWidgetItem("Variance")
+        var_label.setForeground(QColor(_MUTED))
+        var_value = QTableWidgetItem("—")
+        var_value.setForeground(QColor("#22c55e"))
+        self._cost_table.setItem(total_row + 2, 0, var_label)
+        self._cost_table.setItem(total_row + 2, 1, var_value)
+
+        cost_side.addWidget(self._cost_table)
+        split.addLayout(cost_side, 3)
+        split.addWidget(_vdiv())
+
+        # Right — schedule milestones
+        sched_side = QVBoxLayout()
+        sched_side.setSpacing(6)
+        sched_cap = QLabel("Schedule (est.)")
+        sched_cap.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+        sched_side.addWidget(sched_cap)
+
+        self._milestone_indicators: List[QLabel] = []
+        self._milestone_date_edits: List         = []
+        _NULL_DATE = QDate(2000, 1, 1)
+
+        from PyQt5.QtWidgets import QDateEdit
+        for idx, milestone in enumerate(SCHEDULE_MILESTONES):
+            row_w = QWidget()
+            row_w.setStyleSheet("background: transparent;")
+            row_l = QHBoxLayout(row_w)
+            row_l.setContentsMargins(0, 2, 0, 2)
+            row_l.setSpacing(6)
+
+            dot = QLabel("○")
+            dot.setFixedWidth(14)
+            dot.setStyleSheet(f"color: {_MUTED}; font-size: 13px; background: transparent; border: none;")
+
+            name_lbl = QLabel(milestone)
+            name_lbl.setFixedWidth(120)
+            name_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px; background: transparent; border: none;")
+
+            de = QDateEdit()
+            de.setDisplayFormat("dd/MM/yyyy")
+            de.setCalendarPopup(True)
+            de.setMinimumDate(_NULL_DATE)
+            de.setSpecialValueText("—")
+            de.setDate(_NULL_DATE)
+            de.setFixedHeight(24)
+            de.setFixedWidth(100)
+            de.setStyleSheet(f"""
+                QDateEdit {{
+                    background: #f5f6f8; color: {_TEXT};
+                    border: 1px solid {_BORDER}; border-radius: 4px;
+                    padding: 2px 4px; font-size: 10px;
+                }}
+                QDateEdit:focus {{ border-color: {_ACCENT}; }}
+                QDateEdit::drop-down {{ border: none; width: 16px; }}
+                QDateEdit::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 10px; }}
+            """)
+            de.dateChanged.connect(lambda d, i=idx: self._on_milestone_date_changed(i, d))
+            de.dateChanged.connect(lambda _: self.changed.emit())
+
+            row_l.addWidget(dot)
+            row_l.addWidget(name_lbl)
+            row_l.addWidget(de)
+            sched_side.addWidget(row_w)
+            self._milestone_indicators.append(dot)
+            self._milestone_date_edits.append(de)
+
+        sched_side.addStretch()
+        split.addLayout(sched_side, 2)
+        cl3.addLayout(split)
+        self._layout.addWidget(card3)
+        self._layout.addStretch()
+
+    # ── public ─────────────────────────────────────────────────────────────────
+
+    def lock(self):
+        self._add_contributor_btn.setEnabled(False)
+        self._stakeholder_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        for row in range(self._stakeholder_table.rowCount()):
+            combo = self._stakeholder_table.cellWidget(row, 3)
+            if combo:
+                combo.setEnabled(False)
+            pc = self._stakeholder_table.cellWidget(row, 4)
+            if pc:
+                pc._spin.setEnabled(False)
+        for btn in self._photo_btns:
+            btn.setEnabled(False)
+            btn.setStyleSheet(btn.styleSheet() + "QPushButton { opacity: 0.5; }")
+        for de in self._milestone_date_edits:
+            de.setEnabled(False)
+
+    def _on_milestone_date_changed(self, idx: int, date: QDate):
+        dot = self._milestone_indicators[idx]
+        null = QDate(2000, 1, 1)
+        if date == null:
+            dot.setText("○")
+            dot.setStyleSheet(f"color: {_MUTED}; font-size: 13px; background: transparent; border: none;")
+        elif date <= QDate.currentDate():
+            dot.setText("✓")
+            dot.setStyleSheet("color: #22c55e; font-size: 13px; background: transparent; border: none;")
+        else:
+            dot.setText("○")
+            dot.setStyleSheet(f"color: {_ACCENT}; font-size: 13px; background: transparent; border: none;")
+
+    def load_session(self, session: ValidationSession):
+        self._session = session
+        self._reload_stakeholders()
+        self._reload_schedule()
+
+    def _reload_schedule(self):
+        if not self._session:
+            return
+        null = QDate(2000, 1, 1)
+        dates = self._session.schedule_dates or [""] * len(SCHEDULE_MILESTONES)
+        for i, (de, raw) in enumerate(zip(self._milestone_date_edits, dates)):
+            de.blockSignals(True)
+            if raw:
+                d = QDate.fromString(raw, "dd/MM/yyyy")
+                de.setDate(d if d.isValid() else null)
+            else:
+                de.setDate(null)
+            de.blockSignals(False)
+            self._on_milestone_date_changed(i, de.date())
+
+    def update_cost_summary(self, summary: list, currency: str, target_budget: float = 0.0):
+        """Rebuild the cost table from Estimated Cost best-partner data."""
+        _symbols = {
+            "EUR": "€", "USD": "$", "GBP": "£", "CHF": "Fr",
+            "JPY": "¥", "CNY": "¥", "AED": "د.إ", "CAD": "$", "AUD": "$",
+        }
+        sym = _symbols.get(currency, currency + " ")
+        n = len(summary)
+        self._cost_table.setRowCount(n + 3)
+
+        grand_total = 0.0
+        for i, item in enumerate(summary):
+            self._cost_table.setItem(i, 0, QTableWidgetItem(item.get("trade", f"Trade {i+1}")))
+            cost = item.get("total_cost", 0.0)
+            grand_total += cost
+            self._cost_table.setItem(i, 1, QTableWidgetItem(f"{sym}{cost:,.2f}"))
+
+        total_row = n
+        bold_font = make_font(size=11, bold=True)
+        for col, txt in enumerate(["Total est.", f"{sym}{grand_total:,.2f}"]):
+            it = QTableWidgetItem(txt)
+            it.setFont(bold_font)
+            it.setBackground(QColor("#f1f3f5"))
+            self._cost_table.setItem(total_row, col, it)
+
+        budget_text = f"{sym}{target_budget:,.2f}" if target_budget > 0 else "—"
+        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem("Target budget"))
+        budget_item = QTableWidgetItem(budget_text)
+        budget_item.setFont(bold_font if target_budget > 0 else make_font(size=11))
+        self._cost_table.setItem(total_row + 1, 1, budget_item)
+
+        var_label = QTableWidgetItem("Variance")
+        var_label.setForeground(QColor(_MUTED))
+        self._cost_table.setItem(total_row + 2, 0, var_label)
+        if target_budget > 0 and grand_total > 0:
+            variance = grand_total - target_budget
+            pct      = (variance / target_budget) * 100
+            sign     = "+" if variance >= 0 else ""
+            var_text = f"{sign}{sym}{abs(variance):,.2f}  ({sign}{pct:.1f}%)"
+            var_item = QTableWidgetItem(var_text)
+            var_item.setForeground(QColor("#ef4444" if variance > 0 else "#22c55e"))
+            var_item.setFont(bold_font)
+        else:
+            var_item = QTableWidgetItem("—")
+            var_item.setForeground(QColor("#22c55e"))
+        self._cost_table.setItem(total_row + 2, 1, var_item)
+
+    def sync_to_session(self):
+        if not self._session:
+            return
+        s = self._session
+        null = QDate(2000, 1, 1)
+        s.schedule_dates = [
+            (de.date().toString("dd/MM/yyyy") if de.date() != null else "")
+            for de in self._milestone_date_edits
+        ]
+        s.stakeholders = []
+        for row in range(self._stakeholder_table.rowCount()):
+            stk = Stakeholder(id=row + 1)
+            for col, attr in enumerate(["role", "name", "responsibility"]):
+                item = self._stakeholder_table.item(row, col)
+                setattr(stk, attr, item.text() if item else "")
+            combo = self._stakeholder_table.cellWidget(row, 3)
+            stk.status = combo.currentText() if combo else "In progress"
+            pc = self._stakeholder_table.cellWidget(row, 4)
+            stk.progress = pc.value() if pc else 0
+            for col, attr in enumerate(["deliverables", "comments"], start=5):
+                item = self._stakeholder_table.item(row, col)
+                setattr(stk, attr, item.text() if item else "")
+            s.stakeholders.append(stk)
+
+    # ── internals ──────────────────────────────────────────────────────────────
+
+    def _reload_stakeholders(self):
+        self._progress_cells.clear()
+        self._stakeholder_table.blockSignals(True)
+        self._stakeholder_table.setRowCount(0)
+        if self._session:
+            for stk in self._session.stakeholders:
+                self._add_stakeholder_row(stk)
+        self._stakeholder_table.blockSignals(False)
+
+    def _add_stakeholder_row(self, stk: Stakeholder):
+        row = self._stakeholder_table.rowCount()
+        self._stakeholder_table.insertRow(row)
+        self._stakeholder_table.setRowHeight(row, 44)
+
+        for col, val in enumerate([stk.role, stk.name, stk.responsibility]):
+            self._stakeholder_table.setItem(row, col, QTableWidgetItem(val))
+
+        status_combo = _combo(["In progress", "Not started", "Completed", "On hold"])
+        status_combo.setCurrentText(stk.status)
+        status_combo.currentTextChanged.connect(lambda v, r=row: self._on_status_change(r, v))
+        self._stakeholder_table.setCellWidget(row, 3, status_combo)
+
+        pc = _ProgressCell(stk.progress)
+        pc.valueChanged.connect(lambda v, r=row: self._on_progress_change(r, v))
+        self._stakeholder_table.setCellWidget(row, 4, pc)
+        self._progress_cells.append(pc)
+
+        for col, val in enumerate([stk.deliverables, stk.comments], start=5):
+            self._stakeholder_table.setItem(row, col, QTableWidgetItem(val))
+
+    def _add_stakeholder(self):
+        if not self._session:
+            return
+        new_id = max((s.id for s in self._session.stakeholders), default=0) + 1
+        stk = Stakeholder(new_id)
+        self._session.stakeholders.append(stk)
+        self._add_stakeholder_row(stk)
+        self.changed.emit()
+
+    def _on_status_change(self, row: int, value: str):
+        if self._session and row < len(self._session.stakeholders):
+            self._session.stakeholders[row].status = value
+            self.changed.emit()
+
+    def _on_progress_change(self, row: int, value: int):
+        if self._session and row < len(self._session.stakeholders):
+            self._session.stakeholders[row].progress = value
+            self.changed.emit()
+
+    def _upload_photo(self, idx: int):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Photo", "", "Images (*.png *.jpg *.jpeg)"
+        )
+        if path:
+            pix = QPixmap(path)
+            if not pix.isNull():
+                btn = self._photo_btns[idx]
+                btn.setIcon(QIcon(
+                    pix.scaled(btn.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                ))
+                btn.setIconSize(btn.size())
+                btn.setText("")
+                self.changed.emit()
+
+
+# ── Report Panel ──────────────────────────────────────────────────────────────
+
+class ReportPanel(QScrollArea):
+
+    changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._session: Optional[ValidationSession] = None
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setStyleSheet(f"""
+            QScrollArea {{ background: {_BG}; border: none; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
+            QScrollBar::handle:vertical {{ background: {_BORDER}; border-radius: 3px; }}
+        """)
+        body = QWidget()
+        body.setStyleSheet(f"background: {_BG};")
+        self._layout = QVBoxLayout(body)
+        self._layout.setContentsMargins(16, 16, 16, 16)
+        self._layout.setSpacing(12)
+        self.setWidget(body)
+        self._build_static()
+
+    def _build_static(self):
+        hdr = QLabel("Validation report")
+        hdr.setFont(make_font(size=14, bold=True))
+        hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none; padding-bottom: 4px;")
+        self._layout.addWidget(hdr)
+
+        from PyQt5.QtWidgets import QTimeEdit, QDateEdit
+
+        # ── Row 1: Meeting Info | Overall Decision | Present Attendees | Attendees' Remarks ──
+        row1 = QHBoxLayout()
+        row1.setSpacing(10)
+
+        meet_card = _card_frame()
+        mc = QVBoxLayout(meet_card)
+        mc.setContentsMargins(12, 10, 12, 10)
+        mc.setSpacing(4)
+        mc.addWidget(_section_title("Meeting Information"))
+        mc.addWidget(_sep())
+
+        mc.addWidget(_lbl("Date"))
+        self._r_date = QDateEdit(QDate.currentDate())
+        self._r_date.setDisplayFormat("dd/MM/yyyy")
+        self._r_date.setCalendarPopup(True)
+        self._r_date.setStyleSheet(_INPUT)
+        self._r_date.setFixedHeight(26)
+        mc.addWidget(self._r_date)
+
+        mc.addWidget(_lbl("Time (from / to)"))
+        tr = QHBoxLayout()
+        self._r_time_from = QTimeEdit(QTime(9, 0))
+        self._r_time_to   = QTimeEdit(QTime(10, 0))
+        for t in (self._r_time_from, self._r_time_to):
+            t.setStyleSheet(_TIMEEDIT_STYLE)
+            t.setFixedHeight(26)
+        to_lbl = QLabel("to")
+        to_lbl.setStyleSheet(f"color: {_MUTED}; background: transparent; border: none; font-size: 10px;")
+        tr.addWidget(self._r_time_from)
+        tr.addWidget(to_lbl)
+        tr.addWidget(self._r_time_to)
+        mc.addLayout(tr)
+
+        mc.addWidget(_lbl("Location / Meeting"))
+        self._r_location = QLineEdit()
+        self._r_location.setPlaceholderText("Location / Link")
+        self._r_location.setStyleSheet(_INPUT)
+        self._r_location.setFixedHeight(26)
+        mc.addWidget(self._r_location)
+
+        mc.addWidget(_lbl("Decision Maker"))
+        self._r_decision_maker = QLineEdit()
+        self._r_decision_maker.setPlaceholderText("Name")
+        self._r_decision_maker.setStyleSheet(_INPUT)
+        self._r_decision_maker.setFixedHeight(26)
+        mc.addWidget(self._r_decision_maker)
+
+        mc.addWidget(_lbl("Presentation Lead"))
+        self._r_presentation_lead = QLineEdit()
+        self._r_presentation_lead.setPlaceholderText("Name")
+        self._r_presentation_lead.setStyleSheet(_INPUT)
+        self._r_presentation_lead.setFixedHeight(26)
+        mc.addWidget(self._r_presentation_lead)
+        mc.addStretch()
+        row1.addWidget(meet_card, 1)
+
+        od_card = _card_frame()
+        od = QVBoxLayout(od_card)
+        od.setContentsMargins(12, 10, 12, 10)
+        od.setSpacing(4)
+        od.addWidget(_section_title("Overall Decision"))
+        od.addWidget(_sep())
+        self._r_overall_decision = QTextEdit()
+        self._r_overall_decision.setPlaceholderText("Overall decision...")
+        self._r_overall_decision.setStyleSheet(_INPUT)
+        od.addWidget(self._r_overall_decision, 1)
+        row1.addWidget(od_card, 1)
+
+        pa_card = _card_frame()
+        pa = QVBoxLayout(pa_card)
+        pa.setContentsMargins(12, 10, 12, 10)
+        pa.setSpacing(4)
+        pa.addWidget(_section_title("Present Attendees"))
+        pa.addWidget(_sep())
+        self._r_attendees = QTextEdit()
+        self._r_attendees.setPlaceholderText("Present attendees...")
+        self._r_attendees.setStyleSheet(_INPUT)
+        pa.addWidget(self._r_attendees, 1)
+        row1.addWidget(pa_card, 1)
+
+        ar_card = _card_frame()
+        ar = QVBoxLayout(ar_card)
+        ar.setContentsMargins(12, 10, 12, 10)
+        ar.setSpacing(4)
+        ar.addWidget(_section_title("Attendees' Remarks"))
+        ar.addWidget(_sep())
+        self._r_attendee_remarks = QTextEdit()
+        self._r_attendee_remarks.setPlaceholderText("Remarks...")
+        self._r_attendee_remarks.setStyleSheet(_INPUT)
+        ar.addWidget(self._r_attendee_remarks, 1)
+        row1.addWidget(ar_card, 1)
+
+        self._layout.addLayout(row1)
+
+        # ── CEO Feedback ────────────────────────────────────────────────────
+        ceo_card = _card_frame()
+        cc = QVBoxLayout(ceo_card)
+        cc.setContentsMargins(14, 12, 14, 12)
+        cc.setSpacing(6)
+        cc.addWidget(_section_title("CEO Feedback & Key Remarks"))
+        cc.addWidget(_sep())
+        hint = QLabel("Feedback, remarks and key points to take into account.")
+        hint.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        cc.addWidget(hint)
+        self._r_ceo_feedback = QTextEdit()
+        self._r_ceo_feedback.setPlaceholderText("CEO feedback...")
+        self._r_ceo_feedback.setMinimumHeight(70)
+        self._r_ceo_feedback.setStyleSheet(_INPUT)
+        cc.addWidget(self._r_ceo_feedback)
+        self._layout.addWidget(ceo_card)
+
+        # ── Modifications / Actions Required ────────────────────────────────
+        mod_card = _card_frame()
+        ml = QVBoxLayout(mod_card)
+        ml.setContentsMargins(14, 12, 14, 12)
+        ml.setSpacing(8)
+        mod_hdr = QHBoxLayout()
+        mod_hdr.addWidget(_section_title("Modifications / Actions Required"))
+        self._add_mod_btn = QPushButton("+ Add row")
+        self._add_mod_btn.setStyleSheet(_BTN_SMALL)
+        self._add_mod_btn.setCursor(Qt.PointingHandCursor)
+        self._add_mod_btn.clicked.connect(lambda: self._add_modification_row())
+        mod_hdr.addStretch()
+        mod_hdr.addWidget(self._add_mod_btn)
+        ml.addLayout(mod_hdr)
+        ml.addWidget(_sep())
+
+        self._mod_table = QTableWidget(0, 6)
+        self._mod_table.setHorizontalHeaderLabels(
+            ["ID", "Description of Modification", "Priority", "Responsible", "Due Date", "Status"]
+        )
+        self._mod_table.setStyleSheet(_TABLE_STYLE)
+        self._mod_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self._mod_table.setColumnWidth(0, 36)
+        self._mod_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        for c in range(2, 6):
+            self._mod_table.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        self._mod_table.setMinimumHeight(140)
+        self._mod_table.verticalHeader().setVisible(False)
+        self._mod_table.itemChanged.connect(lambda: self.changed.emit())
+        ml.addWidget(self._mod_table)
+        self._layout.addWidget(mod_card)
+
+        # ── Action Plan ──────────────────────────────────────────────────────
+        ap_card = _card_frame()
+        al = QVBoxLayout(ap_card)
+        al.setContentsMargins(14, 12, 14, 12)
+        al.setSpacing(8)
+        ap_hdr = QHBoxLayout()
+        ap_hdr.addWidget(_section_title("Action Plan by Stakeholder"))
+        self._add_ap_btn = QPushButton("+ Add row")
+        self._add_ap_btn.setStyleSheet(_BTN_SMALL)
+        self._add_ap_btn.setCursor(Qt.PointingHandCursor)
+        self._add_ap_btn.clicked.connect(lambda: self._add_action_row())
+        ap_hdr.addStretch()
+        ap_hdr.addWidget(self._add_ap_btn)
+        al.addLayout(ap_hdr)
+        al.addWidget(_sep())
+
+        self._ap_table = QTableWidget(0, 6)
+        self._ap_table.setHorizontalHeaderLabels(
+            ["Stakeholder / Dept", "Actions to Perform", "Deliverables Expected",
+             "Responsible", "Due Date", "Status"]
+        )
+        self._ap_table.setStyleSheet(_TABLE_STYLE)
+        self._ap_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._ap_table.setMinimumHeight(180)
+        self._ap_table.verticalHeader().setVisible(False)
+        self._ap_table.itemChanged.connect(lambda: self.changed.emit())
+        al.addWidget(self._ap_table)
+        self._layout.addWidget(ap_card)
+
+        # ── Risks + Open Comments ────────────────────────────────────────────
+        bottom = QHBoxLayout()
+        bottom.setSpacing(12)
+        for title, attr in [("Risks & Points of Attention", "_r_risks"),
+                             ("Open Comments", "_r_open_comments")]:
+            c = _card_frame()
+            cl = QVBoxLayout(c)
+            cl.setContentsMargins(14, 10, 14, 10)
+            cl.setSpacing(4)
+            cl.addWidget(_section_title(title))
+            cl.addWidget(_sep())
+            ta = QTextEdit()
+            ta.setPlaceholderText(f"{title}...")
+            ta.setMinimumHeight(80)
+            ta.setStyleSheet(_INPUT)
+            setattr(self, attr, ta)
+            cl.addWidget(ta)
+            bottom.addWidget(c)
+        self._layout.addLayout(bottom)
+        self._layout.addStretch()
+
+    # ── public ─────────────────────────────────────────────────────────────────
+
+    def load_session(self, session: ValidationSession):
+        self._session = session
+        self._reload_tables()
+
+    def lock(self):
+        for w in (self._r_location, self._r_decision_maker, self._r_presentation_lead):
+            w.setReadOnly(True)
+            w.setStyleSheet(w.styleSheet() + f"QLineEdit {{ background: #f1f3f5; color: {_MUTED}; }}")
+        for w in (self._r_overall_decision, self._r_attendees, self._r_attendee_remarks,
+                  self._r_ceo_feedback, self._r_risks, self._r_open_comments):
+            w.setReadOnly(True)
+        self._r_date.setEnabled(False)
+        self._r_time_from.setEnabled(False)
+        self._r_time_to.setEnabled(False)
+        self._mod_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._ap_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._add_mod_btn.setEnabled(False)
+        self._add_ap_btn.setEnabled(False)
+        for table in (self._mod_table, self._ap_table):
+            for row in range(table.rowCount()):
+                for col in range(table.columnCount()):
+                    w = table.cellWidget(row, col)
+                    if w:
+                        w.setEnabled(False)
+
+    def sync_to_session(self):
+        if not self._session:
+            return
+        s = self._session
+        s.meeting_date       = self._r_date.date().toString("dd/MM/yyyy")
+        s.meeting_time_from  = self._r_time_from.time().toString("HH:mm")
+        s.meeting_time_to    = self._r_time_to.time().toString("HH:mm")
+        s.meeting_location   = self._r_location.text()
+        s.decision_maker     = self._r_decision_maker.text()
+        s.presentation_lead  = self._r_presentation_lead.text()
+        s.overall_decision   = self._r_overall_decision.toPlainText()
+        s.present_attendees  = self._r_attendees.toPlainText()
+        s.attendees_remarks  = self._r_attendee_remarks.toPlainText()
+        s.ceo_feedback       = self._r_ceo_feedback.toPlainText()
+        s.risks              = self._r_risks.toPlainText()
+        s.open_comments      = self._r_open_comments.toPlainText()
+
+        s.modifications = []
+        for row in range(self._mod_table.rowCount()):
+            m = ModificationRow()
+            item = self._mod_table.item(row, 1)
+            m.description = item.text() if item else ""
+            combo = self._mod_table.cellWidget(row, 2)
+            m.priority = combo.currentText() if combo else "To modify"
+            item = self._mod_table.item(row, 3)
+            m.responsible = item.text() if item else ""
+            item = self._mod_table.item(row, 4)
+            m.due_date = item.text() if item else ""
+            combo = self._mod_table.cellWidget(row, 5)
+            m.status = combo.currentText() if combo else "To Do"
+            s.modifications.append(m)
+
+        s.action_plan = []
+        for row in range(self._ap_table.rowCount()):
+            a = ActionRow()
+            for col, attr in enumerate(["department", "actions", "deliverables",
+                                         "responsible", "due_date"]):
+                item = self._ap_table.item(row, col)
+                setattr(a, attr, item.text() if item else "")
+            combo = self._ap_table.cellWidget(row, 5)
+            a.status = combo.currentText() if combo else "To Do"
+            s.action_plan.append(a)
+
+    # ── internals ──────────────────────────────────────────────────────────────
+
+    def _reload_tables(self):
+        if not self._session:
+            return
+        s = self._session
+
+        if s.meeting_date:
+            d = QDate.fromString(s.meeting_date, "dd/MM/yyyy")
+            if d.isValid():
+                self._r_date.setDate(d)
+        if s.meeting_time_from:
+            t = QTime.fromString(s.meeting_time_from, "HH:mm")
+            if t.isValid():
+                self._r_time_from.setTime(t)
+        if s.meeting_time_to:
+            t = QTime.fromString(s.meeting_time_to, "HH:mm")
+            if t.isValid():
+                self._r_time_to.setTime(t)
+        self._r_location.setText(s.meeting_location)
+        self._r_decision_maker.setText(s.decision_maker)
+        self._r_presentation_lead.setText(s.presentation_lead)
+        self._r_overall_decision.setPlainText(s.overall_decision)
+        self._r_attendees.setPlainText(s.present_attendees)
+        self._r_attendee_remarks.setPlainText(s.attendees_remarks)
+        self._r_ceo_feedback.setPlainText(s.ceo_feedback)
+        self._r_risks.setPlainText(s.risks)
+        self._r_open_comments.setPlainText(s.open_comments)
+
+        self._mod_table.blockSignals(True)
+        self._mod_table.setRowCount(0)
+        for m in s.modifications:
+            self._add_modification_row(m)
+        self._mod_table.blockSignals(False)
+
+        self._ap_table.blockSignals(True)
+        self._ap_table.setRowCount(0)
+        for a in s.action_plan:
+            self._add_action_row(a)
+        self._ap_table.blockSignals(False)
+
+    def _add_modification_row(self, data: Optional[ModificationRow] = None):
+        row = self._mod_table.rowCount()
+        self._mod_table.insertRow(row)
+        m = data or ModificationRow()
+
+        id_item = QTableWidgetItem(str(row + 1))
+        id_item.setTextAlignment(Qt.AlignCenter)
+        id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+        id_item.setForeground(QColor(_MUTED))
+        self._mod_table.setItem(row, 0, id_item)
+
+        self._mod_table.setItem(row, 1, QTableWidgetItem(m.description))
+
+        priority_combo = _combo(["To modify", "Accepted", "On hold", "Canceled"])
+        priority_combo.setCurrentText(m.priority)
+        self._mod_table.setCellWidget(row, 2, priority_combo)
+
+        self._mod_table.setItem(row, 3, QTableWidgetItem(m.responsible))
+        self._mod_table.setItem(row, 4, QTableWidgetItem(m.due_date))
+
+        status_combo = _combo(["To Do", "In progress", "Done"])
+        status_combo.setCurrentText(m.status)
+        self._mod_table.setCellWidget(row, 5, status_combo)
+
+        self.changed.emit()
+
+    def _add_action_row(self, data: Optional[ActionRow] = None):
+        row = self._ap_table.rowCount()
+        self._ap_table.insertRow(row)
+        a = data or ActionRow()
+        for col, val in enumerate([a.department, a.actions, a.deliverables,
+                                    a.responsible, a.due_date]):
+            self._ap_table.setItem(row, col, QTableWidgetItem(val or ""))
+        status_combo = _combo(["To Do", "In progress", "Done"])
+        status_combo.setCurrentText(a.status)
+        self._ap_table.setCellWidget(row, 5, status_combo)
+        self.changed.emit()

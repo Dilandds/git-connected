@@ -19,7 +19,7 @@ from PyQt5.QtGui import (
     QPixmap, QPainter, QPen, QColor, QFont, QFontMetrics,
     QBrush, QPainterPath, QPolygonF, QImage, QWheelEvent, QMouseEvent
 )
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import show_message_dialog, ask_yes_no_dialog
 
 logger = logging.getLogger(__name__)
@@ -690,7 +690,7 @@ class TechnicalAnnotationPanel(QWidget):
                 border-radius: 9px;
             }}
             QPushButton:hover {{ border: 2px solid rgba(255,255,255,0.7); }}
-        """)
+        """ + TOOLTIP_STYLE)
 
         color_btn.clicked.connect(lambda checked=False, aid=ann.id, btn=color_btn, color=ann_color: self._show_color_palette(btn, aid, color))
         layout.addWidget(color_btn)
@@ -753,7 +753,7 @@ class TechnicalAnnotationPanel(QWidget):
                 color: #F87171;
                 border-radius: 14px;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         del_btn.clicked.connect(lambda: self.annotation_deleted.emit(ann.id))
         layout.addWidget(del_btn)
 

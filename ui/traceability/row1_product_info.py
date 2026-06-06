@@ -5,8 +5,25 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
-from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS
+from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE
 from .shared import _ProgressBar
+
+_LAUNCH_TOOLTIP = f"""
+    QLabel {{
+        background: transparent;
+        border: none;
+    }}
+""" + _TOOLTIP_STYLE
+
+_PROG_LABEL_STYLE = f"""
+    QLabel {{
+        color: {_ACCENT};
+        background: transparent;
+        border: none;
+    }}
+""" + _TOOLTIP_STYLE
+
+_IMG_SIZE = 130
 
 
 class _ProductInfoRow(QFrame):
@@ -17,22 +34,24 @@ class _ProductInfoRow(QFrame):
         self._planned_launch     = ''
         self._overall_progress   = 0
         self._product_image_path = ''
-        self.setFixedHeight(108)
+        self.setFixedHeight(152)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
         self._build()
 
     def _build(self):
         root = QHBoxLayout(self)
-        root.setContentsMargins(12, 8, 16, 8)
-        root.setSpacing(14)
+        root.setContentsMargins(0, 10, 0, 10)
+        root.setSpacing(16)
 
-        # Photo button
+        root.addSpacing(60)   # left free space
+
+        # Photo button — large, rounded
         self._img_btn = QPushButton('＋\nPhoto')
-        self._img_btn.setFixedSize(72, 72)
+        self._img_btn.setFixedSize(_IMG_SIZE, _IMG_SIZE)
         self._img_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 2px dashed {_BORDER};
-                border-radius: 8px; color: {_MUTED}; font-size: 9px;
+                border-radius: 12px; color: {_MUTED}; font-size: 9px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; background: #e8f0fe; }}
         """)
@@ -40,86 +59,126 @@ class _ProductInfoRow(QFrame):
         self._img_btn.clicked.connect(self._upload_image)
         root.addWidget(self._img_btn)
 
-        # Name / reference / PM / launch block
-        left = QVBoxLayout(); left.setSpacing(1)
+        # Name / reference / PM / launch — each on its own line
+        left = QVBoxLayout()
+        left.setSpacing(3)
+        left.setContentsMargins(4, 0, 0, 0)
+
         mp = QLabel('Main Product')
         mp.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
         left.addWidget(mp)
 
         self._name_lbl = QLabel('—')
-        self._name_lbl.setFont(make_font(size=14, bold=True))
+        self._name_lbl.setFont(make_font(size=15, bold=True))
         self._name_lbl.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
         left.addWidget(self._name_lbl)
 
-        meta_row = QHBoxLayout(); meta_row.setSpacing(14)
-        self._ref_lbl    = self._meta_lbl('Reference  —')
-        self._pm_lbl     = self._meta_lbl('Project Manager  —')
-        self._launch_lbl = self._meta_lbl('Planned Launch  —')
+        self._ref_lbl    = self._meta_field('Reference', '—')
+        self._pm_lbl     = self._meta_field('Project Manager', '—')
+        self._launch_lbl = self._meta_field('Planned Launch', '—')
+        self._launch_lbl.setStyleSheet(_LAUNCH_TOOLTIP)
         self._launch_lbl.setCursor(Qt.PointingHandCursor)
         self._launch_lbl.setToolTip('Click to edit')
         self._launch_lbl.mousePressEvent = lambda _: self._edit('planned_launch')
-        for lbl in (self._ref_lbl, self._pm_lbl, self._launch_lbl):
-            meta_row.addWidget(lbl)
-        meta_row.addStretch()
-        left.addLayout(meta_row)
-        root.addLayout(left, 2)
+
+        left.addWidget(self._ref_lbl)
+        left.addWidget(self._pm_lbl)
+        left.addWidget(self._launch_lbl)
+        left.addStretch()
+        root.addLayout(left)
 
         root.addWidget(self._vdiv())
 
-        self._start_lbl = self._info_col_val('—')
-        root.addLayout(self._info_col('Start Date', self._start_lbl))
+        # Start Date with calendar icon
+        self._start_lbl = self._date_val('—')
+        root.addLayout(self._info_col('📅  Start Date', self._start_lbl))
         root.addWidget(self._vdiv())
 
-        self._dd_lbl = self._info_col_val('—')
-        root.addLayout(self._info_col('Due Date', self._dd_lbl))
+        # Due Date with calendar icon
+        self._dd_lbl = self._date_val('—')
+        root.addLayout(self._info_col('📅  Due Date', self._dd_lbl))
         root.addWidget(self._vdiv())
 
-        self._status_lbl = self._info_col_val('—')
-        root.addLayout(self._info_col('Global Status', self._status_lbl))
+        # Global Status — pill badge
+        sc = QVBoxLayout(); sc.setSpacing(6); sc.setAlignment(Qt.AlignVCenter)
+        st_title = QLabel('Global Status')
+        st_title.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
+        sc.addWidget(st_title)
+        self._status_lbl = QLabel('—')
+        self._status_lbl.setFont(make_font(size=9, bold=True))
+        self._status_lbl.setStyleSheet(
+            f'color: {_MUTED}; background: transparent; border: none; padding: 0px;'
+        )
+        sc.addWidget(self._status_lbl)
+        root.addLayout(sc)
         root.addWidget(self._vdiv())
 
         # Overall progress (editable)
-        pc = QVBoxLayout(); pc.setSpacing(3); pc.setAlignment(Qt.AlignVCenter)
+        pc = QVBoxLayout(); pc.setSpacing(4); pc.setAlignment(Qt.AlignVCenter)
         pt = QLabel('Overall Progress')
         pt.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
         pc.addWidget(pt)
         self._prog_lbl = QLabel('0 %')
-        self._prog_lbl.setFont(make_font(size=15, bold=True))
-        self._prog_lbl.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
+        self._prog_lbl.setFont(make_font(size=20, bold=True))
+        self._prog_lbl.setStyleSheet(_PROG_LABEL_STYLE)
         self._prog_lbl.setCursor(Qt.PointingHandCursor)
         self._prog_lbl.setToolTip('Click to edit progress')
         self._prog_lbl.mousePressEvent = lambda _: self._edit('progress')
         pc.addWidget(self._prog_lbl)
-        self._prog_bar = _ProgressBar(0); self._prog_bar.setFixedSize(80, 6)
+        self._prog_bar = _ProgressBar(0)
+        self._prog_bar.setFixedSize(100, 7)
         pc.addWidget(self._prog_bar)
         root.addLayout(pc)
 
-    @staticmethod
-    def _meta_lbl(text: str) -> QLabel:
-        l = QLabel(text)
-        l.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
-        return l
+        root.addSpacing(60)   # right free space
 
     @staticmethod
-    def _info_col_val(value: str) -> QLabel:
+    def _meta_field(label: str, value: str) -> QLabel:
+        lbl = QLabel()
+        lbl.setTextFormat(Qt.RichText)
+        lbl.setText(
+            f'<span style="color:{_MUTED}; font-size:10px;">{label}</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{value}</b>'
+        )
+        lbl.setStyleSheet('background: transparent; border: none;')
+        return lbl
+
+    @staticmethod
+    def _date_val(value: str) -> QLabel:
         l = QLabel(value)
-        l.setFont(make_font(size=10, bold=True))
+        l.setFont(make_font(size=11, bold=True))
         l.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
         return l
 
     @staticmethod
     def _info_col(title: str, val_lbl: QLabel) -> QVBoxLayout:
-        lay = QVBoxLayout(); lay.setSpacing(3); lay.setAlignment(Qt.AlignVCenter)
+        lay = QVBoxLayout(); lay.setSpacing(5); lay.setAlignment(Qt.AlignVCenter)
         t = QLabel(title)
         t.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
-        lay.addWidget(t); lay.addWidget(val_lbl)
+        lay.addWidget(t)
+        lay.addWidget(val_lbl)
         return lay
 
     @staticmethod
     def _vdiv() -> QFrame:
-        v = QFrame(); v.setFrameShape(QFrame.VLine); v.setFixedHeight(58)
+        v = QFrame(); v.setFrameShape(QFrame.VLine); v.setFixedHeight(90)
         v.setStyleSheet(f'color: {_BORDER}; background: {_BORDER}; max-width: 1px; border: none;')
         return v
+
+    def _apply_image(self, path: str):
+        pix = QPixmap(path)
+        if not pix.isNull():
+            scaled = pix.scaled(_IMG_SIZE, _IMG_SIZE, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            self._img_btn.setIcon(QIcon(scaled))
+            self._img_btn.setIconSize(QSize(_IMG_SIZE, _IMG_SIZE))
+            self._img_btn.setText('')
+            self._img_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; border: none;
+                    border-radius: 12px;
+                }}
+                QPushButton:hover {{ border: 2px solid {_ACCENT}; }}
+            """)
 
     def _upload_image(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -127,11 +186,7 @@ class _ProductInfoRow(QFrame):
         )
         if path:
             self._product_image_path = path
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._img_btn.setIcon(QIcon(pix.scaled(68, 68, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
-                self._img_btn.setIconSize(QSize(68, 68))
-                self._img_btn.setText('')
+            self._apply_image(path)
             self.changed.emit()
 
     def _edit(self, field: str):
@@ -141,7 +196,7 @@ class _ProductInfoRow(QFrame):
             )
             if ok:
                 self._planned_launch = val.strip()
-                self._launch_lbl.setText(f'Planned Launch  {val.strip() or "—"}')
+                self._set_launch_text(self._planned_launch or '—')
                 self.changed.emit()
         elif field == 'progress':
             val, ok = QInputDialog.getText(
@@ -158,26 +213,52 @@ class _ProductInfoRow(QFrame):
                 except ValueError:
                     pass
 
+    def _set_launch_text(self, value: str):
+        self._launch_lbl.setText(
+            f'<span style="color:{_MUTED}; font-size:10px;">Planned Launch</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{value}</b>'
+        )
+
+    def _set_status_pill(self, status: str):
+        if status and status != '—':
+            color = _STATUS_COLORS.get(status, _MUTED)
+            bg = color + '22'
+            self._status_lbl.setText(status)
+            self._status_lbl.setStyleSheet(
+                f'color: {color}; background: {bg}; border: 1px solid {color}44;'
+                f'border-radius: 9px; padding: 2px 10px; font-size: 9px; font-weight: bold;'
+            )
+        else:
+            self._status_lbl.setText('—')
+            self._status_lbl.setStyleSheet(
+                f'color: {_MUTED}; background: transparent; border: none; padding: 0px;'
+            )
+
     def update_project_info(self, info: dict):
         self._name_lbl.setText(info.get('title') or '—')
-        self._ref_lbl.setText(f"Reference  {info.get('number') or '—'}")
-        self._pm_lbl.setText(f"Project Manager  {info.get('company') or '—'}")
+
+        ref = info.get('number') or '—'
+        self._ref_lbl.setText(
+            f'<span style="color:{_MUTED}; font-size:10px;">Reference</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{ref}</b>'
+        )
+
+        pm = info.get('company') or '—'
+        self._pm_lbl.setText(
+            f'<span style="color:{_MUTED}; font-size:10px;">Project Manager</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{pm}</b>'
+        )
+
         self._start_lbl.setText(info.get('start_date') or '—')
         self._dd_lbl.setText(info.get('due_date') or '—')
+
         status = info.get('status', '')
-        self._status_lbl.setText(status or '—')
-        color = _STATUS_COLORS.get(status, _MUTED)
-        self._status_lbl.setStyleSheet(
-            f'color: {color}; font-size: 10px; font-weight: bold; background: transparent; border: none;'
-        )
+        self._set_status_pill(status or '—')
+
         photo = info.get('photo_path', '')
         if photo and photo != self._product_image_path:
-            pix = QPixmap(photo)
-            if not pix.isNull():
-                self._product_image_path = photo
-                self._img_btn.setIcon(QIcon(pix.scaled(68, 68, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
-                self._img_btn.setIconSize(QSize(68, 68))
-                self._img_btn.setText('')
+            self._product_image_path = photo
+            self._apply_image(photo)
 
     def get_extra_data(self) -> dict:
         return {
@@ -187,15 +268,11 @@ class _ProductInfoRow(QFrame):
         }
 
     def set_extra_data(self, data: dict):
-        self._planned_launch   = data.get('planned_launch', '')
-        self._overall_progress = data.get('overall_progress', 0)
+        self._planned_launch     = data.get('planned_launch', '')
+        self._overall_progress   = data.get('overall_progress', 0)
         self._product_image_path = data.get('product_image_path', '')
-        self._launch_lbl.setText(f'Planned Launch  {self._planned_launch or "—"}')
+        self._set_launch_text(self._planned_launch or '—')
         self._prog_lbl.setText(f'{self._overall_progress} %')
         self._prog_bar.set_value(self._overall_progress)
         if self._product_image_path:
-            pix = QPixmap(self._product_image_path)
-            if not pix.isNull():
-                self._img_btn.setIcon(QIcon(pix.scaled(68, 68, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
-                self._img_btn.setIconSize(QSize(68, 68))
-                self._img_btn.setText('')
+            self._apply_image(self._product_image_path)

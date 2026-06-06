@@ -137,6 +137,22 @@ FONTS = {
 }
 
 
+# ── Single source of truth for tooltip styling ────────────────────────────────
+# Import this wherever a widget has BOTH setStyleSheet() AND setToolTip().
+# Without it, Qt stops walking up to the global app stylesheet when a widget
+# has its own local stylesheet, and macOS falls back to native dark tooltips.
+TOOLTIP_STYLE = """
+    QToolTip {
+        color: #1e2430;
+        background-color: #f8f9fa;
+        border: 1px solid #d1d5db;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+    }
+"""
+
+
 def make_font(size=None, bold=False, pixel_size=None, weight=None):
     """Create a QFont with the app's standard family for cross-platform consistency.
     

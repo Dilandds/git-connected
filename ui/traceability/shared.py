@@ -5,23 +5,12 @@ used across all traceability sub-modules.
 from PyQt5.QtWidgets import QFrame, QLabel, QSizePolicy, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPainter, QBrush
-from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
+from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 
 _ARROW_URL = _get_arrow()
 
-# ── Tooltip — must be appended to any local stylesheet that uses QWidget {} ───
-# Without this, QWidget{} in a local stylesheet breaks Qt's global QToolTip
-# inheritance and macOS falls back to its native (dark) tooltip rendering.
-_TOOLTIP_STYLE = """
-    QToolTip {
-        color: #1e2430;
-        background-color: #f8f9fa;
-        border: 1px solid #d1d5db;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-    }
-"""
+# Alias kept for internal use — imported from styles.py (single source of truth).
+_TOOLTIP_STYLE = TOOLTIP_STYLE
 
 # ── palette ───────────────────────────────────────────────────────────────────
 _BG      = '#f8f9fa'
@@ -103,6 +92,38 @@ _BTN_DELETE = f"""
     QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-radius: 3px; }}
 """
 
+# Red circle × button used on card corners (component + stage delete).
+# Includes QToolTip so macOS never falls back to native dark tooltip.
+_BTN_DEL_CIRCLE = """
+    QPushButton {
+        background-color: transparent; color: #6b7280;
+        border: none;
+        font-size: 11px; font-weight: bold;
+        padding: 0; min-width: 18px; min-height: 18px;
+    }
+    QPushButton:hover { background-color: transparent; color: #ef4444; }
+""" + _TOOLTIP_STYLE
+
+# Sub-stage tab button styles — include QToolTip for the same reason.
+def tab_active_style(accent: str) -> str:
+    return f"""
+        QPushButton {{
+            background: {accent}; color: white; border: none;
+            border-radius: 5px 0 0 5px; padding: 4px 10px;
+            font-size: 10px; font-weight: bold;
+        }}
+    """ + _TOOLTIP_STYLE
+
+def tab_inactive_style(border: str, muted: str, text: str, accent: str) -> str:
+    return f"""
+        QPushButton {{
+            background: transparent; color: {muted};
+            border: 1px solid {border}; border-radius: 5px 0 0 5px;
+            padding: 4px 10px; font-size: 10px;
+        }}
+        QPushButton:hover {{ color: {text}; border-color: {accent}; background: #e8f0fe; }}
+    """ + _TOOLTIP_STYLE
+
 _MENU_STYLE = f"""
     QMenu {{ background: {_CARD}; border: 1px solid {_BORDER}; border-radius: 6px; padding: 4px; }}
     QMenu::item {{ padding: 6px 16px; font-size: 11px; color: {_TEXT}; border-radius: 4px; }}
@@ -153,23 +174,26 @@ def _status_badge(status: str) -> QLabel:
 
 
 class _PartBadge(QWidget):
-    """Numbered colour circle for a part row."""
+    """Numbered colour circle for a part row. Pass label='1.1.3' for dot notation."""
 
-    def __init__(self, number: int, color: str, parent=None):
+    def __init__(self, number: int, color: str, label: str = None, size: int = 38, parent=None):
         super().__init__(parent)
-        self._number = number
-        self._color  = QColor(color)
-        self.setFixedSize(26, 26)
+        self._label = label if label is not None else str(number)
+        self._color = QColor(color)
+        self.setFixedSize(size, size)
+        self._size  = size
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setBrush(QBrush(self._color))
         p.setPen(Qt.NoPen)
-        p.drawEllipse(1, 1, 24, 24)
+        m = 1
+        p.drawEllipse(m, m, self._size - 2*m, self._size - 2*m)
         p.setPen(QColor('white'))
-        p.setFont(make_font(size=8, bold=True))
-        p.drawText(self.rect(), Qt.AlignCenter, str(self._number))
+        font_size = 7 if len(self._label) > 2 else 9
+        p.setFont(make_font(size=font_size, bold=True))
+        p.drawText(self.rect(), Qt.AlignCenter, self._label)
         p.end()
 
 
@@ -179,7 +203,8 @@ class _ProgressBar(QWidget):
     def __init__(self, value: int = 0, parent=None):
         super().__init__(parent)
         self._value = max(0, min(100, value))
-        self.setFixedSize(80, 7)
+        self._bar_w = 110
+        self.setFixedSize(self._bar_w, 7)
 
     def set_value(self, v: int):
         self._value = max(0, min(100, v))

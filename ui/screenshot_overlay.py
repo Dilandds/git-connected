@@ -9,7 +9,7 @@ Input model in screenshot mode:
 Forwarding is achieved by toggling WA_TransparentForMouseEvents — the Qt-guaranteed
 way to let the QRenderWidget underneath receive mouse events natively.
 """
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QLineEdit, QTextEdit, QPlainTextEdit, QApplication
 from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPoint
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QCursor
 
@@ -143,6 +143,20 @@ class ScreenshotOverlay(QWidget):
 
     # ---- show / hide ----
 
+    def _on_focus_changed(self, old_widget, new_widget):
+        """Release keyboard grab while a text input has focus; re-grab when it leaves."""
+        if isinstance(new_widget, (QLineEdit, QTextEdit, QPlainTextEdit)):
+            try:
+                self.releaseKeyboard()
+            except Exception:
+                pass
+        else:
+            if self.isVisible():
+                try:
+                    self.grabKeyboard()
+                except Exception:
+                    pass
+
     def showEvent(self, event):
         super().showEvent(event)
         # Reset to navigate mode every time we appear.
@@ -151,7 +165,11 @@ class ScreenshotOverlay(QWidget):
         self._set_capture_mode(False)
         # Grab keyboard so Space/Esc reach us regardless of focused widget,
         # and so Space doesn't trigger focused buttons elsewhere.
+        # Release temporarily when a text input gains focus so typing works.
         self.setFocus(Qt.OtherFocusReason)
+        app = QApplication.instance()
+        if app is not None:
+            app.focusChanged.connect(self._on_focus_changed)
         try:
             self.grabKeyboard()
         except Exception:
@@ -159,6 +177,12 @@ class ScreenshotOverlay(QWidget):
 
     def hideEvent(self, event):
         """Release keyboard grab and reset cursor when overlay is hidden."""
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.focusChanged.disconnect(self._on_focus_changed)
+            except Exception:
+                pass
         try:
             self.releaseKeyboard()
         except Exception:

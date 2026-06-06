@@ -8,7 +8,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal, Qt, QTimer
 from PyQt5.QtGui import QColor
-from ui.styles import default_theme
+from ui.styles import default_theme, TOOLTIP_STYLE
+from ui.modal_utils import BaseModal
 
 
 from ui.color_palette import PALETTE as PRESET_COLORS
@@ -144,14 +145,14 @@ class DrawColorPicker(QWidget):
                     border: 2px solid {default_theme.button_primary};
                     padding: 0px;
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setToolTip(color)
             btn.clicked.connect(lambda checked, c=color: self._pick(c))
             grid.addWidget(btn, i // 4, i % 4)
         layout.addLayout(grid)
 
-        custom_btn = QPushButton("Custom…")
+        custom_btn = QPushButton("More colors…")
         custom_btn.setMinimumHeight(30)
         custom_btn.setCursor(Qt.PointingHandCursor)
         custom_btn.setStyleSheet(f"""
@@ -181,13 +182,8 @@ class DrawColorPicker(QWidget):
         self.close()
 
     def _pick_custom(self):
-        wrapper = QDialog(self.parent())
-        wrapper.setWindowTitle("Choose Pen Color")
-        wrapper.setWindowFlags(wrapper.windowFlags() & ~Qt.WindowContextHelpButtonHint)
-        wrapper.setStyleSheet(_DIALOG_STYLESHEET)
-
-        outer = QVBoxLayout(wrapper)
-        outer.setContentsMargins(16, 16, 16, 16)
+        wrapper = BaseModal(self.parent(), "Choose Pen Color")
+        outer = wrapper._root
         outer.setSpacing(14)
 
         # Embed QColorDialog as a plain widget (NoButtons so we supply our own)

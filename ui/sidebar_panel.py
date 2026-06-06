@@ -15,7 +15,7 @@ from ui.components import (
     DimensionRow, SurfaceAreaRow, WeightRow, WeightDensityInputRow,
     Separator, ScaleResultRow, ReportCheckbox, confirm_dialog,
 )
-from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
+from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 from core.edition import is_education
 
@@ -192,28 +192,6 @@ class _WeightInfoRow(QWidget):
         self._lbl.setText(text)
 
 
-class _FakeDensityInput:
-    """Mimics QLineEdit.text() so calculate_weight() needs no changes."""
-    def __init__(self): self._v = "0.0"
-    def text(self): return self._v
-    def set(self, v: str): self._v = v
-
-
-class _DensityDisplayRow(_WeightInfoRow):
-    """Weight-info row that also exposes density_input for calculate_weight()."""
-
-    def __init__(self, label: str, parent=None):
-        super().__init__(label, parent=parent)
-        self.density_input = _FakeDensityInput()
-
-    def set_density_silent(self, density: float):
-        self.density_input.set(str(density))
-        self.set_value(f"{density} g/cm³")
-
-    def clear_density_silent(self):
-        self.density_input.set("0.0")
-        self.set_value("--")
-
 
 class _WeightResultRow(QFrame):
     """Gold-highlighted estimated weight result row."""
@@ -376,6 +354,7 @@ class SidebarPanel(QWidget):
             "  background-color: rgba(255,255,255,0.32);"
             "  border-color: rgba(255,255,255,0.6);"
             "}"
+            + TOOLTIP_STYLE
         )
         return badge
 
@@ -456,7 +435,7 @@ class SidebarPanel(QWidget):
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setObjectName("uploadBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
+        self.upload_btn.setStyleSheet(get_button_style("uploadBtn") + TOOLTIP_STYLE)
         self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
         self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         # Strong black drop shadow (visible below the pill; layout margin reserves space in stylesheet)
@@ -767,8 +746,9 @@ class SidebarPanel(QWidget):
         inner_lay.addWidget(self.weight_volume_row)
         inner_lay.addWidget(_hsep())
 
-        # Density display row (keeps density_input interface)
-        self.weight_density_row = _DensityDisplayRow(t("sidebar.density") if hasattr(t("sidebar.density"), "__len__") else "Density")
+        # Density editable row
+        self.weight_density_row = WeightDensityInputRow()
+        self.weight_density_row.densityChanged.connect(self.calculate_weight)
         inner_lay.addWidget(self.weight_density_row)
 
         card_layout.addWidget(inner)

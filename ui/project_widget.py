@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
-from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
+from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 
 _ARROW_URL = _get_arrow()
@@ -74,7 +74,7 @@ _BTN_TOOLBAR = f"""
     QPushButton:hover {{ background-color: #3a3e48; border-color: {_ACCENT}; color: white; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; color: white; }}
     QPushButton:disabled {{ color: {_MUTED}; border-color: {_BORDER}; background-color: #252830; }}
-"""
+""" + TOOLTIP_STYLE
 
 _BTN_SAVE = f"""
     QPushButton {{
@@ -84,7 +84,7 @@ _BTN_SAVE = f"""
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
     QPushButton:disabled {{ background-color: #253545; color: #4a6070; }}
-"""
+""" + TOOLTIP_STYLE
 
 _INFO_INPUT_STYLE = f"""
     QLineEdit {{
@@ -134,16 +134,16 @@ def _status_combo_style(color: str) -> str:
 
 def _import_screen(key: str) -> Type[QWidget]:
     if key == 'brief':
-        from ui.project_brief import ProjectBriefWidget
+        from ui.brief import ProjectBriefWidget
         return ProjectBriefWidget
     if key == 'timeline':
-        from ui.project_timeline import TimelineWidget
+        from ui.timeline import TimelineWidget
         return TimelineWidget
     if key == 'validation':
         from ui.project_validation import ValidationWidget
         return ValidationWidget
     if key == 'report':
-        from ui.report_widget import ReportWidget
+        from ui.report import ReportWidget
         return ReportWidget
     if key == 'estimated_cost':
         from ui.estimated_cost import EstimatedCostWidget
@@ -211,7 +211,7 @@ class ProjectNavPanel(QWidget):
         card_layout.setSpacing(5)
 
         self._photo_btn = QPushButton('+Add photo')
-        self._photo_btn.setFixedHeight(58)
+        self._photo_btn.setFixedHeight(150)
         self._photo_btn.setCursor(Qt.PointingHandCursor)
         self._photo_btn.setStyleSheet(f"""
             QPushButton {{
@@ -469,7 +469,7 @@ class TheProjectWidget(QWidget):
         open_btn = QPushButton('📂 Open Project')
         open_btn.setStyleSheet(_BTN_TOOLBAR); open_btn.setFixedHeight(28)
         open_btn.setCursor(Qt.PointingHandCursor)
-        open_btn.setToolTip('Open an existing .ectoproject file')
+        open_btn.setToolTip('Open an existing .ectopjt file')
         open_btn.clicked.connect(self._on_open_project)
 
         self._save_btn = QPushButton('💾 Save Project')
@@ -631,7 +631,7 @@ class TheProjectWidget(QWidget):
             return
         path, _ = QFileDialog.getOpenFileName(
             self, 'Open Project', '',
-            'ECTOFORM Project (*.ectoproject);;All Files (*)'
+            'ECTOFORM Project (*.ectopjt);;All Files (*)'
         )
         if not path:
             return
@@ -644,13 +644,13 @@ class TheProjectWidget(QWidget):
     def _on_save_project(self):
         if not self._project_path:
             path, _ = QFileDialog.getSaveFileName(
-                self, 'Save Project', 'project.ectoproject',
-                'ECTOFORM Project (*.ectoproject);;All Files (*)'
+                self, 'Save Project', 'project.ectopjt',
+                'ECTOFORM Project (*.ectopjt);;All Files (*)'
             )
             if not path:
                 return
-            if not path.endswith('.ectoproject'):
-                path += '.ectoproject'
+            if not path.endswith('.ectopjt'):
+                path += '.ectopjt'
             self._project_path = path
         try:
             self._save_project(self._project_path)

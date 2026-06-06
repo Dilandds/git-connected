@@ -392,15 +392,7 @@ class WeightDensityInputRow(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFixedHeight(44)
 
-        _wp = default_theme.weight_panel_bg
-        self.setObjectName("weightRowStandard")
-        self.setStyleSheet(f"""
-            QFrame#weightRowStandard {{
-                background-color: {_wp};
-                border-radius: 8px;
-                border: none;
-            }}
-        """)
+        self.setStyleSheet("QFrame { background: transparent; border: none; }")
 
         row_layout = QHBoxLayout(self)
         row_layout.setContentsMargins(14, 8, 14, 8)
@@ -461,29 +453,6 @@ class WeightDensityInputRow(QFrame):
         row_layout.addWidget(label)
         row_layout.addWidget(self.density_input, 1)
         row_layout.addWidget(unit_label)
-
-        self.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        if obj == self:
-            _wp = default_theme.weight_panel_bg
-            _wph = default_theme.weight_panel_hover
-            if self.objectName() == "weightRowStandard":
-                if event.type() == QEvent.Enter:
-                    self.setStyleSheet(f"""
-                        QFrame#weightRowStandard {{
-                            background-color: {_wph};
-                            border-radius: 8px;
-                        }}
-                    """)
-                elif event.type() == QEvent.Leave:
-                    self.setStyleSheet(f"""
-                        QFrame#weightRowStandard {{
-                            background-color: {_wp};
-                            border-radius: 8px;
-                        }}
-                    """)
-        return super().eventFilter(obj, event)
 
     def set_density_silent(self, density: float):
         """Set numeric density without emitting densityChanged."""

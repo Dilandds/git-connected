@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, QPoint, QTimer, QSize
 from PyQt5.QtGui import QPixmap, QDrag, QPainter, QColor, QRadialGradient, QPen, QImageReader
 from i18n import t, on_language_changed
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.annotation_panel import (
     _ANNO_CARD_BORDER,
     _ANNO_CARD_BORDER_HOVER,
@@ -929,7 +929,7 @@ class TextureCard(QFrame):
                 background-color: rgba(255, 255, 255, 0.20);
                 color: #FFFFFF;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         close_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
         header.addWidget(close_btn)
         layout.addLayout(header)
@@ -1375,7 +1375,7 @@ class TexturePanel(QWidget):
             QPushButton#resetTextureBtn:pressed {{
                 background-color: {default_theme.button_primary_pressed};
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         reset_btn.clicked.connect(self.reset_textures_requested.emit)
         title_row.addWidget(reset_btn)
 

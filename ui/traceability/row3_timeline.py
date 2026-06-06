@@ -2,16 +2,38 @@
 from typing import List
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QComboBox, QLineEdit, QDialog,
+    QFrame, QScrollArea, QDialog,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint
+from PyQt5.QtGui import QColor, QPainter, QBrush, QPen
 from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceStage, TraceSubStage
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _ACCENT_H,
-    _STATUS_COLORS, _TOOLTIP_STYLE,
+    _STATUS_COLORS, _TOOLTIP_STYLE, _BTN_DEL_CIRCLE,
 )
 from .dialogs import _EditStageDialog
+
+_CARD_W  = 180   # stage card width
+_CARD_H  = 76    # stage card height
+_ROW_H   = 104   # total row height
+_ARROW_W = 36    # arrow separator width
+
+
+class _StatusDot(QWidget):
+    """Small filled circle used as the status icon."""
+    def __init__(self, color: str, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self.setFixedSize(10, 10)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(self._color))
+        p.drawEllipse(1, 1, 8, 8)
 
 
 class _StageTimelineRow(QWidget):
@@ -22,7 +44,7 @@ class _StageTimelineRow(QWidget):
         super().__init__(parent)
         self._stages:  List[TraceStage] = []
         self._selected = 0
-        self.setFixedHeight(86)
+        self.setFixedHeight(_ROW_H)
         self.setStyleSheet(f'background: {_BG}; border-bottom: 2px solid {_BORDER};')
         self._build()
 
@@ -31,23 +53,33 @@ class _StageTimelineRow(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        def _nav_btn(text):
+        def _nav_btn(text, border_side):
             b = QPushButton(text)
-            b.setFixedSize(28, 86)
+            b.setFixedSize(32, _ROW_H)
+            border_css = (
+                f'border-right: 1px solid {_BORDER};' if border_side == 'right'
+                else f'border-left: 1px solid {_BORDER};'
+            )
             b.setStyleSheet(f"""
                 QPushButton {{
-                    background: transparent; color: {_MUTED};
-                    border: none; font-size: 20px; font-weight: bold;
+                    background: transparent;
+                    color: {_TEXT};
+                    {border_css}
+                    border-top: none; border-bottom: none;
+                    font-size: 20px; font-weight: 600;
+                    padding: 0;
                 }}
-                QPushButton:hover {{ background: #e8f0fe; color: {_ACCENT}; }}
+                QPushButton:hover {{
+                    background: #e8f0fe;
+                    color: {_ACCENT};
+                }}
+                QPushButton:disabled {{ color: {_BORDER}; }}
             """)
+            b.setCursor(Qt.PointingHandCursor)
             return b
 
-        self._prev_btn = _nav_btn('‹')
-        self._prev_btn.setStyleSheet(
-            self._prev_btn.styleSheet() + f'border-right: 1px solid {_BORDER};'
-        )
-        self._prev_btn.clicked.connect(lambda: self._scroll(-150))
+        self._prev_btn = _nav_btn('‹', 'right')
+        self._prev_btn.clicked.connect(lambda: self._scroll(-200))
         root.addWidget(self._prev_btn)
 
         self._scroll_area = QScrollArea()
@@ -55,19 +87,31 @@ class _StageTimelineRow(QWidget):
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setStyleSheet(f'background: {_BG}; border: none;')
-        self._inner = QWidget(); self._inner.setStyleSheet(f'background: {_BG};')
+
+        self._inner = QWidget()
+        self._inner.setStyleSheet(f'background: {_BG};')
         self._inner_l = QHBoxLayout(self._inner)
-        self._inner_l.setContentsMargins(10, 8, 10, 8)
+        self._inner_l.setContentsMargins(12, 0, 12, 0)
         self._inner_l.setSpacing(0)
+        self._inner_l.setAlignment(Qt.AlignVCenter)
+
         self._scroll_area.setWidget(self._inner)
         root.addWidget(self._scroll_area, 1)
 
-        self._next_btn = _nav_btn('›')
-        self._next_btn.setStyleSheet(
-            self._next_btn.styleSheet() + f'border-left: 1px solid {_BORDER};'
-        )
-        self._next_btn.clicked.connect(lambda: self._scroll(150))
+        self._next_btn = _nav_btn('›', 'left')
+        self._next_btn.clicked.connect(lambda: self._scroll(200))
         root.addWidget(self._next_btn)
+
+    def selected_center_x(self) -> int:
+        """X-center (in this widget's coordinates) of the selected stage card."""
+        idx = self._selected
+        layout_pos = idx * 2  # arrows sit at odd positions (2i+1)
+        if layout_pos < self._inner_l.count():
+            item = self._inner_l.itemAt(layout_pos)
+            if item and item.widget():
+                w = item.widget()
+                return w.mapTo(self, QPoint(w.width() // 2, 0)).x()
+        return self.width() // 2
 
     def load_stages(self, stages: List[TraceStage], selected: int = 0):
         self._stages   = stages
@@ -83,93 +127,107 @@ class _StageTimelineRow(QWidget):
         for i, stage in enumerate(self._stages):
             if i > 0:
                 arr = QLabel('→')
-                arr.setFixedWidth(22)
-                arr.setAlignment(Qt.AlignVCenter)
-                arr.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
-                self._inner_l.addWidget(arr)
-            self._inner_l.addWidget(self._make_card(stage, i))
+                arr.setFixedWidth(_ARROW_W)
+                arr.setAlignment(Qt.AlignCenter)
+                arr.setStyleSheet(
+                    f'color: {_MUTED}; font-size: 16px; background: transparent; border: none;'
+                )
+                self._inner_l.addWidget(arr, 0, Qt.AlignVCenter)
+            self._inner_l.addWidget(self._make_card(stage, i), 0, Qt.AlignVCenter)
 
+        # "+ Add stage" button
         add = QPushButton('＋  Add stage')
-        add.setFixedHeight(34)
+        add.setFixedHeight(36)
         add.setStyleSheet(f"""
             QPushButton {{
-                background: #e8f0fe; color: {_ACCENT};
-                border: 1px dashed {_ACCENT}; border-radius: 5px;
-                padding: 0 12px; font-size: 11px; font-weight: bold;
+                background: transparent; color: {_ACCENT};
+                border: 1.5px dashed {_ACCENT}; border-radius: 7px;
+                padding: 0 14px; font-size: 11px; font-weight: 600;
             }}
-            QPushButton:hover {{ background: {_ACCENT}; color: white; border: 1px solid {_ACCENT}; }}
+            QPushButton:hover {{ background: #eff6ff; }}
         """)
         add.setCursor(Qt.PointingHandCursor)
         add.clicked.connect(self._add_stage)
-        self._inner_l.addSpacing(8)
-        self._inner_l.addWidget(add)
+        self._inner_l.addSpacing(12)
+        self._inner_l.addWidget(add, 0, Qt.AlignVCenter)
         self._inner_l.addStretch()
 
         n = len(self._stages)
-        w = n * 116 + max(0, n - 1) * 22 + 110 + 20
-        self._inner.setFixedSize(max(w, 350), 70)
+        total_w = n * (_CARD_W + _ARROW_W) + 140 + 24
+        self._inner.setFixedSize(max(total_w, 400), _ROW_H)
 
     def _make_card(self, stage: TraceStage, idx: int) -> QWidget:
         is_sel = (idx == self._selected)
-        status_color = _STATUS_COLORS.get(stage.status, _MUTED)
+        status = stage.status
+        status_color = _STATUS_COLORS.get(status, _MUTED)
 
         card = QWidget()
-        card.setFixedWidth(116)
+        card.setObjectName('stageCard')
+        card.setFixedSize(_CARD_W, _CARD_H)
         card.setCursor(Qt.PointingHandCursor)
         card.setToolTip('Double-click to rename')
+        # Use #stageCard selector so child widgets are NOT affected
         card.setStyleSheet(f"""
-            QWidget {{
-                background: white;
+            QWidget#stageCard {{
+                background: {'#eff6ff' if is_sel else 'white'};
                 border: {'2px' if is_sel else '1px'} solid {_ACCENT if is_sel else _BORDER};
-                border-radius: 7px;
+                border-radius: 9px;
             }}
-            {'QWidget:hover { border-color: ' + _ACCENT + '; background: #f0f7ff; }' if not is_sel else ''}
+            {'QWidget#stageCard:hover { border-color: ' + _ACCENT + '; background: #f0f7ff; }' if not is_sel else ''}
         """ + _TOOLTIP_STYLE)
 
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(8, 6, 8, 6)
-        cl.setSpacing(3)
+        outer = QVBoxLayout(card)
+        outer.setContentsMargins(10, 9, 8, 9)
+        outer.setSpacing(6)
 
-        num_row = QHBoxLayout(); num_row.setSpacing(4); num_row.setContentsMargins(0, 0, 0, 0)
+        # ── top row: [num]  [name ···]  [×] ─────────────────────────────
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
+
         num_lbl = QLabel(f'{stage.number:02d}')
+        num_lbl.setFixedWidth(26)
         num_lbl.setStyleSheet(
-            f'color: {_ACCENT}; font-size: 13px; font-weight: bold; background: transparent; border: none;'
+            f'color: {_ACCENT}; font-size: 15px; font-weight: 800;'
+            f' background: transparent; border: none;'
         )
-        num_row.addWidget(num_lbl)
-        num_row.addStretch()
-        if stage.status == 'Completed':
-            icon = QLabel('✓')
-            icon.setStyleSheet(
-                f'color: {_STATUS_COLORS["Completed"]}; font-size: 11px; background: transparent; border: none;'
-            )
-            num_row.addWidget(icon)
+        top.addWidget(num_lbl, 0, Qt.AlignVCenter)
 
-        del_btn = QPushButton('×')
+        name_lbl = QLabel(stage.name)
+        name_lbl.setStyleSheet(
+            f'color: {_TEXT}; font-size: 11px; font-weight: 700;'
+            f' background: transparent; border: none;'
+        )
+        name_lbl.setWordWrap(False)
+        top.addWidget(name_lbl, 1, Qt.AlignVCenter)
+
+        del_btn = QPushButton('✕')
         del_btn.setFixedSize(16, 16)
-        del_btn.setStyleSheet("""
-            QPushButton {
-                background: #fee2e2; color: #ef4444;
-                border: none; border-radius: 8px;
-                font-size: 11px; font-weight: bold;
-            }
-            QPushButton:hover { background: #ef4444; color: white; }
-        """)
+        del_btn.setStyleSheet(_BTN_DEL_CIRCLE)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setToolTip(f'Remove {stage.name}')
         del_btn.clicked.connect(lambda _, i=idx: self._remove_stage(i))
-        num_row.addWidget(del_btn)
-        cl.addLayout(num_row)
+        top.addWidget(del_btn, 0, Qt.AlignVCenter)
 
-        name_lbl = QLabel(stage.name)
-        name_lbl.setWordWrap(True)
-        name_lbl.setStyleSheet(
-            f'color: {_TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;'
+        outer.addLayout(top)
+
+        # ── status row: [dot]  [label] ────────────────────────────────────
+        st_row = QHBoxLayout()
+        st_row.setContentsMargins(0, 0, 0, 0)
+        st_row.setSpacing(5)
+
+        dot = _StatusDot(status_color)
+        st_row.addWidget(dot, 0, Qt.AlignVCenter)
+
+        st_lbl = QLabel(status)
+        st_lbl.setStyleSheet(
+            f'color: {status_color}; font-size: 10px; font-weight: 500;'
+            f' background: transparent; border: none;'
         )
-        cl.addWidget(name_lbl)
+        st_row.addWidget(st_lbl, 0, Qt.AlignVCenter)
+        st_row.addStretch()
 
-        st_lbl = QLabel(stage.status)
-        st_lbl.setStyleSheet(f'color: {status_color}; font-size: 9px; background: transparent; border: none;')
-        cl.addWidget(st_lbl)
+        outer.addLayout(st_row)
 
         card.mousePressEvent       = lambda _, i=idx: self._select(i)
         card.mouseDoubleClickEvent = lambda _, i=idx: self._edit_stage(i)
@@ -179,7 +237,8 @@ class _StageTimelineRow(QWidget):
         if not self._stages or idx >= len(self._stages):
             return
         stage = self._stages[idx]
-        if not ask_yes_no_dialog(self, 'Remove Stage', f"Remove '{stage.name}' and all its sub-stages?"):
+        if not ask_yes_no_dialog(self, 'Remove Stage',
+                                  f"Remove '{stage.name}' and all its sub-stages?"):
             return
         self._stages.pop(idx)
         self._selected = min(self._selected, max(0, len(self._stages) - 1))

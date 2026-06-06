@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 from ui.components import confirm_dialog
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 from ui.annotation_panel import (
     _ANNO_CARD_BORDER,
@@ -120,7 +120,7 @@ class ScreenshotCard(QFrame):
                 background-color: rgba(255, 255, 255, 0.20);
                 color: #FFFFFF;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         close_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
         header.addWidget(close_btn)
         layout.addLayout(header)

@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
-from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 from core.edition import is_education
 
@@ -184,7 +184,7 @@ class TechnicalSidebar(QWidget):
             QPushButton:hover {{
                 background-color: {default_theme.button_primary_hover};
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         add_mfr_btn.clicked.connect(self._add_manufacturer_field)
         mfr_header.addWidget(add_mfr_btn)
         layout.addLayout(mfr_header)

@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +313,7 @@ class AnnotationCard(QFrame):
                 color: #F87171;
                 border-radius: 14px;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.annotation.id))
         layout.addWidget(self.delete_btn)
     

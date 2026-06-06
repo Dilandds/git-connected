@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QFrame, QSizePolicy
 )
 from PyQt5.QtCore import pyqtSignal, Qt
-from ui.styles import default_theme
+from ui.styles import default_theme, TOOLTIP_STYLE
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class PartCard(QFrame):
         self.eye_btn.setStyleSheet(f"""
             QPushButton {{ background: transparent; border: none; font-size: 12px; padding: 2px; min-width: 24px; min-height: 24px; border-radius: 4px; }}
             QPushButton:hover {{ background: {default_theme.row_bg_hover}; }}
-        """)
+        """ + TOOLTIP_STYLE)
         self.eye_btn.clicked.connect(self._toggle_visibility)
         layout.addWidget(self.eye_btn)
 

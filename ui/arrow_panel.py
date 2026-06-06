@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor
-from ui.styles import default_theme, FONTS
+from ui.styles import default_theme, FONTS, TOOLTIP_STYLE
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +211,7 @@ def _control_button(text: str, tooltip: str = "") -> QPushButton:
             color: {default_theme.text_subtext};
             background-color: {default_theme.background};
         }}
-    """)
+    """ + TOOLTIP_STYLE)
     return btn
 
 

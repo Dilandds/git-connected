@@ -4,7 +4,7 @@ Provides: Color picker, Eraser toggle, Undo last stroke, Clear all.
 """
 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton, QFrame
 from PyQt5.QtCore import pyqtSignal, Qt
-from ui.styles import default_theme
+from ui.styles import default_theme, TOOLTIP_STYLE
 
 
 class DrawToolbar(QWidget):
@@ -78,8 +78,8 @@ class DrawToolbar(QWidget):
         self._eraser_btn.setCursor(Qt.PointingHandCursor)
         self._eraser_btn.clicked.connect(self._toggle_eraser)
         layout.addWidget(self._eraser_btn)
-        self._btn_style = btn_style
-        self._active_style = active_style
+        self._btn_style    = btn_style    + TOOLTIP_STYLE
+        self._active_style = active_style + TOOLTIP_STYLE
 
         self._undo_btn = QPushButton("↩")
         self._undo_btn.setToolTip("Undo last stroke")

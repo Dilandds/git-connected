@@ -977,6 +977,7 @@ class STLViewerWindow(QMainWindow):
             tab.filename = display_name
         tab_bar_index = self.tab_bar.insertTab(self._plus_tab_index, _ecto_tab_caption(display_name))
         self._plus_tab_index += 1  # "+" tab shifted right
+        self._attach_tab_close_btn(tab_bar_index)
         
         # Switch to the new tab
         self.tab_bar.setCurrentIndex(tab_bar_index)
@@ -1141,6 +1142,37 @@ class STLViewerWindow(QMainWindow):
         tab.texture_mode_active = getattr(self.toolbar, 'texture_mode_enabled', False)
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
     
+    def _attach_tab_close_btn(self, tab_bar_index: int):
+        """Attach a styled × close button to a tab."""
+        btn = QPushButton("×")
+        btn.setFixedSize(16, 16)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet("""
+            QPushButton {
+                color: #9aa3b0;
+                background: transparent;
+                border: none;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 0;
+                margin: 0;
+            }
+            QPushButton:hover {
+                color: #ffffff;
+                background: rgba(255, 255, 255, 0.15);
+                border-radius: 3px;
+            }
+            QPushButton:pressed {
+                color: #ffffff;
+                background: rgba(255, 255, 255, 0.25);
+                border-radius: 3px;
+            }
+        """)
+        btn.clicked.connect(lambda: self._on_tab_close_requested(
+            self.tab_bar.tabAt(btn.mapTo(self.tab_bar, btn.rect().center()))
+        ))
+        self.tab_bar.setTabButton(tab_bar_index, QTabBar.RightSide, btn)
+
     def _on_tab_close_requested(self, index: int):
         """Handle tab close button click."""
         if index == self._plus_tab_index:

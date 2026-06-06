@@ -12,7 +12,7 @@ from PyQt5.QtGui import (
     QPainter, QPixmap, QColor, QPen, QFont, QImage,
     QCursor, QFontMetrics
 )
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 from ui.draw_color_picker import DrawColorPicker
 
@@ -341,8 +341,8 @@ class ScreenshotEditorDialog(QDialog):
                 background-color: {default_theme.button_primary_hover};
             }}
         """
-        self._btn_css = btn_css
-        self._active_css = active_css
+        self._btn_css    = btn_css    + TOOLTIP_STYLE
+        self._active_css = active_css + TOOLTIP_STYLE
 
         # Tool buttons
         self._line_btn = QPushButton("✏ Line")

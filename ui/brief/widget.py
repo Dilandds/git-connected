@@ -1,0 +1,169 @@
+"""
+ProjectBriefWidget — assembles the 7 section cards into a scrollable page.
+All data and edit-mode logic is delegated to the individual section cards.
+"""
+import logging
+from datetime import date
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFrame, QScrollArea,
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from ui.styles import make_font
+from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, BTN_PRIMARY, BTN_SECONDARY
+from .section_overview    import ProductOverviewCard
+from .section_techniques  import TechniquesCard
+from .section_targets     import TargetPointsCard
+from .section_dates       import TargetDatesCard
+from .section_inspiration import InspirationCard
+from .section_components  import ComponentsCard
+from .section_notes       import NotesCard
+
+logger = logging.getLogger(__name__)
+
+
+class ProjectBriefWidget(QWidget):
+    """Full Project Brief screen."""
+
+    changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._edit_mode = False
+        self.setStyleSheet(f'background-color: {_BG};')
+        self._build_ui()
+        self._set_edit_mode(False)
+
+    # ── construction ──────────────────────────────────────────────────────────
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._build_top_bar())
+        root.addWidget(self._build_scroll_body())
+
+    def _build_top_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setStyleSheet(f'background-color: {_BG}; border-bottom: 1px solid {_BORDER};')
+        bar.setFixedHeight(52)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(24, 0, 24, 0)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        page_title = QLabel('Project Brief')
+        page_title.setFont(make_font(size=15, bold=True))
+        page_title.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
+        subtitle = QLabel('Define the essential information and objectives of the project.')
+        subtitle.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+        title_col.addWidget(page_title)
+        title_col.addWidget(subtitle)
+        layout.addLayout(title_col)
+        layout.addStretch()
+
+        self._edit_btn = QPushButton('✎  Edit Brief')
+        self._edit_btn.setStyleSheet(BTN_SECONDARY)
+        self._edit_btn.setFixedHeight(32)
+        self._edit_btn.setCursor(Qt.PointingHandCursor)
+        self._edit_btn.clicked.connect(self._toggle_edit)
+        layout.addWidget(self._edit_btn)
+        return bar
+
+    def _build_scroll_body(self) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background-color: {_BG}; border: none; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
+            QScrollBar::handle:vertical {{ background: {_BORDER_L}; border-radius: 3px; }}
+        """)
+
+        body = QWidget()
+        body.setStyleSheet(f'background-color: {_BG};')
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(24, 20, 24, 24)
+        layout.setSpacing(16)
+
+        # Instantiate all section cards
+        self._s_overview    = ProductOverviewCard()
+        self._s_techniques  = TechniquesCard()
+        self._s_targets     = TargetPointsCard()
+        self._s_dates       = TargetDatesCard()
+        self._s_inspiration = InspirationCard()
+        self._s_components  = ComponentsCard()
+        self._s_notes       = NotesCard()
+
+        # Row 1: Overview + Techniques
+        row1 = QHBoxLayout(); row1.setSpacing(16)
+        row1.addWidget(self._s_overview, 2)
+        row1.addWidget(self._s_techniques, 3)
+        layout.addLayout(row1)
+
+        # Row 2: Targets + Dates + Inspiration
+        row2 = QHBoxLayout(); row2.setSpacing(16)
+        row2.addWidget(self._s_targets, 2)
+        row2.addWidget(self._s_dates, 2)
+        row2.addWidget(self._s_inspiration, 3)
+        layout.addLayout(row2)
+
+        # Row 3: Components + Notes
+        row3 = QHBoxLayout(); row3.setSpacing(16)
+        row3.addWidget(self._s_components, 3)
+        row3.addWidget(self._s_notes, 2)
+        layout.addLayout(row3)
+
+        layout.addWidget(self._build_footer())
+        layout.addStretch()
+
+        scroll.setWidget(body)
+        return scroll
+
+    def _build_footer(self) -> QWidget:
+        w = QWidget(); w.setStyleSheet('background: transparent;')
+        layout = QHBoxLayout(w)
+        layout.setContentsMargins(0, 8, 0, 0)
+        today = date.today().strftime('%d %B %Y')
+        for text, align in [(f'Document generated on {today}', Qt.AlignLeft),
+                             ('ECTOFORM v1.2.0', Qt.AlignRight)]:
+            lbl = QLabel(text)
+            lbl.setStyleSheet(
+                f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;'
+            )
+            layout.addWidget(lbl)
+            if align == Qt.AlignLeft:
+                layout.addStretch()
+        return w
+
+    # ── edit mode ─────────────────────────────────────────────────────────────
+
+    def _toggle_edit(self):
+        self._set_edit_mode(not self._edit_mode)
+        if not self._edit_mode:
+            self.changed.emit()
+
+    def _set_edit_mode(self, enabled: bool):
+        self._edit_mode = enabled
+        self._edit_btn.setText('✔  Save Brief' if enabled else '✎  Edit Brief')
+        self._edit_btn.setStyleSheet(BTN_PRIMARY if enabled else BTN_SECONDARY)
+        for section in self._all_sections():
+            section.set_edit_mode(enabled)
+
+    def _all_sections(self):
+        return (
+            self._s_overview, self._s_techniques, self._s_targets,
+            self._s_dates, self._s_inspiration, self._s_components, self._s_notes,
+        )
+
+    # ── serialisation ─────────────────────────────────────────────────────────
+
+    def get_data(self) -> dict:
+        data = {}
+        for section in self._all_sections():
+            data.update(section.get_data())
+        return data
+
+    def set_data(self, data: dict):
+        for section in self._all_sections():
+            section.set_data(data)

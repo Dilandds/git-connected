@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
-from ui.styles import default_theme, make_font
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
@@ -296,7 +296,7 @@ class ToolbarButton(QPushButton):
                     border: 1px solid {_TB_ACTIVE_BORDER};
                     border-radius: 6px;
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
         else:
             self.setStyleSheet(f"""
                 QPushButton {{
@@ -309,8 +309,8 @@ class ToolbarButton(QPushButton):
                     border: 1px solid {_TB_BORDER};
                     border-radius: 6px;
                 }}
-            """)
-    
+            """ + TOOLTIP_STYLE)
+
     def _apply_hover_style(self):
         """Apply the hover style."""
         if self._is_active:
@@ -325,7 +325,7 @@ class ToolbarButton(QPushButton):
                     border: 1px solid {_TB_ACTIVE_BORDER};
                     border-radius: 6px;
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
         else:
             self.setStyleSheet(f"""
                 QPushButton {{
@@ -338,8 +338,8 @@ class ToolbarButton(QPushButton):
                     border: 1px solid {_TB_BORDER};
                     border-radius: 6px;
                 }}
-            """)
-    
+            """ + TOOLTIP_STYLE)
+
     def _apply_disabled_style(self):
         """Apply disabled style."""
         self.setStyleSheet(f"""
@@ -348,7 +348,7 @@ class ToolbarButton(QPushButton):
                 border: 1px solid transparent;
                 border-radius: 6px;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         _ifs = getattr(self, '_icon_label_font_px', 12)
         self.icon_label.setStyleSheet(f"color: #888888; font-size: {_ifs}px; background: transparent;")
         self.text_label.setStyleSheet(_toolbar_label_style('#888888', self._label_font_size))

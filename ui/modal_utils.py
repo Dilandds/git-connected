@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QFrame, QScrollArea, QWidget,
 )
 from PyQt5.QtCore import Qt
-from ui.styles import default_theme, dropdown_arrow_url
+from ui.styles import default_theme, dropdown_arrow_url, TOOLTIP_STYLE
 
 # ── Design tokens ─────────────────────────────────────────────────────────────
 MODAL_BG    = default_theme.background
@@ -64,13 +64,7 @@ MODAL_BTN_DESTRUCTIVE = """
     QPushButton:pressed { background: #fecaca; }
 """
 
-_TOOLTIP_CSS = """
-    QToolTip {
-        color: #1e2430; background-color: #f8f9fa;
-        border: 1px solid #d1d5db; padding: 4px 8px;
-        border-radius: 4px; font-size: 11px;
-    }
-"""
+_TOOLTIP_CSS = TOOLTIP_STYLE  # imported from styles.py — single source of truth
 
 _ARROW = dropdown_arrow_url()
 
@@ -91,7 +85,7 @@ def _build_dark_stylesheet() -> str:
             background-color: {t.input_bg};
             color: {t.text_primary};
             border: 1px solid {t.input_border};
-            border-radius: 6px; padding: 6px 8px;
+            border-radius: 6px; padding: 3px 8px;
             selection-background-color: {t.button_primary};
             selection-color: white;
         }}
@@ -426,12 +420,15 @@ def ask_yes_no_cancel_dialog(parent, title: str, message: str,
 
 
 def ask_text_input_dialog(parent, title: str, label: str,
-                          placeholder: str = '', *, light: bool = True) -> tuple:
+                          placeholder: str = '', *,
+                          default_text: str = '', light: bool = False) -> tuple:
     """Single-line text input. Returns (text, accepted)."""
     dlg = FormModal(parent, title,
                     theme=BaseModal.LIGHT if light else BaseModal.DARK)
     inp = QLineEdit()
     inp.setPlaceholderText(placeholder)
+    if default_text:
+        inp.setText(default_text)
     dlg.add_field(label, inp)
     dlg.finish()
     inp.returnPressed.connect(dlg.ok_btn.click)
@@ -441,7 +438,7 @@ def ask_text_input_dialog(parent, title: str, label: str,
 
 
 def ask_password_dialog(parent, title: str, label: str,
-                        *, light: bool = True) -> tuple:
+                        *, light: bool = False) -> tuple:
     """Password input (masked). Returns (text, accepted)."""
     dlg = FormModal(parent, title,
                     theme=BaseModal.LIGHT if light else BaseModal.DARK)
