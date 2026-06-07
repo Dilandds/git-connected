@@ -25,9 +25,9 @@ from ui.modal_utils import show_message_dialog, ask_yes_no_dialog
 logger = logging.getLogger(__name__)
 
 # Arrow annotation colours
-ARROW_COLOR = "#5294E2"
+ARROW_COLOR = "#000000"
 ARROW_SELECTED_COLOR = "#E53E3E"
-ARROW_BADGE_BG = "#5294E2"
+ARROW_BADGE_BG = "#000000"
 ARROW_BADGE_TEXT = "#FFFFFF"
 IS_WINDOWS = os.name == "nt"
 ARROW_BADGE_SIZE = 30 if IS_WINDOWS else 26

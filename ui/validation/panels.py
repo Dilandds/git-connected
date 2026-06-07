@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
     QGridLayout, QFileDialog, QAbstractItemView,
 )
-from PyQt5.QtCore import Qt, QDate, QTime, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QTime, QPoint, pyqtSignal
 from PyQt5.QtGui import QColor, QPixmap, QIcon
 
 from ui.styles import make_font
@@ -28,6 +28,102 @@ from .shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── Photo button with hover zoom preview ──────────────────────────────────────
+
+class _PhotoButton(QPushButton):
+    """Photo upload button that shows a large floating preview when hovering over a loaded photo."""
+
+    _PREVIEW_W = 340
+    _PREVIEW_H = 300
+
+    def __init__(self, w: int, h: int, parent=None):
+        super().__init__(parent)
+        self._photo_path = ""
+        self._preview: Optional[QLabel] = None
+        self.setFixedSize(w, h)
+        self.setCursor(Qt.PointingHandCursor)
+        self._apply_empty_style()
+
+    def _apply_empty_style(self):
+        self.setText("+\nAdd photo")
+        self.setIcon(QIcon())
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: #f1f3f5; border: 1px dashed {_BORDER};
+                border-radius: 6px; color: {_MUTED}; font-size: 10px;
+            }}
+            QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
+        """)
+
+    def set_photo(self, path: str):
+        self._photo_path = path
+        if not path:
+            self._apply_empty_style()
+            return
+        pix = QPixmap(path)
+        if pix.isNull():
+            self._apply_empty_style()
+            return
+        self.setIcon(QIcon(pix.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)))
+        self.setIconSize(self.size())
+        self.setText("")
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: #f1f3f5; border: 1px solid {_BORDER}; border-radius: 6px;
+            }}
+            QPushButton:hover {{ border: 2px solid {_ACCENT}; }}
+        """)
+
+    def enterEvent(self, event):
+        if self._photo_path:
+            self._show_preview()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hide_preview()
+        super().leaveEvent(event)
+
+    def _show_preview(self):
+        pix = QPixmap(self._photo_path)
+        if pix.isNull():
+            return
+
+        if self._preview is None:
+            self._preview = QLabel()
+            self._preview.setWindowFlags(Qt.ToolTip | Qt.FramelessWindowHint)
+            self._preview.setStyleSheet("""
+                QLabel {
+                    background: white;
+                    border: 1px solid #d1d5db;
+                    border-radius: 8px;
+                    padding: 5px;
+                }
+            """)
+
+        scaled = pix.scaled(self._PREVIEW_W, self._PREVIEW_H, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._preview.setPixmap(scaled)
+        self._preview.setFixedSize(scaled.width() + 10, scaled.height() + 10)
+
+        # Position to the right of the button; fall back to left if near screen edge
+        from PyQt5.QtWidgets import QApplication
+        global_pos = self.mapToGlobal(QPoint(self.width() + 6, 0))
+        screen = QApplication.screenAt(global_pos)
+        if screen:
+            sr = screen.geometry()
+            if global_pos.x() + self._preview.width() > sr.right():
+                global_pos = self.mapToGlobal(QPoint(-(self._preview.width() + 6), 0))
+            if global_pos.y() + self._preview.height() > sr.bottom():
+                global_pos.setY(sr.bottom() - self._preview.height() - 4)
+
+        self._preview.move(global_pos)
+        self._preview.show()
+        self._preview.raise_()
+
+    def _hide_preview(self):
+        if self._preview:
+            self._preview.hide()
 
 
 # ── Preparation Panel ─────────────────────────────────────────────────────────
@@ -113,16 +209,7 @@ class PreparationPanel(QScrollArea):
         self._photo_labels: List[QLineEdit]   = []
 
         for i in range(8):
-            btn = QPushButton("+\nAdd photo")
-            btn.setFixedSize(112, 88)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: #f1f3f5; border: 1px dashed {_BORDER};
-                    border-radius: 6px; color: {_MUTED}; font-size: 10px;
-                }}
-                QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
-            """)
+            btn = _PhotoButton(112, 88)
             btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
 
             lbl_inp = QLineEdit()
@@ -215,7 +302,7 @@ class PreparationPanel(QScrollArea):
         self._milestone_date_edits: List         = []
         _NULL_DATE = QDate(2000, 1, 1)
 
-        from PyQt5.QtWidgets import QDateEdit
+        from ui.date_picker import EctoDateEdit
         for idx, milestone in enumerate(SCHEDULE_MILESTONES):
             row_w = QWidget()
             row_w.setStyleSheet("background: transparent;")
@@ -231,24 +318,9 @@ class PreparationPanel(QScrollArea):
             name_lbl.setFixedWidth(120)
             name_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px; background: transparent; border: none;")
 
-            de = QDateEdit()
-            de.setDisplayFormat("dd/MM/yyyy")
-            de.setCalendarPopup(True)
-            de.setMinimumDate(_NULL_DATE)
-            de.setSpecialValueText("—")
-            de.setDate(_NULL_DATE)
+            de = EctoDateEdit(QDate.currentDate())
             de.setFixedHeight(24)
             de.setFixedWidth(100)
-            de.setStyleSheet(f"""
-                QDateEdit {{
-                    background: #f5f6f8; color: {_TEXT};
-                    border: 1px solid {_BORDER}; border-radius: 4px;
-                    padding: 2px 4px; font-size: 10px;
-                }}
-                QDateEdit:focus {{ border-color: {_ACCENT}; }}
-                QDateEdit::drop-down {{ border: none; width: 16px; }}
-                QDateEdit::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 10px; }}
-            """)
             de.dateChanged.connect(lambda d, i=idx: self._on_milestone_date_changed(i, d))
             de.dateChanged.connect(lambda _: self.changed.emit())
 
@@ -443,15 +515,9 @@ class PreparationPanel(QScrollArea):
             self, "Select Photo", "", "Images (*.png *.jpg *.jpeg)"
         )
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                btn = self._photo_btns[idx]
-                btn.setIcon(QIcon(
-                    pix.scaled(btn.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-                ))
-                btn.setIconSize(btn.size())
-                btn.setText("")
-                self.changed.emit()
+            btn = self._photo_btns[idx]
+            btn.set_photo(path)
+            self.changed.emit()
 
 
 # ── Report Panel ──────────────────────────────────────────────────────────────
@@ -484,7 +550,8 @@ class ReportPanel(QScrollArea):
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none; padding-bottom: 4px;")
         self._layout.addWidget(hdr)
 
-        from PyQt5.QtWidgets import QTimeEdit, QDateEdit
+        from PyQt5.QtWidgets import QTimeEdit
+        from ui.date_picker import EctoDateEdit
 
         # ── Row 1: Meeting Info | Overall Decision | Present Attendees | Attendees' Remarks ──
         row1 = QHBoxLayout()
@@ -498,10 +565,7 @@ class ReportPanel(QScrollArea):
         mc.addWidget(_sep())
 
         mc.addWidget(_lbl("Date"))
-        self._r_date = QDateEdit(QDate.currentDate())
-        self._r_date.setDisplayFormat("dd/MM/yyyy")
-        self._r_date.setCalendarPopup(True)
-        self._r_date.setStyleSheet(_INPUT)
+        self._r_date = EctoDateEdit(QDate.currentDate())
         self._r_date.setFixedHeight(26)
         mc.addWidget(self._r_date)
 
@@ -621,8 +685,20 @@ class ReportPanel(QScrollArea):
         self._mod_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self._mod_table.setColumnWidth(0, 36)
         self._mod_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        for c in range(2, 6):
-            self._mod_table.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        # Fixed column widths — wide enough for the longest option text
+        self._mod_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self._mod_table.setColumnWidth(2, 160)   # "To modify"
+        for c in range(3, 5):
+            self._mod_table.horizontalHeader().setSectionResizeMode(c, QHeaderView.Fixed)
+        self._mod_table.setColumnWidth(3, 140)   # Responsible
+        self._mod_table.setColumnWidth(4, 120)   # Due Date
+        self._mod_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self._mod_table.setColumnWidth(5, 165)   # "In progress"
+        # Minimum width = sum of all fixed columns + min description column
+        # Forces the outer QScrollArea to scroll horizontally instead of squishing
+        self._mod_table.setMinimumWidth(36 + 220 + 160 + 140 + 120 + 165)  # = 841 px
+        self._mod_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._mod_table.setHorizontalScrollMode(self._mod_table.ScrollPerPixel)
         self._mod_table.setMinimumHeight(140)
         self._mod_table.verticalHeader().setVisible(False)
         self._mod_table.itemChanged.connect(lambda: self.changed.emit())
@@ -652,6 +728,12 @@ class ReportPanel(QScrollArea):
         )
         self._ap_table.setStyleSheet(_TABLE_STYLE)
         self._ap_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # Status column: fixed width so "In progress" is never clipped
+        self._ap_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self._ap_table.setColumnWidth(5, 165)
+        self._ap_table.setMinimumWidth(841)
+        self._ap_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._ap_table.setHorizontalScrollMode(self._ap_table.ScrollPerPixel)
         self._ap_table.setMinimumHeight(180)
         self._ap_table.verticalHeader().setVisible(False)
         self._ap_table.itemChanged.connect(lambda: self.changed.emit())

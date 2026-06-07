@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtGui import QColor, QFont
-from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
+from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE, arrow_up_url as _arrow_up, arrow_down_url as _arrow_down
 from ui.modal_utils import (
     ask_yes_no_dialog, ask_password_dialog,
     show_warning_dialog, show_message_dialog, ask_text_input_dialog,
@@ -279,14 +279,43 @@ def _field(placeholder="", h=26) -> QLineEdit:
     return w
 
 
-def _spin(decimals=1, max_val=99999.0) -> QDoubleSpinBox:
-    s = QDoubleSpinBox()
-    s.setDecimals(decimals)
-    s.setRange(0, max_val)
-    s.setStyleSheet(_INPUT)
-    s.setFixedHeight(26)
-    s.setButtonSymbols(QDoubleSpinBox.NoButtons)
-    return s
+class _NumericSpin(QDoubleSpinBox):
+    """SpinBox that shows blank when value is 0 (placeholder look), reveals on focus."""
+
+    def __init__(self, decimals=1, max_val=99999.0):
+        super().__init__()
+        self.setDecimals(decimals)
+        self.setRange(0.0, max_val)
+        self.setFixedHeight(26)
+        self.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.setSpecialValueText(' ')   # show blank when value == minimum (0.0)
+        self._apply_style()
+        self.valueChanged.connect(lambda _: self._apply_style())
+
+    def _apply_style(self):
+        color = _MUTED if self.value() == 0.0 else _TEXT
+        self.setStyleSheet(_INPUT + f"\nQDoubleSpinBox {{ color: {color}; }}")
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        if self.value() == 0.0:
+            self.setSpecialValueText('')   # reveal "0.0" so user can overwrite it
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        if self.value() == 0.0:
+            self.setSpecialValueText(' ')  # hide 0 again when leaving empty field
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, self.selectAll)
+
+
+def _spin(decimals=1, max_val=99999.0) -> _NumericSpin:
+    return _NumericSpin(decimals=decimals, max_val=max_val)
 
 
 def _fmt(value: float, currency: str) -> str:
@@ -312,7 +341,6 @@ class PartnerPanel(QScrollArea):
         self._rate_cells:  List[QDoubleSpinBox] = []
         self._total_cells: List[QLabel]         = []
         self._hours_cells: List[QDoubleSpinBox] = []
-        self._blocking_rate = False
 
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
@@ -452,9 +480,9 @@ class PartnerPanel(QScrollArea):
         cl.addWidget(_sep())
 
         # Table
-        self._table = QTableWidget(0, 5)
+        self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels(
-            ["Component", "Task", "Est. Hours", "Hourly Rate", "Total Cost"]
+            ["Component", "Task", "Est. Hours", "Hourly Rate", "Total Cost", ""]
         )
         self._table.setStyleSheet(_TABLE_STYLE)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -465,9 +493,13 @@ class PartnerPanel(QScrollArea):
         self._table.setColumnWidth(3, 100)
         self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
         self._table.setColumnWidth(4, 110)
+        self._table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self._table.setColumnWidth(5, 32)
         self._table.verticalHeader().setVisible(False)
         self._table.verticalHeader().setDefaultSectionSize(32)
         self._table.setSelectionMode(QAbstractItemView.NoSelection)
+        self._table.setFocusPolicy(Qt.NoFocus)
+        self._table.viewport().setFocusPolicy(Qt.NoFocus)
         self._table.setMinimumHeight(320)
 
         # Populate from partner tasks
@@ -510,13 +542,19 @@ class PartnerPanel(QScrollArea):
                 width: 16px; border-left: 1px solid {_BORDER};
                 border-top-right-radius: 4px; background: #f1f3f5;
             }}
-            QDoubleSpinBox::up-button:hover   {{ background: {_ACCENT}; }}
+            QDoubleSpinBox::up-button:hover {{ background: {_ACCENT}; }}
+            QDoubleSpinBox::up-arrow {{
+                image: url({_arrow_up()}); width: 8px; height: 8px;
+            }}
             QDoubleSpinBox::down-button {{
                 subcontrol-origin: border; subcontrol-position: bottom right;
                 width: 16px; border-left: 1px solid {_BORDER};
                 border-bottom-right-radius: 4px; background: #f1f3f5;
             }}
-            QDoubleSpinBox::down-button:hover  {{ background: {_ACCENT}; }}
+            QDoubleSpinBox::down-button:hover {{ background: {_ACCENT}; }}
+            QDoubleSpinBox::down-arrow {{
+                image: url({_arrow_down()}); width: 8px; height: 8px;
+            }}
         """)
         self._tax_spin.valueChanged.connect(self._on_tax_changed)
         tax_row.addSpacing(8)
@@ -543,45 +581,75 @@ class PartnerPanel(QScrollArea):
         if task is None:
             task = CostTask()
             self._partner.tasks.append(task)
+        self._rebuild_table()
 
-        row = self._table.rowCount()
-        self._table.insertRow(row)
+    def _rebuild_table(self):
+        """Clear and repopulate every row so indices are always correct."""
+        self._table.setRowCount(0)
+        self._hours_cells.clear()
+        self._rate_cells.clear()
+        self._total_cells.clear()
 
-        # Component
-        c_inp = _field()
-        c_inp.setText(task.component)
-        c_inp.textChanged.connect(lambda v, t=task: setattr(t, 'component', v) or self.changed.emit())
-        self._table.setCellWidget(row, 0, c_inp)
+        for row, task in enumerate(self._partner.tasks):
+            self._table.insertRow(row)
 
-        # Task
-        t_inp = _field()
-        t_inp.setText(task.task)
-        t_inp.textChanged.connect(lambda v, t=task: setattr(t, 'task', v) or self.changed.emit())
-        self._table.setCellWidget(row, 1, t_inp)
+            # Component
+            c_inp = _field()
+            c_inp.setText(task.component)
+            c_inp.textChanged.connect(lambda v, t=task: setattr(t, 'component', v) or self.changed.emit())
+            self._table.setCellWidget(row, 0, c_inp)
 
-        # Hours
-        h_spin = _spin(decimals=1)
-        h_spin.setValue(task.hours)
-        h_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_hours_changed(v, t, r))
-        self._table.setCellWidget(row, 2, h_spin)
-        self._hours_cells.append(h_spin)
+            # Task
+            t_inp = _field()
+            t_inp.setText(task.task)
+            t_inp.textChanged.connect(lambda v, t=task: setattr(t, 'task', v) or self.changed.emit())
+            self._table.setCellWidget(row, 1, t_inp)
 
-        # Hourly Rate
-        r_spin = _spin(decimals=2, max_val=99999.0)
-        r_spin.setValue(task.hourly_rate)
-        r_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_rate_changed(v, t, r))
-        self._table.setCellWidget(row, 3, r_spin)
-        self._rate_cells.append(r_spin)
+            # Hours
+            h_spin = _spin(decimals=1)
+            h_spin.setValue(task.hours)
+            h_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_hours_changed(v, t, r))
+            self._table.setCellWidget(row, 2, h_spin)
+            self._hours_cells.append(h_spin)
 
-        # Total (read-only label)
-        tot_lbl = QLabel(self._fmt_total(task.total))
-        tot_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        tot_lbl.setStyleSheet(
-            f"color: {_TEXT}; font-size: 11px; font-weight: bold; "
-            f"background: #f5f6f8; border: none; padding-right: 8px;"
-        )
-        self._table.setCellWidget(row, 4, tot_lbl)
-        self._total_cells.append(tot_lbl)
+            # Hourly Rate
+            r_spin = _spin(decimals=2, max_val=99999.0)
+            r_spin.setValue(task.hourly_rate)
+            r_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_rate_changed(v, t, r))
+            self._table.setCellWidget(row, 3, r_spin)
+            self._rate_cells.append(r_spin)
+
+            # Total (read-only label)
+            tot_lbl = QLabel(self._fmt_total(task.total))
+            tot_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            tot_lbl.setStyleSheet(
+                f"color: {_TEXT}; font-size: 11px; font-weight: bold; "
+                f"background: #f5f6f8; border: none; padding-right: 8px;"
+            )
+            self._table.setCellWidget(row, 4, tot_lbl)
+            self._total_cells.append(tot_lbl)
+
+            # Delete button
+            del_btn = QPushButton("×")
+            del_btn.setFixedSize(24, 24)
+            del_btn.setCursor(Qt.PointingHandCursor)
+            del_btn.setToolTip("Delete row")
+            del_btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent; color: #9ca3af;
+                    border: none; font-size: 15px; font-weight: bold;
+                }
+                QPushButton:hover { color: #ef4444; }
+            """)
+            del_btn.clicked.connect(lambda _, t=task: self._delete_task_row(t))
+            self._table.setCellWidget(row, 5, del_btn)
+
+    def _delete_task_row(self, task: CostTask):
+        if task in self._partner.tasks:
+            self._partner.tasks.remove(task)
+        self._rebuild_table()
+        self._refresh_totals()
+        self.changed.emit()
 
     def _on_hours_changed(self, value: float, task: CostTask, row: int):
         task.hours = value
@@ -592,17 +660,9 @@ class PartnerPanel(QScrollArea):
         self.changed.emit()
 
     def _on_rate_changed(self, value: float, task: CostTask, row: int):
-        if self._blocking_rate:
-            return
-        # Auto-fill rate to ALL rows
-        self._blocking_rate = True
-        for i, (spin, t) in enumerate(zip(self._rate_cells, self._partner.tasks)):
-            spin.setValue(value)
-            t.hourly_rate = value
-            if i < len(self._total_cells):
-                self._total_cells[i].setText(self._fmt_total(t.total))
         task.hourly_rate = value
-        self._blocking_rate = False
+        if row < len(self._total_cells):
+            self._total_cells[row].setText(self._fmt_total(task.total))
         self._refresh_totals()
         self.changed.emit()
 
@@ -1035,8 +1095,9 @@ class TradeWidget(QWidget):
         self._refresh_sub_tabs()
 
     def _on_best_toggled(self, partner_id: int):
+        already_best = any(p.id == partner_id and p.is_best for p in self._trade.partners)
         for p in self._trade.partners:
-            p.is_best = (p.id == partner_id)
+            p.is_best = False if already_best else (p.id == partner_id)
         for pp in self._partner_panels:
             pp.set_best(pp._partner.is_best)
         self._overview_panel.refresh(self._all_trades(), self._currency_fn())

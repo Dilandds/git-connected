@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont
-from ui.styles import default_theme
+from ui.styles import default_theme, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class RulerViewButton(QPushButton):
                     font-size: 11px;
                     font-weight: 500;
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
         else:
             self.setStyleSheet(f"""
                 QPushButton {{
@@ -50,8 +50,8 @@ class RulerViewButton(QPushButton):
                     padding: 4px 12px;
                     font-size: 11px;
                 }}
-            """)
-    
+            """ + TOOLTIP_STYLE)
+
     def _apply_hover_style(self):
         """Apply hover style."""
         if not self._is_active:
@@ -64,7 +64,7 @@ class RulerViewButton(QPushButton):
                     padding: 4px 12px;
                     font-size: 11px;
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
     
     def set_active(self, active):
         """Set the active state of the button."""

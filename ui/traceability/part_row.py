@@ -1,21 +1,22 @@
 from PyQt5.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QMenu, QWidget,
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QWidget, QTextEdit,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QPoint
+from PyQt5.QtCore import Qt, pyqtSignal
 from .models import TracePart
 from .shared import (
     _TEXT, _MUTED, _BORDER, _CARD, _ACCENT,
-    _BTN_ICON, _MENU_STYLE, _PART_PALETTE,
+    _PART_PALETTE,
     _PartBadge, _ProgressBar,
 )
 
 # Column widths — must match headers in parts_table.py
-_W_TASK     = 260
-_W_COMMENTS = 130
+_W_TASK     = 200
+_W_SUBJECT  = 160
+_W_COMMENTS = 200
 _W_DATE     = 105
 _W_STATUS   = 108
 _W_PROGRESS = 200   # includes % + bar + comment count
-_ROW_H      = 80
+_ROW_H      = 100
 
 
 def _date_cell(date_str: str) -> QWidget:
@@ -57,6 +58,7 @@ class _PartRow(QFrame):
     edit_requested    = pyqtSignal(object)
     delete_requested  = pyqtSignal(object)
     comment_requested = pyqtSignal(object)
+    data_changed      = pyqtSignal()
 
     def __init__(self, part: TracePart, index: int,
                  stage_num: int = 1, sub_num: int = 1, parent=None):
@@ -123,28 +125,42 @@ class _PartRow(QFrame):
         lay.addWidget(task_w)
         lay.addStretch(1)
 
-        # ── COMMENTS ──────────────────────────────────────────────────────
-        comm_w = QWidget(); comm_w.setFixedWidth(_W_COMMENTS)
-        comm_w.setStyleSheet('background: transparent;')
-        comm_l = QHBoxLayout(comm_w)
-        comm_l.setContentsMargins(0, 0, 0, 0); comm_l.setSpacing(6)
+        # ── SUBJECT ───────────────────────────────────────────────────────
+        subj_lbl = QLabel(self._part.subject or '—')
+        subj_lbl.setFixedWidth(_W_SUBJECT)
+        subj_lbl.setWordWrap(True)
+        subj_lbl.setStyleSheet(
+            f'color: {_TEXT}; font-size: 11px;'
+            f' background: transparent; border: none;'
+        )
+        lay.addWidget(subj_lbl, 0, Qt.AlignVCenter)
 
-        if self._part.comments:
-            comm_btn = QPushButton(f'💬  {len(self._part.comments)} comment{"s" if len(self._part.comments) != 1 else ""}')
-        else:
-            comm_btn = QPushButton('💬  Add comments')
-        comm_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; border: none;
-                color: {_ACCENT}; font-size: 10px;
-                padding: 0; text-align: left;
+        # ── COMMENTS (inline 3-line editor) ───────────────────────────────
+        comm_edit = QTextEdit()
+        comm_edit.setFixedWidth(_W_COMMENTS)
+        comm_edit.setFixedHeight(62)
+        comm_edit.setPlaceholderText('Add a comment…')
+        comm_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        comm_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        comm_edit.setStyleSheet(f"""
+            QTextEdit {{
+                background: #f8f9fa; border: 1px solid {_BORDER};
+                border-radius: 5px; padding: 4px 6px;
+                color: {_TEXT}; font-size: 10px;
             }}
-            QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
+            QTextEdit:focus {{ border-color: {_ACCENT}; background: white; }}
         """)
-        comm_btn.setCursor(Qt.PointingHandCursor)
-        comm_btn.clicked.connect(lambda: self.comment_requested.emit(self._part))
-        comm_l.addWidget(comm_btn); comm_l.addStretch()
-        lay.addWidget(comm_w)
+        if self._part.comments:
+            comm_edit.setPlainText('\n'.join(self._part.comments))
+
+        def _on_comment_changed():
+            text = comm_edit.toPlainText()
+            lines = [l for l in text.splitlines() if l.strip()]
+            self._part.comments = lines
+            self.data_changed.emit()
+
+        comm_edit.textChanged.connect(_on_comment_changed)
+        lay.addWidget(comm_edit, 0, Qt.AlignVCenter)
 
         # ── START DATE ────────────────────────────────────────────────────
         lay.addWidget(_date_cell(self._part.start_date))
@@ -193,21 +209,27 @@ class _PartRow(QFrame):
 
         lay.addWidget(prog_w, 0, Qt.AlignVCenter)
 
-        # ── ⋮ context menu ────────────────────────────────────────────────
-        mb = QPushButton('⋮')
-        mb.setFixedSize(28, 28)
-        mb.setStyleSheet(_BTN_ICON)
-        mb.setCursor(Qt.PointingHandCursor)
-        mb.clicked.connect(lambda: self._show_menu(mb))
-        lay.addWidget(mb, 0, Qt.AlignVCenter)
+        # ── Edit / Delete inline buttons ──────────────────────────────────
+        _ACTION_BTN = """
+            QPushButton {
+                background: transparent; border: none;
+                font-size: 11px; font-weight: 600; padding: 2px 6px;
+            }
+        """
+        edit_btn = QPushButton('Edit')
+        edit_btn.setStyleSheet(_ACTION_BTN + f"QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ color: #1d6fc4; text-decoration: underline; }}")
+        edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._part))
 
-    def _show_menu(self, btn: QPushButton):
-        menu = QMenu(self)
-        menu.setStyleSheet(_MENU_STYLE)
-        edit_a = menu.addAction('✎  Edit')
-        del_a  = menu.addAction('🗑  Delete')
-        chosen = menu.exec_(btn.mapToGlobal(QPoint(0, btn.height())))
-        if chosen == edit_a:
-            self.edit_requested.emit(self._part)
-        elif chosen == del_a:
-            self.delete_requested.emit(self._part)
+        del_btn = QPushButton('Delete')
+        del_btn.setStyleSheet(_ACTION_BTN + "QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; text-decoration: underline; }")
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.clicked.connect(lambda: self.delete_requested.emit(self._part))
+
+        actions_w = QWidget(); actions_w.setStyleSheet('background: transparent;')
+        actions_l = QVBoxLayout(actions_w)
+        actions_l.setContentsMargins(0, 0, 0, 0)
+        actions_l.setSpacing(2)
+        actions_l.addWidget(edit_btn, 0, Qt.AlignLeft)
+        actions_l.addWidget(del_btn, 0, Qt.AlignLeft)
+        lay.addWidget(actions_w, 0, Qt.AlignVCenter)

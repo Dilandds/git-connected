@@ -390,21 +390,26 @@ class AnnotationCard(QFrame):
                 self.status_icon.setPixmap(_checkmark_pixmap(12, status_color))
                 self.status_icon.setVisible(True)
                 self.status_label.setText("Read")
+                self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
             else:
                 base_grad = _ANNO_CARD_READER_UNREAD
                 self.status_icon.setPixmap(QPixmap())
                 self.status_icon.setVisible(False)
                 self.status_label.setText("Unread")
+                self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
         elif self.annotation.is_validated:
+            validated_color = '#4ade80'   # light green
             base_grad = _ANNO_CARD_VALIDATED
-            self.status_icon.setPixmap(_checkmark_pixmap(12, status_color))
+            self.status_icon.setPixmap(_checkmark_pixmap(12, validated_color))
             self.status_icon.setVisible(True)
             self.status_label.setText("Validated")
+            self.status_label.setStyleSheet('color: %s; background: transparent;' % validated_color)
         else:
             base_grad = _ANNO_CARD_PENDING
             self.status_icon.setPixmap(QPixmap())
             self.status_icon.setVisible(False)
             self.status_label.setText("Click to edit")
+            self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
 
         # Style the clickable dot as a colored round button
         self.point_indicator.setStyleSheet(f"""

@@ -122,8 +122,7 @@ class ComponentsTable(QWidget):
         self._rows_layout.setSpacing(4)
         self._outer.addLayout(self._rows_layout)
 
-        for i in range(5):
-            self._append_row(f'Component {i + 1}', '', '')
+        self._append_row('Component 1', '', '')
 
         self._add_btn = QPushButton('+ Add a component')
         self._add_btn.setStyleSheet(ADD_BTN_STYLE)
@@ -225,6 +224,19 @@ class ComponentsTable(QWidget):
             for j, val in enumerate(row_data):
                 if j < len(self._rows[i]):
                     self._rows[i][j].setText(val)
+
+    def replace_data(self, data: list):
+        """Clear all rows then repopulate from data (list of [comp, mat, col])."""
+        for w in list(self._row_widgets):
+            w.hide()
+            w.setParent(None)
+        self._rows.clear()
+        self._row_widgets.clear()
+        for row_data in data:
+            comp = row_data[0] if len(row_data) > 0 else ''
+            mat  = row_data[1] if len(row_data) > 1 else ''
+            col  = row_data[2] if len(row_data) > 2 else ''
+            self._append_row(comp, mat, col)
 
     def set_edit_mode(self, enabled: bool):
         self._add_btn.setVisible(enabled)

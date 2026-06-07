@@ -15,7 +15,7 @@ from .shared import (
 from .dialogs import _AddComponentDialog, _EditComponentDialog
 
 _ITEM_H   = 72   # height of each component pill
-_IMG_SIZE = 40   # image thumbnail size
+_IMG_SIZE = 58   # image thumbnail size (circle diameter)
 
 
 class _ComponentsRow(QWidget):
@@ -38,7 +38,7 @@ class _ComponentsRow(QWidget):
         # Section title
         title = QLabel('Product Components')
         title.setStyleSheet(
-            f'color: {_TEXT}; font-size: 11px; font-weight: bold;'
+            f'color: {_TEXT}; font-size: 13px; font-weight: bold;'
             f' background: transparent; border: none;'
         )
         root.addWidget(title)
@@ -98,7 +98,7 @@ class _ComponentsRow(QWidget):
         add.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; border: none;
-                color: {_ACCENT}; font-size: 11px; font-weight: 600;
+                color: {_ACCENT}; font-size: 13px; font-weight: 600;
                 padding: 4px 8px;
             }}
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
@@ -147,20 +147,21 @@ class _ComponentsRow(QWidget):
         """)
         img_fl = QVBoxLayout(img_frame)
         img_fl.setContentsMargins(0, 0, 0, 0)
+        img_fl.setAlignment(Qt.AlignCenter)
         img = QLabel()
         img.setAlignment(Qt.AlignCenter)
         img.setStyleSheet('background: transparent; border: none;')
         if comp.image_path:
             pix = QPixmap(comp.image_path)
             if not pix.isNull():
-                img.setPixmap(pix.scaled(_IMG_SIZE - 4, _IMG_SIZE - 4,
-                                         Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                img.setPixmap(pix.scaled(_IMG_SIZE, _IMG_SIZE,
+                                         Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
             else:
                 img.setText('📦')
-                img.setStyleSheet('font-size: 18px; background: transparent; border: none;')
+                img.setStyleSheet('font-size: 20px; background: transparent; border: none;')
         else:
             img.setText('📦')
-            img.setStyleSheet('font-size: 18px; background: transparent; border: none;')
+            img.setStyleSheet('font-size: 20px; background: transparent; border: none;')
         img_fl.addWidget(img)
         row.addWidget(img_frame, 0, Qt.AlignVCenter)
 
@@ -171,7 +172,7 @@ class _ComponentsRow(QWidget):
 
         name_lbl = QLabel(comp.name)
         name_lbl.setStyleSheet(
-            f'color: {_ACCENT if is_sel else _TEXT}; font-size: 11px;'
+            f'color: {_ACCENT if is_sel else _TEXT}; font-size: 13px;'
             f' font-weight: {"700" if is_sel else "600"}; background: transparent; border: none;'
         )
         text_col.addWidget(name_lbl)
@@ -179,7 +180,7 @@ class _ComponentsRow(QWidget):
         if comp.is_main:
             sub_lbl = QLabel('(Main Product)')
             sub_lbl.setStyleSheet(
-                f'color: {_ACCENT}; font-size: 9px; background: transparent; border: none;'
+                f'color: {_ACCENT}; font-size: 11px; background: transparent; border: none;'
             )
             text_col.addWidget(sub_lbl)
 

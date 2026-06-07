@@ -16,13 +16,13 @@ from .row4_substages import _SubStagePanel
 
 
 class _ArrowConnector(QWidget):
-    """Horizontal band that draws a curved connector arrow between two x positions."""
+    """Horizontal band that draws a straight orthogonal connector arrow between two x positions."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._x_from = -1
         self._x_to   = -1
-        self.setFixedHeight(26)
+        self.setFixedHeight(32)
         self.setStyleSheet(f'background: {_BG};')
 
     def set_positions(self, x_from: int, x_to: int):
@@ -36,24 +36,28 @@ class _ArrowConnector(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
 
-        x1, y1 = float(self._x_from), 0.0
-        x2, y2 = float(self._x_to),   float(self.height() - 8)
+        h = float(self.height())
+        x1 = float(self._x_from)
+        x2 = float(self._x_to)
+        # Elbow midpoint — horizontal jog happens here
+        mid_y = h / 2.0
+        tip_y = h
 
-        # Cubic bezier — control points at mid-height create a smooth S-curve
-        mid_y = (y1 + y2) / 2.0
-        curve = QPainterPath()
-        curve.moveTo(x1, y1)
-        curve.cubicTo(x1, mid_y, x2, mid_y, x2, y2)
+        # Orthogonal path: straight down → straight across → straight down
+        path = QPainterPath()
+        path.moveTo(x1, 0.0)
+        path.lineTo(x1, mid_y)
+        path.lineTo(x2, mid_y)
+        path.lineTo(x2, tip_y - 9)   # stop just above arrowhead base
 
-        p.setPen(QPen(QColor(_ACCENT), 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.setPen(QPen(QColor(_ACCENT), 2, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin))
         p.setBrush(Qt.NoBrush)
-        p.drawPath(curve)
+        p.drawPath(path)
 
         # Filled arrowhead pointing down
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(QColor(_ACCENT)))
         head = QPainterPath()
-        tip_y = float(self.height())
         head.moveTo(x2,     tip_y)
         head.lineTo(x2 - 6, tip_y - 9)
         head.lineTo(x2 + 6, tip_y - 9)
@@ -166,31 +170,48 @@ class TraceabilityWidget(QWidget):
                 self._comp_row.load_components(self._components, self._current_component)
 
     def update_components_from_brief(self, brief_components: list):
-        """Add component names from Project Brief that aren't already present."""
+        """Full reconcile of non-main components against the Brief component list.
+
+        - Adds components that appear in brief but not in traceability.
+        - Removes non-main components that are no longer in brief.
+        - Preserves stages/sub-stages for any component whose name is unchanged.
+        """
         names = [r[0].strip() for r in brief_components if r and r[0].strip()]
-        existing = {c.name for c in self._components}
-        changed = False
+
+        main_comps = [c for c in self._components if c.is_main]
+        existing_by_name = {c.name: c for c in self._components if not c.is_main}
+
+        new_non_main = []
+        next_id = max((c.id for c in self._components), default=0)
         for name in names:
-            if name not in existing:
-                new_id = max((c.id for c in self._components), default=0) + 1
-                self._components.append(TraceComponent(
-                    id=new_id, name=name,
+            if name in existing_by_name:
+                new_non_main.append(existing_by_name[name])
+            else:
+                next_id += 1
+                new_non_main.append(TraceComponent(
+                    id=next_id, name=name,
                     stages=[TraceStage(
                         id=1, number=1, name='Stage 1', status='Upcoming',
                         sub_stages=[TraceSubStage(id=1, name='Sub-stage 1')]
                     )]
                 ))
-                existing.add(name)
-                changed = True
-        if changed:
-            self._comp_row.load_components(self._components, self._current_component)
+
+        self._components = main_comps + new_non_main
+        self._current_component = min(
+            self._current_component, max(0, len(self._components) - 1)
+        )
+        self._comp_row.load_components(self._components, self._current_component)
+
+    def get_non_main_component_names(self) -> list:
+        """Return names of non-main components for reverse brief sync."""
+        return [c.name for c in self._components if not c.is_main]
 
     # ── serialisation ──────────────────────────────────────────────────────────
 
     def get_data(self) -> dict:
         def _sp(p: TracePart) -> dict:
             return {
-                'id': p.id, 'name': p.name,
+                'id': p.id, 'name': p.name, 'subject': p.subject,
                 'suppliers': p.suppliers, 'action': p.action,
                 'current_task': p.current_task,
                 'start_date': p.start_date, 'due_date': p.due_date,
@@ -234,6 +255,7 @@ class TraceabilityWidget(QWidget):
                     parts = [
                         TracePart(
                             id=pd['id'], name=pd.get('name', 'Part'),
+                            subject=pd.get('subject', ''),
                             suppliers=pd.get('suppliers', ''),
                             action=pd.get('action', ''),
                             current_task=pd.get('current_task', ''),

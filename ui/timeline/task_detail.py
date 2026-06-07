@@ -15,7 +15,7 @@ _BTN_DELETE = f"""
     QPushButton {{
         background-color: #fee2e2; color: #ef4444;
         border: 1px solid #fca5a5; border-radius: 4px;
-        font-size: 10px; padding: 2px 10px;
+        font-size: 12px; padding: 2px 10px;
     }}
     QPushButton:hover {{ background-color: #ef4444; color: white; border-color: #ef4444; }}
     QPushButton:disabled {{ color: #9ca3af; background-color: #f1f3f5; border-color: {BORDER}; }}
@@ -25,7 +25,7 @@ _FIELD_STYLE = f"""
     QLineEdit {{
         background-color: #f5f6f8; color: {TEXT};
         border: 1px solid {BORDER}; border-radius: 4px;
-        padding: 2px 6px; font-size: 10px;
+        padding: 2px 6px; font-size: 12px;
     }}
     QLineEdit:focus    {{ border-color: {ACCENT}; }}
     QLineEdit:disabled {{ background-color: #f1f3f5; color: #9ca3af; }}
@@ -46,11 +46,11 @@ class TaskDetailPanel(QWidget):
         self.setFixedWidth(_PANEL_W)
         self.setStyleSheet(f"""
             QWidget  {{ background-color: {CARD}; border-left: 1px solid {BORDER}; }}
-            QLabel   {{ color: {TEXT}; font-size: 10px; background: transparent; border: none; }}
+            QLabel   {{ color: {TEXT}; font-size: 12px; background: transparent; border: none; }}
             QTextEdit {{
                 background-color: #f5f6f8; color: {TEXT};
                 border: 1px solid {BORDER}; border-radius: 4px;
-                font-size: 10px; padding: 4px;
+                font-size: 12px; padding: 4px;
             }}
         """)
         self._build_ui()
@@ -80,9 +80,9 @@ class TaskDetailPanel(QWidget):
 
         lay.addWidget(self._build_info_section())
         lay.addWidget(self._hline())
-        lay.addWidget(self._build_comment_section())
-        lay.addWidget(self._hline())
         lay.addWidget(self._build_meta_section())
+        lay.addWidget(self._hline())
+        lay.addWidget(self._build_comment_section())
         lay.addStretch()
 
         scroll.setWidget(container)
@@ -97,7 +97,7 @@ class TaskDetailPanel(QWidget):
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text.upper())
         lbl.setStyleSheet(
-            f'color: {MUTED}; font-size: 9px; font-weight: bold; '
+            f'color: {MUTED}; font-size: 11px; font-weight: bold; '
             f'background: transparent; border: none;'
         )
         return lbl
@@ -113,7 +113,7 @@ class TaskDetailPanel(QWidget):
         self._lbl_task = QLabel('Click a task to see details')
         self._lbl_task.setWordWrap(True)
         self._lbl_task.setStyleSheet(
-            f'color: {TEXT}; font-size: 12px; font-weight: bold; '
+            f'color: {TEXT}; font-size: 14px; font-weight: bold; '
             f'background: transparent; border: none;'
         )
         col.addWidget(self._lbl_task)
@@ -138,7 +138,7 @@ class TaskDetailPanel(QWidget):
             QPushButton {{
                 background-color: #e5e7eb; color: {MUTED};
                 border: 1px solid {BORDER}; border-radius: 4px;
-                font-size: 10px; padding: 2px 10px;
+                font-size: 12px; padding: 2px 10px;
             }}
             QPushButton:enabled {{ color: {TEXT}; border-color: #9ca3af; }}
             QPushButton:enabled:hover {{
@@ -170,26 +170,7 @@ class TaskDetailPanel(QWidget):
         col.setContentsMargins(12, 10, 12, 10)
         col.setSpacing(6)
 
-        header = QHBoxLayout()
-        header.addWidget(self._section_label('Comments'))
-        header.addStretch()
-
-        self._save_btn = QPushButton('Save')
-        self._save_btn.setFixedHeight(22)
-        self._save_btn.setEnabled(False)
-        self._save_btn.setCursor(Qt.PointingHandCursor)
-        self._save_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {ACCENT}; color: white; border: none;
-                border-radius: 4px; font-size: 10px; font-weight: bold;
-                padding: 0 14px;
-            }}
-            QPushButton:hover {{ background-color: {default_theme.button_primary_hover}; }}
-            QPushButton:disabled {{ background-color: #e5e7eb; color: #9ca3af; }}
-        """)
-        self._save_btn.clicked.connect(self._save_comment)
-        header.addWidget(self._save_btn)
-        col.addLayout(header)
+        col.addWidget(self._section_label('Comments'))
 
         self._comment_box = QTextEdit()
         self._comment_box.setPlaceholderText('Add a comment...')
@@ -198,6 +179,26 @@ class TaskDetailPanel(QWidget):
             lambda: self._save_btn.setEnabled(self._current_task is not None)
         )
         col.addWidget(self._comment_box)
+
+        # Save button — bottom-right of the textarea
+        self._save_btn = QPushButton('Save')
+        self._save_btn.setFixedHeight(26)
+        self._save_btn.setEnabled(False)
+        self._save_btn.setCursor(Qt.PointingHandCursor)
+        self._save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ACCENT}; color: white; border: none;
+                border-radius: 4px; font-size: 12px; font-weight: bold;
+                padding: 0 18px;
+            }}
+            QPushButton:hover {{ background-color: {default_theme.button_primary_hover}; }}
+            QPushButton:disabled {{ background-color: #e5e7eb; color: #9ca3af; }}
+        """)
+        self._save_btn.clicked.connect(self._save_comment)
+        save_row = QHBoxLayout(); save_row.setContentsMargins(0, 0, 0, 0)
+        save_row.addStretch()
+        save_row.addWidget(self._save_btn)
+        col.addLayout(save_row)
         return w
 
     def _build_meta_section(self) -> QWidget:
@@ -214,7 +215,7 @@ class TaskDetailPanel(QWidget):
             lbl = QLabel(label_text)
             lbl.setFixedWidth(108)
             lbl.setStyleSheet(
-                f'color: {MUTED}; font-size: 10px; background: transparent; border: none;'
+                f'color: {MUTED}; font-size: 12px; background: transparent; border: none;'
             )
             inp = QLineEdit()
             inp.setPlaceholderText('—')

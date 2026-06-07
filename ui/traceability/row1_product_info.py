@@ -51,7 +51,7 @@ class _ProductInfoRow(QFrame):
         self._img_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 2px dashed {_BORDER};
-                border-radius: 12px; color: {_MUTED}; font-size: 9px;
+                border-radius: 12px; color: {_MUTED}; font-size: 11px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; background: #e8f0fe; }}
         """)
@@ -65,11 +65,11 @@ class _ProductInfoRow(QFrame):
         left.setContentsMargins(4, 0, 0, 0)
 
         mp = QLabel('Main Product')
-        mp.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
+        mp.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
         left.addWidget(mp)
 
         self._name_lbl = QLabel('—')
-        self._name_lbl.setFont(make_font(size=15, bold=True))
+        self._name_lbl.setFont(make_font(size=17, bold=True))
         self._name_lbl.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
         left.addWidget(self._name_lbl)
 
@@ -102,10 +102,10 @@ class _ProductInfoRow(QFrame):
         # Global Status — pill badge
         sc = QVBoxLayout(); sc.setSpacing(6); sc.setAlignment(Qt.AlignVCenter)
         st_title = QLabel('Global Status')
-        st_title.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
+        st_title.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         sc.addWidget(st_title)
         self._status_lbl = QLabel('—')
-        self._status_lbl.setFont(make_font(size=9, bold=True))
+        self._status_lbl.setFont(make_font(size=11, bold=True))
         self._status_lbl.setStyleSheet(
             f'color: {_MUTED}; background: transparent; border: none; padding: 0px;'
         )
@@ -116,10 +116,10 @@ class _ProductInfoRow(QFrame):
         # Overall progress (editable)
         pc = QVBoxLayout(); pc.setSpacing(4); pc.setAlignment(Qt.AlignVCenter)
         pt = QLabel('Overall Progress')
-        pt.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
+        pt.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         pc.addWidget(pt)
         self._prog_lbl = QLabel('0 %')
-        self._prog_lbl.setFont(make_font(size=20, bold=True))
+        self._prog_lbl.setFont(make_font(size=22, bold=True))
         self._prog_lbl.setStyleSheet(_PROG_LABEL_STYLE)
         self._prog_lbl.setCursor(Qt.PointingHandCursor)
         self._prog_lbl.setToolTip('Click to edit progress')
@@ -137,8 +137,8 @@ class _ProductInfoRow(QFrame):
         lbl = QLabel()
         lbl.setTextFormat(Qt.RichText)
         lbl.setText(
-            f'<span style="color:{_MUTED}; font-size:10px;">{label}</span>'
-            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{value}</b>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">{label}</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{value}</b>'
         )
         lbl.setStyleSheet('background: transparent; border: none;')
         return lbl
@@ -146,7 +146,7 @@ class _ProductInfoRow(QFrame):
     @staticmethod
     def _date_val(value: str) -> QLabel:
         l = QLabel(value)
-        l.setFont(make_font(size=11, bold=True))
+        l.setFont(make_font(size=13, bold=True))
         l.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
         return l
 
@@ -154,7 +154,7 @@ class _ProductInfoRow(QFrame):
     def _info_col(title: str, val_lbl: QLabel) -> QVBoxLayout:
         lay = QVBoxLayout(); lay.setSpacing(5); lay.setAlignment(Qt.AlignVCenter)
         t = QLabel(title)
-        t.setStyleSheet(f'color: {_MUTED}; font-size: 8px; background: transparent; border: none;')
+        t.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         lay.addWidget(t)
         lay.addWidget(val_lbl)
         return lay
@@ -215,8 +215,8 @@ class _ProductInfoRow(QFrame):
 
     def _set_launch_text(self, value: str):
         self._launch_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size:10px;">Planned Launch</span>'
-            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{value}</b>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">Planned Launch</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{value}</b>'
         )
 
     def _set_status_pill(self, status: str):
@@ -226,7 +226,7 @@ class _ProductInfoRow(QFrame):
             self._status_lbl.setText(status)
             self._status_lbl.setStyleSheet(
                 f'color: {color}; background: {bg}; border: 1px solid {color}44;'
-                f'border-radius: 9px; padding: 2px 10px; font-size: 9px; font-weight: bold;'
+                f'border-radius: 9px; padding: 2px 10px; font-size: 11px; font-weight: bold;'
             )
         else:
             self._status_lbl.setText('—')
@@ -239,14 +239,14 @@ class _ProductInfoRow(QFrame):
 
         ref = info.get('number') or '—'
         self._ref_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size:10px;">Reference</span>'
-            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{ref}</b>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">Reference</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{ref}</b>'
         )
 
-        pm = info.get('company') or '—'
+        pm = info.get('project_manager') or '—'
         self._pm_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size:10px;">Project Manager</span>'
-            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size:10px;">{pm}</b>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">Project Manager</span>'
+            f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{pm}</b>'
         )
 
         self._start_lbl.setText(info.get('start_date') or '—')

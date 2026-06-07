@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF, QFont
-from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style
+from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style, TOOLTIP_STYLE
 from i18n import t, on_language_changed
 from ui.technical_sidebar import (
     _FIELD_BG,
@@ -300,7 +300,7 @@ class ScaleSidebar(QWidget):
                 padding: 6px 12px;
                 font-size: 11px;
                 font-weight: bold;
-                color: {default_theme.button_primary};
+                color: #000000;
             }}
             QPushButton:hover {{
                 background-color: {default_theme.row_bg_hover};
@@ -795,7 +795,7 @@ class ScaleSidebar(QWidget):
                 QPushButton:hover {{
                     background-color: {default_theme.button_primary_hover};
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
         else:
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -808,7 +808,7 @@ class ScaleSidebar(QWidget):
                 QPushButton:hover {{
                     background-color: {default_theme.row_bg_hover};
                 }}
-            """)
+            """ + TOOLTIP_STYLE)
 
     def _on_color_picker(self):
         """Open color picker popup using shared palette."""

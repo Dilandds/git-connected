@@ -36,8 +36,8 @@ OP_HEADER_H = 22    # px for the operator name mini-strip
 HEADER_H    = 52    # date header height
 OP_LABEL_W  = 150   # frozen left column width
 DAY_W_DAY   = 38    # px per day in Day view
-DAY_W_WEEK  = 16    # px per day in Week view
-DAY_W_MONTH = 6     # px per day in Month view
+DAY_W_WEEK  = 26    # px per day in Week view  (7 days × 26 = 182 px/week)
+DAY_W_MONTH = 11    # px per day in Month view (~30 days × 11 = 330 px/month)
 
 
 # ── data models ───────────────────────────────────────────────────────────────
@@ -57,6 +57,8 @@ class Task:
     project_manager:   str            = ''
     technical_manager: str            = ''
     contributors:      str            = ''
+    unavailable_start: Optional[QDate] = None
+    unavailable_end:   Optional[QDate] = None
 
     def __post_init__(self):
         self.duration_days = max(1, self.start.daysTo(self.end))

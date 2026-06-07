@@ -35,14 +35,14 @@ logger = logging.getLogger(__name__)
 _BTN_VIEW_ACTIVE = f"""
     QPushButton {{
         background-color: {ACCENT}; color: white; border: none;
-        border-radius: 4px; padding: 3px 10px; font-size: 10px; font-weight: bold;
+        border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: bold;
     }}
 """
 _BTN_VIEW_INACTIVE = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {MUTED};
         border: 1px solid {BORDER};
-        border-radius: 4px; padding: 3px 10px; font-size: 10px;
+        border-radius: 4px; padding: 3px 10px; font-size: 12px;
     }}
     QPushButton:hover {{ color: {TEXT}; background-color: #e5e7eb; border-color: {ACCENT}; }}
 """
@@ -50,21 +50,21 @@ _BTN_SMALL = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {TEXT};
         border: 1px solid {BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 12px;
     }}
     QPushButton:hover {{ background-color: #e5e7eb; border-color: {ACCENT}; color: {ACCENT}; }}
 """
 _TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 13px; font-weight: bold;
     }}
 """
 _TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {MUTED};
         border: 1px solid {BORDER}; border-radius: 5px;
-        padding: 5px 14px; font-size: 11px;
+        padding: 5px 14px; font-size: 13px;
     }}
     QPushButton:hover {{ color: {TEXT}; border-color: {ACCENT}; background-color: #e8f0fe; }}
 """
@@ -78,7 +78,7 @@ _CLOSE_TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {ACCENT}; color: rgba(255,255,255,0.55);
         border: none; border-left: 1px solid rgba(255,255,255,0.18);
-        border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
+        border-radius: 0 5px 5px 0; font-size: 15px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: white; background-color: #ef4444; border-left-color: transparent; }}
 """ + TOOLTIP_STYLE
@@ -87,7 +87,7 @@ _CLOSE_TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {MUTED};
         border: 1px solid {BORDER}; border-left: none;
-        border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
+        border-radius: 0 5px 5px 0; font-size: 15px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: #ef4444; background-color: #fee2e2; border-color: #fca5a5; border-left: none; }}
 """ + TOOLTIP_STYLE
@@ -205,28 +205,69 @@ class GanttCanvas(QWidget):
         p.fillRect(0, 0, self.width(), HEADER_H, QColor('#e8eaed'))
         p.setPen(QPen(QColor(BORDER), 1))
         p.drawLine(0, HEADER_H, self.width(), HEADER_H)
-        font_week = make_font(size=9, bold=True)
-        font_day  = make_font(size=8)
+
+        font_week  = make_font(size=11, bold=True)
+        font_day   = make_font(size=10)
+        font_month = make_font(size=11, bold=True)
+
         date = self._start_date
+        is_day_view   = day_w >= DAY_W_DAY
+        is_week_view  = not is_day_view and day_w >= DAY_W_WEEK
+        # month view = everything smaller
+
         for _ in range(self._total_days()):
             x = self._x_for_date(date, day_w)
             if x < OP_LABEL_W:
                 date = date.addDays(1); continue
-            if date.dayOfWeek() == 1 or date == self._start_date:
-                p.setPen(QColor(TEXT)); p.setFont(font_week)
-                p.drawText(QRect(x, 4, day_w * 7, 20),
-                           Qt.AlignLeft | Qt.AlignVCenter,
-                           f"W{date.weekNumber()[0]}  {date.toString('d MMM')}")
-            p.setPen(QPen(QColor(BORDER), 1))
-            p.drawLine(x, HEADER_H - 16, x, HEADER_H)
-            if day_w >= DAY_W_DAY:
+
+            is_week_start  = (date.dayOfWeek() == 1 or date == self._start_date)
+            is_month_start = (date.day() == 1    or date == self._start_date)
+
+            if is_day_view:
+                # ── Day view: label + tick every day ──────────────────────────
+                if is_week_start:
+                    p.setPen(QColor(TEXT)); p.setFont(font_week)
+                    p.drawText(QRect(x, 4, day_w * 7, 20),
+                               Qt.AlignLeft | Qt.AlignVCenter,
+                               date.toString('d MMM'))
+                p.setPen(QPen(QColor(BORDER), 1))
+                p.drawLine(x, HEADER_H - 16, x, HEADER_H)
                 day_rect = QRect(x + 2, HEADER_H - 16, day_w - 4, 14)
                 p.setPen(QColor(MUTED)); p.setFont(font_day)
                 if date == today():
                     p.fillRect(x + 1, HEADER_H - 17, day_w - 2, 16, QColor(ACCENT).darker(140))
                     p.setPen(QColor(ACCENT))
                 p.drawText(day_rect, Qt.AlignCenter, date.toString('d'))
+
+            elif is_week_view:
+                # ── Week view: label + tick at every week boundary ────────────
+                if is_week_start:
+                    week_w = day_w * 7
+                    label = date.toString('d MMM') if week_w >= 80 else date.toString('d')
+                    p.setPen(QColor(TEXT)); p.setFont(font_week)
+                    p.drawText(QRect(x, 4, week_w, 20),
+                               Qt.AlignLeft | Qt.AlignVCenter, label)
+                    p.setPen(QPen(QColor(BORDER), 1))
+                    p.drawLine(x, HEADER_H - 12, x, HEADER_H)
+
+            else:
+                # ── Month view: label + tick at every month boundary ──────────
+                if is_month_start:
+                    month_w = date.daysInMonth() * day_w
+                    p.setPen(QColor(TEXT)); p.setFont(font_month)
+                    p.drawText(QRect(x + 4, 4, month_w - 4, 20),
+                               Qt.AlignLeft | Qt.AlignVCenter,
+                               date.toString('MMM yyyy'))
+                    p.setPen(QPen(QColor(BORDER), 1))
+                    p.drawLine(x, HEADER_H - 12, x, HEADER_H)
+                # Minor tick every week in month view
+                elif is_week_start:
+                    p.setPen(QPen(QColor(BORDER), 1))
+                    p.drawLine(x, HEADER_H - 6, x, HEADER_H)
+
             date = date.addDays(1)
+
+        # Today marker
         tx = self._x_for_date(today(), day_w)
         if tx > OP_LABEL_W:
             p.setPen(QPen(QColor(ACCENT), 1, Qt.DotLine))
@@ -236,7 +277,7 @@ class GanttCanvas(QWidget):
         p.fillRect(0, 0, OP_LABEL_W, HEADER_H, QColor('#e8eaed'))
         p.setPen(QPen(QColor(BORDER), 1))
         p.drawLine(0, HEADER_H, OP_LABEL_W, HEADER_H)
-        p.setPen(QColor(MUTED)); p.setFont(make_font(size=9, bold=True))
+        p.setPen(QColor(MUTED)); p.setFont(make_font(size=11, bold=True))
         p.drawText(QRect(8, 0, OP_LABEL_W - 8, HEADER_H),
                    Qt.AlignLeft | Qt.AlignVCenter, 'OPERATIONS')
 
@@ -279,8 +320,27 @@ class GanttCanvas(QWidget):
             for sx in range(x - h, x + w + h, 8):
                 p.drawLine(sx, y, sx + h, y + h)
             p.restore()
+        # ── Unavailability hatching ───────────────────────────────────────
+        if task.unavailable_start and task.unavailable_end:
+            hx1 = max(self._x_for_date(task.unavailable_start, day_w), x)
+            hx2 = min(self._x_for_date(task.unavailable_end,   day_w), x + w)
+            if hx2 > hx1:
+                p.save()
+                p.setClipRect(QRect(hx1, y, hx2 - hx1, h), Qt.IntersectClip)
+                # Dark semi-transparent overlay so the zone is clearly distinct
+                p.fillRect(QRect(hx1, y, hx2 - hx1, h), QColor(0, 0, 0, 90))
+                # Bold diagonal black lines
+                p.setPen(QPen(QColor(0, 0, 0, 220), 2))
+                step = 8
+                for sx in range(hx1 - h, hx2 + step, step):
+                    p.drawLine(sx, y, sx + h, y + h)
+                # Border around the hatched zone
+                p.setPen(QPen(QColor(0, 0, 0, 180), 1))
+                p.drawRect(QRect(hx1, y, hx2 - hx1, h))
+                p.restore()
+
         if w > 24:
-            p.setPen(QColor('white')); p.setFont(make_font(size=9, bold=task.is_urgent))
+            p.setPen(QColor('white')); p.setFont(make_font(size=11, bold=task.is_urgent))
             text_rect = QRect(x + 5, y, w - 10, h)
             p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft,
                        p.fontMetrics().elidedText(task.name, Qt.ElideRight, w - 10))
@@ -289,7 +349,7 @@ class GanttCanvas(QWidget):
         abs_y = HEADER_H + y_pos
         p.fillRect(0, abs_y, OP_LABEL_W, OP_HEADER_H, QColor('#dbeafe'))
         p.fillRect(0, abs_y, 3, OP_HEADER_H, QColor(ACCENT))
-        p.setPen(QColor('#1d4ed8')); p.setFont(make_font(size=9, bold=True))
+        p.setPen(QColor('#1d4ed8')); p.setFont(make_font(size=11, bold=True))
         p.drawText(QRect(8, abs_y, OP_LABEL_W - 10, OP_HEADER_H),
                    Qt.AlignVCenter | Qt.AlignLeft, op.name.upper())
         p.setPen(QPen(QColor(BORDER), 1))
@@ -308,12 +368,12 @@ class GanttCanvas(QWidget):
                 p.fillRect(0, oy, OP_LABEL_W, ROW_H, QColor('#f6f8fa'))
             p.setPen(QPen(QColor(BORDER), 1))
             p.drawLine(0, oy + ROW_H - 1, OP_LABEL_W, oy + ROW_H - 1)
-            p.setPen(QColor(TEXT)); p.setFont(make_font(size=9))
+            p.setPen(QColor(TEXT)); p.setFont(make_font(size=11))
             p.drawText(QRect(10, oy, OP_LABEL_W - 32, ROW_H),
                        Qt.AlignVCenter | Qt.AlignLeft, oper.name)
             # Pencil hint — always faint, brighter on hover
             p.setPen(QColor(ACCENT if is_hovered else MUTED))
-            p.setFont(make_font(size=9))
+            p.setFont(make_font(size=11))
             p.setOpacity(0.7 if is_hovered else 0.3)
             p.drawText(QRect(OP_LABEL_W - 26, oy, 20, ROW_H),
                        Qt.AlignVCenter | Qt.AlignRight, '✎')
@@ -326,7 +386,7 @@ class GanttCanvas(QWidget):
         x = self._x_for_date(self._deadline, day_w)
         p.setPen(QPen(QColor('#ef4444'), 2))
         p.drawLine(x, HEADER_H, x, self.height())
-        p.setPen(QColor('#ef4444')); p.setFont(make_font(size=8, bold=True))
+        p.setPen(QColor('#ef4444')); p.setFont(make_font(size=10, bold=True))
         p.drawText(x + 3, HEADER_H + 12, 'DEADLINE')
 
     # ── interaction ───────────────────────────────────────────────────────────
@@ -486,7 +546,6 @@ class TimelineWidget(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
         left_layout.addWidget(self._build_gantt_scroll(), 1)
-        left_layout.addWidget(self._build_add_strip())
 
         main_layout.addWidget(left, 1)
         main_layout.addWidget(self._build_detail_panel())
@@ -497,12 +556,26 @@ class TimelineWidget(QWidget):
         top = QWidget(); top.setFixedHeight(46)
         top.setStyleSheet(f'background-color: {BG}; border-bottom: 1px solid {BORDER};')
         layout = QHBoxLayout(top); layout.setContentsMargins(16, 0, 16, 0)
-        title = QLabel('Timeline'); title.setFont(make_font(size=15, bold=True))
+        title = QLabel('Timeline'); title.setFont(make_font(size=17, bold=True))
         title.setStyleSheet(f'color: {TEXT}; background: transparent; border: none;')
         sub = QLabel('Centralise project evolution, revisions and workflow actions.')
-        sub.setStyleSheet(f'color: {MUTED}; font-size: 10px; background: transparent; border: none;')
+        sub.setStyleSheet(f'color: {MUTED}; font-size: 12px; background: transparent; border: none;')
         col = QVBoxLayout(); col.setSpacing(1); col.addWidget(title); col.addWidget(sub)
         layout.addLayout(col); layout.addStretch()
+
+        for label, slot in (('＋ Add Operation', self._add_operation),
+                             ('＋ Add Event',     self._add_task)):
+            btn = QPushButton(label); btn.setStyleSheet(_BTN_SMALL); btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor); btn.clicked.connect(slot)
+            layout.addWidget(btn)
+
+        layout.addSpacing(8)
+        sep = QFrame(); sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-width: 1px; border: none;')
+        sep.setFixedHeight(20)
+        layout.addWidget(sep)
+        layout.addSpacing(8)
+
         add_op = QPushButton('＋ Add Operator')
         add_op.setStyleSheet(_BTN_SMALL); add_op.setFixedHeight(28)
         add_op.setCursor(Qt.PointingHandCursor); add_op.clicked.connect(self._add_operator)
@@ -525,19 +598,26 @@ class TimelineWidget(QWidget):
         layout = QHBoxLayout(controls); layout.setContentsMargins(12, 4, 12, 4); layout.setSpacing(6)
 
         lbl = QLabel('LEGEND:')
-        lbl.setStyleSheet(f'color: {MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;')
+        lbl.setStyleSheet(f'color: {MUTED}; font-size: 11px; font-weight: bold; background: transparent; border: none;')
         layout.addWidget(lbl)
-        for name, color in TASK_TYPES.items():
-            dot = QLabel(f'● {name}')
-            dot.setStyleSheet(f'color: {color}; font-size: 9px; background: transparent; border: none;')
-            layout.addWidget(dot)
+
+        # Legend items live in their own container so we can rebuild without touching the rest
+        self._legend_area = QWidget()
+        self._legend_area.setStyleSheet('background: transparent; border: none;')
+        self._legend_area_layout = QHBoxLayout(self._legend_area)
+        self._legend_area_layout.setContentsMargins(0, 0, 0, 0)
+        self._legend_area_layout.setSpacing(6)
+        self._legend_btns: dict[str, QPushButton] = {}
+        self._rebuild_legend_area()
+        layout.addWidget(self._legend_area)
+
         layout.addStretch()
 
         prev = QPushButton('◀'); prev.setFixedSize(24, 24); prev.setStyleSheet(_BTN_SMALL)
         prev.setCursor(Qt.PointingHandCursor); prev.clicked.connect(lambda: self._shift_date(-14))
 
         self._date_lbl = QLabel()
-        self._date_lbl.setStyleSheet(f'color: {TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;')
+        self._date_lbl.setStyleSheet(f'color: {TEXT}; font-size: 12px; font-weight: bold; background: transparent; border: none;')
         self._update_date_label()
 
         nxt = QPushButton('▶'); nxt.setFixedSize(24, 24); nxt.setStyleSheet(_BTN_SMALL)
@@ -577,18 +657,6 @@ class TimelineWidget(QWidget):
         self._canvas.row_clicked.connect(self._on_row_clicked)
         self._scroll.setWidget(self._canvas)
         return self._scroll
-
-    def _build_add_strip(self) -> QWidget:
-        strip = QWidget(); strip.setFixedHeight(32)
-        strip.setStyleSheet(f'background-color: {CARD}; border-top: 1px solid {BORDER};')
-        layout = QHBoxLayout(strip); layout.setContentsMargins(12, 0, 12, 0)
-        for label, slot in (('＋ Add Operation', self._add_operation),
-                             ('＋ Add Task',      self._add_task)):
-            btn = QPushButton(label); btn.setStyleSheet(_BTN_SMALL); btn.setFixedHeight(24)
-            btn.setCursor(Qt.PointingHandCursor); btn.clicked.connect(slot)
-            layout.addWidget(btn)
-        layout.addStretch()
-        return strip
 
     def _build_hline(self) -> QFrame:
         sep = QFrame(); sep.setFrameShape(QFrame.HLine)
@@ -651,6 +719,87 @@ class TimelineWidget(QWidget):
         self._canvas._start_date = self._canvas._start_date.addDays(days)
         self._update_date_label(); self._canvas.update()
 
+    # ── legend helpers ────────────────────────────────────────────────────────
+
+    def _rebuild_legend_area(self):
+        """Clear and repopulate the legend area from the current TASK_TYPES dict."""
+        # Remove all existing widgets
+        while self._legend_area_layout.count():
+            item = self._legend_area_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._legend_btns.clear()
+
+        for name, color in TASK_TYPES.items():
+            btn = self._make_legend_btn(name, color)
+            self._legend_btns[name] = btn
+            self._legend_area_layout.addWidget(btn)
+
+        # Pencil button to open full editor
+        edit_btn = QPushButton('✎')
+        edit_btn.setFixedSize(22, 22)
+        edit_btn.setToolTip('Edit legend (add / remove / recolour entries)')
+        edit_btn.setCursor(Qt.PointingHandCursor)
+        edit_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {MUTED}; background: transparent; border: none;
+                font-size: 14px; padding: 0;
+            }}
+            QPushButton:hover {{ color: {ACCENT}; }}
+        """)
+        edit_btn.clicked.connect(self._open_legend_editor)
+        self._legend_area_layout.addWidget(edit_btn)
+
+    def _make_legend_btn(self, name: str, color: str) -> QPushButton:
+        btn = QPushButton(f'● {name}')
+        btn.setToolTip(f'Click to change colour for "{name}"')
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(self._legend_btn_style(color))
+        btn.clicked.connect(lambda _, n=name, b=btn: self._edit_legend_color(n, b))
+        return btn
+
+    @staticmethod
+    def _legend_btn_style(color: str) -> str:
+        return f"""
+            QPushButton {{
+                color: {color}; font-size: 11px;
+                background: transparent; border: none; padding: 0 2px;
+            }}
+            QPushButton:hover {{
+                color: {color}; text-decoration: underline;
+                background: transparent; border: none;
+            }}
+        """
+
+    def _edit_legend_color(self, name: str, anchor: QPushButton):
+        """Quick per-item colour change via the app's DrawColorPicker popup."""
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(lambda c, n=name: self._apply_legend_color(n, c))
+        pos = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        picker.move(pos)
+        picker.show()
+
+    def _apply_legend_color(self, name: str, new_hex: str):
+        TASK_TYPES[name] = new_hex
+        btn = self._legend_btns.get(name)
+        if btn:
+            btn.setStyleSheet(self._legend_btn_style(new_hex))
+        self._canvas.update()
+        self.changed.emit()
+
+    def _open_legend_editor(self):
+        """Open the full legend editor (add / rename / delete / recolour)."""
+        from ui.timeline.dialogs import LegendEditorDialog
+        dlg = LegendEditorDialog(dict(TASK_TYPES), self)
+        if dlg.exec_() == QDialog.Accepted:
+            new_types = dlg.get_result()
+            TASK_TYPES.clear()
+            TASK_TYPES.update(new_types)
+            self._rebuild_legend_area()
+            self._canvas.update()
+            self.changed.emit()
+
     def _update_date_label(self):
         d = self._canvas._start_date if hasattr(self, '_canvas') else today()
         self._date_lbl.setText(d.toString('d MMM yyyy'))
@@ -673,6 +822,8 @@ class TimelineWidget(QWidget):
             task.name = d['name']; task.task_type = d['task_type']
             task.start = d['start']; task.end = d['end']
             task.status = d['status']; task.is_urgent = d['is_urgent']
+            task.unavailable_start = d['unavailable_start']
+            task.unavailable_end   = d['unavailable_end']
             task.duration_days = max(1, task.start.daysTo(task.end))
             self._canvas.set_operators(self._operators)
             self._detail.show_task(task)
@@ -805,6 +956,8 @@ class TimelineWidget(QWidget):
                 'project_manager':   t.project_manager,
                 'technical_manager': t.technical_manager,
                 'contributors':      t.contributors,
+                'unavailable_start': t.unavailable_start.toString('yyyy-MM-dd') if t.unavailable_start else None,
+                'unavailable_end':   t.unavailable_end.toString('yyyy-MM-dd')   if t.unavailable_end   else None,
             }
         def _op(o: Operation) -> dict:
             return {'id': o.id, 'name': o.name, 'tasks': [_task(t) for t in o.tasks]}
@@ -829,6 +982,8 @@ class TimelineWidget(QWidget):
                         project_manager=t.get('project_manager', ''),
                         technical_manager=t.get('technical_manager', ''),
                         contributors=t.get('contributors', ''),
+                        unavailable_start=QDate.fromString(t['unavailable_start'], 'yyyy-MM-dd') if t.get('unavailable_start') else None,
+                        unavailable_end=QDate.fromString(t['unavailable_end'], 'yyyy-MM-dd')     if t.get('unavailable_end')   else None,
                     )
                     for t in o_d.get('tasks', [])
                 ]

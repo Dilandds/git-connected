@@ -1097,8 +1097,8 @@ class ScaleCanvas(QWidget):
         y_pos = canvas.bottom() - 20 + self._ref_line_pos.y()
         x_end = x_start + line_len
 
-        # Main line — darker red for visibility on white
-        pen = QPen(QColor("#C62828"), 3)
+        # Main line — black
+        pen = QPen(QColor("#000000"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
         # End caps
@@ -1109,7 +1109,7 @@ class ScaleCanvas(QWidget):
         ratio = self._scale_ratio
         if ratio > 1:
             subdivisions = int(ratio)
-            sub_pen = QPen(QColor("#C62828"), 1.5)
+            sub_pen = QPen(QColor("#000000"), 1.5)
             painter.setPen(sub_pen)
             for i in range(1, subdivisions):
                 sx = x_start + (line_len * i / subdivisions)
@@ -1123,7 +1123,7 @@ class ScaleCanvas(QWidget):
             unit_label += f"  (1:{int(ratio)})"
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
-        painter.setPen(QColor("#C62828"))
+        painter.setPen(QColor("#000000"))
         painter.drawText(
             QRectF(x_start, y_pos - 20, line_len, 18),
             Qt.AlignCenter, unit_label
@@ -1639,8 +1639,10 @@ class ScaleCanvas(QWidget):
 
             # Red reference line is static — no dragging
 
-        if (event.button() == Qt.MiddleButton) or (
-            event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._drawing_mode
+        if (
+            event.button() == Qt.MiddleButton
+            or event.button() == Qt.RightButton   # right-click pans (replaces scroll-button press)
+            or (event.button() == Qt.LeftButton and not self._ruler_mode and self._pixmap and not self._drawing_mode)
         ):
             self._panning = True
             self._pan_start = event.pos() - self._pan_offset.toPoint()

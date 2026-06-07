@@ -6,12 +6,14 @@ Settings match PyVista viewer for consistent default view and rendering.
 import sys
 import os
 import logging
+import threading
 from pathlib import Path
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent, QPoint, QPointF, QRectF, QSize
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QPixmap
 from ui.drop_zone_overlay import DropZoneOverlay
+from ui.loading_overlay import LoadingOverlay
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,143 @@ def _pyvista_to_trimesh(pv_mesh):
     return trimesh.Trimesh(vertices=verts, faces=faces)
 
 
+
+
+_MAX_PROXY_FACES = 50_000  # Simplified mesh face cap used for annotation raycasting
+
+
+def _scene_has_geometry(candidate):
+    import trimesh
+    if not isinstance(candidate, trimesh.Scene):
+        return False
+    for g in candidate.geometry.values():
+        if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0:
+            return True
+    return False
+
+
+def _segment_by_angle(mesh_input, angle_threshold_deg=30):
+    """Segment a connected mesh into regions separated by sharp dihedral edges."""
+    import networkx as nx
+    import trimesh
+    try:
+        adj = mesh_input.face_adjacency
+        angles = mesh_input.face_adjacency_angles
+    except Exception as e:
+        logger.info(f"parts_debug (pygfx): face_adjacency failed: {e}")
+        return [mesh_input]
+
+    n_faces = len(mesh_input.faces)
+    if n_faces < 10:
+        return [mesh_input]
+
+    threshold_rad = np.radians(angle_threshold_deg)
+    smooth_mask = angles < threshold_rad
+    smooth_edges = adj[smooth_mask]
+
+    G = nx.Graph()
+    G.add_nodes_from(range(n_faces))
+    G.add_edges_from(smooth_edges.tolist())
+    face_groups = list(nx.connected_components(G))
+
+    if len(face_groups) <= 1:
+        return [mesh_input]
+
+    if len(face_groups) > 200:
+        logger.info(f"parts_debug (pygfx): angle segmentation produced {len(face_groups)} segments, skipping")
+        return [mesh_input]
+
+    MIN_FACES = 4
+    large_groups = []
+    tiny_groups = []
+    for grp in face_groups:
+        if len(grp) >= MIN_FACES:
+            large_groups.append(grp)
+        else:
+            tiny_groups.append(grp)
+
+    if not large_groups:
+        return [mesh_input]
+
+    if tiny_groups:
+        biggest = max(large_groups, key=len)
+        for tg in tiny_groups:
+            biggest.update(tg)
+
+    segments = []
+    for grp in sorted(large_groups, key=len, reverse=True):
+        face_indices = np.array(sorted(grp))
+        try:
+            sub = mesh_input.submesh([face_indices], append=True)
+            if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                segments.append(sub)
+        except Exception:
+            pass
+
+    if not segments:
+        return [mesh_input]
+
+    logger.info(f"parts_debug (pygfx): angle segmentation produced {len(segments)} segments from {n_faces} faces")
+    return segments
+
+
+def _split_reasonable_components(source_mesh):
+    """Split mesh into connected components, then segment large ones by dihedral angle."""
+    import trimesh
+    try:
+        components = list(source_mesh.split(only_watertight=False))
+    except Exception as e:
+        logger.info(f"parts_debug (pygfx): split() failed: {e}, returning single mesh")
+        return [source_mesh]
+
+    components = [
+        c for c in components
+        if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
+    ]
+    logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
+    if len(components) <= 1:
+        comp = components[0] if components else source_mesh
+        if len(comp.faces) >= 50:
+            segmented = _segment_by_angle(comp)
+            if len(segmented) > 1:
+                logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts by angle")
+                return segmented
+        return [comp]
+
+    if len(components) > 5000:
+        logger.info("parts_debug (pygfx): >5000 components, returning single mesh")
+        return [source_mesh]
+
+    result = []
+    for comp in components:
+        if len(comp.faces) >= 50:
+            segmented = _segment_by_angle(comp)
+            result.extend(segmented)
+        else:
+            result.append(comp)
+
+    logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + angle segmentation")
+    return result
+
+
+def _make_proxy_mesh(mesh_tri):
+    """Return a simplified version of mesh_tri for raycasting (≤ _MAX_PROXY_FACES faces).
+    Falls back to the original mesh if simplification fails.
+    """
+    if len(mesh_tri.faces) <= _MAX_PROXY_FACES:
+        return mesh_tri
+    try:
+        proxy = mesh_tri.simplify_quadric_decimation(_MAX_PROXY_FACES)
+        if proxy is None or len(proxy.faces) == 0:
+            return mesh_tri
+        logger.info(
+            f"load_stl (pygfx): proxy mesh for raycasting: {len(proxy.faces)} faces "
+            f"(down from {len(mesh_tri.faces)})"
+        )
+        return proxy
+    except Exception as e:
+        logger.warning(f"load_stl (pygfx): proxy mesh simplification failed ({e}), using full mesh")
+        return mesh_tri
 
 
 def _debug_print(msg):
@@ -258,6 +397,10 @@ class STLViewerWidget(QWidget):
         self._zoom_in_btn.clicked.connect(lambda: self._screenshot_zoom(1.15))
         self._zoom_out_btn.clicked.connect(lambda: self._screenshot_zoom(0.85))
 
+        # Loading overlay — floats over everything while load_stl() runs
+        self._loading_overlay = LoadingOverlay(self)
+        self._loading_overlay.setGeometry(self.rect())
+
         _debug_print("STLViewerWidget (pygfx): Basic init complete")
 
     def showEvent(self, event):
@@ -276,6 +419,9 @@ class STLViewerWidget(QWidget):
         # Keep screenshot overlay sized to viewer
         if self._screenshot_overlay is not None and self._screenshot_overlay.isVisible():
             self._screenshot_overlay.setGeometry(self.viewer_container.rect())
+        # Keep loading overlay sized to self
+        if hasattr(self, '_loading_overlay'):
+            self._loading_overlay.setGeometry(self.rect())
 
     def _init_pygfx(self):
         if self._initialized:
@@ -383,291 +529,56 @@ class STLViewerWidget(QWidget):
             logger.warning(f"load_stl (pygfx): Unsupported format, got {file_ext}")
             return False
 
+        # Show loading overlay — covers the grey canvas while file is processed
+        from PyQt5.QtWidgets import QApplication
+        self._loading_overlay.show_loading()
+        QApplication.processEvents()
+
+        # Clear stale model immediately so viewport shows overlay only
+        if self._mesh_obj is not None:
+            self._scene.remove(self._mesh_obj)
+            self._mesh_obj = None
+
+        # ── Phase A: CPU-heavy work on a background thread ─────────────────────
+        # Everything that touches only Python / numpy / file I/O runs off the
+        # main thread.  GPU work (geometry_from_trimesh, gfx.Mesh) happens in
+        # Phase B on the main thread after the thread completes.
+
+        _result = [None]
+        _done = threading.Event()
+
+        def _cpu_work():
+            try:
+                _result[0] = self._cpu_load_file(file_path)
+            except Exception as e:
+                logger.error(f"load_stl (pygfx): background parse failed: {e}", exc_info=True)
+            finally:
+                _done.set()
+
+        t = threading.Thread(target=_cpu_work, daemon=True, name="ectoform-load")
+        t.start()
+
+        # Pump the Qt event loop every 20 ms so the window stays responsive
+        while not _done.wait(timeout=0.02):
+            QApplication.processEvents()
+
+        cpu_result = _result[0]
+        if cpu_result is None:
+            self._loading_overlay.hide_loading()
+            logger.error(f"load_stl (pygfx): CPU parse phase failed for {file_path}")
+            return False
+
+        # ── Phase B: GPU work on the main thread ───────────────────────────────
         try:
             import pygfx as gfx
-            import trimesh
-            import pyvista as pv
 
-            if self._mesh_obj is not None:
-                self._scene.remove(self._mesh_obj)
-                self._mesh_obj = None
+            sub_meshes = cpu_result['sub_meshes']
+            pv_mesh    = cpu_result['pv_mesh']
+            mesh_tri   = cpu_result['mesh_tri']
+            proxy_mesh = cpu_result['proxy_mesh']
 
-            mesh_tri = None
-            pv_mesh = None
-
-            def _scene_has_geometry(candidate):
-                if not isinstance(candidate, trimesh.Scene):
-                    return False
-                for g in candidate.geometry.values():
-                    if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0:
-                        return True
-                return False
-
-            def _segment_by_angle(mesh_input, angle_threshold_deg=30):
-                """Segment a connected mesh into regions separated by sharp dihedral edges."""
-                import networkx as nx
-                try:
-                    adj = mesh_input.face_adjacency
-                    angles = mesh_input.face_adjacency_angles
-                except Exception as e:
-                    logger.info(f"parts_debug (pygfx): face_adjacency failed: {e}")
-                    return [mesh_input]
-
-                n_faces = len(mesh_input.faces)
-                if n_faces < 10:
-                    return [mesh_input]
-
-                threshold_rad = np.radians(angle_threshold_deg)
-                smooth_mask = angles < threshold_rad
-                smooth_edges = adj[smooth_mask]
-
-                G = nx.Graph()
-                G.add_nodes_from(range(n_faces))
-                G.add_edges_from(smooth_edges.tolist())
-                face_groups = list(nx.connected_components(G))
-
-                if len(face_groups) <= 1:
-                    return [mesh_input]
-
-                # Safety: if too many segments, skip
-                if len(face_groups) > 200:
-                    logger.info(f"parts_debug (pygfx): angle segmentation produced {len(face_groups)} segments, skipping")
-                    return [mesh_input]
-
-                # Merge tiny segments (< 4 faces) into largest neighbor
-                MIN_FACES = 4
-                large_groups = []
-                tiny_groups = []
-                for grp in face_groups:
-                    if len(grp) >= MIN_FACES:
-                        large_groups.append(grp)
-                    else:
-                        tiny_groups.append(grp)
-
-                if not large_groups:
-                    return [mesh_input]
-
-                # Assign tiny faces to the largest group overall (simple merge)
-                if tiny_groups:
-                    biggest = max(large_groups, key=len)
-                    for tg in tiny_groups:
-                        biggest.update(tg)
-
-                # Extract sub-meshes
-                segments = []
-                for grp in sorted(large_groups, key=len, reverse=True):
-                    face_indices = np.array(sorted(grp))
-                    try:
-                        sub = mesh_input.submesh([face_indices], append=True)
-                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
-                            segments.append(sub)
-                    except Exception:
-                        pass
-
-                if not segments:
-                    return [mesh_input]
-
-                logger.info(f"parts_debug (pygfx): angle segmentation produced {len(segments)} segments from {n_faces} faces")
-                return segments
-
-            def _split_reasonable_components(source_mesh):
-                """Split mesh into connected components, then segment large ones by dihedral angle."""
-                try:
-                    components = list(source_mesh.split(only_watertight=False))
-                except Exception as e:
-                    logger.info(f"parts_debug (pygfx): split() failed: {e}, returning single mesh")
-                    return [source_mesh]
-
-                components = [
-                    c for c in components
-                    if isinstance(c, trimesh.Trimesh) and len(c.vertices) > 0 and len(c.faces) > 0
-                ]
-                logger.info(f"parts_debug (pygfx): trimesh.split returned {len(components)} components")
-                if len(components) <= 1:
-                    comp = components[0] if components else source_mesh
-                    # Even a single connected component can be segmented by angle
-                    if len(comp.faces) >= 50:
-                        segmented = _segment_by_angle(comp)
-                        if len(segmented) > 1:
-                            logger.info(f"parts_debug (pygfx): single component segmented into {len(segmented)} parts by angle")
-                            return segmented
-                    return [comp]
-
-                # Safety valve: cap at 5000 raw components
-                if len(components) > 5000:
-                    logger.info(f"parts_debug (pygfx): >5000 components, returning single mesh")
-                    return [source_mesh]
-
-                # Apply angle segmentation to large connected components
-                result = []
-                for comp in components:
-                    if len(comp.faces) >= 50:
-                        segmented = _segment_by_angle(comp)
-                        result.extend(segmented)
-                    else:
-                        result.append(comp)
-
-                logger.info(f"parts_debug (pygfx): final {len(result)} parts after connectivity + angle segmentation")
-                return result
-
-            # STEP
-            if file_ext.endswith('.step') or file_ext.endswith('.stp'):
-                logger.info("load_stl (pygfx): Loading STEP with StepLoader...")
-                from core.step_loader import StepLoader
-                pv_mesh = StepLoader.load_step(file_path)
-                if pv_mesh is None or pv_mesh.n_points == 0:
-                    raise ValueError("STEP loader returned empty mesh")
-                mesh_tri = _pyvista_to_trimesh(pv_mesh)
-            # 3DM
-            elif file_ext.endswith('.3dm'):
-                logger.info("load_stl (pygfx): Loading 3DM with Rhino3dmLoader...")
-                from core.rhino3dm_loader import Rhino3dmLoader
-                pv_mesh = Rhino3dmLoader.load_3dm(file_path)
-                if pv_mesh is None or pv_mesh.n_points == 0:
-                    raise ValueError("3DM loader returned empty mesh")
-                mesh_tri = _pyvista_to_trimesh(pv_mesh)
-            # IGES
-            elif file_ext.endswith('.iges') or file_ext.endswith('.igs'):
-                logger.info("load_stl (pygfx): Loading IGES with IgesLoader...")
-                from core.iges_loader import IgesLoader
-                pv_mesh = IgesLoader.load_iges(file_path)
-                if pv_mesh is None or pv_mesh.n_points == 0:
-                    raise ValueError("IGES loader returned empty mesh")
-                mesh_tri = _pyvista_to_trimesh(pv_mesh)
-            # DXF
-            elif file_ext.endswith('.dxf'):
-                logger.info("load_stl (pygfx): Loading DXF with DxfLoader...")
-                from core.dxf_loader import DxfLoader
-                pv_mesh, is_2d = DxfLoader.load_dxf(file_path)
-                if pv_mesh is None or pv_mesh.n_points == 0:
-                    raise ValueError("DXF loader returned empty mesh")
-                mesh_tri = _pyvista_to_trimesh(pv_mesh)
-                self._current_is_2d = is_2d
-            # OBJ: prefer Scene (preserves object groups), then fallback chain
-            elif file_ext.endswith('.obj'):
-                mesh_tri = None
-                try:
-                    mesh_tri = trimesh.load(file_path, force='scene', process=False)
-                except Exception:
-                    try:
-                        mesh_tri = trimesh.load(file_path, force='mesh', process=False)
-                    except Exception:
-                        mesh_tri = None
-
-                if mesh_tri is None or (
-                    isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
-                ) or (
-                    isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
-                ):
-                    try:
-                        pv_mesh = pv.read(file_path)
-                    except Exception:
-                        try:
-                            import meshio
-                            meshio_mesh = meshio.read(file_path)
-                            pts = meshio_mesh.points
-                            cells = None
-                            for cb in meshio_mesh.cells:
-                                if cb.type == "triangle":
-                                    cells = cb.data
-                                    break
-                            if cells is None and meshio_mesh.cells:
-                                cells = meshio_mesh.cells[0].data
-                            if cells is not None and len(pts) > 0:
-                                n_verts = cells.shape[1] if cells.ndim == 2 else 3
-                                cells_flat = np.column_stack([np.full(len(cells), n_verts), cells]).ravel().astype(np.int32)
-                                pv_mesh = pv.PolyData(pts, cells_flat).triangulate()
-                            else:
-                                raise ValueError("No cells")
-                        except Exception:
-                            from core.obj_loader import ObjLoader
-                            pv_mesh = ObjLoader.load_obj(file_path)
-                    if pv_mesh is not None and pv_mesh.n_points > 0:
-                        mesh_tri = _pyvista_to_trimesh(pv_mesh)
-
-                if mesh_tri is None or (
-                    isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
-                ) or (
-                    isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
-                ):
-                    raise ValueError("OBJ file could not be loaded")
-            # STL, PLY: trimesh
-            else:
-                mesh_tri = trimesh.load(file_path, force='mesh')
-                if mesh_tri is None:
-                    raise ValueError("No mesh in file")
-                pv_mesh = _trimesh_to_pyvista(mesh_tri)
-
-            # Normalize mesh_tri: preserve sub-meshes as separate parts.
-            # If we only have one mesh, split by disconnected components so assemblies
-            # can still be isolated in the Parts panel.
-            sub_meshes = []  # list of (name, trimesh.Trimesh)
-            if isinstance(mesh_tri, trimesh.Scene):
-                named_meshes = []
-
-                # Prefer transformed meshes from scene graph dump
-                try:
-                    dumped = mesh_tri.dump(concatenate=False)
-                    dumped_meshes = [
-                        g for g in dumped
-                        if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
-                    ]
-                    if dumped_meshes:
-                        named_meshes = [(f"Part {i + 1}", g) for i, g in enumerate(dumped_meshes)]
-                except Exception:
-                    named_meshes = []
-
-                # Fallback: raw scene geometry map
-                if not named_meshes:
-                    named_meshes = [
-                        (str(name), g) for name, g in mesh_tri.geometry.items()
-                        if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
-                    ]
-
-                if not named_meshes:
-                    raise ValueError("No meshes in file")
-
-                exploded_parts = []
-                for part_name, source_mesh in named_meshes:
-                    components = _split_reasonable_components(source_mesh)
-
-                    if len(components) <= 1:
-                        exploded_parts.append((part_name, source_mesh))
-                    else:
-                        for comp_idx, comp in enumerate(components, 1):
-                            exploded_parts.append((f"{part_name} #{comp_idx}", comp))
-
-                sub_meshes = exploded_parts
-
-            elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
-                fname = Path(file_path).stem if file_path else "Part"
-                logger.info(f"parts_debug (pygfx): Single Trimesh, verts={len(mesh_tri.vertices)}, faces={len(mesh_tri.faces)}")
-                components = _split_reasonable_components(mesh_tri)
-
-                if len(components) > 1:
-                    sub_meshes = [(f"{fname} #{i + 1}", comp) for i, comp in enumerate(components)]
-                    logger.info(f"parts_debug (pygfx): Using {len(sub_meshes)} components")
-                else:
-                    sub_meshes = [(fname, mesh_tri)]
-                    logger.info(f"parts_debug (pygfx): Single component, part='{fname}'")
-            else:
-                raise ValueError("No mesh in file")
-
-            if not sub_meshes:
-                raise ValueError("No mesh in file")
-
-            # Combined mesh for raycasting/MeshCalculator
-            mesh_tri = trimesh.util.concatenate([g for _, g in sub_meshes]) if len(sub_meshes) > 1 else sub_meshes[0][1]
-            logger.info(f"load_stl (pygfx): Built {len(sub_meshes)} part(s) for panel: {[(n, len(t.faces)) for n, t in sub_meshes]}")
-
-            if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
-                raise ValueError("No mesh in file")
-
-            # Ensure PyVista for MeshCalculator (before flat-shading)
-            if pv_mesh is None:
-                pv_mesh = _trimesh_to_pyvista(mesh_tri)
-            if pv_mesh is None:
-                raise ValueError("Could not convert mesh for dimensions/volume calculation")
+            if cpu_result.get('is_2d') is not None:
+                self._current_is_2d = cpu_result['is_2d']
 
             # Build separate gfx.Mesh per sub-mesh inside a Group
             from pygfx.geometries import geometry_from_trimesh
@@ -694,7 +605,7 @@ class STLViewerWidget(QWidget):
             self.set_render_mode(self._render_mode)
 
             self.current_mesh = pv_mesh
-            self._annotation_trimesh = mesh_tri  # Keep original smooth trimesh for raycasting in annotation mode
+            self._annotation_trimesh = proxy_mesh  # simplified proxy for fast raycasting
             self._model_loaded = True
             self._show_overlay(False)
 
@@ -772,12 +683,203 @@ class STLViewerWidget(QWidget):
             QTimer.singleShot(50, _deferred_repaint)
             QTimer.singleShot(200, _deferred_repaint)
 
+            self._loading_overlay.hide_loading()
             logger.info("load_stl (pygfx): Loaded successfully")
             return True
 
         except Exception as e:
-            logger.error(f"load_stl (pygfx): Error: {e}", exc_info=True)
+            self._loading_overlay.hide_loading()
+            logger.error(f"load_stl (pygfx): GPU phase error: {e}", exc_info=True)
             return False
+
+    def _cpu_load_file(self, file_path: str) -> dict:
+        """Parse the file and build trimesh/PyVista objects. Safe to call from a background thread.
+
+        Returns a dict with:
+            sub_meshes  — list of (name, trimesh.Trimesh) for the parts panel
+            pv_mesh     — PyVista PolyData for MeshCalculator
+            mesh_tri    — concatenated trimesh.Trimesh (full resolution)
+            proxy_mesh  — simplified trimesh.Trimesh for annotation raycasting
+            is_2d       — bool or None (DXF files only)
+
+        Raises ValueError on any unrecoverable parse error.
+        """
+        import trimesh
+        import pyvista as pv
+
+        file_ext = file_path.lower()
+        mesh_tri = None
+        pv_mesh = None
+        is_2d = None
+
+        # ── Format-specific loading ─────────────────────────────────────────
+        if file_ext.endswith('.step') or file_ext.endswith('.stp'):
+            logger.info("load_stl (pygfx): Loading STEP with StepLoader...")
+            from core.step_loader import StepLoader
+            pv_mesh = StepLoader.load_step(file_path)
+            if pv_mesh is None or pv_mesh.n_points == 0:
+                raise ValueError("STEP loader returned empty mesh")
+            mesh_tri = _pyvista_to_trimesh(pv_mesh)
+
+        elif file_ext.endswith('.3dm'):
+            logger.info("load_stl (pygfx): Loading 3DM with Rhino3dmLoader...")
+            from core.rhino3dm_loader import Rhino3dmLoader
+            pv_mesh = Rhino3dmLoader.load_3dm(file_path)
+            if pv_mesh is None or pv_mesh.n_points == 0:
+                raise ValueError("3DM loader returned empty mesh")
+            mesh_tri = _pyvista_to_trimesh(pv_mesh)
+
+        elif file_ext.endswith('.iges') or file_ext.endswith('.igs'):
+            logger.info("load_stl (pygfx): Loading IGES with IgesLoader...")
+            from core.iges_loader import IgesLoader
+            pv_mesh = IgesLoader.load_iges(file_path)
+            if pv_mesh is None or pv_mesh.n_points == 0:
+                raise ValueError("IGES loader returned empty mesh")
+            mesh_tri = _pyvista_to_trimesh(pv_mesh)
+
+        elif file_ext.endswith('.dxf'):
+            logger.info("load_stl (pygfx): Loading DXF with DxfLoader...")
+            from core.dxf_loader import DxfLoader
+            pv_mesh, is_2d = DxfLoader.load_dxf(file_path)
+            if pv_mesh is None or pv_mesh.n_points == 0:
+                raise ValueError("DXF loader returned empty mesh")
+            mesh_tri = _pyvista_to_trimesh(pv_mesh)
+
+        elif file_ext.endswith('.obj'):
+            mesh_tri = None
+            try:
+                mesh_tri = trimesh.load(file_path, force='scene', process=False)
+            except Exception:
+                try:
+                    mesh_tri = trimesh.load(file_path, force='mesh', process=False)
+                except Exception:
+                    mesh_tri = None
+
+            if mesh_tri is None or (
+                isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
+            ) or (
+                isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
+            ):
+                try:
+                    pv_mesh = pv.read(file_path)
+                except Exception:
+                    try:
+                        import meshio
+                        meshio_mesh = meshio.read(file_path)
+                        pts = meshio_mesh.points
+                        cells = None
+                        for cb in meshio_mesh.cells:
+                            if cb.type == "triangle":
+                                cells = cb.data
+                                break
+                        if cells is None and meshio_mesh.cells:
+                            cells = meshio_mesh.cells[0].data
+                        if cells is not None and len(pts) > 0:
+                            n_verts = cells.shape[1] if cells.ndim == 2 else 3
+                            cells_flat = np.column_stack(
+                                [np.full(len(cells), n_verts), cells]
+                            ).ravel().astype(np.int32)
+                            pv_mesh = pv.PolyData(pts, cells_flat).triangulate()
+                        else:
+                            raise ValueError("No cells")
+                    except Exception:
+                        from core.obj_loader import ObjLoader
+                        pv_mesh = ObjLoader.load_obj(file_path)
+                if pv_mesh is not None and pv_mesh.n_points > 0:
+                    mesh_tri = _pyvista_to_trimesh(pv_mesh)
+
+            if mesh_tri is None or (
+                isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) == 0
+            ) or (
+                isinstance(mesh_tri, trimesh.Scene) and not _scene_has_geometry(mesh_tri)
+            ):
+                raise ValueError("OBJ file could not be loaded")
+
+        else:
+            mesh_tri = trimesh.load(file_path, force='mesh')
+            if mesh_tri is None:
+                raise ValueError("No mesh in file")
+            pv_mesh = _trimesh_to_pyvista(mesh_tri)
+
+        # ── Normalise into sub-meshes (parts panel) ─────────────────────────
+        sub_meshes = []
+        if isinstance(mesh_tri, trimesh.Scene):
+            named_meshes = []
+            try:
+                dumped = mesh_tri.dump(concatenate=False)
+                dumped_meshes = [
+                    g for g in dumped
+                    if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
+                ]
+                if dumped_meshes:
+                    named_meshes = [(f"Part {i + 1}", g) for i, g in enumerate(dumped_meshes)]
+            except Exception:
+                named_meshes = []
+
+            if not named_meshes:
+                named_meshes = [
+                    (str(name), g) for name, g in mesh_tri.geometry.items()
+                    if isinstance(g, trimesh.Trimesh) and len(g.vertices) > 0 and len(g.faces) > 0
+                ]
+
+            if not named_meshes:
+                raise ValueError("No meshes in file")
+
+            exploded_parts = []
+            for part_name, source_mesh in named_meshes:
+                components = _split_reasonable_components(source_mesh)
+                if len(components) <= 1:
+                    exploded_parts.append((part_name, source_mesh))
+                else:
+                    for comp_idx, comp in enumerate(components, 1):
+                        exploded_parts.append((f"{part_name} #{comp_idx}", comp))
+            sub_meshes = exploded_parts
+
+        elif isinstance(mesh_tri, trimesh.Trimesh) and len(mesh_tri.vertices) > 0:
+            fname = Path(file_path).stem if file_path else "Part"
+            logger.info(f"parts_debug (pygfx): Single Trimesh, verts={len(mesh_tri.vertices)}, faces={len(mesh_tri.faces)}")
+            components = _split_reasonable_components(mesh_tri)
+            if len(components) > 1:
+                sub_meshes = [(f"{fname} #{i + 1}", comp) for i, comp in enumerate(components)]
+                logger.info(f"parts_debug (pygfx): Using {len(sub_meshes)} components")
+            else:
+                sub_meshes = [(fname, mesh_tri)]
+                logger.info(f"parts_debug (pygfx): Single component, part='{fname}'")
+        else:
+            raise ValueError("No mesh in file")
+
+        if not sub_meshes:
+            raise ValueError("No mesh in file")
+
+        # ── Merged mesh for raycasting / MeshCalculator ─────────────────────
+        mesh_tri = (
+            trimesh.util.concatenate([g for _, g in sub_meshes])
+            if len(sub_meshes) > 1
+            else sub_meshes[0][1]
+        )
+        logger.info(
+            f"load_stl (pygfx): Built {len(sub_meshes)} part(s): "
+            f"{[(n, len(t.faces)) for n, t in sub_meshes]}"
+        )
+
+        if not isinstance(mesh_tri, trimesh.Trimesh) or len(mesh_tri.vertices) == 0:
+            raise ValueError("No mesh in file")
+
+        if pv_mesh is None:
+            pv_mesh = _trimesh_to_pyvista(mesh_tri)
+        if pv_mesh is None:
+            raise ValueError("Could not convert mesh for dimensions/volume calculation")
+
+        # ── Proxy mesh for annotation raycasting (Change 3) ─────────────────
+        proxy_mesh = _make_proxy_mesh(mesh_tri)
+
+        return {
+            'sub_meshes': sub_meshes,
+            'pv_mesh': pv_mesh,
+            'mesh_tri': mesh_tri,
+            'proxy_mesh': proxy_mesh,
+            'is_2d': is_2d,
+        }
 
     def set_render_mode(self, mode):
         """Set render mode: 'solid', 'wireframe', or 'shaded'."""
@@ -3026,16 +3128,33 @@ class STLViewerWidget(QWidget):
             logger.debug(f"_draw_place_text: {e}")
             return False
 
-    def _add_text_at(self, text: str, position: tuple, color: str, font_size: int = 16):
-        """Add a pygfx Text object at the given 3D position."""
+    def _get_draw_text_size(self) -> float:
+        """World-space font size for surface text — scales with the model."""
+        try:
+            b = self.current_mesh.bounds
+            diag = np.sqrt(
+                (b[1] - b[0]) ** 2 + (b[3] - b[2]) ** 2 + (b[5] - b[4]) ** 2
+            )
+            return max(diag * 0.04, 0.5)
+        except Exception:
+            return 1.0
+
+    def _add_text_at(self, text: str, position: tuple, color: str, font_size: float = None):
+        """Add a world-space pygfx Text object on the mesh surface.
+
+        screen_space=False so the text lives in 3D and rotates with the model,
+        exactly like drawn lines.  font_size is in world units.
+        """
         import pygfx as gfx
         try:
+            if font_size is None:
+                font_size = self._get_draw_text_size()
             mat = gfx.TextMaterial(color=color)
             mat.depth_test = True
             mat.depth_write = True
             text_obj = gfx.Text(
                 text=text, material=mat, font_size=font_size,
-                anchor="middle-center", screen_space=True
+                anchor="middle-center", screen_space=False
             )
             text_obj.local.position = position
             self._scene.add(text_obj)
@@ -3063,13 +3182,19 @@ class STLViewerWidget(QWidget):
                 pass
         self._draw_texts.clear()
         self._draw_texts_data.clear()
+        world_size = self._get_draw_text_size()
         for td in texts or []:
             try:
+                stored_size = td.get('font_size', None)
+                # Old .ecto files stored pixel sizes (e.g. 16); detect and replace
+                # with a proper world-space size for the loaded mesh.
+                if stored_size is not None and stored_size <= 72:
+                    stored_size = world_size
                 self._add_text_at(
                     td.get('text', ''),
                     tuple(td.get('position', [0, 0, 0])),
                     td.get('color', '#FF0000'),
-                    td.get('font_size', 16)
+                    stored_size,
                 )
             except Exception as e:
                 logger.warning(f"restore_draw_texts: {e}")

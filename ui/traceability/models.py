@@ -6,6 +6,7 @@ from typing import List
 class TracePart:
     id:           int
     name:         str       = 'Part'
+    subject:      str       = ''
     suppliers:    str       = ''
     action:       str       = ''
     current_task: str       = ''

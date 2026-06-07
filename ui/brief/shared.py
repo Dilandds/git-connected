@@ -126,12 +126,9 @@ def make_textarea(placeholder: str = '', min_height: int = 70) -> QTextEdit:
     return w
 
 
-def make_date_edit() -> QDateEdit:
-    w = QDateEdit()
-    w.setDisplayFormat('dd/MM/yyyy')
-    w.setCalendarPopup(True)
-    w.setDate(QDate.currentDate())
-    w.setStyleSheet(DATE_STYLE)
+def make_date_edit():
+    from ui.date_picker import EctoDateEdit
+    w = EctoDateEdit(QDate.currentDate())
     w.setMinimumHeight(28)
     return w
 

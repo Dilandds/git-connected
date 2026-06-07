@@ -5,9 +5,9 @@ before saving. Opens as a modal dialog from the screenshot panel.
 import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QApplication, QInputDialog, QWidget, QFileDialog, QSlider, QSpinBox
+    QApplication, QInputDialog, QWidget, QFileDialog, QSlider, QSpinBox, QLineEdit,
 )
-from PyQt5.QtCore import Qt, QPoint, QPointF, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QPointF, QTimer, pyqtSignal
 from PyQt5.QtGui import (
     QPainter, QPixmap, QColor, QPen, QFont, QImage,
     QCursor, QFontMetrics
@@ -17,6 +17,104 @@ from i18n import t, on_language_changed
 from ui.draw_color_picker import DrawColorPicker
 
 logger = logging.getLogger(__name__)
+
+
+class _FontSizeWidget(QWidget):
+    """Font size control: QLineEdit + visible ▲/▼ buttons. Avoids QSpinBox QSS/suffix quirks."""
+    valueChanged = pyqtSignal(int)
+    _MIN, _MAX = 10, 500
+
+    def __init__(self, initial: int = 140, parent=None):
+        super().__init__(parent)
+        self._value = initial
+        # 46 (number) + 18 (pt) + 18 (buttons) = 82 px total
+        self.setFixedSize(82, 26)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        from PyQt5.QtGui import QIntValidator
+        self._edit = QLineEdit(str(initial))
+        self._edit.setFixedSize(46, 26)
+        self._edit.setAlignment(Qt.AlignCenter)
+        self._edit.setValidator(QIntValidator(self._MIN, self._MAX))
+        self._edit.setStyleSheet(f"""
+            QLineEdit {{
+                background: {default_theme.row_bg_standard}; color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard}; border-right: none;
+                border-radius: 5px 0 0 5px; font-size: 11px; padding: 1px 4px;
+            }}
+            QLineEdit:focus {{ border-color: {default_theme.button_primary}; }}
+        """)
+        self._edit.editingFinished.connect(self._commit)
+        _orig_focus = self._edit.focusInEvent
+        def _focus_in(ev, _orig=_orig_focus):
+            _orig(ev)
+            QTimer.singleShot(0, self._edit.selectAll)
+        self._edit.focusInEvent = _focus_in
+        lay.addWidget(self._edit)
+
+        pt = QLabel("pt")
+        pt.setFixedSize(18, 26)
+        pt.setAlignment(Qt.AlignCenter)
+        pt.setStyleSheet(f"""
+            QLabel {{
+                background: {default_theme.row_bg_standard}; color: {default_theme.text_subtext};
+                border: 1px solid {default_theme.border_standard}; border-left: none; border-right: none;
+                font-size: 10px;
+            }}
+        """)
+        lay.addWidget(pt)
+
+        _bs = f"""
+            QPushButton {{
+                background: {default_theme.row_bg_standard}; color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard}; font-size: 7px; padding: 0;
+            }}
+            QPushButton:hover {{ background: {default_theme.row_bg_hover}; }}
+            QPushButton:pressed {{ background: {default_theme.button_primary}; color: white; }}
+        """
+        btn_col = QVBoxLayout()
+        btn_col.setContentsMargins(0, 0, 0, 0)
+        btn_col.setSpacing(0)
+
+        up = QPushButton("▲")
+        up.setFixedSize(18, 13)
+        up.setCursor(Qt.PointingHandCursor)
+        up.setStyleSheet(_bs + "QPushButton { border-radius: 0 5px 0 0; border-bottom: none; }")
+        up.clicked.connect(lambda: self._step(1))
+        btn_col.addWidget(up)
+
+        dn = QPushButton("▼")
+        dn.setFixedSize(18, 13)
+        dn.setCursor(Qt.PointingHandCursor)
+        dn.setStyleSheet(_bs + "QPushButton { border-radius: 0 0 5px 0; }")
+        dn.clicked.connect(lambda: self._step(-1))
+        btn_col.addWidget(dn)
+
+        lay.addLayout(btn_col)
+
+    def _commit(self):
+        try:
+            v = int(self._edit.text())
+        except ValueError:
+            v = self._value
+        self._set(max(self._MIN, min(self._MAX, v)))
+
+    def _step(self, d: int):
+        self._set(self._value + d)
+
+    def _set(self, v: int):
+        self._value = max(self._MIN, min(self._MAX, v))
+        self._edit.setText(str(self._value))
+        self.valueChanged.emit(self._value)
+
+    def value(self) -> int:
+        return self._value
+
+    def setValue(self, v: int):
+        self._set(v)
+
 
 # Tool modes
 TOOL_NONE = 'none'
@@ -34,7 +132,7 @@ class _EditorCanvas(QWidget):
         self._scale = 1.0
         self._offset = QPoint(0, 0)
         self._tool = TOOL_NONE
-        self._color = '#FF0000'
+        self._color = '#000000'
         self._line_width = 20
         # Increase default font size so text remains readable when screenshots are scaled down
         self._line_width = 28
@@ -150,12 +248,13 @@ class _EditorCanvas(QWidget):
         if self._drawing and self._tool in (TOOL_LINE, TOOL_ARROW):
             start_w = self._image_to_widget(self._draw_start)
             end_w = self._image_to_widget(self._draw_current)
-            pen = QPen(QColor(self._color), self._line_width * self._scale)
-            pen.setCapStyle(Qt.RoundCap)
-            painter.setPen(pen)
-            painter.drawLine(start_w, end_w)
             if self._tool == TOOL_ARROW:
-                self._draw_arrowhead(painter, start_w, end_w, self._color, self._line_width * self._scale)
+                self._draw_arrow(painter, start_w, end_w, self._color, self._line_width * self._scale)
+            else:
+                pen = QPen(QColor(self._color), self._line_width * self._scale)
+                pen.setCapStyle(Qt.RoundCap)
+                painter.setPen(pen)
+                painter.drawLine(start_w, end_w)
 
         painter.end()
 
@@ -175,13 +274,9 @@ class _EditorCanvas(QWidget):
         # Arrows
         for start, end, color, width in self._arrows:
             painter.save()
-            pen = QPen(QColor(color), width * scale)
-            pen.setCapStyle(Qt.RoundCap)
-            painter.setPen(pen)
             s = QPointF(start.x() * scale + offset.x(), start.y() * scale + offset.y())
             e = QPointF(end.x() * scale + offset.x(), end.y() * scale + offset.y())
-            painter.drawLine(s, e)
-            self._draw_arrowhead(painter, s, e, color, width * scale)
+            self._draw_arrow(painter, s, e, color, width * scale)
             painter.restore()
 
         # Texts
@@ -197,8 +292,8 @@ class _EditorCanvas(QWidget):
             painter.drawText(p, text)
             painter.restore()
 
-    def _draw_arrowhead(self, painter, start: QPointF, end: QPointF, color: str, width: float):
-        """Draw an arrowhead at the end point."""
+    def _draw_arrow(self, painter, start: QPointF, end: QPointF, color: str, width: float):
+        """Draw shaft + arrowhead. Shaft stops at head base so the line never protrudes."""
         import math
         from PyQt5.QtGui import QPolygonF, QBrush
         dx = end.x() - start.x()
@@ -207,18 +302,29 @@ class _EditorCanvas(QWidget):
         if length < 1:
             return
         ux, uy = dx / length, dy / length
-        arrow_len = max(12, width * 4)
-        arrow_w = arrow_len * 0.5
+
+        # Shorter head, wider base — head fully covers the shaft end
+        arrow_len = max(width * 2.0, 20)   # shorter than before (was width*4)
+        arrow_w   = arrow_len * 0.55        # wide enough to hide the shaft behind it
+
         bx = end.x() - ux * arrow_len
         by = end.y() - uy * arrow_len
+        shaft_end = QPointF(bx, by)         # shaft stops HERE, not at end
+
+        # Shaft — thinner so it sits cleanly behind the head
+        shaft_width = max(width * 0.65, 1)
+        pen = QPen(QColor(color), shaft_width)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(start, shaft_end)
+
+        # Arrowhead triangle
         p1 = QPointF(bx + uy * arrow_w, by - ux * arrow_w)
         p2 = QPointF(bx - uy * arrow_w, by + ux * arrow_w)
-        painter.save()
         polygon = QPolygonF([end, p1, p2])
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(QColor(color)))
         painter.drawPolygon(polygon)
-        painter.restore()
 
     # ---- mouse events ----
 
@@ -283,7 +389,7 @@ class ScreenshotEditorDialog(QDialog):
         self.setWindowTitle(title)
         self.setModal(True)
         self._current_tool = TOOL_NONE
-        self._current_color = '#FF0000'
+        self._current_color = '#000000'
 
         from ui.annotation_icon import get_app_window_icon
         icon = get_app_window_icon()
@@ -366,6 +472,12 @@ class ScreenshotEditorDialog(QDialog):
         self._text_btn.clicked.connect(lambda: self._set_tool(TOOL_TEXT))
         toolbar.addWidget(self._text_btn)
 
+        # Font size spinner — visible at all times, only affects text tool
+        self._font_spin = _FontSizeWidget(initial=140)
+        self._font_spin.setToolTip("Text font size")
+        self._font_spin.valueChanged.connect(self._on_font_size_changed)
+        toolbar.addWidget(self._font_spin)
+
         # Separator
         sep = QLabel("│")
         sep.setStyleSheet(f"color: {default_theme.border_standard}; font-size: 16px;")
@@ -390,7 +502,7 @@ class ScreenshotEditorDialog(QDialog):
             QPushButton:hover {{
                 border: 2px solid {default_theme.button_primary};
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         self._color_btn.clicked.connect(self._show_color_picker)
         toolbar.addWidget(self._color_btn)
 
@@ -406,7 +518,7 @@ class ScreenshotEditorDialog(QDialog):
         undo_btn = QPushButton("↩ Undo")
         undo_btn.setToolTip("Undo last annotation")
         undo_btn.setCursor(Qt.PointingHandCursor)
-        undo_btn.setStyleSheet(btn_css)
+        undo_btn.setStyleSheet(self._btn_css)
         undo_btn.clicked.connect(self._undo)
         toolbar.addWidget(undo_btn)
 
@@ -414,7 +526,7 @@ class ScreenshotEditorDialog(QDialog):
         clear_btn = QPushButton("🗑 Clear")
         clear_btn.setToolTip("Remove all annotations")
         clear_btn.setCursor(Qt.PointingHandCursor)
-        clear_btn.setStyleSheet(btn_css)
+        clear_btn.setStyleSheet(self._btn_css)
         clear_btn.clicked.connect(self._clear)
         toolbar.addWidget(clear_btn)
 
@@ -430,6 +542,7 @@ class ScreenshotEditorDialog(QDialog):
         # Canvas
         self._canvas = _EditorCanvas(self._original, self)
         self._canvas.setMinimumSize(400, 300)
+        self._canvas.set_font_size(self._font_spin.value())  # sync initial value
         layout.addWidget(self._canvas, 1)
 
         # Bottom buttons
@@ -493,6 +606,10 @@ class ScreenshotEditorDialog(QDialog):
         }
         self._hint.setText(hints.get(tool, "Select a tool to start annotating"))
 
+    def _on_font_size_changed(self, size: int):
+        if hasattr(self, '_canvas'):
+            self._canvas.set_font_size(size)
+
     def _show_color_picker(self):
         picker = DrawColorPicker(self)
         picker.color_selected.connect(self._on_color_selected)
@@ -517,7 +634,7 @@ class ScreenshotEditorDialog(QDialog):
             QPushButton:hover {{
                 border: 2px solid {default_theme.button_primary};
             }}
-        """)
+        """ + TOOLTIP_STYLE)
 
     def _undo(self):
         self._canvas.undo()

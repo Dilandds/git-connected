@@ -199,20 +199,15 @@ class TechnicalSidebar(QWidget):
         # Dates
         self.start_date_label = _section_label(t("technical.start_date"))
         layout.addWidget(self.start_date_label)
-        self.start_date = QDateEdit()
-        self.start_date.setCalendarPopup(True)
-        self.start_date.setDate(QDate.currentDate())
+        from ui.date_picker import EctoDateEdit
+        self.start_date = EctoDateEdit(QDate.currentDate())
         self.start_date.setFixedHeight(30)
-        self._style_date_edit(self.start_date)
         layout.addWidget(self.start_date)
 
         self.deadline_label = _section_label(t("technical.deadline"))
         layout.addWidget(self.deadline_label)
-        self.deadline_date = QDateEdit()
-        self.deadline_date.setCalendarPopup(True)
-        self.deadline_date.setDate(QDate.currentDate().addMonths(1))
+        self.deadline_date = EctoDateEdit(QDate.currentDate().addMonths(1))
         self.deadline_date.setFixedHeight(30)
-        self._style_date_edit(self.deadline_date)
         layout.addWidget(self.deadline_date)
 
         # Comments

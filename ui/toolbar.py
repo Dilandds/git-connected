@@ -46,19 +46,19 @@ def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
         p.setPen(Qt.NoPen)
         cell = size // 2 - 1
         gap = 1
-        black = QColor(0, 0, 0)
+        white = QColor(255, 255, 255)
         for r in range(2):
             for c in range(2):
                 x = gap + c * (cell + gap)
                 y = gap + r * (cell + gap)
-                p.fillRect(QRect(x, y, cell, cell), black)
+                p.fillRect(QRect(x, y, cell, cell), white)
         p.end()
         logger.debug("_parts_menu_pixmap_fallback v2: ok size=%d cell=%d", size, cell)
         return pm
     except Exception:
         logger.warning("_parts_menu_pixmap_fallback v2 failed", exc_info=True)
         pm = QPixmap(max(size, 10), max(size, 10))
-        pm.fill(QColor(0, 0, 0))
+        pm.fill(QColor(255, 255, 255))
         return pm
 
 
@@ -79,7 +79,17 @@ def _load_parts_menu_pixmap(path: str) -> QPixmap:
             logger.warning("_load_parts_menu_pixmap: scaled pixmap is null/zero")
             return QPixmap()
         img = pm.toImage().convertToFormat(QImage.Format_ARGB32_Premultiplied)
-        return QPixmap.fromImage(img)
+        pm_alpha = QPixmap.fromImage(img)
+        # Recolor to white: fill white then mask with original alpha channel
+        result = QPixmap(pm_alpha.size())
+        result.fill(Qt.transparent)
+        p = QPainter(result)
+        p.setCompositionMode(QPainter.CompositionMode_Source)
+        p.fillRect(result.rect(), QColor(255, 255, 255))
+        p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+        p.drawPixmap(0, 0, pm_alpha)
+        p.end()
+        return result
     except Exception:
         logger.warning("_load_parts_menu_pixmap failed for '%s'", path, exc_info=True)
         return QPixmap()
@@ -433,6 +443,7 @@ class ViewControlsToolbar(QWidget):
     draw_text_toggled = pyqtSignal(bool)  # True = text mode on
     draw_undo_requested = pyqtSignal()
     draw_clear_requested = pyqtSignal()
+    draw_color_picker_requested = pyqtSignal()  # show color picker (pen/text only, not eraser)
     load_file = pyqtSignal()
     clear_model = pyqtSignal()
     open_converter = pyqtSignal()
@@ -1107,15 +1118,7 @@ class ViewControlsToolbar(QWidget):
 
         from PyQt5.QtWidgets import QActionGroup
 
-        # Master on/off
-        draw_action = menu.addAction("🖊  Draw mode")
-        draw_action.setCheckable(True)
-        draw_action.setChecked(self.draw_mode_enabled)
-        draw_action.triggered.connect(self._on_draw_toggled)
-
-        menu.addSeparator()
-
-        # Mutually exclusive tool selection (only meaningful when draw mode is on)
+        # Mutually exclusive tool selection — clicking any tool auto-enables draw mode
         tool_group = QActionGroup(menu)
         tool_group.setExclusive(True)
 
@@ -1123,21 +1126,18 @@ class ViewControlsToolbar(QWidget):
         pen_action = menu.addAction("✏  Pen")
         pen_action.setCheckable(True)
         pen_action.setChecked(pen_active)
-        pen_action.setEnabled(self.draw_mode_enabled)
         pen_action.triggered.connect(self._on_pen_tool_selected)
         tool_group.addAction(pen_action)
 
         eraser_action = menu.addAction("🧹  Eraser")
         eraser_action.setCheckable(True)
         eraser_action.setChecked(self.draw_mode_enabled and self._eraser_active)
-        eraser_action.setEnabled(self.draw_mode_enabled)
         eraser_action.triggered.connect(self._on_eraser_tool_selected)
         tool_group.addAction(eraser_action)
 
         text_action = menu.addAction("T  Text")
         text_action.setCheckable(True)
         text_action.setChecked(self.draw_mode_enabled and self._draw_text_active)
-        text_action.setEnabled(self.draw_mode_enabled)
         text_action.triggered.connect(self._on_text_tool_selected)
         tool_group.addAction(text_action)
 
@@ -1158,20 +1158,40 @@ class ViewControlsToolbar(QWidget):
             self.draw_btn.rect().bottomLeft()
         ))
 
-    def _on_pen_tool_selected(self):
-        """Switch to pen (default draw) tool."""
+    def _ensure_draw_mode_on(self):
+        """Enable draw mode if it isn't already (called by tool selectors)."""
         if not self.draw_mode_enabled:
-            return
+            self.draw_mode_enabled = True
+            self.draw_btn.set_active(True)
+            if self.parts_mode_enabled:
+                self.parts_mode_enabled = False
+                self.parts_btn.set_active(False)
+                self.toggle_parts.emit()
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.annotation_mode_enabled:
+                self.annotation_mode_enabled = False
+                self.annotation_btn.set_active(False)
+                self.annotation_btn.set_icon("📝")
+            self.toggle_draw.emit()
+
+    def _on_pen_tool_selected(self):
+        """Switch to pen tool — enables draw mode automatically if needed."""
+        was_off = not self.draw_mode_enabled
+        self._ensure_draw_mode_on()
         self._eraser_active = False
         self._draw_text_active = False
         self.draw_btn.set_label("Drawing ▼")
         self.draw_eraser_toggled.emit(False)
         self.draw_text_toggled.emit(False)
+        if was_off:
+            self.draw_color_picker_requested.emit()
 
     def _on_eraser_tool_selected(self):
-        """Switch to eraser tool (exclusive with pen/text)."""
-        if not self.draw_mode_enabled:
-            return
+        """Switch to eraser tool — enables draw mode automatically, no color picker."""
+        self._ensure_draw_mode_on()
         self._eraser_active = True
         self._draw_text_active = False
         self.draw_btn.set_label("Eraser ▼")
@@ -1179,14 +1199,16 @@ class ViewControlsToolbar(QWidget):
         self.draw_eraser_toggled.emit(True)
 
     def _on_text_tool_selected(self):
-        """Switch to text tool (exclusive with pen/eraser)."""
-        if not self.draw_mode_enabled:
-            return
+        """Switch to text tool — enables draw mode automatically if needed."""
+        was_off = not self.draw_mode_enabled
+        self._ensure_draw_mode_on()
         self._eraser_active = False
         self._draw_text_active = True
         self.draw_btn.set_label("Text ▼")
         self.draw_eraser_toggled.emit(False)
         self.draw_text_toggled.emit(True)
+        if was_off:
+            self.draw_color_picker_requested.emit()
 
     def _on_draw_toggled(self):
         """Toggle draw mode on/off."""

@@ -4,10 +4,17 @@ Every dialog extends FormModal so theme and tooltip styling are guaranteed consi
 """
 from typing import List, Optional
 
-from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox, QDateEdit, QLabel
+from PyQt5.QtWidgets import (
+    QLineEdit, QComboBox, QCheckBox, QLabel,
+    QPushButton, QHBoxLayout, QVBoxLayout, QWidget,
+    QScrollArea, QFrame, QDialog,
+)
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QColor
 
-from ui.modal_utils import FormModal
-from .models import Task, Operation, Operator, TASK_TYPES, today
+from ui.modal_utils import FormModal, BaseModal
+from ui.date_picker import EctoDateEdit
+from .models import Task, Operation, Operator, TASK_TYPES, today, BORDER, MUTED, ACCENT, TEXT
 
 
 # ── Add Operator ──────────────────────────────────────────────────────────────
@@ -68,7 +75,7 @@ class TaskFormDialog(FormModal):
                  current_op_idx: int = 0,
                  current_oper_idx: int = 0,
                  parent=None):
-        super().__init__(parent, 'Edit Task' if task else 'Add Task',
+        super().__init__(parent, 'Edit Event' if task else 'Add Event',
                          min_width=380)
         self._operators: List[Operator] = operators or []
 
@@ -99,13 +106,8 @@ class TaskFormDialog(FormModal):
         if task:
             self.f_type.setCurrentText(task.task_type)
 
-        self.f_start = self.add_hfield('Start', QDateEdit(task.start if task else today()))
-        self.f_start.setDisplayFormat('dd/MM/yyyy')
-        self.f_start.setCalendarPopup(True)
-
-        self.f_end = self.add_hfield('End', QDateEdit(task.end if task else today().addDays(3)))
-        self.f_end.setDisplayFormat('dd/MM/yyyy')
-        self.f_end.setCalendarPopup(True)
+        self.f_start = self.add_hfield('Start', EctoDateEdit(task.start if task else today()))
+        self.f_end   = self.add_hfield('End',   EctoDateEdit(task.end   if task else today().addDays(3)))
 
         self.f_status = self.add_hfield('Status', QComboBox())
         self.f_status.addItems(['In progress', 'Awaiting', 'Completed', 'Cancelled'])
@@ -115,6 +117,27 @@ class TaskFormDialog(FormModal):
         self.f_urgent = QCheckBox('Mark as urgent')
         self.f_urgent.setChecked(task.is_urgent if task else False)
         self.add_widget(self.f_urgent)
+
+        self.add_separator()
+
+        # ── Unavailability period ─────────────────────────────────────────
+        self._unavail_check = QCheckBox('Mark as unavailable for a period')
+        _has_unavail = bool(task and task.unavailable_start and task.unavailable_end)
+        self._unavail_check.setChecked(_has_unavail)
+        self.add_widget(self._unavail_check)
+
+        _ustart = task.unavailable_start if (task and task.unavailable_start) else today()
+        _uend   = task.unavailable_end   if (task and task.unavailable_end)   else today().addDays(1)
+        self.f_unavail_start = self.add_hfield('Unavailable from', EctoDateEdit(_ustart))
+        self.f_unavail_end   = self.add_hfield('Unavailable to',   EctoDateEdit(_uend))
+
+        def _toggle_unavail(checked):
+            self.f_unavail_start.setEnabled(checked)
+            self.f_unavail_end.setEnabled(checked)
+
+        self._unavail_check.toggled.connect(_toggle_unavail)
+        _toggle_unavail(_has_unavail)
+
         self.finish()
 
     def _populate_operation_combo(self):
@@ -145,11 +168,175 @@ class TaskFormDialog(FormModal):
         return None, None
 
     def get_task_data(self) -> dict:
+        has_unavail = self._unavail_check.isChecked()
         return {
-            'name':      self.f_name.text().strip() or 'New Task',
-            'task_type': self.f_type.currentText(),
-            'start':     self.f_start.date(),
-            'end':       self.f_end.date(),
-            'status':    self.f_status.currentText(),
-            'is_urgent': self.f_urgent.isChecked(),
+            'name':              self.f_name.text().strip() or 'New Task',
+            'task_type':         self.f_type.currentText(),
+            'start':             self.f_start.date(),
+            'end':               self.f_end.date(),
+            'status':            self.f_status.currentText(),
+            'is_urgent':         self.f_urgent.isChecked(),
+            'unavailable_start': self.f_unavail_start.date() if has_unavail else None,
+            'unavailable_end':   self.f_unavail_end.date()   if has_unavail else None,
+        }
+
+
+# ── Legend Editor ─────────────────────────────────────────────────────────────
+
+_SWATCH_STYLE = """
+    QPushButton {{
+        color: {c}; background: transparent;
+        border: 2px solid {c}; border-radius: 5px;
+        font-size: 18px; padding: 0;
+    }}
+    QPushButton:hover {{ border-width: 3px; }}
+"""
+
+_NAME_STYLE = f"""
+    QLineEdit {{
+        background-color: #f5f6f8; color: #1e2430;
+        border: 1px solid {BORDER}; border-radius: 4px;
+        padding: 2px 8px; font-size: 12px;
+    }}
+    QLineEdit:focus {{ border-color: {ACCENT}; }}
+"""
+
+_DEL_STYLE = f"""
+    QPushButton {{
+        color: {MUTED}; background: transparent; border: none;
+        font-size: 16px; font-weight: bold; padding: 0 4px;
+    }}
+    QPushButton:hover {{ color: #ef4444; }}
+"""
+
+_ADD_STYLE = f"""
+    QPushButton {{
+        background-color: #f1f3f5; color: #1e2430;
+        border: 1px solid {BORDER}; border-radius: 5px;
+        font-size: 12px; padding: 5px 14px;
+    }}
+    QPushButton:hover {{ background-color: #e5e7eb; border-color: {ACCENT}; color: {ACCENT}; }}
+"""
+
+
+class LegendEditorDialog(BaseModal):
+    """Dialog to add, recolour, rename and remove timeline legend entries."""
+
+    def __init__(self, task_types: dict, parent=None):
+        super().__init__(parent, 'Edit Legend', theme='light', min_width=440)
+        # Working copy: list of [color_str, name_str] — mutated in-place by row widgets
+        self._entries: list[list] = [[color, name] for name, color in task_types.items()]
+        self._rows_widget = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_widget)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(6)
+        self._build()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+
+    def _build(self):
+        scroll = QScrollArea()
+        scroll.setWidget(self._rows_widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setMaximumHeight(320)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{ background: #f1f3f5; width: 6px; border-radius: 3px; }}
+            QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 3px; }}
+        """)
+        self._root.addWidget(scroll)
+
+        for entry in self._entries:
+            self._add_row(entry)
+
+        add_btn = QPushButton('＋  Add Entry')
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setStyleSheet(_ADD_STYLE)
+        add_btn.clicked.connect(self._add_new_entry)
+        self._root.addWidget(add_btn)
+
+        sep = QFrame(); sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-height: 1px; border: none;')
+        self._root.addWidget(sep)
+
+        btn_row = QHBoxLayout(); btn_row.setSpacing(8)
+        btn_row.addStretch()
+        btn_row.addWidget(self._make_cancel_btn())
+        btn_row.addWidget(self._make_ok_btn('Save'))
+        self._root.addLayout(btn_row)
+
+    def _add_row(self, entry: list):
+        """Build one editable row for the given [color, name] entry."""
+        color, name = entry
+
+        row = QWidget()
+        row.setStyleSheet('background: transparent; border: none;')
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(4, 2, 4, 2)
+        rl.setSpacing(8)
+
+        # Colour swatch
+        swatch = QPushButton('●')
+        swatch.setFixedSize(32, 32)
+        swatch.setCursor(Qt.PointingHandCursor)
+        swatch.setToolTip('Click to change colour')
+        swatch.setStyleSheet(_SWATCH_STYLE.format(c=color))
+
+        # Name field
+        name_edit = QLineEdit(name)
+        name_edit.setStyleSheet(_NAME_STYLE)
+        name_edit.setFixedHeight(32)
+        name_edit.textChanged.connect(lambda v, e=entry: e.__setitem__(1, v))
+
+        # Delete button
+        del_btn = QPushButton('×')
+        del_btn.setFixedSize(28, 28)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet(_DEL_STYLE)
+        del_btn.setToolTip('Remove this entry')
+        del_btn.clicked.connect(lambda _, e=entry, r=row: self._remove_row(e, r))
+
+        rl.addWidget(swatch)
+        rl.addWidget(name_edit, 1)
+        rl.addWidget(del_btn)
+        self._rows_layout.addWidget(row)
+
+        # Wire colour picker
+        swatch.clicked.connect(lambda _, e=entry, s=swatch: self._open_picker(e, s))
+
+    def _open_picker(self, entry: list, swatch: QPushButton):
+        from ui.draw_color_picker import DrawColorPicker
+        picker = DrawColorPicker(self)
+        picker.color_selected.connect(lambda c, e=entry, s=swatch: self._apply_swatch(c, e, s))
+        pos = swatch.mapToGlobal(swatch.rect().bottomLeft())
+        picker.move(pos)
+        picker.show()
+
+    @staticmethod
+    def _apply_swatch(color: str, entry: list, swatch: QPushButton):
+        entry[0] = color
+        swatch.setStyleSheet(_SWATCH_STYLE.format(c=color))
+
+    def _remove_row(self, entry: list, row: QWidget):
+        if entry in self._entries:
+            self._entries.remove(entry)
+        row.setParent(None)
+        row.deleteLater()
+
+    def _add_new_entry(self):
+        entry = ['#3b82f6', 'New Type']
+        self._entries.append(entry)
+        self._add_row(entry)
+        # Scroll to bottom so new row is visible
+        QTimer.singleShot(0, lambda: self._rows_widget.updateGeometry())
+
+    # ── result ────────────────────────────────────────────────────────────────
+
+    def get_result(self) -> dict:
+        """Return {name: color} dict preserving order, skipping blank names."""
+        return {
+            entry[1].strip(): entry[0]
+            for entry in self._entries
+            if entry[1].strip()
         }

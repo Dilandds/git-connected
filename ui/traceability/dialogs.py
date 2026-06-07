@@ -25,6 +25,9 @@ class _PartDialog(FormModal):
         self.f_name = self.add_field('PART NAME', QLineEdit(part.name if part else ''))
         self.f_name.setPlaceholderText('e.g. Part 1')
 
+        self.f_subject = self.add_field('SUBJECT', QLineEdit(part.subject if part else ''))
+        self.f_subject.setPlaceholderText('Subject of this task')
+
         self.f_suppliers = self.add_field('SUPPLIERS', QLineEdit(part.suppliers if part else ''))
         self.f_suppliers.setPlaceholderText('Supplier name(s)')
 
@@ -63,6 +66,7 @@ class _PartDialog(FormModal):
     def get_data(self) -> dict:
         return {
             'name':         self.f_name.text().strip() or 'Part',
+            'subject':      self.f_subject.text().strip(),
             'suppliers':    self.f_suppliers.text().strip(),
             'action':       self.f_action.text().strip(),
             'current_task': self.f_task.toPlainText().strip(),
@@ -192,6 +196,21 @@ class _AddComponentDialog(FormModal):
     @property
     def image_path(self) -> str:
         return self._image_path
+
+
+# ── Rename Sub-stage ──────────────────────────────────────────────────────────
+
+class _RenameSubStageDialog(FormModal):
+    def __init__(self, current_name: str, parent=None):
+        super().__init__(parent, 'Rename Sub-stage', min_width=340)
+        self.f_name = self.add_field('NAME', QLineEdit(current_name))
+        self.f_name.selectAll()
+        self.finish()
+        self.f_name.setFocus()
+
+    @property
+    def name(self) -> str:
+        return self.f_name.text().strip()
 
 
 # ── Edit Component ────────────────────────────────────────────────────────────

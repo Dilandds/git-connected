@@ -393,10 +393,8 @@ class HeaderSection(QWidget):
         meeting_lbl.setStyleSheet(
             f"color: {_HDR_TEXT}; font-size: 13px; font-weight: bold; background: transparent; border: none;"
         )
-        self._date_edit = QDateEdit()
-        self._date_edit.setDisplayFormat("dd/MM/yyyy")
-        self._date_edit.setCalendarPopup(True)
-        self._date_edit.setStyleSheet(_INPUT)
+        from ui.date_picker import EctoDateEdit
+        self._date_edit = EctoDateEdit()
         self._date_edit.setFixedHeight(26)
         self._date_edit.setFixedWidth(110)
         if self._report.date:

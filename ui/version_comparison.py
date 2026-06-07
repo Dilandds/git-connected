@@ -245,8 +245,8 @@ class VersionCardWidget(QFrame):
 
     def _build(self, is_first: bool, is_last: bool):
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(6)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(3)
 
         # ── Star ──
         star_row = QHBoxLayout()
@@ -257,21 +257,29 @@ class VersionCardWidget(QFrame):
         star_row.addStretch()
         root.addLayout(star_row)
 
-        # ── Photos: 1 large primary + 2 small secondary ──
+        # ── Photos: 1 portrait primary (centred) + 2 secondary ──
         self._photo_slots: List[PhotoSlot] = []
 
-        slot0 = PhotoSlot(CARD_W - 20, 120)
+        # Primary photo — portrait rectangle (height > width)
+        _PH_W = CARD_W - 60   # 185 px wide
+        _PH_H = CARD_W + 10   # 255 px tall  →  clearly portrait
+        slot0 = PhotoSlot(_PH_W, _PH_H)
         if len(self._card.photo_paths) > 0:
             slot0.set_path(self._card.photo_paths[0])
         slot0.photo_changed.connect(lambda p: self._on_photo(0, p))
         self._photo_slots.append(slot0)
-        root.addWidget(slot0)
+        ph_row = QHBoxLayout()
+        ph_row.setContentsMargins(0, 0, 0, 0)
+        ph_row.addStretch()
+        ph_row.addWidget(slot0)
+        ph_row.addStretch()
+        root.addLayout(ph_row)
 
         sec_row = QHBoxLayout()
         sec_row.setSpacing(4)
         sw = (CARD_W - 24) // 2
         for i in (1, 2):
-            s = PhotoSlot(sw, 62)
+            s = PhotoSlot(sw, 70)
             if len(self._card.photo_paths) > i:
                 s.set_path(self._card.photo_paths[i])
             s.photo_changed.connect(lambda p, idx=i: self._on_photo(idx, p))
@@ -297,52 +305,56 @@ class VersionCardWidget(QFrame):
             w.setFixedHeight(24)
             return w
 
-        def _area(h=54):
+        def _area(h=50):
             w = QTextEdit()
             w.setStyleSheet(_INPUT)
             w.setFixedHeight(h)
             return w
 
-        root.addWidget(_section_lbl("VERSION :"))
+        def _field_block(label_widget, input_widget):
+            """Label + input grouped with tight spacing."""
+            bl = QVBoxLayout()
+            bl.setSpacing(1)
+            bl.setContentsMargins(0, 0, 0, 0)
+            bl.addWidget(label_widget)
+            bl.addWidget(input_widget)
+            return bl
+
         self._f_version = _inp()
         self._f_version.setPlaceholderText("e.g. V1.0")
         self._f_version.setText(self._card.version)
         self._f_version.textChanged.connect(lambda v: setattr(self._card, 'version', v) or self.changed.emit())
-        root.addWidget(self._f_version)
+        root.addLayout(_field_block(_section_lbl("VERSION :"), self._f_version))
 
-        root.addWidget(_section_lbl("POSITIVE POINTS :"))
         self._f_pos = _area()
         self._f_pos.setPlaceholderText("Positive points...")
         self._f_pos.setPlainText(self._card.positive_points)
         self._f_pos.textChanged.connect(
             lambda: setattr(self._card, 'positive_points', self._f_pos.toPlainText()) or self.changed.emit()
         )
-        root.addWidget(self._f_pos)
+        root.addLayout(_field_block(_section_lbl("POSITIVE POINTS :"), self._f_pos))
 
-        root.addWidget(_section_lbl("NEGATIVE POINTS :"))
         self._f_neg = _area()
         self._f_neg.setPlaceholderText("Negative points...")
         self._f_neg.setPlainText(self._card.negative_points)
         self._f_neg.textChanged.connect(
             lambda: setattr(self._card, 'negative_points', self._f_neg.toPlainText()) or self.changed.emit()
         )
-        root.addWidget(self._f_neg)
+        root.addLayout(_field_block(_section_lbl("NEGATIVE POINTS :"), self._f_neg))
 
-        root.addWidget(_section_lbl("COMMENTS :"))
-        self._f_comments = _area(h=48)
+        self._f_comments = _area(h=44)
         self._f_comments.setPlaceholderText("Comments...")
         self._f_comments.setPlainText(self._card.comments)
         self._f_comments.textChanged.connect(
             lambda: setattr(self._card, 'comments', self._f_comments.toPlainText()) or self.changed.emit()
         )
-        root.addWidget(self._f_comments)
+        root.addLayout(_field_block(_section_lbl("COMMENTS :"), self._f_comments))
 
-        root.addWidget(_section_lbl("COST :"))
         self._f_cost = _inp()
         self._f_cost.setPlaceholderText("e.g. 32,500 €")
         self._f_cost.setText(self._card.cost)
         self._f_cost.textChanged.connect(lambda v: setattr(self._card, 'cost', v) or self.changed.emit())
-        root.addWidget(self._f_cost)
+        root.addLayout(_field_block(_section_lbl("COST :"), self._f_cost))
 
         # ── Bottom toolbar: move ← → | delete ──
         toolbar = QHBoxLayout()

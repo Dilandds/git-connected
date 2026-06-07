@@ -37,3 +37,7 @@ class ComponentsCard(QFrame):
     def get_components(self) -> list:
         """Convenience accessor used by TraceabilityWidget sync."""
         return self._table.get_data()
+
+    def replace_components(self, rows: list):
+        """Replace all component rows (used for traceability→brief sync)."""
+        self._table.replace_data(rows)

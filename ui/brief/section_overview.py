@@ -9,8 +9,8 @@ from .shared import (
     ADD_BTN_STYLE, card, section_label, field_label, make_input, separator,
 )
 
-_IMG_W = 160
-_IMG_H = 210
+_IMG_W = 280
+_IMG_H = 360
 
 _IMG_BTN_STYLE = f"""
     QPushButton {{
@@ -98,7 +98,7 @@ class ProductOverviewCard(QFrame):
 
     def _apply_image(self, pix: QPixmap):
         scaled = pix.scaled(
-            QSize(_IMG_W, _IMG_H), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+            QSize(_IMG_W, _IMG_H), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         self._img_btn.setIcon(QIcon(scaled))
         self._img_btn.setIconSize(QSize(_IMG_W, _IMG_H))

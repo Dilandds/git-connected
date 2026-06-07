@@ -9,7 +9,7 @@ from .shared import (
     _PART_PALETTE, _PartBadge,
 )
 from .dialogs import _PartDialog, _CommentsDialog
-from .part_row import _PartRow, _W_TASK, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
+from .part_row import _PartRow, _W_TASK, _W_SUBJECT, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
 
 
 class _PartsTable(QWidget):
@@ -47,7 +47,7 @@ class _PartsTable(QWidget):
             if w:
                 l.setFixedWidth(w)
             l.setStyleSheet(
-                f'color: {_MUTED}; font-size: 9px; font-weight: 700;'
+                f'color: {_MUTED}; font-size: 11px; font-weight: 700;'
                 f' background: transparent; border: none; letter-spacing: 0.8px;'
             )
             return l
@@ -56,7 +56,8 @@ class _PartsTable(QWidget):
         hl.addSpacing(38 + 12)
         hl.addWidget(_ch('TASK', _W_TASK))
         hl.addStretch(1)
-        hl.addWidget(_ch('COMMENTS', _W_COMMENTS))
+        hl.addWidget(_ch('SUBJECT', _W_SUBJECT))
+        hl.addWidget(_ch('COMMENTS / NOTES', _W_COMMENTS))
         hl.addWidget(_ch('START DATE', _W_DATE))
         hl.addWidget(_ch('DUE DATE', _W_DATE))
         hl.addWidget(_ch('STATUS', _W_STATUS))
@@ -80,7 +81,7 @@ class _PartsTable(QWidget):
         # ── Bottom hint ───────────────────────────────────────────────────
         hint = QLabel('ⓘ  Click on a part to view details, add comments and track progress.')
         hint.setStyleSheet(
-            f'color: {_MUTED}; font-size: 9px; background: {_BG};'
+            f'color: {_MUTED}; font-size: 11px; background: {_BG};'
             f' border-top: 1px solid {_BORDER}; padding: 6px 16px;'
         )
         root.addWidget(hint)
@@ -111,7 +112,7 @@ class _PartsTable(QWidget):
         add_lbl.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; border: none;
-                color: {_ACCENT}; font-size: 11px; font-weight: 600;
+                color: {_ACCENT}; font-size: 13px; font-weight: 600;
                 padding: 0; text-align: left;
             }}
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
@@ -122,7 +123,7 @@ class _PartsTable(QWidget):
 
         for _ in range(4):
             dash = QLabel('—')
-            dash.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+            dash.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;')
             dash.setAlignment(Qt.AlignCenter)
             lay.addWidget(dash)
 
@@ -133,7 +134,7 @@ class _PartsTable(QWidget):
             QPushButton {{
                 background: transparent; color: {_ACCENT};
                 border: 1px solid {_ACCENT}; border-radius: 5px;
-                padding: 4px 12px; font-size: 10px; font-weight: 600;
+                padding: 4px 12px; font-size: 12px; font-weight: 600;
             }}
             QPushButton:hover {{ background: #eff6ff; }}
         """)
@@ -155,7 +156,7 @@ class _PartsTable(QWidget):
             empty = QLabel('No parts yet. Click ＋ Add Task to begin.')
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
-                f'color: {_MUTED}; font-size: 11px;'
+                f'color: {_MUTED}; font-size: 13px;'
                 f' background: transparent; border: none; padding: 28px;'
             )
             self._rows_l.addWidget(empty)
@@ -167,6 +168,7 @@ class _PartsTable(QWidget):
                 row.edit_requested.connect(self._edit_part)
                 row.delete_requested.connect(self._delete_part)
                 row.comment_requested.connect(self._show_comments)
+                row.data_changed.connect(self.changed)
                 self._rows_l.addWidget(row)
 
         # Rebuild footer so badge number stays correct

@@ -195,15 +195,8 @@ class STLViewerWindow(QMainWindow):
         icon = get_app_window_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
-        # Start at a comfortable size but allow shrinking
-        if sys.platform == 'win32':
-            self.resize(1600, 1000)
-        else:
-            self.resize(1400, 900)
-        
-        # Position window on left side of screen (align with toolbar/content)
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.left(), screen.top() + max(0, (screen.height() - min_h) // 2))
+        # Open maximized (fills the screen, title bar and taskbar remain visible)
+        self.showMaximized()
         
         logger.info("init_ui: Creating central widget...")
         central_widget = QWidget()
@@ -1373,6 +1366,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.draw_text_toggled.connect(self._on_draw_text_toggled)
         self.toolbar.draw_undo_requested.connect(self._on_draw_undo)
         self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
+        self.toolbar.draw_color_picker_requested.connect(self.toolbar.show_draw_color_picker)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
         self.toolbar.open_converter.connect(self._open_converter_dialog)
@@ -2411,8 +2405,6 @@ class STLViewerWindow(QMainWindow):
                         self._exit_annotation_mode()
                     if self.toolbar.screenshot_mode_enabled or getattr(vw, "screenshot_mode", False):
                         self._exit_screenshot_mode()
-                    # Show color picker on first enable
-                    self.toolbar.show_draw_color_picker()
                     logger.info("_toggle_draw_mode: Draw mode enabled")
                 else:
                     self.toolbar.reset_draw_state()

@@ -53,14 +53,14 @@ _NAV_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT};
         color: white; border: none; border-radius: 6px;
-        padding: 8px 12px; font-size: 11px; font-weight: bold; text-align: left;
+        padding: 8px 12px; font-size: 13px; font-weight: bold; text-align: left;
     }}
 """
 
 _NAV_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED}; border: none;
-        border-radius: 6px; padding: 8px 12px; font-size: 11px; text-align: left;
+        border-radius: 6px; padding: 8px 12px; font-size: 13px; text-align: left;
     }}
     QPushButton:hover {{ background-color: #2a2e38; color: {_TEXT}; }}
 """
@@ -69,7 +69,7 @@ _BTN_TOOLBAR = f"""
     QPushButton {{
         background-color: #2e323a; color: {_TEXT};
         border: 1px solid {default_theme.border_light};
-        border-radius: 6px; font-size: 11px; padding: 4px 12px;
+        border-radius: 6px; font-size: 13px; padding: 4px 12px;
     }}
     QPushButton:hover {{ background-color: #3a3e48; border-color: {_ACCENT}; color: white; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; color: white; }}
@@ -79,18 +79,27 @@ _BTN_TOOLBAR = f"""
 _BTN_SAVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 6px; font-size: 11px; font-weight: bold; padding: 4px 14px;
+        border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 14px;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
     QPushButton:disabled {{ background-color: #253545; color: #4a6070; }}
 """ + TOOLTIP_STYLE
 
+_BTN_LOCK_ACTIVE = f"""
+    QPushButton {{
+        background-color: #92400e; color: #fde68a; border: 1px solid #b45309;
+        border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 12px;
+    }}
+    QPushButton:hover {{ background-color: #78350f; border-color: #d97706; }}
+    QPushButton:pressed {{ background-color: #451a03; }}
+""" + TOOLTIP_STYLE
+
 _INFO_INPUT_STYLE = f"""
     QLineEdit {{
         background-color: #1e2228; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 10px;
+        padding: 3px 6px; font-size: 12px;
     }}
     QLineEdit:focus {{ border: 1px solid {_ACCENT}; }}
 """
@@ -115,7 +124,7 @@ def _status_combo_style(color: str) -> str:
         QComboBox {{
             background-color: #1e2228; color: {color};
             border: 1px solid {_BORDER}; border-radius: 4px;
-            padding: 3px 6px; font-size: 10px; font-weight: bold;
+            padding: 3px 6px; font-size: 12px; font-weight: bold;
         }}
         QComboBox:focus {{ border: 1px solid {_ACCENT}; }}
         QComboBox::drop-down {{ border: none; width: 16px; }}
@@ -218,19 +227,21 @@ class ProjectNavPanel(QWidget):
                 background-color: #1e2228;
                 border: 1px dashed {_BORDER};
                 border-radius: 6px;
-                color: {_MUTED}; font-size: 9px;
+                color: {_MUTED}; font-size: 11px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
         self._photo_btn.clicked.connect(self._upload_photo)
         card_layout.addWidget(self._photo_btn)
 
-        self._f_company    = self._make_field('Company name')
-        self._f_title      = self._make_field('Project title')
-        self._f_number     = self._make_field('Project number')
-        self._f_start_date = self._make_field('Start date (dd/mm/yyyy)')
-        self._f_due_date   = self._make_field('Due date (dd/mm/yyyy)')
-        for f in (self._f_company, self._f_title, self._f_number, self._f_start_date, self._f_due_date):
+        self._f_company          = self._make_field('Company name')
+        self._f_title            = self._make_field('Project title')
+        self._f_number           = self._make_field('Project number')
+        self._f_project_manager  = self._make_field('Project Manager')
+        self._f_start_date       = self._make_field('Start date (dd/mm/yyyy)')
+        self._f_due_date         = self._make_field('Due date (dd/mm/yyyy)')
+        for f in (self._f_company, self._f_title, self._f_number,
+                  self._f_project_manager, self._f_start_date, self._f_due_date):
             card_layout.addWidget(f)
 
         self._status_combo = QComboBox()
@@ -302,19 +313,21 @@ class ProjectNavPanel(QWidget):
 
     def get_info_data(self) -> dict:
         return {
-            'company':    self._f_company.text(),
-            'title':      self._f_title.text(),
-            'number':     self._f_number.text(),
-            'start_date': self._f_start_date.text(),
-            'due_date':   self._f_due_date.text(),
-            'status':     self._status_combo.currentText(),
-            'photo_path': self._photo_path,
+            'company':          self._f_company.text(),
+            'title':            self._f_title.text(),
+            'number':           self._f_number.text(),
+            'project_manager':  self._f_project_manager.text(),
+            'start_date':       self._f_start_date.text(),
+            'due_date':         self._f_due_date.text(),
+            'status':           self._status_combo.currentText(),
+            'photo_path':       self._photo_path,
         }
 
     def set_info_data(self, data: dict):
         self._f_company.setText(data.get('company', ''))
         self._f_title.setText(data.get('title', ''))
         self._f_number.setText(data.get('number', ''))
+        self._f_project_manager.setText(data.get('project_manager', ''))
         self._f_start_date.setText(data.get('start_date', ''))
         self._f_due_date.setText(data.get('due_date', ''))
         status = data.get('status', 'In progress')
@@ -345,7 +358,7 @@ class ProjectLoginDialog(FormModal):
 
         # Header text (above the standard field area)
         sub = QLabel('Sign in to access your project workspace.')
-        sub.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
+        sub.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
         self._root.addWidget(sub)
         self._root.addWidget(self._make_hline())
 
@@ -359,7 +372,7 @@ class ProjectLoginDialog(FormModal):
 
         self._error_lbl = QLabel('')
         self._error_lbl.setStyleSheet(
-            'color: #ef4444; font-size: 10px; background: transparent; border: none;'
+            'color: #ef4444; font-size: 12px; background: transparent; border: none;'
         )
         self._error_lbl.setVisible(False)
         self._root.addWidget(self._error_lbl)
@@ -400,6 +413,9 @@ class TheProjectWidget(QWidget):
         super().__init__(parent)
         self._project_path: Optional[str] = None
         self._unsaved_changes = False
+        self._current_screen_key: Optional[str] = None
+        self._project_password_hash: Optional[str] = None  # SHA-256 hash; None = no protection
+        self._component_syncing = False  # guard against brief↔traceability sync loops
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
@@ -478,13 +494,27 @@ class TheProjectWidget(QWidget):
         self._save_btn.setToolTip('Save the current project')
         self._save_btn.clicked.connect(self._on_save_project)
 
+        self._print_btn = QPushButton('🖨  Print')
+        self._print_btn.setStyleSheet(_BTN_TOOLBAR); self._print_btn.setFixedHeight(28)
+        self._print_btn.setCursor(Qt.PointingHandCursor)
+        self._print_btn.setToolTip('Print or export the current section as PDF')
+        self._print_btn.clicked.connect(self._on_print)
+
+        self._lock_btn = QPushButton('🔓  Password')
+        self._lock_btn.setStyleSheet(_BTN_TOOLBAR); self._lock_btn.setFixedHeight(28)
+        self._lock_btn.setCursor(Qt.PointingHandCursor)
+        self._lock_btn.setToolTip('Set or remove project password protection')
+        self._lock_btn.clicked.connect(self._on_password_btn)
+
         layout.addWidget(new_btn)
         layout.addWidget(open_btn)
         layout.addWidget(self._save_btn)
+        layout.addWidget(self._lock_btn)
+        layout.addWidget(self._print_btn)
 
         self._project_name_lbl = QLabel('No project open')
         self._project_name_lbl.setStyleSheet(
-            f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+            f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
         )
         layout.addSpacing(6)
         layout.addWidget(self._project_name_lbl)
@@ -504,7 +534,7 @@ class TheProjectWidget(QWidget):
         self._avatar.setStyleSheet(f"""
             QLabel {{
                 background-color: {_MUTED}; color: white; border-radius: 12px;
-                font-size: 11px; font-weight: bold; border: none;
+                font-size: 13px; font-weight: bold; border: none;
             }}
         """)
         self._user_btn = QPushButton('Not logged in  ▾')
@@ -513,7 +543,7 @@ class TheProjectWidget(QWidget):
         self._user_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_MUTED}; border: none;
-                font-size: 11px; font-weight: bold; padding: 0 2px;
+                font-size: 13px; font-weight: bold; padding: 0 2px;
             }}
             QPushButton:hover {{ color: white; }}
         """)
@@ -543,19 +573,44 @@ class TheProjectWidget(QWidget):
             widget.changed.connect(self._on_estimated_cost_changed)
         if key == 'files' and hasattr(widget, 'open_in_viewer'):
             widget.open_in_viewer.connect(self.open_in_viewer)
+        if key == 'brief' and hasattr(widget, 'changed'):
+            widget.changed.connect(self._sync_traceability_from_brief)
+        if key == 'traceability' and hasattr(widget, 'changed'):
+            widget.changed.connect(self._sync_brief_from_traceability)
 
     # ── navigation ────────────────────────────────────────────────────────────
 
     def _on_navigate(self, key: str):
+        self._current_screen_key = key
         widget = self._ensure_screen(key)
         self._stack.setCurrentIndex(self._screen_idx[key])
         if key == 'validation':
             self._push_validation_costs()
         elif key == 'traceability':
-            self._sync_traceability_components()
+            self._sync_traceability_from_brief()
+
+    def _on_print(self):
+        key = self._current_screen_key
+        if key is None:
+            from ui.modal_utils import show_message_dialog
+            show_message_dialog(self, 'Nothing to print',
+                                'Please open a section first, then click Print.')
+            return
+        widget = self._screen_widgets.get(key)
+        if widget is None:
+            return
+        # Human-readable label for the dialog title
+        label = next((lbl for k, lbl in _NAV_ITEMS if k == key), key)
+        # Strip emoji prefix for the window title
+        title = label.split('\xa0')[-1].strip() if '\xa0' in label else label.strip()
+        landscape = key == 'timeline'
+        from ui.print_utils import print_section
+        print_section(key, widget, title, self, landscape=landscape)
 
     def _on_project_info_changed(self):
         info = self._nav.get_info_data()
+        if w := self._screen_widgets.get('brief'):
+            w.update_project_info(info)
         if w := self._screen_widgets.get('estimated_cost'):
             w.update_project_info(info)
         if w := self._screen_widgets.get('report'):
@@ -586,11 +641,57 @@ class TheProjectWidget(QWidget):
         except ValueError:
             return 0.0
 
-    def _sync_traceability_components(self):
+    def _sync_traceability_from_brief(self):
+        """Push brief component names into traceability (full reconcile)."""
+        if self._component_syncing:
+            return
         brief = self._screen_widgets.get('brief')
         trace = self._screen_widgets.get('traceability')
         if brief and trace:
-            trace.update_components_from_brief(brief.get_data().get('components', []))
+            self._component_syncing = True
+            try:
+                trace.update_components_from_brief(brief.get_data().get('components', []))
+            finally:
+                self._component_syncing = False
+
+    def _sync_brief_from_traceability(self):
+        """Fully reconcile brief components to match traceability non-main components.
+
+        Preserves existing Material/Colour values for components whose name is unchanged.
+        Removes rows deleted in traceability; adds rows for components added in traceability.
+        """
+        if self._component_syncing:
+            return
+        brief = self._screen_widgets.get('brief')
+        trace = self._screen_widgets.get('traceability')
+        if not (brief and trace):
+            return
+        trace_names = trace.get_non_main_component_names()
+        current_rows = brief.get_data().get('components', [])
+
+        # Preserve material/colour for any name that still exists
+        existing_by_name = {
+            row[0].strip(): row
+            for row in current_rows
+            if row and row[0].strip()
+        }
+
+        new_rows = []
+        for name in trace_names:
+            if name in existing_by_name:
+                new_rows.append(existing_by_name[name])
+            else:
+                new_rows.append([name, '', ''])
+
+        old_names = [r[0].strip() for r in current_rows if r and r[0].strip()]
+        if old_names == trace_names:
+            return  # nothing changed
+
+        self._component_syncing = True
+        try:
+            brief._s_components.replace_components(new_rows)
+        finally:
+            self._component_syncing = False
 
     def _on_estimated_cost_changed(self):
         ec_idx = self._screen_idx.get('estimated_cost', -1)
@@ -605,14 +706,14 @@ class TheProjectWidget(QWidget):
         self._avatar.setStyleSheet(f"""
             QLabel {{
                 background-color: {_ACCENT}; color: white; border-radius: 12px;
-                font-size: 11px; font-weight: bold; border: none;
+                font-size: 13px; font-weight: bold; border: none;
             }}
         """)
         self._user_btn.setText(f'{username}  ▾')
         self._user_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_TEXT}; border: none;
-                font-size: 11px; font-weight: bold; padding: 0 2px;
+                font-size: 13px; font-weight: bold; padding: 0 2px;
             }}
             QPushButton:hover {{ color: white; }}
         """)
@@ -624,6 +725,8 @@ class TheProjectWidget(QWidget):
             return
         self._project_path = None
         self._unsaved_changes = False
+        self._project_password_hash = None
+        self._update_lock_btn()
         self._update_title()
 
     def _on_open_project(self):
@@ -660,6 +763,8 @@ class TheProjectWidget(QWidget):
 
     def _save_project(self, path: str):
         data = {'version': '1.0', 'project_info': self._nav.get_info_data()}
+        if self._project_password_hash:
+            data['password_hash'] = self._project_password_hash
         for key, _ in _NAV_ITEMS:
             w = self._screen_widgets.get(key)
             data[key] = w.get_data() if w and hasattr(w, 'get_data') else {}
@@ -672,6 +777,16 @@ class TheProjectWidget(QWidget):
     def _load_project(self, path: str):
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+
+        # Password-protected project — verify before loading
+        stored_hash = data.get('password_hash')
+        if stored_hash:
+            from ui.passcode_dialog import PasscodeDialog
+            dlg = PasscodeDialog(mode='enter', stored_hash=stored_hash, parent=self)
+            dlg.setWindowTitle('Protected Project — Enter Password')
+            if dlg.exec_() != QDialog.Accepted:
+                return  # user cancelled — do not load
+
         self._nav.set_info_data(data.get('project_info', {}))
         for key, _ in _NAV_ITEMS:
             screen_data = data.get(key)
@@ -681,9 +796,62 @@ class TheProjectWidget(QWidget):
             if hasattr(w, 'set_data'):
                 w.set_data(screen_data)
         self._project_path = path
+        self._project_password_hash = stored_hash  # keep hash in sync
         self._unsaved_changes = False
+        self._update_lock_btn()
         self._update_title()
         logger.info(f'Project loaded from {path}')
+
+    def _update_lock_btn(self):
+        """Update the password button appearance to reflect the current lock state."""
+        if self._project_password_hash:
+            self._lock_btn.setText('🔒  Protected')
+            self._lock_btn.setStyleSheet(_BTN_LOCK_ACTIVE)
+            self._lock_btn.setToolTip('Project is password-protected — click to change or remove')
+        else:
+            self._lock_btn.setText('🔓  Password')
+            self._lock_btn.setStyleSheet(_BTN_TOOLBAR)
+            self._lock_btn.setToolTip('Set a password to protect this project')
+
+    def _on_password_btn(self):
+        """Set, change, or remove the project password."""
+        from ui.passcode_dialog import PasscodeDialog
+
+        if self._project_password_hash is None:
+            # No password yet — set one
+            dlg = PasscodeDialog(mode='set', parent=self)
+            if dlg.exec_() == QDialog.Accepted:
+                self._project_password_hash = dlg.get_passcode_hash()
+                self._update_lock_btn()
+                self.mark_unsaved()
+        else:
+            # Already protected — verify first
+            dlg = PasscodeDialog(mode='enter',
+                                  stored_hash=self._project_password_hash,
+                                  parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+
+            # Offer Remove / Change / Cancel
+            msg = QMessageBox(self)
+            msg.setWindowTitle('Password Protection')
+            msg.setText('Password verified.\n\nWhat would you like to do?')
+            remove_btn = msg.addButton('Remove Password', QMessageBox.DestructiveRole)
+            change_btn = msg.addButton('Change Password', QMessageBox.AcceptRole)
+            msg.addButton('Cancel', QMessageBox.RejectRole)
+            msg.exec_()
+            clicked = msg.clickedButton()
+
+            if clicked == remove_btn:
+                self._project_password_hash = None
+                self._update_lock_btn()
+                self.mark_unsaved()
+            elif clicked == change_btn:
+                dlg2 = PasscodeDialog(mode='set', parent=self)
+                if dlg2.exec_() == QDialog.Accepted:
+                    self._project_password_hash = dlg2.get_passcode_hash()
+                    self._update_lock_btn()
+                    self.mark_unsaved()
 
     def _confirm_discard(self) -> bool:
         reply = QMessageBox.question(
@@ -697,12 +865,12 @@ class TheProjectWidget(QWidget):
             name = Path(self._project_path).stem
             self._project_name_lbl.setText(f'📄  {name}')
             self._project_name_lbl.setStyleSheet(
-                f'color: {_TEXT}; font-size: 10px; background: transparent; border: none;'
+                f'color: {_TEXT}; font-size: 12px; background: transparent; border: none;'
             )
         else:
             self._project_name_lbl.setText('No project open')
             self._project_name_lbl.setStyleSheet(
-                f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+                f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
             )
 
     # ── autosave ──────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ Used by both PyVista and pygfx viewers.
 import sys
 from pathlib import Path
 from PyQt5.QtWidgets import QWidget, QSizePolicy
+from ui.styles import TOOLTIP_STYLE
 from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPixmap
 
@@ -32,6 +33,7 @@ class OrientationGizmoWidget(QWidget):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.OpenHandCursor)
         self.setToolTip("Drag to rotate view")
+        self.setStyleSheet(TOOLTIP_STYLE)
         self._drag_start = None
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         path = _get_xyz_gizmo_path()

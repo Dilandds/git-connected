@@ -66,7 +66,7 @@ class _StageTimelineRow(QWidget):
                     color: {_TEXT};
                     {border_css}
                     border-top: none; border-bottom: none;
-                    font-size: 20px; font-weight: 600;
+                    font-size: 22px; font-weight: 600;
                     padding: 0;
                 }}
                 QPushButton:hover {{
@@ -130,7 +130,7 @@ class _StageTimelineRow(QWidget):
                 arr.setFixedWidth(_ARROW_W)
                 arr.setAlignment(Qt.AlignCenter)
                 arr.setStyleSheet(
-                    f'color: {_MUTED}; font-size: 16px; background: transparent; border: none;'
+                    f'color: {_MUTED}; font-size: 18px; background: transparent; border: none;'
                 )
                 self._inner_l.addWidget(arr, 0, Qt.AlignVCenter)
             self._inner_l.addWidget(self._make_card(stage, i), 0, Qt.AlignVCenter)
@@ -142,7 +142,7 @@ class _StageTimelineRow(QWidget):
             QPushButton {{
                 background: transparent; color: {_ACCENT};
                 border: 1.5px dashed {_ACCENT}; border-radius: 7px;
-                padding: 0 14px; font-size: 11px; font-weight: 600;
+                padding: 0 14px; font-size: 13px; font-weight: 600;
             }}
             QPushButton:hover {{ background: #eff6ff; }}
         """)
@@ -188,14 +188,14 @@ class _StageTimelineRow(QWidget):
         num_lbl = QLabel(f'{stage.number:02d}')
         num_lbl.setFixedWidth(26)
         num_lbl.setStyleSheet(
-            f'color: {_ACCENT}; font-size: 15px; font-weight: 800;'
+            f'color: {_ACCENT}; font-size: 17px; font-weight: 800;'
             f' background: transparent; border: none;'
         )
         top.addWidget(num_lbl, 0, Qt.AlignVCenter)
 
-        name_lbl = QLabel(stage.name)
+        name_lbl = QLabel(stage.name.upper())
         name_lbl.setStyleSheet(
-            f'color: {_TEXT}; font-size: 11px; font-weight: 700;'
+            f'color: {_TEXT}; font-size: 13px; font-weight: 700;'
             f' background: transparent; border: none;'
         )
         name_lbl.setWordWrap(False)
@@ -221,7 +221,7 @@ class _StageTimelineRow(QWidget):
 
         st_lbl = QLabel(status)
         st_lbl.setStyleSheet(
-            f'color: {status_color}; font-size: 10px; font-weight: 500;'
+            f'color: {status_color}; font-size: 12px; font-weight: 500;'
             f' background: transparent; border: none;'
         )
         st_row.addWidget(st_lbl, 0, Qt.AlignVCenter)

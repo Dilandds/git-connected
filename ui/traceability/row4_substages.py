@@ -2,7 +2,7 @@
 from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QInputDialog, QDialog,
+    QFrame, QScrollArea, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPoint
 from ui.modal_utils import ask_yes_no_dialog
@@ -12,6 +12,7 @@ from .shared import (
     _BTN_SMALL, tab_active_style, tab_inactive_style,
 )
 from .parts_table import _PartsTable
+from .dialogs import _RenameSubStageDialog
 
 
 class _SubStagePanel(QWidget):
@@ -58,7 +59,7 @@ class _SubStagePanel(QWidget):
         footer.setStyleSheet(f'background: #f1f3f5; border-top: 1px solid {_BORDER};')
         fl = QHBoxLayout(footer); fl.setContentsMargins(12, 0, 12, 0)
         hint = QLabel('ℹ  Click on a sub-stage to view details, add comments, and track progress.')
-        hint.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
+        hint.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
         fl.addWidget(hint)
         root.addWidget(footer)
 
@@ -88,7 +89,7 @@ class _SubStagePanel(QWidget):
                 QPushButton {{
                     background: {_ACCENT}; color: rgba(255,255,255,0.6);
                     border: none; border-left: 1px solid rgba(255,255,255,0.2);
-                    border-radius: 0 5px 5px 0; font-size: 12px; font-weight: bold; padding: 0 5px;
+                    border-radius: 0 5px 5px 0; font-size: 14px; font-weight: bold; padding: 0 5px;
                 }}
                 QPushButton:hover {{ color: white; background: #ef4444; }}
             """
@@ -96,7 +97,7 @@ class _SubStagePanel(QWidget):
                 QPushButton {{
                     background: transparent; color: {_MUTED};
                     border: 1px solid {_BORDER}; border-left: none;
-                    border-radius: 0 5px 5px 0; font-size: 12px; font-weight: bold; padding: 0 5px;
+                    border-radius: 0 5px 5px 0; font-size: 14px; font-weight: bold; padding: 0 5px;
                 }}
                 QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-color: #fca5a5; }}
             """
@@ -149,9 +150,9 @@ class _SubStagePanel(QWidget):
         if not self._stage or idx >= len(self._stage.sub_stages):
             return
         sub = self._stage.sub_stages[idx]
-        name, ok = QInputDialog.getText(self, 'Rename Sub-stage', 'Name:', text=sub.name)
-        if ok and name.strip():
-            sub.name = name.strip()
+        dlg = _RenameSubStageDialog(sub.name, parent=self)
+        if dlg.exec_() == QDialog.Accepted and dlg.name:
+            sub.name = dlg.name
             self._refresh_tabs()
             self.changed.emit()
 
@@ -189,7 +190,7 @@ class _SubStagePanel(QWidget):
             msg = QLabel('No sub-stages yet. Click ＋ Add Sub-stage to begin.')
             msg.setAlignment(Qt.AlignCenter)
             msg.setStyleSheet(
-                f'color: {_MUTED}; font-size: 11px; '
+                f'color: {_MUTED}; font-size: 13px; '
                 f'background: transparent; border: none; padding: 40px;'
             )
             self._content_layout.addWidget(msg)

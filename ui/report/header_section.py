@@ -3,9 +3,9 @@ from typing import Callable, List, Optional
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QFileDialog, QDateEdit,
+    QFrame, QFileDialog, QDateEdit, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QSize, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
 
 from .models import Report, AttendeeColumn, CompanyRow
@@ -27,6 +27,7 @@ class HeaderSection(QWidget):
         self._report   = report
         self._logo_fn  = logo_fn
         self._set_logo = set_logo_fn
+        self._last_auto_pm = ''
         self.setStyleSheet(f"background: {_BG};")
         self._build()
 
@@ -65,9 +66,10 @@ class HeaderSection(QWidget):
         if pix:
             self._apply_logo(pix)
 
-        # Project photo
+        # Project photo — created here, inserted into the Company card below (not the top strip)
         self._project_photo_btn = QPushButton("＋  Add project\nphoto")
-        self._project_photo_btn.setFixedSize(110, 60)
+        self._project_photo_btn.setFixedWidth(110)
+        self._project_photo_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._project_photo_btn.setCursor(Qt.PointingHandCursor)
         self._project_photo_btn.setStyleSheet(f"""
             QPushButton {{
@@ -77,12 +79,21 @@ class HeaderSection(QWidget):
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
         self._project_photo_btn.clicked.connect(self._upload_project_photo)
-        tl.addWidget(self._project_photo_btn)
 
-        if self._report.project_photo_path:
-            pix2 = QPixmap(self._report.project_photo_path)
-            if not pix2.isNull():
-                self._apply_project_photo(pix2)
+        self._photo_clear_btn = QPushButton("×")
+        self._photo_clear_btn.setFixedSize(18, 18)
+        self._photo_clear_btn.setCursor(Qt.PointingHandCursor)
+        self._photo_clear_btn.setToolTip("Remove project photo")
+        self._photo_clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ef4444; color: white;
+                border: none; border-radius: 9px;
+                font-size: 12px; font-weight: bold; padding: 0;
+            }
+            QPushButton:hover { background-color: #dc2626; }
+        """)
+        self._photo_clear_btn.setVisible(False)
+        self._photo_clear_btn.clicked.connect(self._clear_project_photo)
 
         # Title + project fields
         mid = QVBoxLayout()
@@ -93,10 +104,8 @@ class HeaderSection(QWidget):
         meeting_lbl.setStyleSheet(
             f"color: {_HDR_TEXT}; font-size: 13px; font-weight: bold; background: transparent; border: none;"
         )
-        self._date_edit = QDateEdit()
-        self._date_edit.setDisplayFormat("dd/MM/yyyy")
-        self._date_edit.setCalendarPopup(True)
-        self._date_edit.setStyleSheet(_INPUT)
+        from ui.date_picker import EctoDateEdit
+        self._date_edit = EctoDateEdit()
         self._date_edit.setFixedHeight(26)
         self._date_edit.setFixedWidth(110)
         if self._report.date:
@@ -165,6 +174,27 @@ class HeaderSection(QWidget):
             self._report.company_extras,
             "company"
         )
+
+        # Inject project photo between the "Company" vertical label (index 0) and the fields (index 1)
+        photo_container = QWidget()
+        photo_container.setStyleSheet("background: transparent;")
+        photo_cl = QVBoxLayout(photo_container)
+        photo_cl.setContentsMargins(4, 6, 4, 6)
+        photo_cl.setSpacing(2)
+        photo_cl.addWidget(self._project_photo_btn)
+        clear_row = QHBoxLayout()
+        clear_row.addStretch()
+        clear_row.addWidget(self._photo_clear_btn)
+        photo_cl.addLayout(clear_row)
+        # Insert at position 1: after VerticalLabel (0), before fields content (was 1, now 2)
+        company_col.layout().insertWidget(1, photo_container)
+
+        # Now restore the saved photo if any
+        if self._report.project_photo_path:
+            pix2 = QPixmap(self._report.project_photo_path)
+            if not pix2.isNull():
+                self._apply_project_photo(pix2)
+
         gl.addWidget(company_col, 3)
 
         div = QFrame()
@@ -376,12 +406,23 @@ class HeaderSection(QWidget):
                 self.changed.emit()
 
     def _apply_project_photo(self, pix: QPixmap):
-        scaled = pix.scaled(
-            self._project_photo_btn.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
+        btn_size = self._project_photo_btn.size()
+        # Fallback size before the widget has been shown/laid out
+        if btn_size.width() < 10 or btn_size.height() < 10:
+            btn_size = QSize(110, 120)
+        scaled = pix.scaled(btn_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._project_photo_btn.setIcon(QIcon(scaled))
-        self._project_photo_btn.setIconSize(self._project_photo_btn.size())
+        self._project_photo_btn.setIconSize(btn_size)
         self._project_photo_btn.setText("")
+        self._photo_clear_btn.setVisible(True)
+
+    def _clear_project_photo(self):
+        self._report.project_photo_path = ""
+        self._project_photo_btn.setIcon(QIcon())
+        self._project_photo_btn.setIconSize(QSize(0, 0))
+        self._project_photo_btn.setText("＋  Add project\nphoto")
+        self._photo_clear_btn.setVisible(False)
+        self.changed.emit()
 
     # ── public API ────────────────────────────────────────────────────────────
 
@@ -390,10 +431,22 @@ class HeaderSection(QWidget):
         self._report.project_name = self._f_project.text()
         self._f_reference.setText(info.get("number", "") or "")
         self._report.project_reference = self._f_reference.text()
+        pm = (info.get("project_manager") or "").strip()
+        current_pm = self._f_pm.text().strip()
+        if pm:
+            if not current_pm or current_pm == self._last_auto_pm:
+                self._f_pm.setText(pm)
+                self._report.project_manager = pm
+                self._last_auto_pm = pm
+        elif current_pm and current_pm == self._last_auto_pm:
+            self._f_pm.setText('')
+            self._report.project_manager = ''
+            self._last_auto_pm = ''
 
     def lock(self):
         self._logo_btn.setEnabled(False)
         self._project_photo_btn.setEnabled(False)
+        self._photo_clear_btn.setEnabled(False)
         self._date_edit.setEnabled(False)
         self._f_deadline.setReadOnly(True)
         self._add_attendee_btn.setEnabled(False)

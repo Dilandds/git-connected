@@ -30,6 +30,8 @@ class ProjectBriefWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._edit_mode = False
+        self._last_auto_title = ''
+        self._last_auto_number = ''
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
         self._set_edit_mode(False)
@@ -167,3 +169,29 @@ class ProjectBriefWidget(QWidget):
     def set_data(self, data: dict):
         for section in self._all_sections():
             section.set_data(data)
+
+    def update_project_info(self, info: dict):
+        """Auto-fill overview fields from the sidebar project info.
+        Keeps syncing while the field hasn't been manually edited.
+        Also clears the field when the sidebar is cleared, if it was auto-filled.
+        """
+        title  = (info.get('title')  or '').strip()
+        number = (info.get('number') or '').strip()
+
+        current_name = self._s_overview._f_product_name.text().strip()
+        if title:
+            if not current_name or current_name == self._last_auto_title:
+                self._s_overview._f_product_name.setText(title)
+                self._last_auto_title = title
+        elif current_name and current_name == self._last_auto_title:
+            self._s_overview._f_product_name.setText('')
+            self._last_auto_title = ''
+
+        current_ref = self._s_overview._f_reference.text().strip()
+        if number:
+            if not current_ref or current_ref == self._last_auto_number:
+                self._s_overview._f_reference.setText(number)
+                self._last_auto_number = number
+        elif current_ref and current_ref == self._last_auto_number:
+            self._s_overview._f_reference.setText('')
+            self._last_auto_number = ''
