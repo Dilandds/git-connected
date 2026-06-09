@@ -1,6 +1,6 @@
 """Row 1: Main product info bar (auto-filled from global project data)."""
 from PyQt5.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QFileDialog, QInputDialog,
+    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap, QIcon
@@ -190,22 +190,26 @@ class _ProductInfoRow(QFrame):
             self.changed.emit()
 
     def _edit(self, field: str):
+        from ui.modal_utils import FormModal
         if field == 'planned_launch':
-            val, ok = QInputDialog.getText(
-                self, 'Edit Planned Launch', 'Planned Launch:', text=self._planned_launch
-            )
-            if ok:
-                self._planned_launch = val.strip()
+            dlg = FormModal(self, 'Edit Planned Launch', min_width=340)
+            f = dlg.add_hfield('Planned Launch', QLineEdit(self._planned_launch))
+            f.setPlaceholderText('dd/mm/yyyy or milestone name')
+            dlg.finish()
+            f.setFocus()
+            if dlg.exec_() == QDialog.Accepted and f.text().strip() is not None:
+                self._planned_launch = f.text().strip()
                 self._set_launch_text(self._planned_launch or '—')
                 self.changed.emit()
         elif field == 'progress':
-            val, ok = QInputDialog.getText(
-                self, 'Edit Overall Progress', 'Overall Progress (0–100):',
-                text=str(self._overall_progress)
-            )
-            if ok:
+            dlg = FormModal(self, 'Edit Overall Progress', min_width=300)
+            f = dlg.add_hfield('Progress (0–100)', QLineEdit(str(self._overall_progress)))
+            f.setPlaceholderText('0 – 100')
+            dlg.finish()
+            f.setFocus()
+            if dlg.exec_() == QDialog.Accepted:
                 try:
-                    v = max(0, min(100, int(val)))
+                    v = max(0, min(100, int(f.text())))
                     self._overall_progress = v
                     self._prog_lbl.setText(f'{v} %')
                     self._prog_bar.set_value(v)

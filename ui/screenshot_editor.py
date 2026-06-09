@@ -24,7 +24,7 @@ class _FontSizeWidget(QWidget):
     valueChanged = pyqtSignal(int)
     _MIN, _MAX = 10, 500
 
-    def __init__(self, initial: int = 140, parent=None):
+    def __init__(self, initial: int = 50, parent=None):
         super().__init__(parent)
         self._value = initial
         # 46 (number) + 18 (pt) + 18 (buttons) = 82 px total
@@ -136,7 +136,7 @@ class _EditorCanvas(QWidget):
         self._line_width = 20
         # Increase default font size so text remains readable when screenshots are scaled down
         self._line_width = 28
-        self._font_size = 140
+        self._font_size = 50
 
         # Annotation layers (stored in image coords)
         self._lines = []       # list of (QPointF start, QPointF end, color, width)
@@ -473,7 +473,7 @@ class ScreenshotEditorDialog(QDialog):
         toolbar.addWidget(self._text_btn)
 
         # Font size spinner — visible at all times, only affects text tool
-        self._font_spin = _FontSizeWidget(initial=140)
+        self._font_spin = _FontSizeWidget(initial=50)
         self._font_spin.setToolTip("Text font size")
         self._font_spin.valueChanged.connect(self._on_font_size_changed)
         toolbar.addWidget(self._font_spin)

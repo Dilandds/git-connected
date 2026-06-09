@@ -38,7 +38,7 @@ def _styled_combo() -> QComboBox:
             border: 1px solid {_FIELD_BORDER};
             border-radius: 6px;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 15px;
             color: {_FIELD_TEXT};
         }}
         QComboBox:hover {{
@@ -126,7 +126,7 @@ class ScaleSidebar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(SIDEBAR_WIDTH)
+        self.setMinimumWidth(260)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._ruler_active = False
         self._static_border_visible = True
@@ -298,9 +298,9 @@ class ScaleSidebar(QWidget):
                 border: 1px solid {default_theme.button_primary};
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: bold;
-                color: #000000;
+                color: #ffffff;
             }}
             QPushButton:hover {{
                 background-color: {default_theme.row_bg_hover};
@@ -321,7 +321,7 @@ class ScaleSidebar(QWidget):
                 border: none;
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: bold;
                 color: white;
             }}
@@ -342,7 +342,7 @@ class ScaleSidebar(QWidget):
                 border: none;
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: bold;
                 color: white;
             }}
@@ -465,7 +465,7 @@ class ScaleSidebar(QWidget):
             "4. Enable Ruler Tool to measure"
         )
         instructions.setWordWrap(True)
-        instructions.setFont(make_font(size=9))
+        instructions.setFont(make_font(size=13))
         instructions.setStyleSheet(
             f"color: {default_theme.text_secondary}; line-height: 1.45; "
             f"background: transparent; border: none;"
@@ -521,7 +521,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_highlight};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -536,7 +536,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     color: {default_theme.text_primary};
                 }}
                 QPushButton:hover {{
@@ -553,7 +553,7 @@ class ScaleSidebar(QWidget):
                     border: none;
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -568,7 +568,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -588,7 +588,7 @@ class ScaleSidebar(QWidget):
                     border: none;
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -603,7 +603,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -623,7 +623,7 @@ class ScaleSidebar(QWidget):
                     border: none;
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -638,7 +638,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -676,7 +676,7 @@ class ScaleSidebar(QWidget):
                     border: none;
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -691,7 +691,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -711,7 +711,7 @@ class ScaleSidebar(QWidget):
                     border: none;
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: white;
                 }}
@@ -726,7 +726,7 @@ class ScaleSidebar(QWidget):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 6px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: bold;
                     color: {default_theme.text_primary};
                 }}
@@ -758,10 +758,9 @@ class ScaleSidebar(QWidget):
         self._update_ruler_btn_style(False)
         self.ruler_toggled.emit(False)
     def _on_drawing_mode_clicked(self, mode: str):
-        """Handle drawing mode button clicks."""
-        # Toggle mode: if already active, turn off; otherwise activate
-        if self._current_drawing_mode == mode and self._drawing_mode_buttons[mode].isChecked():
-            # Turn off all buttons
+        """Handle drawing mode button clicks. Re-clicking the active tool exits it."""
+        if self._current_drawing_mode == mode:
+            # Same tool clicked again → deactivate (back to normal mode)
             for btn in self._drawing_mode_buttons.values():
                 btn.blockSignals(True)
                 btn.setChecked(False)
@@ -770,7 +769,7 @@ class ScaleSidebar(QWidget):
             self._current_drawing_mode = None
             self.drawing_mode_changed.emit("")
         else:
-            # Turn off all other buttons, turn on this one
+            # Activate this tool, deactivate all others
             for m, btn in self._drawing_mode_buttons.items():
                 is_active = (m == mode)
                 btn.blockSignals(True)
@@ -839,7 +838,7 @@ class ScaleSidebar(QWidget):
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: bold;
                 color: white;
             }}

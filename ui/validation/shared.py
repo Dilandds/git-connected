@@ -35,7 +35,7 @@ _INPUT = f"""
     QLineEdit, QTextEdit, QComboBox, QDateEdit, QTimeEdit, QSpinBox {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 4px 8px; font-size: 11px;
+        padding: 4px 8px; font-size: 15px;
     }}
     QLineEdit:focus, QTextEdit:focus, QComboBox:focus,
     QDateEdit:focus, QTimeEdit:focus, QSpinBox:focus {{
@@ -60,7 +60,7 @@ _TABLE_STYLE = f"""
     QTableWidget {{
         background-color: {_CARD}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 6px;
-        gridline-color: {_BORDER}; font-size: 11px;
+        gridline-color: {_BORDER}; font-size: 15px;
     }}
     QTableWidget::item {{ padding: 4px 6px; }}
     QTableWidget::item:selected {{
@@ -70,7 +70,7 @@ _TABLE_STYLE = f"""
         background-color: #f1f3f5; color: {_MUTED};
         border: none; border-bottom: 1px solid {_BORDER};
         border-right: 1px solid {_BORDER};
-        padding: 5px 8px; font-size: 10px; font-weight: bold;
+        padding: 5px 8px; font-size: 14px; font-weight: bold;
     }}
 """
 
@@ -78,7 +78,7 @@ _BTN_PRIMARY = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white;
         border: none; border-radius: 5px;
-        padding: 5px 14px; font-size: 11px; font-weight: bold;
+        padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
@@ -88,7 +88,7 @@ _BTN_OUTLINE = f"""
     QPushButton {{
         background-color: transparent; color: {_ACCENT};
         border: 1px solid {_ACCENT}; border-radius: 5px;
-        padding: 4px 12px; font-size: 10px; font-weight: bold;
+        padding: 4px 12px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #dbeafe; }}
 """ + _TOOLTIP_STYLE
@@ -97,19 +97,19 @@ _BTN_SMALL = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 14px;
     }}
     QPushButton:hover {{ background-color: #e5e7eb; border-color: {_ACCENT}; color: {_ACCENT}; }}
 """ + _TOOLTIP_STYLE
 
-_SECTION_TITLE = f"color: {_TEXT}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
-_LBL_STYLE     = f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
+_SECTION_TITLE = f"color: {_TEXT}; font-size: 15px; font-weight: bold; background: transparent; border: none;"
+_LBL_STYLE     = f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;"
 
 _TIMEEDIT_STYLE = f"""
     QTimeEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 18px 3px 6px; font-size: 11px;
+        padding: 3px 18px 3px 6px; font-size: 15px;
     }}
     QTimeEdit:focus {{ border-color: {_ACCENT}; }}
     QTimeEdit::up-button {{
@@ -138,7 +138,7 @@ _TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white;
         border: none; border-radius: 5px;
-        padding: 5px 14px; font-size: 11px; font-weight: bold;
+        padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
 """ + _TOOLTIP_STYLE
 
@@ -146,7 +146,7 @@ _TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
         border: 1px solid {_BORDER}; border-radius: 5px;
-        padding: 5px 14px; font-size: 11px;
+        padding: 5px 14px; font-size: 15px;
     }}
     QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; background-color: #e8f0fe; }}
 """ + _TOOLTIP_STYLE
@@ -158,7 +158,7 @@ _COMBO_STYLE = f"""
         border: 1px solid {_BORDER};
         border-radius: 5px;
         padding: 3px 28px 3px 8px;
-        font-size: 11px;
+        font-size: 15px;
     }}
     QComboBox:hover {{ border-color: #9ca3af; }}
     QComboBox:focus {{ border-color: {_ACCENT}; }}
@@ -181,7 +181,7 @@ _COMBO_STYLE = f"""
         outline: none;
         selection-background-color: #dbeafe;
         selection-color: {_TEXT};
-        font-size: 11px;
+        font-size: 15px;
     }}
     QComboBox QAbstractItemView::item {{
         padding: 5px 10px;
@@ -273,7 +273,7 @@ class _ProgressCell(QWidget):
             QSpinBox {{
                 background: #f5f6f8; color: {_TEXT};
                 border: 1px solid {_BORDER}; border-radius: 3px;
-                padding: 0 18px 0 4px; font-size: 10px;
+                padding: 0 18px 0 4px; font-size: 14px;
             }}
             QSpinBox:focus {{ border-color: {_ACCENT}; }}
             QSpinBox::up-button {{

@@ -94,7 +94,7 @@ class _DimColumn(QWidget):
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setWordWrap(True)
         lbl.setStyleSheet(
-            "color: rgba(255,255,255,0.55); font-size: 10px; background: transparent; border: none;"
+            "color: rgba(255,255,255,0.55); font-size: 13px; background: transparent; border: none;"
         )
         lay.addWidget(lbl)
 
@@ -126,7 +126,7 @@ class _SurfaceCol(QWidget):
 
         lbl = QLabel(label)
         lbl.setStyleSheet(
-            "color: rgba(255,255,255,0.5); font-size: 10px; background: transparent; border: none;"
+            "color: rgba(255,255,255,0.5); font-size: 13px; background: transparent; border: none;"
         )
         lay.addWidget(lbl)
 
@@ -166,7 +166,7 @@ class _WeightInfoRow(QWidget):
 
         self._lbl = QLabel(label)
         self._lbl.setStyleSheet(
-            "color: rgba(255,255,255,0.55); font-size: 11px; background: transparent; border: none;"
+            "color: rgba(255,255,255,0.55); font-size: 15px; background: transparent; border: none;"
         )
         lay.addWidget(self._lbl)
         lay.addStretch()
@@ -174,7 +174,7 @@ class _WeightInfoRow(QWidget):
         self._val = QLabel("--")
         self._val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._val.setStyleSheet(
-            "color: rgba(255,255,255,0.9); font-size: 11px; background: transparent; border: none;"
+            "color: rgba(255,255,255,0.9); font-size: 15px; background: transparent; border: none;"
         )
         lay.addWidget(self._val)
 
@@ -347,7 +347,7 @@ class SidebarPanel(QWidget):
             "  color: #ffffff;"
             "  border: 1px solid rgba(255,255,255,0.35);"
             "  border-radius: 9px;"
-            "  font-size: 11px;"
+            "  font-size: 15px;"
             "  font-weight: 700;"
             "}"
             "QLabel:hover {"
@@ -367,7 +367,7 @@ class SidebarPanel(QWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setObjectName("sidebarScrollArea")
         scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setMinimumWidth(350)
+        scroll_area.setMinimumWidth(420)
         
         # Style scroll area
         scroll_area.setStyleSheet(f"""
@@ -507,7 +507,7 @@ class SidebarPanel(QWidget):
         ruler.setAlignment(Qt.AlignCenter)
 
         self._dim_title = QLabel(t("sidebar.dimensions").upper())
-        self._dim_title.setFont(make_font(size=11, bold=True))
+        self._dim_title.setFont(make_font(size=14, bold=True))
         self._dim_title.setStyleSheet(
             f"color: {default_theme.text_title}; background: transparent; border: none; letter-spacing: 1px;"
         )
@@ -596,7 +596,7 @@ class SidebarPanel(QWidget):
         wave_icon.setAlignment(Qt.AlignCenter)
 
         self.surface_title_label = QLabel(t("sidebar.total_surface_area").upper())
-        self.surface_title_label.setFont(make_font(size=11, bold=True))
+        self.surface_title_label.setFont(make_font(size=14, bold=True))
         self.surface_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; background: transparent; border: none; letter-spacing: 1px;"
         )
@@ -666,7 +666,7 @@ class SidebarPanel(QWidget):
         bag.setFixedSize(20, 20); bag.setAlignment(Qt.AlignCenter)
 
         self.weight_title_label = QLabel(t("sidebar.estimated_weight").upper())
-        self.weight_title_label.setFont(make_font(size=11, bold=True))
+        self.weight_title_label.setFont(make_font(size=14, bold=True))
         self.weight_title_label.setStyleSheet(
             f"color: {default_theme.text_title}; background: transparent; border: none; letter-spacing: 1px;"
         )
@@ -951,7 +951,7 @@ class SidebarPanel(QWidget):
         
         # Results section title
         self.results_label = QLabel(t("sidebar.scaled_results"))
-        results_font = make_font(size=11, bold=True)
+        results_font = make_font(size=14, bold=True)
         self.results_label.setFont(results_font)
         self.results_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; margin-top: 4px; background-color: transparent; border: none;"
@@ -1348,7 +1348,7 @@ class SidebarPanel(QWidget):
                 background: #1c2029; color: #e2e8f0;
                 border: 1px solid rgba(255,255,255,0.12);
                 border-radius: 8px; padding: 4px;
-                font-size: 11px; font-weight: bold;
+                font-size: 15px; font-weight: bold;
             }}
             QMenu::item {{ padding: 7px 20px; border-radius: 5px; }}
             QMenu::item:selected {{ background: {default_theme.button_primary}; color: white; }}

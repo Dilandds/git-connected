@@ -52,7 +52,7 @@ class _PhotoButton(QPushButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 1px dashed {_BORDER};
-                border-radius: 6px; color: {_MUTED}; font-size: 10px;
+                border-radius: 6px; color: {_MUTED}; font-size: 14px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
@@ -184,7 +184,7 @@ class PreparationPanel(QScrollArea):
         hdr_h.setSectionResizeMode(QHeaderView.Interactive)
         hdr_h.setStretchLastSection(True)
         hdr_h.setMinimumSectionSize(50)
-        for col, w in enumerate([80, 120, 140, 114, 96, 120]):
+        for col, w in enumerate([80, 120, 140, 148, 96, 120]):
             self._stakeholder_table.setColumnWidth(col, w)
         self._stakeholder_table.verticalHeader().setDefaultSectionSize(44)
         self._stakeholder_table.verticalHeader().setVisible(False)
@@ -239,7 +239,7 @@ class PreparationPanel(QScrollArea):
         hdr3.addStretch()
         auto_note = QLabel("Auto-populated from Estimated Cost screen and Timeline")
         auto_note.setStyleSheet(
-            f"color: {_MUTED}; font-size: 9px; background: transparent; border: none; font-style: italic;"
+            f"color: {_MUTED}; font-size: 13px; background: transparent; border: none; font-style: italic;"
         )
         hdr3.addWidget(auto_note)
         cl3.addLayout(hdr3)
@@ -252,7 +252,7 @@ class PreparationPanel(QScrollArea):
         cost_side = QVBoxLayout()
         cost_side.setSpacing(6)
         cost_cap = QLabel("Cost estimation (EUR)")
-        cost_cap.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+        cost_cap.setStyleSheet(f"color: {_MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
         cost_side.addWidget(cost_cap)
 
         self._cost_table = QTableWidget(len(COST_CATEGORIES) + 3, 2)
@@ -295,7 +295,7 @@ class PreparationPanel(QScrollArea):
         sched_side = QVBoxLayout()
         sched_side.setSpacing(6)
         sched_cap = QLabel("Schedule (est.)")
-        sched_cap.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+        sched_cap.setStyleSheet(f"color: {_MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
         sched_side.addWidget(sched_cap)
 
         self._milestone_indicators: List[QLabel] = []
@@ -316,7 +316,7 @@ class PreparationPanel(QScrollArea):
 
             name_lbl = QLabel(milestone)
             name_lbl.setFixedWidth(120)
-            name_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px; background: transparent; border: none;")
+            name_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 14px; background: transparent; border: none;")
 
             de = EctoDateEdit(QDate.currentDate())
             de.setFixedHeight(24)
@@ -577,7 +577,7 @@ class ReportPanel(QScrollArea):
             t.setStyleSheet(_TIMEEDIT_STYLE)
             t.setFixedHeight(26)
         to_lbl = QLabel("to")
-        to_lbl.setStyleSheet(f"color: {_MUTED}; background: transparent; border: none; font-size: 10px;")
+        to_lbl.setStyleSheet(f"color: {_MUTED}; background: transparent; border: none; font-size: 14px;")
         tr.addWidget(self._r_time_from)
         tr.addWidget(to_lbl)
         tr.addWidget(self._r_time_to)
@@ -652,7 +652,7 @@ class ReportPanel(QScrollArea):
         cc.addWidget(_section_title("CEO Feedback & Key Remarks"))
         cc.addWidget(_sep())
         hint = QLabel("Feedback, remarks and key points to take into account.")
-        hint.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        hint.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         cc.addWidget(hint)
         self._r_ceo_feedback = QTextEdit()
         self._r_ceo_feedback.setPlaceholderText("CEO feedback...")

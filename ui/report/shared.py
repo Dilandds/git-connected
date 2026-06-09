@@ -28,7 +28,7 @@ _INPUT = f"""
     QLineEdit, QTextEdit, QDateEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 11px;
+        padding: 3px 6px; font-size: 15px;
     }}
     QLineEdit:focus, QTextEdit:focus, QDateEdit:focus {{ border-color: {_ACCENT}; }}
     QLineEdit:read-only, QTextEdit:read-only {{
@@ -42,7 +42,7 @@ _INPUT = f"""
 _BTN_PRIMARY = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:disabled {{ background-color: #b0c4cc; }}
@@ -51,7 +51,7 @@ _BTN_SMALL = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 14px;
     }}
     QPushButton:hover {{ background-color: #e5e7eb; border-color: {_ACCENT}; color: {_ACCENT}; }}
     QPushButton:disabled {{ color: #9ca3af; background: #f9fafb; }}
@@ -60,7 +60,7 @@ _BTN_OUTLINE = f"""
     QPushButton {{
         background-color: transparent; color: {_ACCENT};
         border: 1px solid {_ACCENT}; border-radius: 5px;
-        padding: 4px 12px; font-size: 10px; font-weight: bold;
+        padding: 4px 12px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #dbeafe; }}
 """
@@ -68,13 +68,13 @@ _BTN_OUTLINE = f"""
 _TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
 """
 _TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
-        border: 1px solid {_BORDER}; border-radius: 5px; padding: 5px 14px; font-size: 11px;
+        border: 1px solid {_BORDER}; border-radius: 5px; padding: 5px 14px; font-size: 15px;
     }}
     QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; background-color: #e8f0fe; }}
 """
@@ -105,7 +105,7 @@ _BTN_LOCK = f"""
     QPushButton {{
         background-color: #fef3c7; color: #b45309;
         border: 1px solid #fde68a; border-radius: 5px;
-        padding: 4px 12px; font-size: 10px; font-weight: bold;
+        padding: 4px 12px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #fde68a; }}
     QPushButton:disabled {{ background-color: #f1f3f5; color: #9ca3af; border-color: {_BORDER}; }}

@@ -28,28 +28,28 @@ _INPUT = f"""
     QLineEdit, QTextEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 4px 8px; font-size: 11px;
+        padding: 4px 8px; font-size: 15px;
     }}
     QLineEdit:focus, QTextEdit:focus {{ border-color: {_ACCENT}; }}
 """
 _BTN_PRIMARY = f"""
     QPushButton {{
         background: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background: {_ACCENT_H}; }}
 """
 _BTN_ICON = f"""
     QPushButton {{
         background: transparent; border: none;
-        color: {_MUTED}; font-size: 13px; padding: 2px 6px;
+        color: {_MUTED}; font-size: 16px; padding: 2px 6px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 4px; }}
 """ + TOOLTIP_STYLE
 _BTN_DELETE = f"""
     QPushButton {{
         background: transparent; border: none;
-        color: {_MUTED}; font-size: 13px; padding: 2px 6px;
+        color: {_MUTED}; font-size: 16px; padding: 2px 6px;
     }}
     QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-radius: 4px; }}
 """ + TOOLTIP_STYLE
@@ -120,7 +120,7 @@ class _TermRow(QFrame):
         self._term_lbl.setFixedWidth(160)
         self._term_lbl.setWordWrap(True)
         self._term_lbl.setStyleSheet(
-            f"color: {_TEXT}; font-size: 11px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_TEXT}; font-size: 15px; font-weight: bold; background: transparent; border: none;"
         )
         lay.addWidget(self._term_lbl)
 
@@ -134,7 +134,7 @@ class _TermRow(QFrame):
         self._def_lbl = QLabel(self._term.definition)
         self._def_lbl.setWordWrap(True)
         self._def_lbl.setStyleSheet(
-            f"color: {_MUTED}; font-size: 11px; background: transparent; border: none;"
+            f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;"
         )
         self._def_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         lay.addWidget(self._def_lbl, 1)
@@ -175,7 +175,7 @@ class _AlphaHeader(QWidget):
         lay.setContentsMargins(16, 0, 16, 0)
         lbl = QLabel(letter)
         lbl.setStyleSheet(
-            f"color: {_ACCENT}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_ACCENT}; font-size: 15px; font-weight: bold; background: transparent; border: none;"
         )
         lay.addWidget(lbl)
         lay.addStretch()
@@ -215,10 +215,10 @@ class GlossaryWidget(QWidget):
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
         title = QLabel("Glossary")
-        title.setFont(make_font(size=15, bold=True))
+        title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         subtitle = QLabel("Project-specific terms and definitions.")
-        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col.addWidget(title)
         t_col.addWidget(subtitle)
         tl.addLayout(t_col)
@@ -254,7 +254,7 @@ class GlossaryWidget(QWidget):
         def _hdr_lbl(text, w=None):
             l = QLabel(text)
             l.setStyleSheet(
-                f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;"
+                f"color: {_MUTED}; font-size: 16px; font-weight: bold; background: transparent; border: none;"
             )
             if w:
                 l.setFixedWidth(w)
@@ -303,7 +303,7 @@ class GlossaryWidget(QWidget):
             empty = QLabel("No terms found. Click ＋ Add term to get started." if not query
                            else f'No results for "{self._filter}".')
             empty.setAlignment(Qt.AlignCenter)
-            empty.setStyleSheet(f"color: {_MUTED}; font-size: 12px; background: transparent; border: none;")
+            empty.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
             empty.setContentsMargins(0, 40, 0, 0)
             self._list_layout.insertWidget(0, empty)
             return

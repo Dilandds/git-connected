@@ -37,7 +37,7 @@ _INPUT = f"""
     QLineEdit, QTextEdit, QComboBox, QSpinBox {{
         background: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 11px;
+        padding: 3px 6px; font-size: 15px;
     }}
     QLineEdit:focus, QTextEdit:focus, QComboBox:focus,
     QSpinBox:focus {{ border-color: {_ACCENT}; }}
@@ -53,7 +53,7 @@ _INPUT = f"""
 _BTN_PRIMARY = f"""
     QPushButton {{
         background: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background: {_ACCENT_H}; }}
 """
@@ -62,7 +62,7 @@ _BTN_SMALL = f"""
     QPushButton {{
         background: #f1f3f5; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 14px;
     }}
     QPushButton:hover {{ background: #e5e7eb; border-color: {_ACCENT}; color: {_ACCENT}; }}
 """
@@ -71,7 +71,7 @@ _BTN_OUTLINE = f"""
     QPushButton {{
         background: transparent; color: {_ACCENT};
         border: 1px solid {_ACCENT}; border-radius: 4px;
-        padding: 3px 10px; font-size: 10px; font-weight: bold;
+        padding: 3px 10px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background: #dbeafe; }}
 """
@@ -79,7 +79,7 @@ _BTN_OUTLINE = f"""
 _BTN_ICON = f"""
     QPushButton {{
         background: transparent; border: none;
-        color: {_MUTED}; font-size: 12px; padding: 2px 4px;
+        color: {_MUTED}; font-size: 15px; padding: 2px 4px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 3px; }}
 """
@@ -87,7 +87,7 @@ _BTN_ICON = f"""
 _BTN_DELETE = f"""
     QPushButton {{
         background: transparent; border: none;
-        color: {_MUTED}; font-size: 12px; padding: 2px 4px;
+        color: {_MUTED}; font-size: 15px; padding: 2px 4px;
     }}
     QPushButton:hover {{ color: #ef4444; background: #fee2e2; border-radius: 3px; }}
 """
@@ -98,7 +98,7 @@ _BTN_DEL_CIRCLE = """
     QPushButton {
         background-color: transparent; color: #6b7280;
         border: none;
-        font-size: 11px; font-weight: bold;
+        font-size: 15px; font-weight: bold;
         padding: 0; min-width: 18px; min-height: 18px;
     }
     QPushButton:hover { background-color: transparent; color: #ef4444; }
@@ -110,7 +110,7 @@ def tab_active_style(accent: str) -> str:
         QPushButton {{
             background: {accent}; color: white; border: none;
             border-radius: 5px 0 0 5px; padding: 4px 10px;
-            font-size: 10px; font-weight: bold;
+            font-size: 14px; font-weight: bold;
         }}
     """ + _TOOLTIP_STYLE
 
@@ -119,19 +119,19 @@ def tab_inactive_style(border: str, muted: str, text: str, accent: str) -> str:
         QPushButton {{
             background: transparent; color: {muted};
             border: 1px solid {border}; border-radius: 5px 0 0 5px;
-            padding: 4px 10px; font-size: 10px;
+            padding: 4px 10px; font-size: 14px;
         }}
         QPushButton:hover {{ color: {text}; border-color: {accent}; background: #e8f0fe; }}
     """ + _TOOLTIP_STYLE
 
 _MENU_STYLE = f"""
     QMenu {{ background: {_CARD}; border: 1px solid {_BORDER}; border-radius: 6px; padding: 4px; }}
-    QMenu::item {{ padding: 6px 16px; font-size: 11px; color: {_TEXT}; border-radius: 4px; }}
+    QMenu::item {{ padding: 6px 16px; font-size: 15px; color: {_TEXT}; border-radius: 4px; }}
     QMenu::item:selected {{ background: #e8f0fe; color: {_ACCENT}; }}
 """
 
 _FIELD_LABEL_STYLE = (
-    f'color: {_MUTED}; font-size: 9px; font-weight: bold; '
+    f'color: {_MUTED}; font-size: 13px; font-weight: bold; '
     f'background: transparent; border: none;'
 )
 
@@ -166,7 +166,7 @@ def _status_badge(status: str) -> QLabel:
         QLabel {{
             background: {color}22; color: {color};
             border: 1px solid {color}88; border-radius: 4px;
-            padding: 2px 8px; font-size: 9px; font-weight: bold;
+            padding: 2px 8px; font-size: 13px; font-weight: bold;
         }}
     """)
     badge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)

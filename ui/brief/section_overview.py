@@ -72,7 +72,7 @@ class ProductOverviewCard(QFrame):
         for label, attr in defs:
             lbl = QLabel(label)
             lbl.setStyleSheet(
-                f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+                f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
             )
             inp = make_input(label)
             setattr(self, attr, inp)

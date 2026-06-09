@@ -9,7 +9,7 @@ from .shared import (
     _PART_PALETTE, _PartBadge,
 )
 from .dialogs import _PartDialog, _CommentsDialog
-from .part_row import _PartRow, _W_TASK, _W_SUBJECT, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
+from .part_row import _PartRow, _W_TASK, _W_SUBJECT, _W_PERFORMED_BY, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
 
 
 class _PartsTable(QWidget):
@@ -57,6 +57,7 @@ class _PartsTable(QWidget):
         hl.addWidget(_ch('TASK', _W_TASK))
         hl.addStretch(1)
         hl.addWidget(_ch('SUBJECT', _W_SUBJECT))
+        hl.addWidget(_ch('PERFORMED BY', _W_PERFORMED_BY))
         hl.addWidget(_ch('COMMENTS / NOTES', _W_COMMENTS))
         hl.addWidget(_ch('START DATE', _W_DATE))
         hl.addWidget(_ch('DUE DATE', _W_DATE))

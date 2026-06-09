@@ -10,9 +10,10 @@ from .shared import (
 )
 
 # Column widths — must match headers in parts_table.py
-_W_TASK     = 200
-_W_SUBJECT  = 160
-_W_COMMENTS = 200
+_W_TASK         = 200
+_W_SUBJECT      = 160
+_W_PERFORMED_BY = 140
+_W_COMMENTS     = 200
 _W_DATE     = 105
 _W_STATUS   = 108
 _W_PROGRESS = 200   # includes % + bar + comment count
@@ -134,6 +135,16 @@ class _PartRow(QFrame):
             f' background: transparent; border: none;'
         )
         lay.addWidget(subj_lbl, 0, Qt.AlignVCenter)
+
+        # ── PERFORMED BY ─────────────────────────────────────────────────
+        perf_lbl = QLabel(self._part.performed_by or '—')
+        perf_lbl.setFixedWidth(_W_PERFORMED_BY)
+        perf_lbl.setWordWrap(True)
+        perf_lbl.setStyleSheet(
+            f'color: {_TEXT}; font-size: 11px;'
+            f' background: transparent; border: none;'
+        )
+        lay.addWidget(perf_lbl, 0, Qt.AlignVCenter)
 
         # ── COMMENTS (inline 3-line editor) ───────────────────────────────
         comm_edit = QTextEdit()

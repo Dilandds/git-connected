@@ -59,6 +59,9 @@ class Task:
     contributors:      str            = ''
     unavailable_start: Optional[QDate] = None
     unavailable_end:   Optional[QDate] = None
+    photo_path:        str            = ''
+    components_impacted: str          = ''
+    priority:          str            = 'Normal'
 
     def __post_init__(self):
         self.duration_days = max(1, self.start.daysTo(self.end))

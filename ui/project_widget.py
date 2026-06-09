@@ -611,6 +611,8 @@ class TheProjectWidget(QWidget):
         info = self._nav.get_info_data()
         if w := self._screen_widgets.get('brief'):
             w.update_project_info(info)
+        if w := self._screen_widgets.get('timeline'):
+            w.update_project_info(info)
         if w := self._screen_widgets.get('estimated_cost'):
             w.update_project_info(info)
         if w := self._screen_widgets.get('report'):

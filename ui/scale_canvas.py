@@ -1136,8 +1136,8 @@ class ScaleCanvas(QWidget):
         y_pos = ref.pos.y()
         x_end = x_start + ppu
 
-        # Line — blue to distinguish from the red default
-        pen = QPen(QColor("#1565C0"), 3)
+        # Line
+        pen = QPen(QColor("#000000"), 3)
         painter.setPen(pen)
         painter.drawLine(int(x_start), int(y_pos), int(x_end), int(y_pos))
         # End caps
@@ -1148,7 +1148,7 @@ class ScaleCanvas(QWidget):
         ratio = self._scale_ratio
         if ratio > 1:
             subdivisions = int(ratio)
-            sub_pen = QPen(QColor("#1565C0"), 1.5)
+            sub_pen = QPen(QColor("#000000"), 1.5)
             painter.setPen(sub_pen)
             for i in range(1, subdivisions):
                 sx = x_start + (ppu * i / subdivisions)
@@ -1160,7 +1160,7 @@ class ScaleCanvas(QWidget):
         }.get(self._unit, "1 cm")
         font = QFont("Segoe UI", 9, QFont.Bold)
         painter.setFont(font)
-        painter.setPen(QColor("#1565C0"))
+        painter.setPen(QColor("#000000"))
         painter.drawText(
             QRectF(x_start, y_pos - 20, ppu, 18),
             Qt.AlignCenter, unit_label

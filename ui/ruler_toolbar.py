@@ -36,7 +36,7 @@ class RulerViewButton(QPushButton):
                     border: none;
                     border-radius: 6px;
                     padding: 4px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                     font-weight: 500;
                 }}
             """ + TOOLTIP_STYLE)
@@ -48,7 +48,7 @@ class RulerViewButton(QPushButton):
                     border: 1px solid transparent;
                     border-radius: 6px;
                     padding: 4px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                 }}
             """ + TOOLTIP_STYLE)
 
@@ -62,7 +62,7 @@ class RulerViewButton(QPushButton):
                     border: 1px solid {default_theme.border_light};
                     border-radius: 6px;
                     padding: 4px 12px;
-                    font-size: 11px;
+                    font-size: 15px;
                 }}
             """ + TOOLTIP_STYLE)
     
@@ -121,7 +121,7 @@ class RulerToolbar(QWidget):
         mode_label = QLabel("📐 Measure Mode")
         mode_label.setStyleSheet(f"""
             color: {default_theme.text_primary};
-            font-size: 11px;
+            font-size: 15px;
             font-weight: bold;
             background: transparent;
         """)
@@ -139,7 +139,7 @@ class RulerToolbar(QWidget):
         instruction_label = QLabel("Click two points to measure")
         instruction_label.setStyleSheet(f"""
             color: {default_theme.text_secondary};
-            font-size: 10px;
+            font-size: 14px;
             background: transparent;
         """)
         layout.addWidget(instruction_label)
@@ -151,7 +151,7 @@ class RulerToolbar(QWidget):
         view_label = QLabel("View:")
         view_label.setStyleSheet(f"""
             color: {default_theme.text_secondary};
-            font-size: 10px;
+            font-size: 14px;
             background: transparent;
         """)
         layout.addWidget(view_label)
@@ -169,7 +169,7 @@ class RulerToolbar(QWidget):
                 border: 1px solid #CFCFCF;
                 border-radius: 6px;
                 padding: 2px 8px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: 500;
             }}
             QComboBox:hover {{
@@ -213,7 +213,7 @@ class RulerToolbar(QWidget):
         unit_label = QLabel("Unit:")
         unit_label.setStyleSheet(f"""
             color: {default_theme.text_secondary};
-            font-size: 10px;
+            font-size: 14px;
             background: transparent;
         """)
         layout.addWidget(unit_label)
@@ -232,7 +232,7 @@ class RulerToolbar(QWidget):
                 border: 1px solid #CFCFCF;
                 border-radius: 6px;
                 padding: 2px 8px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: 500;
             }}
             QComboBox:hover {{
@@ -283,7 +283,7 @@ class RulerToolbar(QWidget):
                 border: 1px solid {default_theme.button_primary_hover};
                 border-radius: 6px;
                 padding: 4px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
@@ -307,7 +307,7 @@ class RulerToolbar(QWidget):
                 border: 1px solid {default_theme.button_primary_hover};
                 border-radius: 6px;
                 padding: 4px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 font-weight: 500;
             }}
             QPushButton:hover {{

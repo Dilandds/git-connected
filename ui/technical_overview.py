@@ -48,6 +48,7 @@ class ArrowAnnotation:
     image_paths: list = field(default_factory=list)
     label: str = "Point"
     created_at: Optional[datetime] = None
+    is_validated: bool = False
 
 
 class ImageCanvas(QWidget):
@@ -293,7 +294,7 @@ class ImageCanvas(QWidget):
     # ---- interaction ----
 
     def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and event.modifiers() & Qt.AltModifier):
+        if event.button() == Qt.RightButton or (event.button() == Qt.LeftButton and event.modifiers() & Qt.AltModifier):
             self._panning = True
             self._pan_start = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
@@ -524,7 +525,7 @@ class TechnicalAnnotationPanel(QWidget):
         title_row.addWidget(anno_icon)
 
         title_label = QLabel("Annotation mode")
-        title_label.setFont(make_font(size=12, bold=True))
+        title_label.setFont(make_font(size=15, bold=True))
         title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(title_label)
         title_row.addStretch()
@@ -646,12 +647,14 @@ class TechnicalAnnotationPanel(QWidget):
     def _create_card(self, ann: ArrowAnnotation, number: int) -> QFrame:
         from ui.annotation_panel import (
             _format_annotation_date, _format_annotation_time,
-            _ANNO_CARD_PENDING, _ANNO_CARD_HOVER,
+            _ANNO_CARD_PENDING, _ANNO_CARD_VALIDATED, _ANNO_CARD_HOVER,
             _ANNO_CARD_BORDER, _ANNO_CARD_BORDER_HOVER,
-            _rounded_text_pixmap,
+            _rounded_text_pixmap, _checkmark_pixmap,
         )
 
-        ann_color = ann.color or ARROW_COLOR
+        VALIDATED_GREEN = '#4ade80'
+        ann_color = VALIDATED_GREEN if ann.is_validated else (ann.color or ARROW_COLOR)
+        card_bg = _ANNO_CARD_VALIDATED if ann.is_validated else _ANNO_CARD_PENDING
 
         card = QFrame()
         card.setObjectName("technicalAnnoCard")
@@ -660,7 +663,7 @@ class TechnicalAnnotationPanel(QWidget):
         card.installEventFilter(self)
         card.setStyleSheet(f"""
             QFrame#technicalAnnoCard {{
-                background: {_ANNO_CARD_PENDING};
+                background: {card_bg};
                 {_ANNO_CARD_BORDER}
             }}
             QFrame#technicalAnnoCard:hover {{
@@ -709,15 +712,35 @@ class TechnicalAnnotationPanel(QWidget):
         info.setSpacing(2)
 
         title = QLabel(ann.label or "Point")
-        title.setFont(make_font(size=11, bold=True))
+        title.setFont(make_font(size=14, bold=True))
         title.setStyleSheet(f"color: {default_theme.text_primary}; background-color: transparent; border: none;")
         info.addWidget(title)
 
         desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or "Click to edit")
         desc = QLabel(desc_text)
-        desc.setStyleSheet(f"font-size: 10px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
+        desc.setStyleSheet(f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
         desc.setWordWrap(True)
         info.addWidget(desc)
+
+        # Status row — green checkmark when validated, grey pending otherwise
+        status_row = QHBoxLayout()
+        status_row.setContentsMargins(0, 2, 0, 0)
+        status_row.setSpacing(4)
+        status_icon = QLabel()
+        status_lbl = QLabel()
+        if ann.is_validated:
+            status_icon.setPixmap(_checkmark_pixmap(11, VALIDATED_GREEN))
+            status_icon.setVisible(True)
+            status_lbl.setText("Validated")
+            status_lbl.setStyleSheet(f"color: {VALIDATED_GREEN}; font-size: 13px; background: transparent; border: none;")
+        else:
+            status_icon.setVisible(False)
+            status_lbl.setText("Click to edit")
+            status_lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 13px; background: transparent; border: none;")
+        status_row.addWidget(status_icon)
+        status_row.addWidget(status_lbl)
+        status_row.addStretch()
+        info.addLayout(status_row)
 
         layout.addLayout(info, 1)
         layout.addStretch()
@@ -731,7 +754,7 @@ class TechnicalAnnotationPanel(QWidget):
             date_time_text = str(number)
         date_label = QLabel(date_time_text)
         date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; background-color: transparent; border: none;")
+        date_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px; background-color: transparent; border: none;")
         layout.addWidget(date_label)
 
         # Delete button (transparent, matches 3D annotation card)
@@ -858,6 +881,7 @@ class TechnicalOverviewWidget(QWidget):
                 'image_paths': list(ann.image_paths),
                 'label': ann.label,
                 'created_at': ann.created_at.isoformat() if ann.created_at else None,
+                'is_validated': ann.is_validated,
             })
         return result
 
@@ -886,6 +910,7 @@ class TechnicalOverviewWidget(QWidget):
                 image_paths=ad.get('image_paths', []),
                 label=ad.get('label', 'Point'),
                 created_at=created,
+                is_validated=ad.get('is_validated', False),
             )
             self._annotations.append(ann)
             self._next_id = max(self._next_id, ann.id + 1)
@@ -996,12 +1021,14 @@ class TechnicalOverviewWidget(QWidget):
         popup.show()
 
     def _on_popup_validated(self, ann_id: int, text: str, image_paths: list, label: str):
-        """Handle popup Done — save text, images, label back to the annotation."""
+        """Handle popup Done — save text, images, label back to the annotation and mark validated."""
         for ann in self._annotations:
             if ann.id == ann_id:
                 ann.text = text
                 ann.image_paths = image_paths
                 ann.label = label
+                ann.is_validated = True
+                ann.color = '#4ade80'   # green on canvas — matches validated card
                 break
         self.canvas.set_annotations(self._annotations)
         self.annotation_panel.refresh(self._annotations)

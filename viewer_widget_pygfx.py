@@ -2301,25 +2301,21 @@ class STLViewerWidget(QWidget):
                 break
 
     def set_annotation_selected(self, annotation_id: int, selected: bool):
-        """Set annotation marker to yellow when selected, restore base color when deselected."""
+        """Scale up hovered annotation marker; restore on leave. Colour never changes."""
         if selected:
             for ann in self.annotations:
                 if ann.get('selected', False):
                     ann['selected'] = False
                     try:
-                        r, g, b = self._hex_to_rgb_normalized(ann.get('base_color', '#909d92'))
-                        ann['marker'].material.color = (r, g, b)
-                        self._update_label_color(ann, ann.get('base_color', '#909d92'))
+                        ann['marker'].local.scale = (1.0, 1.0, 1.0)
                     except Exception:
                         pass
         for ann in self.annotations:
             if ann['id'] == annotation_id:
                 ann['selected'] = selected
-                color = '#FACC15' if selected else ann.get('base_color', '#909d92')
                 try:
-                    r, g, b = self._hex_to_rgb_normalized(color)
-                    ann['marker'].material.color = (r, g, b)
-                    self._update_label_color(ann, color)
+                    s = 1.5 if selected else 1.0
+                    ann['marker'].local.scale = (s, s, s)
                 except Exception as e:
                     logger.debug(f"set_annotation_selected: {e}")
                 if self._canvas:
@@ -2455,9 +2451,7 @@ class STLViewerWidget(QWidget):
                 break
 
     def _get_label_color_for_badge(self, badge_color: str) -> str:
-        """Return label text color for contrast. Validated (blue) uses green; other dark badges use white."""
-        if badge_color and badge_color.lower().lstrip('#') == '1821b4':
-            return '#22C55E'  # Green for validated
+        """Return label text color for contrast against the badge background."""
         return '#FFFFFF' if self._is_dark_hex_color(badge_color) else '#000000'
 
     def _update_label_color(self, ann: dict, badge_color: str):
@@ -3085,6 +3079,37 @@ class STLViewerWidget(QWidget):
         except Exception:
             return 0.1
 
+    def _compute_surface_tangent(self, normal: np.ndarray) -> np.ndarray:
+        """Return a unit tangent vector perpendicular to normal (stable for any orientation)."""
+        ref = np.array([0.0, 1.0, 0.0])
+        if abs(np.dot(normal, ref)) > 0.9:
+            ref = np.array([1.0, 0.0, 0.0])
+        tangent = np.cross(ref, normal)
+        return tangent / (np.linalg.norm(tangent) + 1e-12)
+
+    def _project_point_to_surface(self, point: np.ndarray, normal: np.ndarray):
+        """Project a world-space point back onto the mesh surface along the given normal.
+        Used to find where each text character actually sits on a curved surface.
+        Returns (surface_point, surface_normal) — falls back to (point, normal) on miss.
+        """
+        if self._annotation_trimesh is None:
+            return point, normal
+        dist = self._get_draw_normal_offset() * 300
+        origin = point + normal * dist
+        direction = -normal
+        try:
+            locs, _, tri_ids = self._annotation_trimesh.ray.intersects_location(
+                [origin], [direction]
+            )
+            if len(locs) == 0:
+                return point, normal
+            dists = np.linalg.norm(locs - origin, axis=1)
+            idx = int(np.argmin(dists))
+            surf_normal = self._annotation_trimesh.face_normals[tri_ids[idx]]
+            return locs[idx], surf_normal
+        except Exception:
+            return point, normal
+
     def set_text_mode(self, enabled: bool):
         """Toggle text placement mode. When on, clicks place text labels instead of drawing strokes."""
         self._text_mode = enabled
@@ -3122,7 +3147,8 @@ class STLViewerWidget(QWidget):
             if not ok or not text.strip():
                 return True  # consumed the click, user cancelled
 
-            self._add_text_at(text.strip(), position, self._draw_color)
+            self._add_text_at(text.strip(), position, self._draw_color,
+                              surface_normal=normal)
             return True
         except Exception as e:
             logger.debug(f"_draw_place_text: {e}")
@@ -3139,33 +3165,85 @@ class STLViewerWidget(QWidget):
         except Exception:
             return 1.0
 
-    def _add_text_at(self, text: str, position: tuple, color: str, font_size: float = None):
-        """Add a world-space pygfx Text object on the mesh surface.
+    def _add_text_at(self, text: str, position: tuple, color: str, font_size: float = None,
+                     surface_normal: np.ndarray = None):
+        """Place text on a 3D surface character-by-character so it curves with the geometry.
 
-        screen_space=False so the text lives in 3D and rotates with the model,
-        exactly like drawn lines.  font_size is in world units.
+        Each character is independently projected onto the surface using the tangent
+        direction, oriented to its local face normal, and placed with a small outward
+        offset.  This prevents curved surfaces (rings, cylinders) from clipping the ends
+        of the text string.
         """
         import pygfx as gfx
         try:
-            if font_size is None:
-                font_size = self._get_draw_text_size()
-            mat = gfx.TextMaterial(color=color)
-            mat.depth_test = True
-            mat.depth_write = True
-            text_obj = gfx.Text(
-                text=text, material=mat, font_size=font_size,
-                anchor="middle-center", screen_space=False
-            )
-            text_obj.local.position = position
-            self._scene.add(text_obj)
-            self._draw_texts.append(text_obj)
+            fs = font_size if font_size is not None else self._get_draw_text_size()
+            char_w = fs * 0.65          # approximate world-unit character width
+            offset = self._get_draw_normal_offset() * 4
+
+            # Surface normal at the click point
+            if surface_normal is not None:
+                normal = np.asarray(surface_normal, dtype=float)
+            else:
+                normal = np.array([0.0, 0.0, 1.0])
+            n_len = np.linalg.norm(normal)
+            if n_len > 1e-10:
+                normal = normal / n_len
+
+            tangent = self._compute_surface_tangent(normal)
+
+            n_chars = len(text)
+            total_w = char_w * n_chars
+            start_offset = -total_w / 2.0 + char_w / 2.0  # centre text on click
+
+            placed_objects = []
+            for i, ch in enumerate(text):
+                lateral = start_offset + i * char_w
+                candidate = np.array(position, dtype=float) + tangent * lateral
+
+                # Find real surface point at this lateral offset
+                surf_pt, surf_n = self._project_point_to_surface(candidate, normal)
+                sn_len = np.linalg.norm(surf_n)
+                if sn_len > 1e-10:
+                    surf_n = surf_n / sn_len
+
+                char_pos = surf_pt + surf_n * offset
+
+                mat = gfx.TextMaterial(color=color)
+                mat.depth_test = True
+                mat.depth_write = False
+                char_obj = gfx.Text(
+                    text=ch, material=mat, font_size=fs,
+                    anchor="middle-center", screen_space=False,
+                )
+                char_obj.local.position = tuple(char_pos.astype(float))
+                char_obj.render_order = 100
+
+                # Rotate so the text face (+Z) aligns with the surface normal
+                z_axis = np.array([0.0, 0.0, 1.0])
+                try:
+                    from pylinalg import quat_from_vecs
+                    q = quat_from_vecs(z_axis, surf_n)
+                except Exception:
+                    cross = np.cross(z_axis, surf_n)
+                    dot = float(np.dot(z_axis, surf_n))
+                    w = 1.0 + dot
+                    q = np.array([cross[0], cross[1], cross[2], w])
+                    q_len = np.linalg.norm(q)
+                    q = q / q_len if q_len > 1e-10 else np.array([0.0, 0.0, 0.0, 1.0])
+                char_obj.local.rotation = tuple(float(v) for v in q)
+
+                self._scene.add(char_obj)
+                placed_objects.append(char_obj)
+
+            self._draw_texts.extend(placed_objects)
             self._draw_texts_data.append({
                 'text': text, 'position': list(position),
-                'color': color, 'font_size': font_size
+                'color': color, 'font_size': font_size,
+                'normal': normal.tolist(),
             })
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_add_text_at: Placed '{text}' at {position}")
+            logger.info(f"_add_text_at: Placed '{text}' ({n_chars} chars) curved on surface")
         except Exception as e:
             logger.warning(f"_add_text_at: {e}")
 
@@ -3190,11 +3268,14 @@ class STLViewerWidget(QWidget):
                 # with a proper world-space size for the loaded mesh.
                 if stored_size is not None and stored_size <= 72:
                     stored_size = world_size
+                stored_normal = td.get('normal')
+                surface_normal = np.array(stored_normal) if stored_normal else None
                 self._add_text_at(
                     td.get('text', ''),
                     tuple(td.get('position', [0, 0, 0])),
                     td.get('color', '#FF0000'),
                     stored_size,
+                    surface_normal=surface_normal,
                 )
             except Exception as e:
                 logger.warning(f"restore_draw_texts: {e}")

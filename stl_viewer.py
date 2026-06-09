@@ -54,7 +54,7 @@ except Exception as e:
 from ui.sidebar_panel import SidebarPanel
 from ui.toolbar import ViewControlsToolbar
 from ui.ruler_toolbar import RulerToolbar
-from ui.annotation_panel import AnnotationPanel
+from ui.annotation_panel import AnnotationPanel, VALIDATED_COLOR, PENDING_COLOR
 from ui.arrow_panel import ArrowPanel
 from ui.parts_panel import PartsPanel
 from ui.styles import get_global_stylesheet, default_theme
@@ -221,13 +221,10 @@ class STLViewerWindow(QMainWindow):
         
         # ---- Mode Switcher Bar ----
         mode_bar = QWidget()
-        mode_bar.setFixedHeight(36)
+        mode_bar.setFixedHeight(40)
         mode_bar.setStyleSheet(f"""
             QWidget {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {default_theme.gradient_start},
-                    stop:0.5 {default_theme.gradient_mid},
-                    stop:1 {default_theme.gradient_end});
+                background-color: #2a2e38;
                 border-bottom: 1px solid {default_theme.border_standard};
             }}
         """)
@@ -434,10 +431,14 @@ class STLViewerWindow(QMainWindow):
         
         # ==== Technical Overview Workspace ====
         tech_workspace = QWidget()
-        tech_layout = QHBoxLayout(tech_workspace)
-        tech_layout.setContentsMargins(0, 10, 10, 10)
-        tech_layout.setSpacing(10)
-        
+        _tech_outer = QHBoxLayout(tech_workspace)
+        _tech_outer.setContentsMargins(0, 0, 0, 0)
+        _tech_outer.setSpacing(0)
+
+        self._tech_splitter = QSplitter(Qt.Horizontal)
+        self._tech_splitter.setOpaqueResize(False)
+        self._tech_splitter.setStyleSheet(f"background-color: {default_theme.background};")
+
         self.technical_sidebar = TechnicalSidebar()
         self.technical_sidebar.upload_requested.connect(self._tech_upload_image)
         self.technical_sidebar.annotate_toggled.connect(self._tech_toggle_annotation)
@@ -445,19 +446,28 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar.export_pdf_requested.connect(self._tech_export_pdf)
         self.technical_sidebar.reset_requested.connect(self._tech_reset)
         self._tech_ecto_exported = False
-        tech_layout.addWidget(self.technical_sidebar)
-        
+        self._tech_splitter.addWidget(self.technical_sidebar)
+
         self.technical_overview = TechnicalOverviewWidget()
-        tech_layout.addWidget(self.technical_overview, 1)
-        
+        self._tech_splitter.addWidget(self.technical_overview)
+        self._tech_splitter.setStretchFactor(0, 0)
+        self._tech_splitter.setStretchFactor(1, 1)
+        self._tech_splitter.setSizes([420, 1000])
+        self._tech_splitter.setCollapsible(0, False)
+
+        _tech_outer.addWidget(self._tech_splitter)
         self._workspace_stack.addWidget(tech_workspace)
         
         # ==== Drawing Scale Workspace ====
         scale_workspace = QWidget()
-        scale_layout = QHBoxLayout(scale_workspace)
-        scale_layout.setContentsMargins(0, 10, 10, 10)
-        scale_layout.setSpacing(10)
-        
+        _scale_outer = QHBoxLayout(scale_workspace)
+        _scale_outer.setContentsMargins(0, 0, 0, 0)
+        _scale_outer.setSpacing(0)
+
+        self._scale_splitter = QSplitter(Qt.Horizontal)
+        self._scale_splitter.setOpaqueResize(False)
+        self._scale_splitter.setStyleSheet(f"background-color: {default_theme.background};")
+
         self.scale_sidebar = ScaleSidebar()
         self.scale_sidebar.upload_requested.connect(self._scale_upload)
         self.scale_sidebar.unit_changed.connect(self._scale_unit_changed)
@@ -472,12 +482,17 @@ class STLViewerWindow(QMainWindow):
         self.scale_sidebar.pdf_locked.connect(self._scale_pdf_locked)
         self.scale_sidebar.drawing_mode_changed.connect(self._scale_drawing_mode_changed)
         self.scale_sidebar.drawing_color_changed.connect(self._scale_drawing_color_changed)
-        scale_layout.addWidget(self.scale_sidebar)
-        
+        self._scale_splitter.addWidget(self.scale_sidebar)
+
         self.scale_canvas = ScaleCanvas()
         self.scale_canvas.click_to_upload.connect(self._scale_upload)
-        scale_layout.addWidget(self.scale_canvas, 1)
-        
+        self._scale_splitter.addWidget(self.scale_canvas)
+        self._scale_splitter.setStretchFactor(0, 0)
+        self._scale_splitter.setStretchFactor(1, 1)
+        self._scale_splitter.setSizes([420, 1000])
+        self._scale_splitter.setCollapsible(0, False)
+
+        _scale_outer.addWidget(self._scale_splitter)
         self._workspace_stack.addWidget(scale_workspace)
         
         # ==== The Project Workspace ====
@@ -575,66 +590,41 @@ class STLViewerWindow(QMainWindow):
     def _update_mode_btn_styles(self):
         """Update mode switcher button styles based on current mode."""
         # Selected: glossy / skeuomorphic — top shine + vertical depth + beveled edges (Qt has no inset shadow)
-        _mode_font_size = '13px' if sys.platform == 'win32' else '11px'
+        _mode_font_size = '14px' if sys.platform == 'win32' else '13px'
         active_style = f"""
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #9aa3b8,
-                    stop:0.1 #7d8598,
-                    stop:0.28 #636877,
-                    stop:0.55 #565c6e,
-                    stop:1 #3e424f);
-                color: {default_theme.text_white};
-                border-top: 1px solid #b8c0d4;
-                border-left: 1px solid #9aa2b4;
-                border-right: 1px solid #3a3f4c;
-                border-bottom: 1px solid #252830;
-                border-radius: 5px;
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #b0b8c8;
+                border-radius: 6px;
                 padding: 5px 14px;
                 font-size: {_mode_font_size};
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #a8b0c4,
-                    stop:0.1 #8a92a6,
-                    stop:0.28 #6f7688,
-                    stop:0.55 #5f6576,
-                    stop:1 #484c59);
-                border-top: 1px solid #c8d0e0;
-                border-left: 1px solid #a8b0c0;
-                border-right: 1px solid #424650;
-                border-bottom: 1px solid #2a2e38;
+                background-color: #f0f2f5;
+                border-color: #8090a8;
             }}
             QPushButton:pressed {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #5a6172,
-                    stop:0.45 #4d5362,
-                    stop:1 #3a3e4a);
-                border-top: 1px solid #3a3f4c;
-                border-left: 1px solid #353942;
-                border-right: 1px solid #5a5f6e;
-                border-bottom: 1px solid #6a7080;
+                background-color: #e4e8ee;
             }}
         """
         inactive_style = f"""
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2e323c,
-                    stop:1 #1e2128);
-                border: 1px solid {default_theme.border_light};
-                border-top: 1px solid #454a58;
-                border-radius: 5px;
+                background-color: #ffffff;
+                color: #000000;
+                border: 1px solid #b0b8c8;
+                border-radius: 6px;
                 padding: 5px 14px;
                 font-size: {_mode_font_size};
-                color: {default_theme.text_secondary};
+                font-weight: normal;
+                opacity: 0.85;
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #3a3e4a,
-                    stop:1 #2a2e36);
-                color: {default_theme.text_white};
-                border: 1px solid {default_theme.border_medium};
+                background-color: #f0f2f5;
+                color: #000000;
+                border-color: #8090a8;
+                font-weight: bold;
             }}
         """
         self._mode_3d_btn.setStyleSheet(active_style if self._current_mode == "3d" else inactive_style)
@@ -2477,7 +2467,7 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'add_annotation_marker'):
             display_num = self.annotation_panel.get_display_number(annotation.id)
             vw.add_annotation_marker(
-                annotation.id, point, '#909d92',
+                annotation.id, point, PENDING_COLOR,
                 display_date=str(display_num or len(self.annotation_panel.annotations))
             )
     
@@ -2498,9 +2488,14 @@ class STLViewerWindow(QMainWindow):
             for i, ann in enumerate(annotations):
                 display_number = i + 1
                 if reader_mode:
-                    color = '#1821b4' if ann.is_read else '#36cd2e'
+                    color = VALIDATED_COLOR if ann.is_read else PENDING_COLOR
                 else:
-                    color = '#1821b4' if ann.is_validated else '#909d92'
+                    if getattr(ann, 'color', None):
+                        color = ann.color
+                    elif ann.is_validated:
+                        color = VALIDATED_COLOR
+                    else:
+                        color = PENDING_COLOR
                 annotations_with_display.append((ann.id, display_number, color))
             vw.update_annotation_labels_from_list(annotations_with_display)
         logger.info(f"_on_annotation_deleted: Annotation {annotation_id} removed, markers renumbered")
@@ -2561,8 +2556,6 @@ class STLViewerWindow(QMainWindow):
         
         self.annotation_panel.mark_as_read(annotation_id)
         vw = self.viewer_widget
-        if vw and hasattr(vw, 'update_annotation_marker_color'):
-            vw.update_annotation_marker_color(annotation_id, '#1821b4')
         
         if vw and hasattr(vw, 'set_annotation_selected'):
             vw.set_annotation_selected(annotation_id, True)
@@ -2577,7 +2570,7 @@ class STLViewerWindow(QMainWindow):
             self.annotation_panel.validate_annotation(annotation_id, text, image_paths, label)
         vw = self.viewer_widget
         if vw and hasattr(vw, 'update_annotation_marker_color'):
-            vw.update_annotation_marker_color(annotation_id, '#1821b4')
+            vw.update_annotation_marker_color(annotation_id, VALIDATED_COLOR)
         logger.info(f"_on_popup_validated: Annotation {annotation_id} validated")
     
     def _on_popup_deleted(self, annotation_id: int):
@@ -2617,9 +2610,14 @@ class STLViewerWindow(QMainWindow):
         for i, ann in enumerate(annotations):
             display_number = i + 1
             if reader_mode:
-                color = '#1821b4' if ann.is_read else '#36cd2e'
+                color = VALIDATED_COLOR if ann.is_read else PENDING_COLOR
             else:
-                color = '#1821b4' if ann.is_validated else '#909d92'
+                if getattr(ann, 'color', None):
+                    color = ann.color
+                elif ann.is_validated:
+                    color = VALIDATED_COLOR
+                else:
+                    color = PENDING_COLOR
             if hasattr(vw, 'add_annotation_marker'):
                 vw.add_annotation_marker(ann.id, ann.point, color, display_date=str(display_number))
     
@@ -2911,10 +2909,11 @@ class STLViewerWindow(QMainWindow):
                     point = tuple(ann_data['point'])
                     if reader_mode:
                         is_read = ann_data.get('is_read', False)
-                        color = '#1821b4' if is_read else '#36cd2e'
+                        color = VALIDATED_COLOR if is_read else PENDING_COLOR
                     else:
                         is_validated = ann_data.get('is_validated', False)
-                        color = '#1821b4' if is_validated else '#909d92'
+                        ann_color = ann_data.get('color', None)
+                        color = ann_color if ann_color else (VALIDATED_COLOR if is_validated else PENDING_COLOR)
                     if vw and hasattr(vw, 'add_annotation_marker'):
                         vw.add_annotation_marker(ann_id, point, color, display_date=str(i + 1))
                 

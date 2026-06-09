@@ -232,12 +232,12 @@ class GanttCanvas(QWidget):
                                date.toString('d MMM'))
                 p.setPen(QPen(QColor(BORDER), 1))
                 p.drawLine(x, HEADER_H - 16, x, HEADER_H)
-                day_rect = QRect(x + 2, HEADER_H - 16, day_w - 4, 14)
+                day_rect = QRect(x + 2, HEADER_H - 16, day_w - 2, 14)
                 p.setPen(QColor(MUTED)); p.setFont(font_day)
                 if date == today():
                     p.fillRect(x + 1, HEADER_H - 17, day_w - 2, 16, QColor(ACCENT).darker(140))
                     p.setPen(QColor(ACCENT))
-                p.drawText(day_rect, Qt.AlignCenter, date.toString('d'))
+                p.drawText(day_rect, Qt.AlignLeft | Qt.AlignVCenter, date.toString('d'))
 
             elif is_week_view:
                 # ── Week view: label + tick at every week boundary ────────────
@@ -253,11 +253,26 @@ class GanttCanvas(QWidget):
             else:
                 # ── Month view: label + tick at every month boundary ──────────
                 if is_month_start:
-                    month_w = date.daysInMonth() * day_w
-                    p.setPen(QColor(TEXT)); p.setFont(font_month)
-                    p.drawText(QRect(x + 4, 4, month_w - 4, 20),
-                               Qt.AlignLeft | Qt.AlignVCenter,
-                               date.toString('MMM yyyy'))
+                    # Use days to next month boundary — not full daysInMonth —
+                    # so partial first months don't overlap the following label.
+                    next_month = QDate(date.year(), date.month(), 1).addMonths(1)
+                    available_days = date.daysTo(next_month)
+                    month_w = available_days * day_w
+                    avail_w = month_w - 8
+                    p.setFont(font_month)
+                    fm = p.fontMetrics()
+                    label_full  = date.toString('MMM yyyy')
+                    label_short = date.toString('MMM')
+                    if avail_w >= fm.horizontalAdvance(label_full):
+                        label = label_full
+                    elif avail_w >= fm.horizontalAdvance(label_short):
+                        label = label_short
+                    else:
+                        label = None  # too narrow — skip label, keep tick
+                    if label:
+                        p.setPen(QColor(TEXT))
+                        p.drawText(QRect(x + 4, 4, avail_w, 20),
+                                   Qt.AlignLeft | Qt.AlignVCenter, label)
                     p.setPen(QPen(QColor(BORDER), 1))
                     p.drawLine(x, HEADER_H - 12, x, HEADER_H)
                 # Minor tick every week in month view
@@ -613,14 +628,14 @@ class TimelineWidget(QWidget):
 
         layout.addStretch()
 
-        prev = QPushButton('◀'); prev.setFixedSize(24, 24); prev.setStyleSheet(_BTN_SMALL)
+        prev = QPushButton('◀'); prev.setFixedSize(32, 28); prev.setStyleSheet(_BTN_SMALL)
         prev.setCursor(Qt.PointingHandCursor); prev.clicked.connect(lambda: self._shift_date(-14))
 
         self._date_lbl = QLabel()
         self._date_lbl.setStyleSheet(f'color: {TEXT}; font-size: 12px; font-weight: bold; background: transparent; border: none;')
         self._update_date_label()
 
-        nxt = QPushButton('▶'); nxt.setFixedSize(24, 24); nxt.setStyleSheet(_BTN_SMALL)
+        nxt = QPushButton('▶'); nxt.setFixedSize(32, 28); nxt.setStyleSheet(_BTN_SMALL)
         nxt.setCursor(Qt.PointingHandCursor); nxt.clicked.connect(lambda: self._shift_date(14))
 
         layout.addWidget(prev); layout.addWidget(self._date_lbl); layout.addWidget(nxt)
@@ -628,7 +643,7 @@ class TimelineWidget(QWidget):
 
         self._view_btns: dict[str, QPushButton] = {}
         for mode in ('Day', 'Week', 'Month'):
-            btn = QPushButton(mode); btn.setFixedHeight(24)
+            btn = QPushButton(mode); btn.setFixedHeight(24); btn.setMinimumWidth(54)
             btn.setStyleSheet(_BTN_VIEW_ACTIVE if mode == self._view_mode else _BTN_VIEW_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, m=mode: self._set_view_mode(m))
@@ -717,7 +732,18 @@ class TimelineWidget(QWidget):
 
     def _shift_date(self, days: int):
         self._canvas._start_date = self._canvas._start_date.addDays(days)
+        self._canvas._start_date = self._snap_start_date(
+            self._canvas._start_date, self._view_mode
+        )
         self._update_date_label(); self._canvas.update()
+
+    def _snap_start_date(self, date: QDate, mode: str) -> QDate:
+        """Snap start date so month/week boundaries always land on clean column edges."""
+        if mode == 'Month':
+            return QDate(date.year(), date.month(), 1)
+        if mode == 'Week':
+            return date.addDays(-(date.dayOfWeek() - 1))  # snap to Monday
+        return date
 
     # ── legend helpers ────────────────────────────────────────────────────────
 
@@ -735,18 +761,18 @@ class TimelineWidget(QWidget):
             self._legend_btns[name] = btn
             self._legend_area_layout.addWidget(btn)
 
-        # Pencil button to open full editor
-        edit_btn = QPushButton('✎')
-        edit_btn.setFixedSize(22, 22)
+        # Add legend button
+        edit_btn = QPushButton('＋  Add legend')
+        edit_btn.setFixedHeight(22)
         edit_btn.setToolTip('Edit legend (add / remove / recolour entries)')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.setStyleSheet(f"""
             QPushButton {{
-                color: {MUTED}; background: transparent; border: none;
-                font-size: 14px; padding: 0;
+                color: {ACCENT}; background: transparent; border: none;
+                font-size: 12px; font-weight: bold; padding: 0 4px;
             }}
-            QPushButton:hover {{ color: {ACCENT}; }}
-        """)
+            QPushButton:hover {{ color: {MUTED}; }}
+        """ + TOOLTIP_STYLE)
         edit_btn.clicked.connect(self._open_legend_editor)
         self._legend_area_layout.addWidget(edit_btn)
 
@@ -769,7 +795,7 @@ class TimelineWidget(QWidget):
                 color: {color}; text-decoration: underline;
                 background: transparent; border: none;
             }}
-        """
+        """ + TOOLTIP_STYLE
 
     def _edit_legend_color(self, name: str, anchor: QPushButton):
         """Quick per-item colour change via the app's DrawColorPicker popup."""
@@ -808,7 +834,11 @@ class TimelineWidget(QWidget):
         self._view_mode = mode
         for m, btn in self._view_btns.items():
             btn.setStyleSheet(_BTN_VIEW_ACTIVE if m == mode else _BTN_VIEW_INACTIVE)
+        self._canvas._start_date = self._snap_start_date(
+            self._canvas._start_date, mode
+        )
         self._canvas.set_view_mode(mode)
+        self._update_date_label()
 
     # ── task interaction ──────────────────────────────────────────────────────
 
@@ -964,6 +994,11 @@ class TimelineWidget(QWidget):
         def _operator(op: Operator) -> dict:
             return {'id': op.id, 'name': op.name, 'operations': [_op(o) for o in op.operations]}
         return {'operators': [_operator(op) for op in self._operators]}
+
+    def update_project_info(self, info: dict):
+        """Receive global project sidebar data and forward PM to the detail panel."""
+        pm = (info.get('project_manager') or '').strip()
+        self._detail.set_global_pm(pm)
 
     def set_data(self, data: dict):
         ops = []

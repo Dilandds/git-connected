@@ -7,6 +7,7 @@ class TracePart:
     id:           int
     name:         str       = 'Part'
     subject:      str       = ''
+    performed_by: str       = ''
     suppliers:    str       = ''
     action:       str       = ''
     current_task: str       = ''

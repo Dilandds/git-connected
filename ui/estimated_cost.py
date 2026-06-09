@@ -47,7 +47,7 @@ _INPUT = f"""
     QLineEdit, QDoubleSpinBox, QComboBox, QDateEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 11px;
+        padding: 3px 6px; font-size: 15px;
     }}
     QLineEdit:focus, QDoubleSpinBox:focus, QComboBox:focus, QDateEdit:focus {{
         border-color: {_ACCENT};
@@ -66,7 +66,7 @@ _TABLE_STYLE = f"""
     QTableWidget {{
         background-color: {_CARD}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 6px;
-        gridline-color: {_BORDER}; font-size: 11px;
+        gridline-color: {_BORDER}; font-size: 15px;
     }}
     QTableWidget::item {{ padding: 3px 5px; }}
     QTableWidget::item:selected {{ background-color: #dbeafe; color: {_TEXT}; }}
@@ -74,14 +74,14 @@ _TABLE_STYLE = f"""
         background-color: #f1f3f5; color: {_MUTED};
         border: none; border-bottom: 1px solid {_BORDER};
         border-right: 1px solid {_BORDER};
-        padding: 5px 8px; font-size: 10px; font-weight: bold;
+        padding: 5px 8px; font-size: 14px; font-weight: bold;
     }}
 """
 
 _BTN_PRIMARY = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
@@ -90,7 +90,7 @@ _BTN_SMALL = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 14px;
     }}
     QPushButton:hover {{ background-color: #e5e7eb; border-color: {_ACCENT}; color: {_ACCENT}; }}
 """
@@ -98,7 +98,7 @@ _BTN_OUTLINE = f"""
     QPushButton {{
         background-color: transparent; color: {_ACCENT};
         border: 1px solid {_ACCENT}; border-radius: 5px;
-        padding: 4px 12px; font-size: 10px; font-weight: bold;
+        padding: 4px 12px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #dbeafe; }}
 """
@@ -106,27 +106,27 @@ _BTN_BEST_OFF = f"""
     QPushButton {{
         background-color: #f1f3f5; color: {_MUTED};
         border: 1px solid {_BORDER}; border-radius: 5px;
-        padding: 4px 14px; font-size: 10px; font-weight: bold;
+        padding: 4px 14px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #dcfce7; border-color: #16a34a; color: #16a34a; }}
 """
 _BTN_BEST_ON = f"""
     QPushButton {{
         background-color: #16a34a; color: white; border: none;
-        border-radius: 5px; padding: 4px 14px; font-size: 10px; font-weight: bold;
+        border-radius: 5px; padding: 4px 14px; font-size: 14px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: #15803d; }}
 """
 _TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
 """ + TOOLTIP_STYLE
 _TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
-        border: 1px solid {_BORDER}; border-radius: 5px; padding: 5px 14px; font-size: 11px;
+        border: 1px solid {_BORDER}; border-radius: 5px; padding: 5px 14px; font-size: 15px;
     }}
     QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; background-color: #e8f0fe; }}
 """ + TOOLTIP_STYLE
@@ -136,7 +136,7 @@ _CLOSE_TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: rgba(255,255,255,0.55);
         border: none; border-left: 1px solid rgba(255,255,255,0.18);
-        border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
+        border-radius: 0 5px 5px 0; font-size: 16px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: white; background-color: #ef4444; }}
 """ + TOOLTIP_STYLE
@@ -144,7 +144,7 @@ _CLOSE_TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
         border: 1px solid {_BORDER}; border-left: none;
-        border-radius: 0 5px 5px 0; font-size: 13px; font-weight: bold; padding: 0 5px;
+        border-radius: 0 5px 5px 0; font-size: 16px; font-weight: bold; padding: 0 5px;
     }}
     QPushButton:hover {{ color: #ef4444; background-color: #fee2e2; border-color: #fca5a5; }}
 """ + TOOLTIP_STYLE
@@ -152,7 +152,7 @@ _RENAME_TAB_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: rgba(255,255,255,0.55);
         border: none; border-left: 1px solid rgba(255,255,255,0.18);
-        border-radius: 0; font-size: 11px; padding: 0 5px;
+        border-radius: 0; font-size: 15px; padding: 0 5px;
     }}
     QPushButton:hover {{ color: white; background-color: {_ACCENT_H}; }}
 """ + TOOLTIP_STYLE
@@ -160,7 +160,7 @@ _RENAME_TAB_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED};
         border: 1px solid {_BORDER}; border-left: none;
-        border-radius: 0; font-size: 11px; padding: 0 5px;
+        border-radius: 0; font-size: 15px; padding: 0 5px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background-color: #e8f0fe; border-color: {_ACCENT}; }}
 """ + TOOLTIP_STYLE
@@ -382,7 +382,7 @@ class PartnerPanel(QScrollArea):
         # Title row
         title_row = QHBoxLayout()
         company_lbl = QLabel(self._partner.name)
-        company_lbl.setFont(make_font(size=16, bold=True))
+        company_lbl.setFont(make_font(size=19, bold=True))
         company_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         self._company_name_lbl = company_lbl
         title_row.addWidget(company_lbl)
@@ -534,7 +534,7 @@ class PartnerPanel(QScrollArea):
             QDoubleSpinBox {{
                 background: #f5f6f8; color: {_TEXT};
                 border: 1px solid {_BORDER}; border-radius: 4px;
-                padding: 2px 4px; font-size: 11px;
+                padding: 2px 4px; font-size: 15px;
             }}
             QDoubleSpinBox:focus {{ border-color: {_ACCENT}; }}
             QDoubleSpinBox::up-button {{
@@ -569,7 +569,7 @@ class PartnerPanel(QScrollArea):
         total_tax_row.addStretch()
         self._total_with_tax_lbl = _lbl("Total with tax:  —", muted=False, bold=True, size=12)
         self._total_with_tax_lbl.setStyleSheet(
-            f"color: {_ACCENT}; font-size: 12px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_ACCENT}; font-size: 15px; font-weight: bold; background: transparent; border: none;"
         )
         total_tax_row.addWidget(self._total_with_tax_lbl)
         cl.addLayout(total_tax_row)
@@ -623,7 +623,7 @@ class PartnerPanel(QScrollArea):
             tot_lbl = QLabel(self._fmt_total(task.total))
             tot_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             tot_lbl.setStyleSheet(
-                f"color: {_TEXT}; font-size: 11px; font-weight: bold; "
+                f"color: {_TEXT}; font-size: 15px; font-weight: bold; "
                 f"background: #f5f6f8; border: none; padding-right: 8px;"
             )
             self._table.setCellWidget(row, 4, tot_lbl)
@@ -660,9 +660,15 @@ class PartnerPanel(QScrollArea):
         self.changed.emit()
 
     def _on_rate_changed(self, value: float, task: CostTask, row: int):
-        task.hourly_rate = value
-        if row < len(self._total_cells):
-            self._total_cells[row].setText(self._fmt_total(task.total))
+        if getattr(self, '_blocking_rate', False):
+            return
+        self._blocking_rate = True
+        for i, (spin, t) in enumerate(zip(self._rate_cells, self._partner.tasks)):
+            spin.setValue(value)
+            t.hourly_rate = value
+            if i < len(self._total_cells):
+                self._total_cells[i].setText(self._fmt_total(t.total))
+        self._blocking_rate = False
         self._refresh_totals()
         self.changed.emit()
 
@@ -793,7 +799,7 @@ class OverviewPanel(QWidget):
             QPushButton {{
                 background: #f1f3f5; color: {_MUTED};
                 border: 1px solid {_BORDER}; border-radius: 4px;
-                font-size: 10px; padding: 3px 10px;
+                font-size: 14px; padding: 3px 10px;
             }}
             QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; }}
         """)
@@ -840,7 +846,7 @@ class OverviewPanel(QWidget):
         lock_icon.setStyleSheet("font-size: 40px; background: transparent; border: none;")
         lock_msg = QLabel("This section is password-protected.")
         lock_msg.setAlignment(Qt.AlignCenter)
-        lock_msg.setStyleSheet(f"color: {_TEXT}; font-size: 13px; background: transparent; border: none;")
+        lock_msg.setStyleSheet(f"color: {_TEXT}; font-size: 16px; background: transparent; border: none;")
         unlock_btn = QPushButton("🔓  Enter Password")
         unlock_btn.setStyleSheet(_BTN_PRIMARY)
         unlock_btn.setFixedWidth(180)
@@ -1165,7 +1171,7 @@ class EstimatedCostWidget(QWidget):
         title.setFont(make_font(size=15, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         subtitle = QLabel("Trade-based cost estimation with partner comparison.")
-        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
         t_col.addWidget(title)
@@ -1183,7 +1189,7 @@ class EstimatedCostWidget(QWidget):
             QComboBox {{
                 background-color: {_CARD}; color: {_TEXT};
                 border: 1px solid {_BORDER}; border-radius: 5px;
-                padding: 3px 24px 3px 8px; font-size: 11px; font-weight: bold;
+                padding: 3px 24px 3px 8px; font-size: 15px; font-weight: bold;
             }}
             QComboBox:hover {{ border-color: #9ca3af; }}
             QComboBox:focus {{ border-color: {_ACCENT}; }}
@@ -1199,7 +1205,7 @@ class EstimatedCostWidget(QWidget):
                 border: 1px solid {_BORDER}; border-radius: 4px;
                 outline: none; padding: 2px;
                 selection-background-color: #dbeafe; selection-color: {_TEXT};
-                font-size: 11px;
+                font-size: 15px;
             }}
             QComboBox QAbstractItemView::item {{
                 padding: 5px 10px; min-height: 24px; border-radius: 3px;

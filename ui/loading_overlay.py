@@ -65,11 +65,13 @@ class LoadingOverlay(QWidget):
     # ------------------------------------------------------------------
 
     def _load_logo(self):
-        path = _asset_path('logo.png')
-        if path.exists():
-            pm = QPixmap(str(path))
-            if not pm.isNull():
-                self._logo = pm.scaled(84, 84, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        for name in ('Logo_Ectoform_2_copy-removebg-preview.png', 'logo.png'):
+            path = _asset_path(name)
+            if path.exists():
+                pm = QPixmap(str(path))
+                if not pm.isNull():
+                    self._logo = pm.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    return
 
     def _tick(self):
         self._angle = (self._angle + self._SPINNER_SPEED) % 360

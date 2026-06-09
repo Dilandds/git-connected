@@ -33,7 +33,7 @@ def _apply_field_palette(widget):
 
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text)
-    lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px; font-weight: bold; margin-top: 6px;")
+    lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 14px; font-weight: bold; margin-top: 6px;")
     return lbl
 
 
@@ -47,7 +47,7 @@ def _line_edit(placeholder: str = "") -> QLineEdit:
             border: 1px solid {_FIELD_BORDER};
             border-radius: 6px;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 15px;
             color: {_FIELD_TEXT};
         }}
         QLineEdit:focus {{
@@ -69,7 +69,7 @@ class TechnicalSidebar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(350)
+        self.setMinimumWidth(260)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._init_ui()
 
@@ -223,7 +223,7 @@ class TechnicalSidebar(QWidget):
                 border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 8px;
-                font-size: 11px;
+                font-size: 15px;
                 color: {_FIELD_TEXT};
             }}
             QTextEdit:focus {{
@@ -250,7 +250,7 @@ class TechnicalSidebar(QWidget):
                 background-color: {default_theme.row_bg_standard};
                 border: 1px solid {default_theme.border_light};
                 border-radius: 8px;
-                padding: 6px 12px; font-size: 11px;
+                padding: 6px 12px; font-size: 15px;
                 color: {default_theme.text_primary};
             }}
             QPushButton:hover {{
@@ -272,7 +272,7 @@ class TechnicalSidebar(QWidget):
             QPushButton {{
                 background-color: #10B981;
                 border: none; border-radius: 8px;
-                padding: 6px 12px; font-size: 11px; font-weight: bold;
+                padding: 6px 12px; font-size: 15px; font-weight: bold;
                 color: white;
             }}
             QPushButton:hover {{
@@ -290,7 +290,7 @@ class TechnicalSidebar(QWidget):
             QPushButton {{
                 background-color: #3B82F6;
                 border: none; border-radius: 8px;
-                padding: 6px 12px; font-size: 11px; font-weight: bold;
+                padding: 6px 12px; font-size: 15px; font-weight: bold;
                 color: white;
             }}
             QPushButton:hover {{
@@ -312,7 +312,7 @@ class TechnicalSidebar(QWidget):
             QPushButton {{
                 background-color: #B91C1C;
                 border: none; border-radius: 8px;
-                padding: 6px 12px; font-size: 11px; font-weight: bold;
+                padding: 6px 12px; font-size: 15px; font-weight: bold;
                 color: white;
             }}
             QPushButton:hover {{
@@ -336,7 +336,7 @@ class TechnicalSidebar(QWidget):
                 border: 1px solid {_FIELD_BORDER};
                 border-radius: 6px;
                 padding: 4px 8px;
-                font-size: 11px;
+                font-size: 15px;
                 color: {_FIELD_TEXT};
             }}
             QDateEdit:focus {{

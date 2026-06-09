@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
-from ui.styles import default_theme, make_font, TOOLTIP_STYLE
+from ui.styles import default_theme, make_font, TOOLTIP_STYLE, arrow_up_url as _arrow_up, arrow_down_url as _arrow_down
 from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
@@ -441,6 +441,7 @@ class ViewControlsToolbar(QWidget):
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
     draw_text_toggled = pyqtSignal(bool)  # True = text mode on
+    draw_font_size_changed = pyqtSignal(float)  # multiplier relative to auto size
     draw_undo_requested = pyqtSignal()
     draw_clear_requested = pyqtSignal()
     draw_color_picker_requested = pyqtSignal()  # show color picker (pen/text only, not eraser)
@@ -465,6 +466,7 @@ class ViewControlsToolbar(QWidget):
         self.draw_mode_enabled = False
         self._draw_color = '#FF0000'
         self._draw_text_active = False
+        self._draw_font_size_multiplier = 1.0
         self.stl_loaded = False
         
         # Load saved state
@@ -1094,7 +1096,15 @@ class ViewControlsToolbar(QWidget):
         self.toggle_texture.emit()
     
     def _show_draw_menu(self):
-        """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options."""
+        """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options.
+        If draw mode is already active, pressing the button again exits it (mirrors screenshot toggle).
+        """
+        if self.draw_mode_enabled:
+            self.draw_mode_enabled = False
+            self.draw_btn.set_active(False)
+            self.draw_btn.set_label("Draw ▼")
+            self.toggle_draw.emit()
+            return
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -1142,6 +1152,57 @@ class ViewControlsToolbar(QWidget):
         tool_group.addAction(text_action)
 
         menu.addSeparator()
+
+        # Font size widget (spinbox embedded via QWidgetAction)
+        from PyQt5.QtWidgets import QDoubleSpinBox, QHBoxLayout, QWidget, QLabel
+        _fs_widget = QWidget()
+        _fs_widget.setStyleSheet("background: transparent;")
+        _fs_lay = QHBoxLayout(_fs_widget)
+        _fs_lay.setContentsMargins(16, 4, 16, 4)
+        _fs_lay.setSpacing(8)
+        _fs_lbl = QLabel("Font size:")
+        _fs_lbl.setStyleSheet(
+            f"color: {default_theme.text_primary}; font-size: 11px; background: transparent;"
+        )
+        _fs_spin = QDoubleSpinBox()
+        _fs_spin.setRange(0.5, 5.0)
+        _fs_spin.setSingleStep(0.5)
+        _fs_spin.setDecimals(1)
+        _fs_spin.setValue(self._draw_font_size_multiplier)
+        _fs_spin.setSuffix("×")
+        _fs_spin.setFixedWidth(80)
+        _fs_spin.setFixedHeight(26)
+        _fs_spin.setStyleSheet(f"""
+            QDoubleSpinBox {{
+                background: {default_theme.card_background}; color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard}; border-radius: 4px;
+                padding: 2px 4px; font-size: 11px;
+            }}
+            QDoubleSpinBox:focus {{ border-color: {default_theme.button_primary}; }}
+            QDoubleSpinBox::up-button {{
+                subcontrol-origin: border; subcontrol-position: top right;
+                width: 16px; border-left: 1px solid {default_theme.border_standard};
+                border-top-right-radius: 4px; background: {default_theme.row_bg_standard};
+            }}
+            QDoubleSpinBox::up-button:hover {{ background: {default_theme.button_primary}; }}
+            QDoubleSpinBox::up-arrow {{ image: url({_arrow_up()}); width: 8px; height: 8px; }}
+            QDoubleSpinBox::down-button {{
+                subcontrol-origin: border; subcontrol-position: bottom right;
+                width: 16px; border-left: 1px solid {default_theme.border_standard};
+                border-bottom-right-radius: 4px; background: {default_theme.row_bg_standard};
+            }}
+            QDoubleSpinBox::down-button:hover {{ background: {default_theme.button_primary}; }}
+            QDoubleSpinBox::down-arrow {{ image: url({_arrow_down()}); width: 8px; height: 8px; }}
+        """)
+        _fs_spin.valueChanged.connect(lambda v: (
+            setattr(self, '_draw_font_size_multiplier', v),
+            self.draw_font_size_changed.emit(v)
+        ))
+        _fs_lay.addWidget(_fs_lbl)
+        _fs_lay.addWidget(_fs_spin)
+        _fs_action = QWidgetAction(menu)
+        _fs_action.setDefaultWidget(_fs_widget)
+        menu.addAction(_fs_action)
 
         color_action = menu.addAction("🎨  Pen Color")
         color_action.triggered.connect(self.show_draw_color_picker)

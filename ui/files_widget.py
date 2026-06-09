@@ -56,7 +56,7 @@ _INPUT = f"""
     QLineEdit, QComboBox {{
         background: {_CARD}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 8px; font-size: 10px;
+        padding: 3px 8px; font-size: 14px;
     }}
     QLineEdit:focus {{ border-color: {_ACCENT}; }}
     QComboBox::drop-down {{ border: none; width: 18px; }}
@@ -69,7 +69,7 @@ _INPUT = f"""
 _BTN_PRIMARY = f"""
     QPushButton {{
         background: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: bold;
+        border-radius: 5px; padding: 5px 14px; font-size: 15px; font-weight: bold;
     }}
     QPushButton:hover {{ background: {_ACCENT_H}; }}
 """
@@ -77,14 +77,14 @@ _BTN_SMALL = f"""
     QPushButton {{
         background: {_CARD}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 4px 10px; font-size: 10px;
+        padding: 4px 10px; font-size: 14px;
     }}
     QPushButton:hover {{ background: #f1f3f5; border-color: {_ACCENT}; color: {_ACCENT}; }}
 """
 _BTN_ICON = f"""
     QPushButton {{
         background: transparent; border: none;
-        color: {_MUTED}; font-size: 13px; padding: 2px 5px;
+        color: {_MUTED}; font-size: 16px; padding: 2px 5px;
     }}
     QPushButton:hover {{ color: {_ACCENT}; background: #e8f0fe; border-radius: 4px; }}
 """ + TOOLTIP_STYLE
@@ -92,14 +92,14 @@ _FOLDER_ITEM_ACTIVE = f"""
     QPushButton {{
         background: {_ACCENT}22; color: {_ACCENT};
         border: none; border-radius: 4px;
-        text-align: left; padding: 5px 8px; font-size: 10px; font-weight: bold;
+        text-align: left; padding: 5px 8px; font-size: 14px; font-weight: bold;
     }}
 """
 _FOLDER_ITEM = f"""
     QPushButton {{
         background: transparent; color: {_TEXT};
         border: none; border-radius: 4px;
-        text-align: left; padding: 5px 8px; font-size: 10px;
+        text-align: left; padding: 5px 8px; font-size: 14px;
     }}
     QPushButton:hover {{ background: #e5e7eb; }}
 """
@@ -203,7 +203,7 @@ def _status_chip(status: str) -> QLabel:
         QLabel {{
             background: {color}22; color: {color};
             border: 1px solid {color}66; border-radius: 4px;
-            padding: 1px 8px; font-size: 9px; font-weight: bold;
+            padding: 1px 8px; font-size: 16px; font-weight: bold;
         }}
     """)
     l.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -216,7 +216,7 @@ def _version_chip(ver: str) -> QLabel:
         QLabel {{
             background: {_ACCENT}22; color: {_ACCENT};
             border: 1px solid {_ACCENT}55; border-radius: 4px;
-            padding: 1px 8px; font-size: 9px; font-weight: bold;
+            padding: 1px 8px; font-size: 16px; font-weight: bold;
         }}
     """)
     return l
@@ -257,9 +257,9 @@ class _FileRow(QFrame):
         # Name + extension
         name_col = QVBoxLayout(); name_col.setSpacing(1)
         nl = QLabel(self._pf.name)
-        nl.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+        nl.setStyleSheet(f"color: {_TEXT}; font-size: 15px; font-weight: bold; background: transparent; border: none;")
         el = QLabel(self._pf.extension)
-        el.setStyleSheet(f"color: {_MUTED}; font-size: 9px; background: transparent; border: none;")
+        el.setStyleSheet(f"color: {_MUTED}; font-size: 16px; background: transparent; border: none;")
         name_col.addWidget(nl)
         name_col.addWidget(el)
         lay.addLayout(name_col, 2)
@@ -275,7 +275,7 @@ class _FileRow(QFrame):
         date_str = lv.uploaded_at if lv else "—"
         dl = QLabel(_fmt_date(date_str))
         dl.setAlignment(Qt.AlignCenter)
-        dl.setStyleSheet(f"color: {_MUTED}; font-size: 9px; background: transparent; border: none;")
+        dl.setStyleSheet(f"color: {_MUTED}; font-size: 16px; background: transparent; border: none;")
         lay.addWidget(dl, 1)
 
         # Status
@@ -286,7 +286,7 @@ class _FileRow(QFrame):
         sl = QLabel(_fmt_size(size_bytes))
         sl.setFixedWidth(58)
         sl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        sl.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        sl.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         lay.addWidget(sl)
 
         # Actions
@@ -324,7 +324,7 @@ class _FileRow(QFrame):
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{ background: {_CARD}; color: {_TEXT}; border: 1px solid {_BORDER};
-                     border-radius: 6px; padding: 4px; font-size: 11px; }}
+                     border-radius: 6px; padding: 4px; font-size: 15px; }}
             QMenu::item {{ padding: 6px 16px; border-radius: 4px; }}
             QMenu::item:selected {{ background: {_ACCENT}; color: white; }}
         """)
@@ -371,7 +371,7 @@ class _FileRow(QFrame):
         lay.setSpacing(6)
 
         hdr = QLabel(f"Version history for  {self._pf.name}{self._pf.extension}")
-        hdr.setStyleSheet(f"color: {_TEXT}; font-size: 12px; font-weight: bold; background: transparent; border: none;")
+        hdr.setStyleSheet(f"color: {_TEXT}; font-size: 15px; font-weight: bold; background: transparent; border: none;")
         lay.addWidget(hdr)
 
         for v in reversed(self._pf.versions):
@@ -380,12 +380,12 @@ class _FileRow(QFrame):
             rl = QHBoxLayout(row)
             rl.setContentsMargins(10, 6, 10, 6)
             vl = QLabel(v.version_str)
-            vl.setStyleSheet(f"color: {_ACCENT}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+            vl.setStyleSheet(f"color: {_ACCENT}; font-size: 15px; font-weight: bold; background: transparent; border: none;")
             vl.setFixedWidth(40)
             dl = QLabel(v.uploaded_at)
-            dl.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+            dl.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
             sl = QLabel(_fmt_size(v.size_bytes))
-            sl.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+            sl.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
             rl.addWidget(vl)
             rl.addWidget(dl, 1)
             rl.addWidget(sl)
@@ -426,7 +426,7 @@ class _FolderTree(QWidget):
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
         lbl = QLabel("PROJECT FOLDERS")
-        lbl.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+        lbl.setStyleSheet(f"color: {_MUTED}; font-size: 16px; font-weight: bold; background: transparent; border: none;")
         add_btn = QPushButton("＋")
         add_btn.setFixedSize(22, 22)
         add_btn.setToolTip("New root folder")
@@ -515,7 +515,7 @@ class _FolderTree(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{ background: {_CARD}; color: {_TEXT}; border: 1px solid {_BORDER};
-                     border-radius: 6px; padding: 4px; font-size: 11px; }}
+                     border-radius: 6px; padding: 4px; font-size: 15px; }}
             QMenu::item {{ padding: 6px 16px; border-radius: 4px; }}
             QMenu::item:selected {{ background: {_ACCENT}; color: white; }}
         """)
@@ -564,7 +564,7 @@ class _ColHeader(QWidget):
 
         def _h(text, stretch=0, w=None):
             l = QLabel(text)
-            l.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+            l.setStyleSheet(f"color: {_MUTED}; font-size: 16px; font-weight: bold; background: transparent; border: none;")
             if w:
                 l.setFixedWidth(w)
             return l, stretch
@@ -637,10 +637,10 @@ class FilesVersionsWidget(QWidget):
 
         t_col = QVBoxLayout(); t_col.setSpacing(1)
         title = QLabel("Files and versions")
-        title.setFont(make_font(size=15, bold=True))
+        title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         sub = QLabel("All your 3D files and their versions, organised and easy to find.")
-        sub.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        sub.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col.addWidget(title); t_col.addWidget(sub)
         tl.addLayout(t_col)
         tl.addStretch()
@@ -731,7 +731,7 @@ class FilesVersionsWidget(QWidget):
         self._list_btn.setChecked(True)
         self._list_btn.setStyleSheet(f"""
             QPushButton {{ background: {_ACCENT}; color: white; border: none;
-                           border-radius: 4px 0 0 4px; font-size: 13px; }}
+                           border-radius: 4px 0 0 4px; font-size: 16px; }}
             QPushButton:!checked {{ background: {_CARD}; color: {_MUTED};
                                     border: 1px solid {_BORDER}; }}
         """)
@@ -742,7 +742,7 @@ class FilesVersionsWidget(QWidget):
         self._grid_btn.setCheckable(True)
         self._grid_btn.setStyleSheet(f"""
             QPushButton {{ background: {_CARD}; color: {_MUTED};
-                           border: 1px solid {_BORDER}; border-radius: 0 4px 4px 0; font-size: 13px; }}
+                           border: 1px solid {_BORDER}; border-radius: 0 4px 4px 0; font-size: 16px; }}
             QPushButton:checked {{ background: {_ACCENT}; color: white; border: none; }}
         """)
         self._grid_btn.clicked.connect(lambda: self._set_grid_view(True))
@@ -815,7 +815,7 @@ class FilesVersionsWidget(QWidget):
             empty = QLabel("No files here yet. Click ↑ Upload file to add one." if not in_trash
                            else "Trash is empty.")
             empty.setAlignment(Qt.AlignCenter)
-            empty.setStyleSheet(f"color: {_MUTED}; font-size: 12px; background: transparent; border: none;")
+            empty.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
             empty.setContentsMargins(0, 40, 0, 0)
             self._content_layout.insertWidget(0, empty)
             return
@@ -841,12 +841,12 @@ class FilesVersionsWidget(QWidget):
             hl = QHBoxLayout(hdr)
             hl.setContentsMargins(16, 0, 16, 0)
             cat_lbl = QLabel(cat)
-            cat_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+            cat_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 15px; font-weight: bold; background: transparent; border: none;")
             count_lbl = QLabel(f"{len(cat_files)} file{'s' if len(cat_files) != 1 else ''}")
             count_lbl.setStyleSheet(f"""
                 QLabel {{ background: {_ACCENT}22; color: {_ACCENT};
                           border: 1px solid {_ACCENT}55; border-radius: 10px;
-                          padding: 1px 8px; font-size: 9px; font-weight: bold; }}
+                          padding: 1px 8px; font-size: 16px; font-weight: bold; }}
             """)
             hl.addWidget(cat_lbl)
             hl.addWidget(count_lbl)
@@ -904,7 +904,7 @@ class FilesVersionsWidget(QWidget):
 
         nl = QLabel(pf.name)
         nl.setWordWrap(True)
-        nl.setStyleSheet(f"color: {_TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;")
+        nl.setStyleSheet(f"color: {_TEXT}; font-size: 14px; font-weight: bold; background: transparent; border: none;")
         cl.addWidget(nl)
 
         lv = pf.latest_version

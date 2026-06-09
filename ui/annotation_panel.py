@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Colors for annotation states
 PENDING_COLOR = '#909d92'   # Light grey - unvalidated
-VALIDATED_COLOR = '#1821b4'  # Blue - validated
+VALIDATED_COLOR = '#4ade80'  # Light green - validated
 READER_UNREAD_COLOR = '#36cd2e'  # Green - unread in reader mode
 READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
 
@@ -243,7 +243,7 @@ class AnnotationCard(QFrame):
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.annotation.label)
         self.label_edit.setPlaceholderText("Point")
-        title_font = make_font(size=11, bold=True)
+        title_font = make_font(size=14, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
             QLineEdit {{
@@ -270,7 +270,7 @@ class AnnotationCard(QFrame):
         self.status_icon.setStyleSheet("background-color: transparent;")
         status_layout.addWidget(self.status_icon)
         self.status_label = QLabel()
-        self.status_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 10px; background-color: transparent;")
+        self.status_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 13px; background-color: transparent;")
         status_layout.addWidget(self.status_label, 1)
         
         info_layout = QVBoxLayout()
@@ -421,7 +421,7 @@ class AnnotationCard(QFrame):
             QPushButton:hover {{
                 border: 2px solid {default_theme.button_primary};
             }}
-        """)
+        """ + TOOLTIP_STYLE)
         self.date_icon.setPixmap(_rounded_text_pixmap(str(self._display_number), fill_color=indicator_color))
         self.setStyleSheet(f"""
             QFrame#annotationCard {{
@@ -438,7 +438,7 @@ class AnnotationCard(QFrame):
             QFrame#annotationCard QLineEdit {{
                 background-color: transparent;
             }}
-        """)
+        """ + TOOLTIP_STYLE)
     
     def update_annotation(self, annotation: Annotation, display_number: int = None):
         """Update the card with new annotation data and optional display number (1, 2, 3...)."""
@@ -550,7 +550,7 @@ class AnnotationPanel(QWidget):
         anno_icon.setStyleSheet("background: transparent; border: none;")
         title_row.addWidget(anno_icon)
         self.title_label = QLabel()
-        title_font = make_font(size=12, bold=True)
+        title_font = make_font(size=15, bold=True)
         self.title_label.setFont(title_font)
         self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(self.title_label)
@@ -602,7 +602,7 @@ class AnnotationPanel(QWidget):
         self.instructions_label = QLabel("Please add the first annotation by clicking on the 3D object")
         self.instructions_label.setWordWrap(True)
         self.instructions_label.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
+            "color: rgba(255, 255, 255, 0.95); font-size: 15px; background: transparent; border: none;"
         )
         header_layout.addWidget(self.instructions_label)
         
@@ -618,7 +618,7 @@ class AnnotationPanel(QWidget):
         banner_layout = QHBoxLayout(self.reader_mode_banner)
         banner_layout.setContentsMargins(10, 8, 10, 8)
         reader_label = QLabel("📖 Reader Mode - View Only")
-        reader_label.setStyleSheet("color: #1E40AF; font-size: 11px; font-weight: bold;")
+        reader_label.setStyleSheet("color: #1E40AF; font-size: 15px; font-weight: bold;")
         banner_layout.addWidget(reader_label)
         self.reader_mode_banner.hide()
         header_layout.addWidget(self.reader_mode_banner)
@@ -648,7 +648,7 @@ class AnnotationPanel(QWidget):
         # Empty state
         self.empty_label = QLabel("No annotations yet")
         self.empty_label.setAlignment(Qt.AlignCenter)
-        self.empty_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 11px; padding: 20px;")
+        self.empty_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 15px; padding: 20px;")
         self.content_layout.addWidget(self.empty_label)
         
         scroll_area.setWidget(self.content_widget)
@@ -670,7 +670,7 @@ class AnnotationPanel(QWidget):
                 border: 1px solid {default_theme.border_light};
                 border-radius: 6px;
                 padding: 6px 12px;
-                font-size: 11px;
+                font-size: 15px;
                 color: {default_theme.text_primary};
             }}
             QPushButton:hover {{

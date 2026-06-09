@@ -46,7 +46,7 @@ _INPUT = f"""
     QLineEdit, QTextEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 10px;
+        padding: 3px 6px; font-size: 14px;
     }}
     QLineEdit:focus, QTextEdit:focus {{ border-color: {_ACCENT}; }}
 """
@@ -157,7 +157,7 @@ class PhotoSlot(QPushButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 1px dashed {_BORDER};
-                border-radius: 6px; color: {_MUTED}; font-size: 9px;
+                border-radius: 6px; color: {_MUTED}; font-size: 13px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
@@ -198,7 +198,7 @@ class _StarRankingDialog(FormModal):
         hint = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
         hint.setWordWrap(True)
         hint.setStyleSheet(
-            f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
+            f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;"
         )
         self.add_widget(hint)
         self._preview = StarBadge(current_number)
@@ -296,7 +296,7 @@ class VersionCardWidget(QFrame):
         # ── Fields ──
         def _section_lbl(text):
             l = QLabel(text)
-            l.setStyleSheet(f"color: {_MUTED}; font-size: 9px; font-weight: bold; background: transparent; border: none;")
+            l.setStyleSheet(f"color: {_MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
             return l
 
         def _inp():
@@ -440,7 +440,7 @@ class _AddVersionCard(QFrame):
         plus.setStyleSheet(f"color: {_MUTED}; font-size: 32px; background: transparent; border: none;")
         text = QLabel("Add version")
         text.setAlignment(Qt.AlignCenter)
-        text.setStyleSheet(f"color: {_MUTED}; font-size: 11px; background: transparent; border: none;")
+        text.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
         lay.addWidget(plus)
         lay.addWidget(text)
 
@@ -484,10 +484,10 @@ class VersionComparisonWidget(QWidget):
         tl = QHBoxLayout(top)
         tl.setContentsMargins(16, 0, 16, 0)
         title = QLabel("Version comparison")
-        title.setFont(make_font(size=15, bold=True))
+        title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         subtitle = QLabel("Compare design versions side-by-side with star rankings and notes.")
-        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
+        subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
         t_col.addWidget(title)

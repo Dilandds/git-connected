@@ -28,6 +28,9 @@ class _PartDialog(FormModal):
         self.f_subject = self.add_field('SUBJECT', QLineEdit(part.subject if part else ''))
         self.f_subject.setPlaceholderText('Subject of this task')
 
+        self.f_performed_by = self.add_field('PERFORMED BY', QLineEdit(part.performed_by if part else ''))
+        self.f_performed_by.setPlaceholderText('Person or team responsible')
+
         self.f_suppliers = self.add_field('SUPPLIERS', QLineEdit(part.suppliers if part else ''))
         self.f_suppliers.setPlaceholderText('Supplier name(s)')
 
@@ -67,6 +70,7 @@ class _PartDialog(FormModal):
         return {
             'name':         self.f_name.text().strip() or 'Part',
             'subject':      self.f_subject.text().strip(),
+            'performed_by': self.f_performed_by.text().strip(),
             'suppliers':    self.f_suppliers.text().strip(),
             'action':       self.f_action.text().strip(),
             'current_task': self.f_task.toPlainText().strip(),

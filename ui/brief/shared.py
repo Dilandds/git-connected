@@ -23,7 +23,7 @@ _INPUT_BG = '#f5f6f8'
 # ── shared styles ─────────────────────────────────────────────────────────────
 SECTION_HEADER_STYLE = f"""
     QLabel {{
-        color: {_ACCENT}; font-size: 11px; font-weight: bold;
+        color: {_ACCENT}; font-size: 16px; font-weight: bold;
         letter-spacing: 1px; background: transparent; border: none; padding: 0;
     }}
 """
@@ -40,7 +40,7 @@ INPUT_STYLE = f"""
     QLineEdit, QTextEdit {{
         background-color: {_INPUT_BG}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 5px;
-        padding: 5px 8px; font-size: 11px;
+        padding: 6px 10px; font-size: 16px;
     }}
     QLineEdit:focus, QTextEdit:focus {{ border: 1px solid {_ACCENT}; }}
     QLineEdit:disabled, QTextEdit:disabled {{ color: {_MUTED}; background-color: {_CARD}; }}
@@ -50,7 +50,7 @@ DATE_STYLE = f"""
     QDateEdit {{
         background-color: {_INPUT_BG}; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 5px;
-        padding: 4px 8px; font-size: 11px;
+        padding: 5px 10px; font-size: 16px;
     }}
     QDateEdit:focus {{ border: 1px solid {_ACCENT}; }}
     QDateEdit:disabled {{ color: {_MUTED}; background-color: {_CARD}; }}
@@ -61,7 +61,7 @@ DATE_STYLE = f"""
 BTN_PRIMARY = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 6px; padding: 6px 16px; font-size: 11px; font-weight: bold;
+        border-radius: 6px; padding: 7px 18px; font-size: 16px; font-weight: bold;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
@@ -71,7 +71,7 @@ BTN_SECONDARY = f"""
     QPushButton {{
         background-color: {_CARD2}; color: {_TEXT};
         border: 1px solid {_BORDER_L}; border-radius: 6px;
-        padding: 6px 16px; font-size: 11px;
+        padding: 7px 18px; font-size: 16px;
     }}
     QPushButton:hover {{ background-color: {_BORDER_L}; border-color: {_ACCENT}; color: {_ACCENT}; }}
 """
@@ -79,13 +79,13 @@ BTN_SECONDARY = f"""
 ADD_BTN_STYLE = f"""
     QPushButton {{
         background-color: transparent; color: {_ACCENT}; border: none;
-        font-size: 11px; font-weight: bold; padding: 2px 0; text-align: left;
+        font-size: 16px; font-weight: bold; padding: 2px 0; text-align: left;
     }}
     QPushButton:hover {{ color: {_ACCENT_H}; }}
 """ + TOOLTIP_STYLE
 
-LABEL_STYLE = f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
-VALUE_STYLE = f"color: {_TEXT}; font-size: 11px; background: transparent; border: none;"
+LABEL_STYLE = f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;"
+VALUE_STYLE = f"color: {_TEXT}; font-size: 16px; background: transparent; border: none;"
 
 
 # ── factory functions ─────────────────────────────────────────────────────────

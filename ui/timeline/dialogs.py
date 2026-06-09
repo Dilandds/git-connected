@@ -21,7 +21,7 @@ from .models import Task, Operation, Operator, TASK_TYPES, today, BORDER, MUTED,
 
 class _AddOperatorDialog(FormModal):
     def __init__(self, parent=None):
-        super().__init__(parent, 'Add Operator', min_width=380)
+        super().__init__(parent, 'Add Operator', theme=FormModal.LIGHT, min_width=380)
         self.f_name = self.add_field('OPERATOR / COMPANY NAME', QLineEdit())
         self.f_name.setPlaceholderText('Operator or company name')
         self.finish()
@@ -37,7 +37,7 @@ class _AddOperatorDialog(FormModal):
 
 class _AddOperationDialog(FormModal):
     def __init__(self, operator_name: str, parent=None):
-        super().__init__(parent, 'Add Operation', min_width=380)
+        super().__init__(parent, 'Add Operation', theme=FormModal.LIGHT, min_width=380)
         self.f_name = self.add_field(f'OPERATION NAME  ({operator_name})', QLineEdit())
         self.f_name.setPlaceholderText('Operation name')
         self.finish()
@@ -53,7 +53,7 @@ class _AddOperationDialog(FormModal):
 
 class _EditOperationDialog(FormModal):
     def __init__(self, operation: Operation, operator_name: str, parent=None):
-        super().__init__(parent, 'Edit Operation', min_width=380)
+        super().__init__(parent, 'Edit Operation', theme=FormModal.LIGHT, min_width=380)
         self.f_name = self.add_field(f'OPERATION NAME  ({operator_name})', QLineEdit(operation.name))
         self.f_name.setPlaceholderText('Operation name')
         self.finish()
@@ -76,7 +76,7 @@ class TaskFormDialog(FormModal):
                  current_oper_idx: int = 0,
                  parent=None):
         super().__init__(parent, 'Edit Event' if task else 'Add Event',
-                         min_width=380)
+                         theme=FormModal.LIGHT, min_width=380)
         self._operators: List[Operator] = operators or []
 
         self.f_operator: Optional[QComboBox] = None
