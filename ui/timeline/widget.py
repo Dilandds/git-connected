@@ -28,6 +28,7 @@ from .models import (
     today, sample_data,
 )
 from .task_detail import TaskDetailPanel
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +295,7 @@ class GanttCanvas(QWidget):
         p.drawLine(0, HEADER_H, OP_LABEL_W, HEADER_H)
         p.setPen(QColor(MUTED)); p.setFont(make_font(size=11, bold=True))
         p.drawText(QRect(8, 0, OP_LABEL_W - 8, HEADER_H),
-                   Qt.AlignLeft | Qt.AlignVCenter, 'OPERATIONS')
+                   Qt.AlignLeft | Qt.AlignVCenter, t('project.timeline.operations_header'))
 
     def _draw_operator(self, p: QPainter, op: Operator, y_pos: int, day_w: int) -> int:
         abs_y = HEADER_H + y_pos
@@ -316,14 +317,13 @@ class GanttCanvas(QWidget):
         return y_pos
 
     def _draw_task_block(self, p: QPainter, task: Task, row_y: int, day_w: int):
-        x = self._x_for_date(task.start, day_w)
+        x = self._x_for_date(task.start, day_w) + day_w // 4
         w = max(task.start.daysTo(task.end) * day_w, day_w)
         y = row_y + 5; h = ROW_H - 10
         if x + w < OP_LABEL_W:
             return
         color = QColor(URGENT_COLOR if task.is_urgent else TASK_TYPES.get(task.task_type, ACCENT))
         is_sel = task is self._selected_task
-        p.fillRect(x + 2, y + 2, w, h, QColor(0, 0, 0, 60))
         path = QPainterPath()
         path.addRoundedRect(QRectF(x, y, w, h), 4, 4)
         p.fillPath(path, QBrush(color if not is_sel else color.lighter(130)))
@@ -338,7 +338,7 @@ class GanttCanvas(QWidget):
         # ── Unavailability hatching ───────────────────────────────────────
         if task.unavailable_start and task.unavailable_end:
             hx1 = max(self._x_for_date(task.unavailable_start, day_w), x)
-            hx2 = min(self._x_for_date(task.unavailable_end,   day_w), x + w)
+            hx2 = min(self._x_for_date(task.unavailable_end, day_w), x + w)
             if hx2 > hx1:
                 p.save()
                 p.setClipRect(QRect(hx1, y, hx2 - hx1, h), Qt.IntersectClip)
@@ -402,7 +402,7 @@ class GanttCanvas(QWidget):
         p.setPen(QPen(QColor('#ef4444'), 2))
         p.drawLine(x, HEADER_H, x, self.height())
         p.setPen(QColor('#ef4444')); p.setFont(make_font(size=10, bold=True))
-        p.drawText(x + 3, HEADER_H + 12, 'DEADLINE')
+        p.drawText(x + 3, HEADER_H + 12, t('project.timeline.deadline_label'))
 
     # ── interaction ───────────────────────────────────────────────────────────
 
@@ -417,7 +417,7 @@ class GanttCanvas(QWidget):
                 oy = HEADER_H + y_pos
                 if oy <= pos.y() < oy + ROW_H:
                     for task in oper.tasks:
-                        x = self._x_for_date(task.start, day_w)
+                        x = self._x_for_date(task.start, day_w) + day_w // 2
                         w = max(task.start.daysTo(task.end) * day_w, day_w)
                         if x <= pos.x() <= x + w:
                             return task
@@ -571,15 +571,15 @@ class TimelineWidget(QWidget):
         top = QWidget(); top.setFixedHeight(46)
         top.setStyleSheet(f'background-color: {BG}; border-bottom: 1px solid {BORDER};')
         layout = QHBoxLayout(top); layout.setContentsMargins(16, 0, 16, 0)
-        title = QLabel('Timeline'); title.setFont(make_font(size=17, bold=True))
+        title = QLabel(t('project.timeline.title')); title.setFont(make_font(size=17, bold=True))
         title.setStyleSheet(f'color: {TEXT}; background: transparent; border: none;')
-        sub = QLabel('Centralise project evolution, revisions and workflow actions.')
+        sub = QLabel(t('project.timeline.subtitle'))
         sub.setStyleSheet(f'color: {MUTED}; font-size: 12px; background: transparent; border: none;')
         col = QVBoxLayout(); col.setSpacing(1); col.addWidget(title); col.addWidget(sub)
         layout.addLayout(col); layout.addStretch()
 
-        for label, slot in (('＋ Add Operation', self._add_operation),
-                             ('＋ Add Event',     self._add_task)):
+        for label, slot in ((t('project.timeline.add_operation'), self._add_operation),
+                             (t('project.timeline.add_event'),     self._add_task)):
             btn = QPushButton(label); btn.setStyleSheet(_BTN_SMALL); btn.setFixedHeight(28)
             btn.setCursor(Qt.PointingHandCursor); btn.clicked.connect(slot)
             layout.addWidget(btn)
@@ -591,7 +591,7 @@ class TimelineWidget(QWidget):
         layout.addWidget(sep)
         layout.addSpacing(8)
 
-        add_op = QPushButton('＋ Add Operator')
+        add_op = QPushButton(t('project.timeline.add_operator'))
         add_op.setStyleSheet(_BTN_SMALL); add_op.setFixedHeight(28)
         add_op.setCursor(Qt.PointingHandCursor); add_op.clicked.connect(self._add_operator)
         layout.addWidget(add_op)
@@ -612,7 +612,7 @@ class TimelineWidget(QWidget):
         controls.setStyleSheet(f'background-color: {CARD}; border-bottom: 1px solid {BORDER};')
         layout = QHBoxLayout(controls); layout.setContentsMargins(12, 4, 12, 4); layout.setSpacing(6)
 
-        lbl = QLabel('LEGEND:')
+        lbl = QLabel(t('project.timeline.legend_label'))
         lbl.setStyleSheet(f'color: {MUTED}; font-size: 11px; font-weight: bold; background: transparent; border: none;')
         layout.addWidget(lbl)
 
@@ -643,7 +643,7 @@ class TimelineWidget(QWidget):
 
         self._view_btns: dict[str, QPushButton] = {}
         for mode in ('Day', 'Week', 'Month'):
-            btn = QPushButton(mode); btn.setFixedHeight(24); btn.setMinimumWidth(54)
+            btn = QPushButton(t(f'project.timeline.view_{mode.lower()}')); btn.setFixedHeight(24); btn.setMinimumWidth(54)
             btn.setStyleSheet(_BTN_VIEW_ACTIVE if mode == self._view_mode else _BTN_VIEW_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda _, m=mode: self._set_view_mode(m))
@@ -693,7 +693,7 @@ class TimelineWidget(QWidget):
                 item.widget().deleteLater()
         self._tab_btns: list[QPushButton] = []
 
-        overview = QPushButton('Overview')
+        overview = QPushButton(t('project.timeline.overview_tab'))
         overview.setStyleSheet(_TAB_ACTIVE if self._current_tab == -1 else _TAB_INACTIVE)
         overview.setFixedHeight(28); overview.setCursor(Qt.PointingHandCursor)
         overview.clicked.connect(lambda: self._switch_tab(-1))
@@ -762,9 +762,9 @@ class TimelineWidget(QWidget):
             self._legend_area_layout.addWidget(btn)
 
         # Add legend button
-        edit_btn = QPushButton('＋  Add legend')
+        edit_btn = QPushButton(t('project.timeline.add_legend'))
         edit_btn.setFixedHeight(22)
-        edit_btn.setToolTip('Edit legend (add / remove / recolour entries)')
+        edit_btn.setToolTip(t('project.timeline.edit_legend_tip'))
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.setStyleSheet(f"""
             QPushButton {{
@@ -860,7 +860,7 @@ class TimelineWidget(QWidget):
             self.changed.emit()
 
     def _on_task_delete(self, task: Task):
-        if not ask_yes_no_dialog(self, 'Remove Task',
+        if not ask_yes_no_dialog(self, t('project.timeline.remove_task'),
                                   f"Remove task '{task.name}'?\n\nThis cannot be undone."):
             return
         for op in self._operators:
@@ -886,7 +886,7 @@ class TimelineWidget(QWidget):
             return
         op = self._operators[idx]
         if not ask_yes_no_dialog(
-            self, 'Remove Operator',
+            self, t('project.timeline.remove_operator'),
             f"Remove operator '{op.name}' and all its operations and tasks?\n\nThis cannot be undone."
         ):
             return
@@ -906,7 +906,7 @@ class TimelineWidget(QWidget):
         if self._current_tab == -1:
             from ui.modal_utils import show_message_dialog
             show_message_dialog(
-                self, 'Select an Operator',
+                self, t('project.timeline.select_operator'),
                 'Please select an operator tab first.\n\nOperations and tasks belong to a specific operator.'
             )
             return False
@@ -958,7 +958,7 @@ class TimelineWidget(QWidget):
             if oper is None:
                 from ui.modal_utils import show_message_dialog
                 show_message_dialog(
-                    self, 'No Operation Selected',
+                    self, t('project.timeline.no_op_selected'),
                     'The selected operator has no operations yet.\n\n'
                     'Add at least one operation to the operator first, then add a task.'
                 )

@@ -13,6 +13,7 @@ from .shared import (
     _BTN_SMALL, _BTN_DEL_CIRCLE, _TOOLTIP_STYLE,
 )
 from .dialogs import _AddComponentDialog, _EditComponentDialog
+from i18n import t
 
 _ITEM_H   = 72   # height of each component pill
 _IMG_SIZE = 58   # image thumbnail size (circle diameter)
@@ -36,7 +37,7 @@ class _ComponentsRow(QWidget):
         root.setSpacing(4)
 
         # Section title
-        title = QLabel('Product Components')
+        title = QLabel(t('project.traceability.components_title'))
         title.setStyleSheet(
             f'color: {_TEXT}; font-size: 13px; font-weight: bold;'
             f' background: transparent; border: none;'
@@ -94,7 +95,7 @@ class _ComponentsRow(QWidget):
         sep.setStyleSheet(f'color: {_BORDER}; background: {_BORDER};')
         self._cl.addWidget(sep, 0, Qt.AlignVCenter)
 
-        add = QPushButton('＋  Add Component')
+        add = QPushButton(t('project.traceability.add_component'))
         add.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; border: none;
@@ -122,7 +123,7 @@ class _ComponentsRow(QWidget):
         item.setObjectName('compItem')
         item.setFixedHeight(_ITEM_H)
         item.setCursor(Qt.PointingHandCursor)
-        item.setToolTip('Double-click to edit')
+        item.setToolTip(t('project.traceability.dbl_click_edit'))
         item.setStyleSheet(f"""
             QWidget#compItem {{
                 background: {'#eff6ff' if is_sel else 'transparent'};
@@ -178,7 +179,7 @@ class _ComponentsRow(QWidget):
         text_col.addWidget(name_lbl)
 
         if comp.is_main:
-            sub_lbl = QLabel('(Main Product)')
+            sub_lbl = QLabel(t('project.traceability.main_product_label'))
             sub_lbl.setStyleSheet(
                 f'color: {_ACCENT}; font-size: 11px; background: transparent; border: none;'
             )
@@ -216,8 +217,8 @@ class _ComponentsRow(QWidget):
         comp = self._components[idx]
         if comp.is_main:
             return
-        if not ask_yes_no_dialog(self, 'Remove Component',
-                                  f"Remove '{comp.name}' and all its stages/parts?"):
+        if not ask_yes_no_dialog(self, t('project.traceability.remove_component'),
+                                  t('project.traceability.remove_comp_confirm').format(name=comp.name)):
             return
         self._components.pop(idx)
         new_sel = min(self._selected, max(0, len(self._components) - 1))
@@ -250,8 +251,8 @@ class _ComponentsRow(QWidget):
             self._refresh()
             self.changed.emit()
         elif result == 2:
-            if ask_yes_no_dialog(self, 'Delete Component',
-                                  f"Delete '{comp.name}' and all its data?"):
+            if ask_yes_no_dialog(self, t('project.traceability.delete_stage'),
+                                  t('project.traceability.delete_comp_confirm').format(name=comp.name)):
                 self._components.pop(idx)
                 self._selected = 0
                 self._refresh()

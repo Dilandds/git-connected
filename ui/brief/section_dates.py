@@ -2,6 +2,7 @@
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel
 from PyQt5.QtCore import QDate
 from .shared import _MUTED, LABEL_STYLE, card, section_label, make_textarea, make_date_edit, separator
+from i18n import t
 
 
 class TargetDatesCard(QFrame):
@@ -13,13 +14,13 @@ class TargetDatesCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('4. Target Dates'))
+        layout.addWidget(section_label(t('project.brief.s4_title')))
         layout.addWidget(separator())
 
         date_fields = [
-            ('Expected delivery date',      '_d_delivery'),
-            ('Expected mockup / prototype', '_d_prototype'),
-            ('Expected production start',   '_d_production'),
+            (t('project.brief.s4_delivery'),   '_d_delivery'),
+            (t('project.brief.s4_prototype'),  '_d_prototype'),
+            (t('project.brief.s4_production'), '_d_production'),
         ]
         for label, attr in date_fields:
             row = QHBoxLayout()
@@ -34,10 +35,10 @@ class TargetDatesCard(QFrame):
             layout.addLayout(row)
 
         layout.addWidget(separator())
-        notes_lbl = QLabel('Notes')
+        notes_lbl = QLabel(t('project.brief.s4_notes'))
         notes_lbl.setStyleSheet(LABEL_STYLE)
         layout.addWidget(notes_lbl)
-        self._f_date_notes = make_textarea('Notes and additional details...', 60)
+        self._f_date_notes = make_textarea(t('project.brief.s4_notes_ph'), 60)
         layout.addWidget(self._f_date_notes)
         layout.addStretch()
 

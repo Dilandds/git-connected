@@ -25,6 +25,7 @@ from .shared import (
     _CLOSE_ACTIVE, _CLOSE_INACTIVE,
 )
 from .editor import ReportEditor
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,10 @@ class ReportWidget(QWidget):
         top.setStyleSheet(f"background: {_BG}; border-bottom: 1px solid {_BORDER};")
         tl = QHBoxLayout(top)
         tl.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("Report")
+        title = QLabel(t("project.report.title"))
         title.setFont(make_font(size=15, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        subtitle = QLabel("Meeting reports with pages, photos and formal sign-off.")
+        subtitle = QLabel(t("project.report.subtitle"))
         subtitle.setStyleSheet(
             f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
         )
@@ -73,7 +74,7 @@ class ReportWidget(QWidget):
         t_col.addWidget(subtitle)
         tl.addLayout(t_col)
         tl.addStretch()
-        new_btn = QPushButton("＋  New Report")
+        new_btn = QPushButton(t("project.report.new_report"))
         new_btn.setStyleSheet(_BTN_PRIMARY)
         new_btn.setFixedHeight(30)
         new_btn.setCursor(Qt.PointingHandCursor)

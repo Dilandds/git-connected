@@ -1,6 +1,7 @@
 """Section 7 — Notes card."""
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
 from .shared import _MUTED, card, section_label, make_textarea, separator
+from i18n import t
 
 
 class NotesCard(QFrame):
@@ -12,15 +13,15 @@ class NotesCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('7. Notes'))
+        layout.addWidget(section_label(t('project.brief.s7_title')))
         layout.addWidget(separator())
 
-        hint = QLabel('Any additional information, remarks, ideas...')
+        hint = QLabel(t('project.brief.s7_hint'))
         hint.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self._f_notes = make_textarea('Additional notes...', min_height=120)
+        self._f_notes = make_textarea(t('project.brief.s7_ph'), min_height=120)
         layout.addWidget(self._f_notes)
         layout.addStretch()
 

@@ -15,6 +15,7 @@ from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPainterPath, QBrush, QFont
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class StarBadge(QWidget):
         self._number = number
         self.setFixedSize(58, 58)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("Click to set star ranking")
+        self.setToolTip(t('project.version.click_ranking'))
 
     def set_number(self, n: int):
         self._number = n
@@ -153,7 +154,7 @@ class PhotoSlot(QPushButton):
 
     def _set_empty(self):
         self.setIcon(QIcon())
-        self.setText("＋\nAdd photo")
+        self.setText(t('project.version.add_photo'))
         self.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 1px dashed {_BORDER};
@@ -183,7 +184,7 @@ class PhotoSlot(QPushButton):
 
     def _upload(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Photo", "", "Images (*.png *.jpg *.jpeg *.webp)"
+            self, t('project.timeline.detail_photo_title'), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
             self.set_path(path)
@@ -194,8 +195,8 @@ class PhotoSlot(QPushButton):
 
 class _StarRankingDialog(FormModal):
     def __init__(self, current_number: int, parent=None):
-        super().__init__(parent, 'Set Star Ranking', min_width=280)
-        hint = QLabel("Ranking number — 0 removes the star, 1 = best, 2 = second…")
+        super().__init__(parent, t('project.version.set_ranking'), min_width=280)
+        hint = QLabel(t('project.version.ranking_hint'))
         hint.setWordWrap(True)
         hint.setStyleSheet(
             f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;"
@@ -211,7 +212,7 @@ class _StarRankingDialog(FormModal):
         self.f_spin.setRange(0, 20)
         self.f_spin.setValue(current_number)
         self.f_spin.valueChanged.connect(self._preview.set_number)
-        self.add_field('RANKING', self.f_spin)
+        self.add_field(t('project.version.ranking_field'), self.f_spin)
         self.finish()
 
     @property
@@ -321,47 +322,47 @@ class VersionCardWidget(QFrame):
             return bl
 
         self._f_version = _inp()
-        self._f_version.setPlaceholderText("e.g. V1.0")
+        self._f_version.setPlaceholderText(t('project.version.version_ph'))
         self._f_version.setText(self._card.version)
         self._f_version.textChanged.connect(lambda v: setattr(self._card, 'version', v) or self.changed.emit())
-        root.addLayout(_field_block(_section_lbl("VERSION :"), self._f_version))
+        root.addLayout(_field_block(_section_lbl(t('project.version.version_field')), self._f_version))
 
         self._f_pos = _area()
-        self._f_pos.setPlaceholderText("Positive points...")
+        self._f_pos.setPlaceholderText(t('project.version.positives_ph'))
         self._f_pos.setPlainText(self._card.positive_points)
         self._f_pos.textChanged.connect(
             lambda: setattr(self._card, 'positive_points', self._f_pos.toPlainText()) or self.changed.emit()
         )
-        root.addLayout(_field_block(_section_lbl("POSITIVE POINTS :"), self._f_pos))
+        root.addLayout(_field_block(_section_lbl(t('project.version.positives')), self._f_pos))
 
         self._f_neg = _area()
-        self._f_neg.setPlaceholderText("Negative points...")
+        self._f_neg.setPlaceholderText(t('project.version.negatives_ph'))
         self._f_neg.setPlainText(self._card.negative_points)
         self._f_neg.textChanged.connect(
             lambda: setattr(self._card, 'negative_points', self._f_neg.toPlainText()) or self.changed.emit()
         )
-        root.addLayout(_field_block(_section_lbl("NEGATIVE POINTS :"), self._f_neg))
+        root.addLayout(_field_block(_section_lbl(t('project.version.negatives')), self._f_neg))
 
         self._f_comments = _area(h=44)
-        self._f_comments.setPlaceholderText("Comments...")
+        self._f_comments.setPlaceholderText(t('project.version.comments_ph'))
         self._f_comments.setPlainText(self._card.comments)
         self._f_comments.textChanged.connect(
             lambda: setattr(self._card, 'comments', self._f_comments.toPlainText()) or self.changed.emit()
         )
-        root.addLayout(_field_block(_section_lbl("COMMENTS :"), self._f_comments))
+        root.addLayout(_field_block(_section_lbl(t('project.version.comments')), self._f_comments))
 
         self._f_cost = _inp()
-        self._f_cost.setPlaceholderText("e.g. 32,500 €")
+        self._f_cost.setPlaceholderText(t('project.version.cost_ph'))
         self._f_cost.setText(self._card.cost)
         self._f_cost.textChanged.connect(lambda v: setattr(self._card, 'cost', v) or self.changed.emit())
-        root.addLayout(_field_block(_section_lbl("COST :"), self._f_cost))
+        root.addLayout(_field_block(_section_lbl(t('project.version.cost')), self._f_cost))
 
         # ── Bottom toolbar: move ← → | delete ──
         toolbar = QHBoxLayout()
         toolbar.setSpacing(2)
 
         self._left_btn = QPushButton("←")
-        self._left_btn.setToolTip("Move left")
+        self._left_btn.setToolTip(t('project.version.move_left'))
         self._left_btn.setFixedSize(28, 24)
         self._left_btn.setStyleSheet(_BTN_ICON)
         self._left_btn.setCursor(Qt.PointingHandCursor)
@@ -369,7 +370,7 @@ class VersionCardWidget(QFrame):
         self._left_btn.clicked.connect(self.move_left_requested)
 
         self._right_btn = QPushButton("→")
-        self._right_btn.setToolTip("Move right")
+        self._right_btn.setToolTip(t('project.version.move_right'))
         self._right_btn.setFixedSize(28, 24)
         self._right_btn.setStyleSheet(_BTN_ICON)
         self._right_btn.setCursor(Qt.PointingHandCursor)
@@ -377,7 +378,7 @@ class VersionCardWidget(QFrame):
         self._right_btn.clicked.connect(self.move_right_requested)
 
         del_btn = QPushButton("🗑")
-        del_btn.setToolTip("Delete version")
+        del_btn.setToolTip(t('project.version.delete_version'))
         del_btn.setFixedSize(28, 24)
         del_btn.setStyleSheet(_BTN_DELETE)
         del_btn.setCursor(Qt.PointingHandCursor)
@@ -438,7 +439,7 @@ class _AddVersionCard(QFrame):
         plus = QLabel("＋")
         plus.setAlignment(Qt.AlignCenter)
         plus.setStyleSheet(f"color: {_MUTED}; font-size: 32px; background: transparent; border: none;")
-        text = QLabel("Add version")
+        text = QLabel(t('project.version.add_version'))
         text.setAlignment(Qt.AlignCenter)
         text.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
         lay.addWidget(plus)
@@ -483,10 +484,10 @@ class VersionComparisonWidget(QWidget):
         top.setStyleSheet(f"background: {_BG}; border-bottom: 1px solid {_BORDER};")
         tl = QHBoxLayout(top)
         tl.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("Version comparison")
+        title = QLabel(t('project.version.title'))
         title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        subtitle = QLabel("Compare design versions side-by-side with star rankings and notes.")
+        subtitle = QLabel(t('project.version.subtitle'))
         subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
@@ -572,7 +573,7 @@ class VersionComparisonWidget(QWidget):
     def _delete(self, card: VersionCard):
         from ui.modal_utils import ask_yes_no_dialog
         if not ask_yes_no_dialog(
-            self, "Delete Version", "Delete this version? This cannot be undone."
+            self, t('project.version.delete_dlg'), "Delete this version? This cannot be undone."
         ):
             return
         self._cards.remove(card)

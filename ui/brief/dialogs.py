@@ -5,15 +5,16 @@ Same pattern as ui/traceability/dialogs.py.
 """
 from PyQt5.QtWidgets import QLineEdit, QDialog
 from ui.modal_utils import FormModal
+from i18n import t
 
 
 class _AddBulletDialog(FormModal):
     """Single-line input for adding a bullet point to a list."""
 
     def __init__(self, label: str = 'Item', parent=None):
-        super().__init__(parent, f'Add {label}', min_width=320)
+        super().__init__(parent, f'{t("project.brief.s6_add_bullet")} {label}', min_width=320)
         self.f_text = self.add_field(label.upper(), QLineEdit())
-        self.f_text.setPlaceholderText('Enter text…')
+        self.f_text.setPlaceholderText('…')
         self.finish()
         self.f_text.returnPressed.connect(self.ok_btn.click)
         self.f_text.setFocus()
@@ -30,19 +31,19 @@ class _AddComponentRowDialog(FormModal):
                  colour: str = '', parent=None):
         is_edit = bool(component or material or colour)
         super().__init__(parent,
-                         'Edit Component' if is_edit else 'Add Component',
+                         t('project.brief.s6_edit_row') if is_edit else t('project.brief.s6_add'),
                          min_width=400)
 
         self.f_component, self.f_material, self.f_colour = self.add_row_fields(
-            ('COMPONENT', QLineEdit(component)),
-            ('MATERIAL',  QLineEdit(material)),
-            ('COLOUR',    QLineEdit(colour)),
+            (t('project.brief.s6_component').upper(), QLineEdit(component)),
+            (t('project.brief.s6_material').upper(),  QLineEdit(material)),
+            (t('project.brief.s6_colour').upper(),    QLineEdit(colour)),
         )
-        self.f_component.setPlaceholderText('Component name')
+        self.f_component.setPlaceholderText(t('project.brief.s6_comp_name'))
         self.f_material.setPlaceholderText('e.g. ABS')
         self.f_colour.setPlaceholderText('e.g. Black')
 
-        self.finish(delete='Remove' if is_edit else None)
+        self.finish(delete=t('common.delete') if is_edit else None)
         self.f_component.setFocus()
 
     @property

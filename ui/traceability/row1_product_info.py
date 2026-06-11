@@ -7,6 +7,7 @@ from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
 from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE
 from .shared import _ProgressBar
+from i18n import t
 
 _LAUNCH_TOOLTIP = f"""
     QLabel {{
@@ -46,7 +47,7 @@ class _ProductInfoRow(QFrame):
         root.addSpacing(60)   # left free space
 
         # Photo button — large, rounded
-        self._img_btn = QPushButton('＋\nPhoto')
+        self._img_btn = QPushButton(t('project.traceability.photo_btn'))
         self._img_btn.setFixedSize(_IMG_SIZE, _IMG_SIZE)
         self._img_btn.setStyleSheet(f"""
             QPushButton {{
@@ -64,7 +65,7 @@ class _ProductInfoRow(QFrame):
         left.setSpacing(3)
         left.setContentsMargins(4, 0, 0, 0)
 
-        mp = QLabel('Main Product')
+        mp = QLabel(t('project.traceability.main_product'))
         mp.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
         left.addWidget(mp)
 
@@ -73,12 +74,12 @@ class _ProductInfoRow(QFrame):
         self._name_lbl.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
         left.addWidget(self._name_lbl)
 
-        self._ref_lbl    = self._meta_field('Reference', '—')
-        self._pm_lbl     = self._meta_field('Project Manager', '—')
-        self._launch_lbl = self._meta_field('Planned Launch', '—')
+        self._ref_lbl    = self._meta_field(t('project.traceability.reference'), '—')
+        self._pm_lbl     = self._meta_field(t('project.traceability.manager'), '—')
+        self._launch_lbl = self._meta_field(t('project.traceability.planned_launch'), '—')
         self._launch_lbl.setStyleSheet(_LAUNCH_TOOLTIP)
         self._launch_lbl.setCursor(Qt.PointingHandCursor)
-        self._launch_lbl.setToolTip('Click to edit')
+        self._launch_lbl.setToolTip(t('project.traceability.click_to_edit'))
         self._launch_lbl.mousePressEvent = lambda _: self._edit('planned_launch')
 
         left.addWidget(self._ref_lbl)
@@ -91,17 +92,17 @@ class _ProductInfoRow(QFrame):
 
         # Start Date with calendar icon
         self._start_lbl = self._date_val('—')
-        root.addLayout(self._info_col('📅  Start Date', self._start_lbl))
+        root.addLayout(self._info_col(t('project.traceability.start_date'), self._start_lbl))
         root.addWidget(self._vdiv())
 
         # Due Date with calendar icon
         self._dd_lbl = self._date_val('—')
-        root.addLayout(self._info_col('📅  Due Date', self._dd_lbl))
+        root.addLayout(self._info_col(t('project.traceability.due_date'), self._dd_lbl))
         root.addWidget(self._vdiv())
 
         # Global Status — pill badge
         sc = QVBoxLayout(); sc.setSpacing(6); sc.setAlignment(Qt.AlignVCenter)
-        st_title = QLabel('Global Status')
+        st_title = QLabel(t('project.traceability.global_status'))
         st_title.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         sc.addWidget(st_title)
         self._status_lbl = QLabel('—')
@@ -115,14 +116,14 @@ class _ProductInfoRow(QFrame):
 
         # Overall progress (editable)
         pc = QVBoxLayout(); pc.setSpacing(4); pc.setAlignment(Qt.AlignVCenter)
-        pt = QLabel('Overall Progress')
+        pt = QLabel(t('project.traceability.overall_progress'))
         pt.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         pc.addWidget(pt)
         self._prog_lbl = QLabel('0 %')
         self._prog_lbl.setFont(make_font(size=22, bold=True))
         self._prog_lbl.setStyleSheet(_PROG_LABEL_STYLE)
         self._prog_lbl.setCursor(Qt.PointingHandCursor)
-        self._prog_lbl.setToolTip('Click to edit progress')
+        self._prog_lbl.setToolTip(t('project.traceability.click_edit_progress'))
         self._prog_lbl.mousePressEvent = lambda _: self._edit('progress')
         pc.addWidget(self._prog_lbl)
         self._prog_bar = _ProgressBar(0)
@@ -192,9 +193,9 @@ class _ProductInfoRow(QFrame):
     def _edit(self, field: str):
         from ui.modal_utils import FormModal
         if field == 'planned_launch':
-            dlg = FormModal(self, 'Edit Planned Launch', min_width=340)
-            f = dlg.add_hfield('Planned Launch', QLineEdit(self._planned_launch))
-            f.setPlaceholderText('dd/mm/yyyy or milestone name')
+            dlg = FormModal(self, t('project.traceability.edit_launch_title'), min_width=340)
+            f = dlg.add_hfield(t('project.traceability.planned_launch'), QLineEdit(self._planned_launch))
+            f.setPlaceholderText(t('project.traceability.launch_ph'))
             dlg.finish()
             f.setFocus()
             if dlg.exec_() == QDialog.Accepted and f.text().strip() is not None:
@@ -202,8 +203,8 @@ class _ProductInfoRow(QFrame):
                 self._set_launch_text(self._planned_launch or '—')
                 self.changed.emit()
         elif field == 'progress':
-            dlg = FormModal(self, 'Edit Overall Progress', min_width=300)
-            f = dlg.add_hfield('Progress (0–100)', QLineEdit(str(self._overall_progress)))
+            dlg = FormModal(self, t('project.traceability.edit_progress_title'), min_width=300)
+            f = dlg.add_hfield(t('project.traceability.progress_field'), QLineEdit(str(self._overall_progress)))
             f.setPlaceholderText('0 – 100')
             dlg.finish()
             f.setFocus()
@@ -219,7 +220,7 @@ class _ProductInfoRow(QFrame):
 
     def _set_launch_text(self, value: str):
         self._launch_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size: 12px;">Planned Launch</span>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">{t("project.traceability.planned_launch")}</span>'
             f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{value}</b>'
         )
 
@@ -243,13 +244,13 @@ class _ProductInfoRow(QFrame):
 
         ref = info.get('number') or '—'
         self._ref_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size: 12px;">Reference</span>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">{t("project.traceability.reference")}</span>'
             f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{ref}</b>'
         )
 
         pm = info.get('project_manager') or '—'
         self._pm_lbl.setText(
-            f'<span style="color:{_MUTED}; font-size: 12px;">Project Manager</span>'
+            f'<span style="color:{_MUTED}; font-size: 12px;">{t("project.traceability.manager")}</span>'
             f'&nbsp;&nbsp;<b style="color:{_TEXT}; font-size: 12px;">{pm}</b>'
         )
 

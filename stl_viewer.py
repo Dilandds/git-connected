@@ -1354,7 +1354,9 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.draw_color_changed.connect(self._on_draw_color_changed)
         self.toolbar.draw_eraser_toggled.connect(self._on_draw_eraser_toggled)
         self.toolbar.draw_text_toggled.connect(self._on_draw_text_toggled)
+        self.toolbar.draw_font_size_changed.connect(self._on_draw_font_size_changed)
         self.toolbar.draw_undo_requested.connect(self._on_draw_undo)
+        self.toolbar.draw_undo_text_requested.connect(self._on_draw_undo_text)
         self.toolbar.draw_clear_requested.connect(self._on_draw_clear)
         self.toolbar.draw_color_picker_requested.connect(self.toolbar.show_draw_color_picker)
         self.toolbar.load_file.connect(self.upload_stl_file)
@@ -2428,11 +2430,23 @@ class STLViewerWindow(QMainWindow):
         if vw and hasattr(vw, 'set_text_mode'):
             vw.set_text_mode(enabled)
 
+    def _on_draw_font_size_changed(self, multiplier: float):
+        """Forward font-size multiplier to the active viewer."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_font_size_multiplier'):
+            vw.set_font_size_multiplier(multiplier)
+
     def _on_draw_undo(self):
-        """Undo last drawn stroke."""
+        """Undo last pen stroke."""
         vw = self.viewer_widget
         if vw and hasattr(vw, 'undo_last_stroke'):
             vw.undo_last_stroke()
+
+    def _on_draw_undo_text(self):
+        """Undo last placed text label."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'undo_last_text'):
+            vw.undo_last_text()
 
     def _on_draw_clear(self):
         """Clear all drawn strokes."""

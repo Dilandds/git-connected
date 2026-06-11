@@ -16,6 +16,7 @@ from .shared import (
 )
 from .page_widget import PageWidget
 from ui.modal_utils import MessageModal
+from i18n import t
 
 
 class ReportEditor(QWidget):
@@ -49,20 +50,20 @@ class ReportEditor(QWidget):
         self._page_layout.setContentsMargins(12, 4, 12, 4)
         self._page_layout.setSpacing(6)
 
-        self._add_page_btn = QPushButton("＋  Add page")
+        self._add_page_btn = QPushButton(t("project.report.add_page"))
         self._add_page_btn.setStyleSheet(_BTN_SMALL)
         self._add_page_btn.setFixedHeight(26)
         self._add_page_btn.setCursor(Qt.PointingHandCursor)
         self._add_page_btn.clicked.connect(self._add_page)
 
-        self._lock_btn = QPushButton("🔒  Lock Report")
+        self._lock_btn = QPushButton(t("project.report.lock"))
         self._lock_btn.setStyleSheet(_BTN_LOCK)
         self._lock_btn.setFixedHeight(26)
         self._lock_btn.setCursor(Qt.PointingHandCursor)
         self._lock_btn.clicked.connect(self._lock_report)
         if self._report.locked:
             self._lock_btn.setEnabled(False)
-            self._lock_btn.setText("🔒  Locked")
+            self._lock_btn.setText(t("project.report.locked"))
 
         self._page_layout.addStretch()
         root.addWidget(self._page_bar)
@@ -86,7 +87,7 @@ class ReportEditor(QWidget):
                 ch = QHBoxLayout(container)
                 ch.setContentsMargins(0, 0, 0, 0)
                 ch.setSpacing(0)
-                btn = QPushButton(f"Page {i + 1}")
+                btn = QPushButton(f"{t('project.report.page_label')} {i + 1}")
                 btn.setFixedHeight(26)
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.setStyleSheet(_TAB_ACTIVE_L if is_active else _TAB_INACTIVE_L)
@@ -101,7 +102,7 @@ class ReportEditor(QWidget):
                 ch.addWidget(close)
                 self._page_layout.addWidget(container)
             else:
-                btn = QPushButton("Page 1")
+                btn = QPushButton(f"{t('project.report.page_label')} 1")
                 btn.setFixedHeight(26)
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.setStyleSheet(_TAB_ACTIVE if is_active else _TAB_INACTIVE)
@@ -180,7 +181,7 @@ class ReportEditor(QWidget):
             return
         self._report.locked = True
         self._lock_btn.setEnabled(False)
-        self._lock_btn.setText("🔒  Locked")
+        self._lock_btn.setText(t("project.report.locked"))
         self._add_page_btn.setEnabled(False)
         for pw in self._page_widgets:
             pw.lock()

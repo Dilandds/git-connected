@@ -20,6 +20,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
+from i18n import t, on_language_changed
 
 _ARROW_URL = _get_arrow()
 
@@ -36,17 +37,12 @@ _ACCENT   = default_theme.button_primary
 _ACCENT_H = default_theme.button_primary_hover
 
 # ── nav items — order defines sidebar display order ───────────────────────────
-_NAV_ITEMS = [
-    ('brief',              '📄  Project Brief'),
-    ('timeline',           '⏱  Timeline'),
-    ('validation',         '✔  Validation'),
-    ('report',             '📋  Report'),
-    ('estimated_cost',     '💰  Estimated Cost'),
-    ('files',              '📁  Files & Versions'),
-    ('version_comparison', '⭐  Version Comparison'),
-    ('traceability',       '🔍  Traceability'),
-    ('glossary',           'A-Z  Glossary'),
+_NAV_KEYS = [
+    'brief', 'timeline', 'validation', 'report', 'estimated_cost',
+    'files', 'version_comparison', 'traceability', 'glossary',
 ]
+# Keep a fallback list for print label lookup; labels filled at runtime via t()
+_NAV_ITEMS = [(k, k) for k in _NAV_KEYS]
 
 # ── shared styles ─────────────────────────────────────────────────────────────
 _NAV_ACTIVE = f"""
@@ -187,6 +183,7 @@ class ProjectNavPanel(QWidget):
         self._on_navigate = None
         self._photo_path: str = ''
         self._build_ui()
+        on_language_changed(self.retranslate)
 
     # ── construction ──────────────────────────────────────────────────────────
 
@@ -219,7 +216,7 @@ class ProjectNavPanel(QWidget):
         card_layout.setContentsMargins(10, 10, 10, 10)
         card_layout.setSpacing(5)
 
-        self._photo_btn = QPushButton('+Add photo')
+        self._photo_btn = QPushButton(t('project.sidebar.add_photo'))
         self._photo_btn.setFixedHeight(150)
         self._photo_btn.setCursor(Qt.PointingHandCursor)
         self._photo_btn.setStyleSheet(f"""
@@ -234,12 +231,12 @@ class ProjectNavPanel(QWidget):
         self._photo_btn.clicked.connect(self._upload_photo)
         card_layout.addWidget(self._photo_btn)
 
-        self._f_company          = self._make_field('Company name')
-        self._f_title            = self._make_field('Project title')
-        self._f_number           = self._make_field('Project number')
-        self._f_project_manager  = self._make_field('Project Manager')
-        self._f_start_date       = self._make_field('Start date (dd/mm/yyyy)')
-        self._f_due_date         = self._make_field('Due date (dd/mm/yyyy)')
+        self._f_company          = self._make_field(t('project.sidebar.company'))
+        self._f_title            = self._make_field(t('project.sidebar.title'))
+        self._f_number           = self._make_field(t('project.sidebar.number'))
+        self._f_project_manager  = self._make_field(t('project.sidebar.manager'))
+        self._f_start_date       = self._make_field(t('project.sidebar.start_date'))
+        self._f_due_date         = self._make_field(t('project.sidebar.due_date'))
         for f in (self._f_company, self._f_title, self._f_number,
                   self._f_project_manager, self._f_start_date, self._f_due_date):
             card_layout.addWidget(f)
@@ -263,8 +260,8 @@ class ProjectNavPanel(QWidget):
         return f
 
     def _build_nav_buttons(self, layout: QVBoxLayout):
-        for key, label in _NAV_ITEMS:
-            btn = QPushButton(label)
+        for key, _label in _NAV_ITEMS:
+            btn = QPushButton(t(f'project.nav.{key}'))
             btn.setStyleSheet(_NAV_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setMinimumHeight(34)
@@ -347,6 +344,19 @@ class ProjectNavPanel(QWidget):
                 self._photo_btn.setIconSize(self._photo_btn.size())
                 self._photo_btn.setText('')
 
+    def retranslate(self):
+        """Update all visible labels/buttons when language changes."""
+        if not self._photo_path:
+            self._photo_btn.setText(t('project.sidebar.add_photo'))
+        self._f_company.setPlaceholderText(t('project.sidebar.company'))
+        self._f_title.setPlaceholderText(t('project.sidebar.title'))
+        self._f_number.setPlaceholderText(t('project.sidebar.number'))
+        self._f_project_manager.setPlaceholderText(t('project.sidebar.manager'))
+        self._f_start_date.setPlaceholderText(t('project.sidebar.start_date'))
+        self._f_due_date.setPlaceholderText(t('project.sidebar.due_date'))
+        for key, btn in self._buttons.items():
+            btn.setText(t(f'project.nav.{key}'))
+
 
 # ── Login dialog ──────────────────────────────────────────────────────────────
 
@@ -354,19 +364,19 @@ class ProjectLoginDialog(FormModal):
     """Login gate for The Project workspace."""
 
     def __init__(self, parent=None):
-        super().__init__(parent, 'The Project — Login', min_width=380)
+        super().__init__(parent, t('project.login.title'), min_width=380)
 
         # Header text (above the standard field area)
-        sub = QLabel('Sign in to access your project workspace.')
+        sub = QLabel(t('project.login.subtitle'))
         sub.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
         self._root.addWidget(sub)
         self._root.addWidget(self._make_hline())
 
-        self._f_user = self.add_field('USERNAME', QLineEdit(), height=36)
-        self._f_user.setPlaceholderText('Enter username')
+        self._f_user = self.add_field(t('project.login.username'), QLineEdit(), height=36)
+        self._f_user.setPlaceholderText(t('project.login.username_ph'))
 
-        self._f_pass = self.add_field('PASSWORD', QLineEdit(), height=36)
-        self._f_pass.setPlaceholderText('Enter password')
+        self._f_pass = self.add_field(t('project.login.password'), QLineEdit(), height=36)
+        self._f_pass.setPlaceholderText(t('project.login.password_ph'))
         self._f_pass.setEchoMode(QLineEdit.Password)
         self._f_pass.returnPressed.connect(self._try_login)
 
@@ -378,7 +388,7 @@ class ProjectLoginDialog(FormModal):
         self._root.addWidget(self._error_lbl)
 
         # Custom full-width sign-in button (no Cancel)
-        sign_in = self._make_ok_btn('Sign in')
+        sign_in = self._make_ok_btn(t('project.login.sign_in'))
         sign_in.setFixedHeight(38)
         sign_in.clicked.disconnect()          # disconnect auto-accept
         sign_in.clicked.connect(self._try_login)
@@ -393,7 +403,7 @@ class ProjectLoginDialog(FormModal):
         if expected and password == expected:
             self.accept()
         else:
-            self._error_lbl.setText('Incorrect username or password. Please try again.')
+            self._error_lbl.setText(t('project.login.error'))
             self._error_lbl.setVisible(True)
             self._f_pass.clear()
             self._f_pass.setFocus()
@@ -419,9 +429,11 @@ class TheProjectWidget(QWidget):
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
+        self._pending_restoration: dict[str, dict] = {}
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
         self._setup_autosave()
+        on_language_changed(self._on_language_changed)
 
     # ── construction ──────────────────────────────────────────────────────────
 
@@ -476,43 +488,43 @@ class TheProjectWidget(QWidget):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(8)
 
-        new_btn = QPushButton('＋ New Project')
-        new_btn.setStyleSheet(_BTN_TOOLBAR); new_btn.setFixedHeight(28)
-        new_btn.setCursor(Qt.PointingHandCursor)
-        new_btn.setToolTip('Create a new empty project')
-        new_btn.clicked.connect(self._on_new_project)
+        self._new_btn = QPushButton(t('project.topbar.new'))
+        self._new_btn.setStyleSheet(_BTN_TOOLBAR); self._new_btn.setFixedHeight(28)
+        self._new_btn.setCursor(Qt.PointingHandCursor)
+        self._new_btn.setToolTip(t('project.topbar.tip_new'))
+        self._new_btn.clicked.connect(self._on_new_project)
 
-        open_btn = QPushButton('📂 Open Project')
-        open_btn.setStyleSheet(_BTN_TOOLBAR); open_btn.setFixedHeight(28)
-        open_btn.setCursor(Qt.PointingHandCursor)
-        open_btn.setToolTip('Open an existing .ectopjt file')
-        open_btn.clicked.connect(self._on_open_project)
+        self._open_btn = QPushButton(t('project.topbar.open'))
+        self._open_btn.setStyleSheet(_BTN_TOOLBAR); self._open_btn.setFixedHeight(28)
+        self._open_btn.setCursor(Qt.PointingHandCursor)
+        self._open_btn.setToolTip(t('project.topbar.tip_open'))
+        self._open_btn.clicked.connect(self._on_open_project)
 
-        self._save_btn = QPushButton('💾 Save Project')
+        self._save_btn = QPushButton(t('project.topbar.save'))
         self._save_btn.setStyleSheet(_BTN_SAVE); self._save_btn.setFixedHeight(28)
         self._save_btn.setCursor(Qt.PointingHandCursor)
-        self._save_btn.setToolTip('Save the current project')
+        self._save_btn.setToolTip(t('project.topbar.tip_save'))
         self._save_btn.clicked.connect(self._on_save_project)
 
-        self._print_btn = QPushButton('🖨  Print')
+        self._print_btn = QPushButton(t('project.topbar.print'))
         self._print_btn.setStyleSheet(_BTN_TOOLBAR); self._print_btn.setFixedHeight(28)
         self._print_btn.setCursor(Qt.PointingHandCursor)
-        self._print_btn.setToolTip('Print or export the current section as PDF')
+        self._print_btn.setToolTip(t('project.topbar.tip_print'))
         self._print_btn.clicked.connect(self._on_print)
 
-        self._lock_btn = QPushButton('🔓  Password')
+        self._lock_btn = QPushButton(t('project.topbar.password'))
         self._lock_btn.setStyleSheet(_BTN_TOOLBAR); self._lock_btn.setFixedHeight(28)
         self._lock_btn.setCursor(Qt.PointingHandCursor)
-        self._lock_btn.setToolTip('Set or remove project password protection')
+        self._lock_btn.setToolTip(t('project.topbar.tip_password'))
         self._lock_btn.clicked.connect(self._on_password_btn)
 
-        layout.addWidget(new_btn)
-        layout.addWidget(open_btn)
+        layout.addWidget(self._new_btn)
+        layout.addWidget(self._open_btn)
         layout.addWidget(self._save_btn)
         layout.addWidget(self._lock_btn)
         layout.addWidget(self._print_btn)
 
-        self._project_name_lbl = QLabel('No project open')
+        self._project_name_lbl = QLabel(t('project.topbar.no_project'))
         self._project_name_lbl.setStyleSheet(
             f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
         )
@@ -537,7 +549,7 @@ class TheProjectWidget(QWidget):
                 font-size: 13px; font-weight: bold; border: none;
             }}
         """)
-        self._user_btn = QPushButton('Not logged in  ▾')
+        self._user_btn = QPushButton(t('project.topbar.not_logged_in'))
         self._user_btn.setFlat(True)
         self._user_btn.setCursor(Qt.PointingHandCursor)
         self._user_btn.setStyleSheet(f"""
@@ -563,6 +575,11 @@ class TheProjectWidget(QWidget):
             idx = self._stack.addWidget(widget)
             self._screen_widgets[key] = widget
             self._screen_idx[key] = idx
+            # Restore data saved during a language change
+            if key in self._pending_restoration:
+                saved = self._pending_restoration.pop(key)
+                if hasattr(widget, 'set_data'):
+                    widget.set_data(saved)
         return self._screen_widgets[key]
 
     def _wire_screen(self, key: str, widget: QWidget):
@@ -593,14 +610,14 @@ class TheProjectWidget(QWidget):
         key = self._current_screen_key
         if key is None:
             from ui.modal_utils import show_message_dialog
-            show_message_dialog(self, 'Nothing to print',
-                                'Please open a section first, then click Print.')
+            show_message_dialog(self, t('project.msg.nothing_to_print'),
+                                t('project.msg.open_section'))
             return
         widget = self._screen_widgets.get(key)
         if widget is None:
             return
         # Human-readable label for the dialog title
-        label = next((lbl for k, lbl in _NAV_ITEMS if k == key), key)
+        label = t(f'project.nav.{key}')
         # Strip emoji prefix for the window title
         title = label.split('\xa0')[-1].strip() if '\xa0' in label else label.strip()
         landscape = key == 'timeline'
@@ -700,6 +717,63 @@ class TheProjectWidget(QWidget):
         if self._stack.currentIndex() == ec_idx:
             self._push_validation_costs()
 
+    # ── language change ───────────────────────────────────────────────────────
+
+    def _retranslate_topbar(self):
+        """Update only the topbar static labels/buttons."""
+        self._new_btn.setText(t('project.topbar.new'))
+        self._new_btn.setToolTip(t('project.topbar.tip_new'))
+        self._open_btn.setText(t('project.topbar.open'))
+        self._open_btn.setToolTip(t('project.topbar.tip_open'))
+        self._save_btn.setText(t('project.topbar.save'))
+        self._save_btn.setToolTip(t('project.topbar.tip_save'))
+        self._print_btn.setText(t('project.topbar.print'))
+        self._print_btn.setToolTip(t('project.topbar.tip_print'))
+        self._update_lock_btn()
+        if not self._project_path:
+            self._project_name_lbl.setText(t('project.topbar.no_project'))
+
+    def _on_language_changed(self):
+        """Retranslate the shell UI and reload all content screens with preserved data."""
+        # 1. Save data from every loaded screen
+        saved = {}
+        for key, w in self._screen_widgets.items():
+            if w is not None and hasattr(w, 'get_data'):
+                saved[key] = w.get_data()
+
+        # 2. Save project nav info
+        project_info = self._nav.get_info_data()
+        current_key = self._current_screen_key
+
+        # 3. Destroy all screen widgets
+        for key in list(self._screen_widgets.keys()):
+            w = self._screen_widgets[key]
+            if w is not None:
+                self._stack.removeWidget(w)
+                w.deleteLater()
+            self._screen_widgets[key] = None
+        self._screen_idx.clear()
+
+        # 4. Retranslate the static shell (nav + topbar)
+        self._nav.retranslate()
+        self._retranslate_topbar()
+
+        # 5. Keep saved data available for lazy restoration
+        self._pending_restoration = {k: v for k, v in saved.items() if v}
+
+        # 6. Restore project info (placeholders are now updated)
+        self._nav.set_info_data(project_info)
+
+        # 7. Reload the current screen (creates it fresh in new language)
+        if current_key:
+            self._ensure_screen(current_key)
+            self._stack.setCurrentIndex(self._screen_idx[current_key])
+            self._on_project_info_changed()
+            if current_key == 'validation':
+                self._push_validation_costs()
+            elif current_key == 'traceability':
+                self._sync_traceability_from_brief()
+
     # ── top bar ───────────────────────────────────────────────────────────────
 
     def set_user(self, username: str):
@@ -744,7 +818,7 @@ class TheProjectWidget(QWidget):
             self._load_project(path)
         except Exception as e:
             logger.error(f'Failed to open project: {e}', exc_info=True)
-            QMessageBox.critical(self, 'Open Failed', f'Could not open project:\n{e}')
+            QMessageBox.critical(self, t('project.msg.open_failed'), t('project.msg.open_error').format(e=e))
 
     def _on_save_project(self):
         if not self._project_path:
@@ -761,7 +835,7 @@ class TheProjectWidget(QWidget):
             self._save_project(self._project_path)
         except Exception as e:
             logger.error(f'Failed to save project: {e}', exc_info=True)
-            QMessageBox.critical(self, 'Save Failed', f'Could not save project:\n{e}')
+            QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
 
     def _save_project(self, path: str):
         data = {'version': '1.0', 'project_info': self._nav.get_info_data()}
@@ -785,7 +859,7 @@ class TheProjectWidget(QWidget):
         if stored_hash:
             from ui.passcode_dialog import PasscodeDialog
             dlg = PasscodeDialog(mode='enter', stored_hash=stored_hash, parent=self)
-            dlg.setWindowTitle('Protected Project — Enter Password')
+            dlg.setWindowTitle(t('project.msg.pwd_enter_title'))
             if dlg.exec_() != QDialog.Accepted:
                 return  # user cancelled — do not load
 
@@ -807,13 +881,13 @@ class TheProjectWidget(QWidget):
     def _update_lock_btn(self):
         """Update the password button appearance to reflect the current lock state."""
         if self._project_password_hash:
-            self._lock_btn.setText('🔒  Protected')
+            self._lock_btn.setText(t('project.topbar.protected'))
             self._lock_btn.setStyleSheet(_BTN_LOCK_ACTIVE)
-            self._lock_btn.setToolTip('Project is password-protected — click to change or remove')
+            self._lock_btn.setToolTip(t('project.topbar.tip_protected'))
         else:
-            self._lock_btn.setText('🔓  Password')
+            self._lock_btn.setText(t('project.topbar.password'))
             self._lock_btn.setStyleSheet(_BTN_TOOLBAR)
-            self._lock_btn.setToolTip('Set a password to protect this project')
+            self._lock_btn.setToolTip(t('project.topbar.tip_unlocked'))
 
     def _on_password_btn(self):
         """Set, change, or remove the project password."""
@@ -836,11 +910,11 @@ class TheProjectWidget(QWidget):
 
             # Offer Remove / Change / Cancel
             msg = QMessageBox(self)
-            msg.setWindowTitle('Password Protection')
-            msg.setText('Password verified.\n\nWhat would you like to do?')
-            remove_btn = msg.addButton('Remove Password', QMessageBox.DestructiveRole)
-            change_btn = msg.addButton('Change Password', QMessageBox.AcceptRole)
-            msg.addButton('Cancel', QMessageBox.RejectRole)
+            msg.setWindowTitle(t('project.msg.pwd_title'))
+            msg.setText(t('project.msg.pwd_body'))
+            remove_btn = msg.addButton(t('project.msg.pwd_remove'), QMessageBox.DestructiveRole)
+            change_btn = msg.addButton(t('project.msg.pwd_change'), QMessageBox.AcceptRole)
+            msg.addButton(t('common.cancel'), QMessageBox.RejectRole)
             msg.exec_()
             clicked = msg.clickedButton()
 
@@ -857,7 +931,7 @@ class TheProjectWidget(QWidget):
 
     def _confirm_discard(self) -> bool:
         reply = QMessageBox.question(
-            self, 'Unsaved Changes', 'You have unsaved changes. Discard them?',
+            self, t('project.msg.unsaved_title'), t('project.msg.unsaved_body'),
             QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Cancel
         )
         return reply == QMessageBox.Discard
@@ -870,7 +944,7 @@ class TheProjectWidget(QWidget):
                 f'color: {_TEXT}; font-size: 12px; background: transparent; border: none;'
             )
         else:
-            self._project_name_lbl.setText('No project open')
+            self._project_name_lbl.setText(t('project.topbar.no_project'))
             self._project_name_lbl.setStyleSheet(
                 f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
             )

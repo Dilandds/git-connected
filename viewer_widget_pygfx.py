@@ -338,6 +338,7 @@ class STLViewerWidget(QWidget):
         self._drawing_active = False  # True while mouse button is held
         self._eraser_mode = False  # When True, clicks erase strokes instead of drawing
         self._text_mode = False  # When True, clicks place text labels on mesh surface
+        self._font_size_multiplier = 1.0  # multiplier applied on top of auto base size
         self._draw_texts = []  # list of pygfx.Text objects in scene
         self._draw_texts_data = []  # parallel list for export: [{'text': '...', 'position': [x,y,z], 'color': '...', 'font_size': N}]
         self._draw_pending_pos = None   # last unprocessed mouse pos for throttling
@@ -2803,31 +2804,32 @@ class STLViewerWidget(QWidget):
             self._canvas.request_draw()
 
     def undo_last_stroke(self):
-        """Remove the most recently drawn stroke or text label."""
-        # Determine which was added last by comparing list lengths
-        # If text was the last action, undo text; otherwise undo stroke
-        # We track order via a simple approach: undo whichever list was modified last
-        # Since we can't easily track order, undo text if text_mode is active, otherwise stroke
-        if self._text_mode and self._draw_texts:
-            text_obj = self._draw_texts.pop()
-            if self._draw_texts_data:
-                self._draw_texts_data.pop()
-            try:
-                self._scene.remove(text_obj)
-            except Exception:
-                pass
-            if self._canvas:
-                self._canvas.request_draw()
-        elif self._draw_strokes:
-            stroke = self._draw_strokes.pop()
-            if self._draw_strokes_data:
-                self._draw_strokes_data.pop()
-            try:
-                self._scene.remove(stroke)
-            except Exception:
-                pass
-            if self._canvas:
-                self._canvas.request_draw()
+        """Remove the most recently drawn pen stroke."""
+        if not self._draw_strokes:
+            return
+        stroke = self._draw_strokes.pop()
+        if self._draw_strokes_data:
+            self._draw_strokes_data.pop()
+        try:
+            self._scene.remove(stroke)
+        except Exception:
+            pass
+        if self._canvas:
+            self._canvas.request_draw()
+
+    def undo_last_text(self):
+        """Remove the most recently placed text label."""
+        if not self._draw_texts:
+            return
+        text_obj = self._draw_texts.pop()
+        if self._draw_texts_data:
+            self._draw_texts_data.pop()
+        try:
+            self._scene.remove(text_obj)
+        except Exception:
+            pass
+        if self._canvas:
+            self._canvas.request_draw()
 
     def set_eraser_mode(self, enabled: bool):
         """Toggle eraser mode. When on, clicks remove strokes instead of drawing."""
@@ -3117,6 +3119,10 @@ class STLViewerWidget(QWidget):
             self._eraser_mode = False
         logger.info(f"set_text_mode: {enabled}")
 
+    def set_font_size_multiplier(self, multiplier: float):
+        """Set the font-size multiplier applied on top of the auto base size."""
+        self._font_size_multiplier = max(0.1, float(multiplier))
+
     def _draw_place_text(self, x, y):
         """Place a text label on the mesh surface at click position."""
         if self._annotation_trimesh is None:
@@ -3155,32 +3161,40 @@ class STLViewerWidget(QWidget):
             return False
 
     def _get_draw_text_size(self) -> float:
-        """World-space font size for surface text — scales with the model."""
+        """World-space font size using the same ratio pattern as annotation markers.
+
+        Annotation spheres use max_dim * 0.012 (radius).  Text is sized at
+        max_dim * 0.020 — roughly matching the sphere's visible diameter so
+        labels are readable alongside marker dots.  The 0.01 guard mirrors
+        add_annotation_marker's degenerate-mesh protection.
+        """
         try:
             b = self.current_mesh.bounds
-            diag = np.sqrt(
-                (b[1] - b[0]) ** 2 + (b[3] - b[2]) ** 2 + (b[5] - b[4]) ** 2
+            max_dim = max(
+                b[1] - b[0],
+                b[3] - b[2],
+                b[5] - b[4],
+                0.01,
             )
-            return max(diag * 0.04, 0.5)
+            return max_dim * 0.030 * self._font_size_multiplier
         except Exception:
-            return 1.0
+            return self._font_size_multiplier
 
     def _add_text_at(self, text: str, position: tuple, color: str, font_size: float = None,
                      surface_normal: np.ndarray = None):
-        """Place text on a 3D surface character-by-character so it curves with the geometry.
+        """Place text as a flat label at the click point.
 
-        Each character is independently projected onto the surface using the tangent
-        direction, oriented to its local face normal, and placed with a small outward
-        offset.  This prevents curved surfaces (rings, cylinders) from clipping the ends
-        of the text string.
+        All characters share the surface normal and tangent computed at the
+        click point — no per-character surface re-projection, so text stays
+        straight even on curved surfaces.
         """
         import pygfx as gfx
         try:
             fs = font_size if font_size is not None else self._get_draw_text_size()
-            char_w = fs * 0.65          # approximate world-unit character width
+            char_w = fs * 0.65
             offset = self._get_draw_normal_offset() * 4
 
-            # Surface normal at the click point
+            # Normal at the click point (used for all characters)
             if surface_normal is not None:
                 normal = np.asarray(surface_normal, dtype=float)
             else:
@@ -3191,22 +3205,29 @@ class STLViewerWidget(QWidget):
 
             tangent = self._compute_surface_tangent(normal)
 
+            # Rotation: align text face (+Z) with click-point normal — computed once
+            base_pos = np.array(position, dtype=float) + normal * offset
+            z_axis = np.array([0.0, 0.0, 1.0])
+            try:
+                from pylinalg import quat_from_vecs
+                q = quat_from_vecs(z_axis, normal)
+            except Exception:
+                cross = np.cross(z_axis, normal)
+                dot = float(np.dot(z_axis, normal))
+                w = 1.0 + dot
+                q = np.array([cross[0], cross[1], cross[2], w])
+                q_len = np.linalg.norm(q)
+                q = q / q_len if q_len > 1e-10 else np.array([0.0, 0.0, 0.0, 1.0])
+            rotation = tuple(float(v) for v in q)
+
             n_chars = len(text)
             total_w = char_w * n_chars
-            start_offset = -total_w / 2.0 + char_w / 2.0  # centre text on click
+            start_offset = -total_w / 2.0 + char_w / 2.0
 
             placed_objects = []
             for i, ch in enumerate(text):
                 lateral = start_offset + i * char_w
-                candidate = np.array(position, dtype=float) + tangent * lateral
-
-                # Find real surface point at this lateral offset
-                surf_pt, surf_n = self._project_point_to_surface(candidate, normal)
-                sn_len = np.linalg.norm(surf_n)
-                if sn_len > 1e-10:
-                    surf_n = surf_n / sn_len
-
-                char_pos = surf_pt + surf_n * offset
+                char_pos = base_pos + tangent * lateral
 
                 mat = gfx.TextMaterial(color=color)
                 mat.depth_test = True
@@ -3216,22 +3237,8 @@ class STLViewerWidget(QWidget):
                     anchor="middle-center", screen_space=False,
                 )
                 char_obj.local.position = tuple(char_pos.astype(float))
+                char_obj.local.rotation = rotation
                 char_obj.render_order = 100
-
-                # Rotate so the text face (+Z) aligns with the surface normal
-                z_axis = np.array([0.0, 0.0, 1.0])
-                try:
-                    from pylinalg import quat_from_vecs
-                    q = quat_from_vecs(z_axis, surf_n)
-                except Exception:
-                    cross = np.cross(z_axis, surf_n)
-                    dot = float(np.dot(z_axis, surf_n))
-                    w = 1.0 + dot
-                    q = np.array([cross[0], cross[1], cross[2], w])
-                    q_len = np.linalg.norm(q)
-                    q = q / q_len if q_len > 1e-10 else np.array([0.0, 0.0, 0.0, 1.0])
-                char_obj.local.rotation = tuple(float(v) for v in q)
-
                 self._scene.add(char_obj)
                 placed_objects.append(char_obj)
 
@@ -3243,7 +3250,7 @@ class STLViewerWidget(QWidget):
             })
             if self._canvas:
                 self._canvas.request_draw()
-            logger.info(f"_add_text_at: Placed '{text}' ({n_chars} chars) curved on surface")
+            logger.info(f"_add_text_at: Placed '{text}' ({n_chars} chars) flat on surface")
         except Exception as e:
             logger.warning(f"_add_text_at: {e}")
 

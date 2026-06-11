@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 
 from .models import Report, ReportPage, PhotoRow
 from .shared import _BG, _BORDER, _INPUT, _BTN_OUTLINE, _card, _sep, _lbl
+from i18n import t
 from .photo_row import PhotoRowWidget
 from .header_section import HeaderSection
 
@@ -51,10 +52,10 @@ class PageWidget(QScrollArea):
         fl = QVBoxLayout(fu_card)
         fl.setContentsMargins(14, 10, 14, 10)
         fl.setSpacing(6)
-        fl.addWidget(_lbl("Production follow-up and meeting summary", muted=False, bold=True))
+        fl.addWidget(_lbl(t("project.report.page_follow_title"), muted=False, bold=True))
         fl.addWidget(_sep())
         self._followup = QTextEdit()
-        self._followup.setPlaceholderText("Production follow-up and meeting summary...")
+        self._followup.setPlaceholderText(t("project.report.page_follow_ph"))
         self._followup.setMinimumHeight(80)
         self._followup.setStyleSheet(_INPUT)
         self._followup.setPlainText(page.followup)
@@ -70,9 +71,9 @@ class PageWidget(QScrollArea):
         pl.setContentsMargins(14, 10, 14, 10)
         pl.setSpacing(8)
         ph_hdr = QHBoxLayout()
-        ph_hdr.addWidget(_lbl("Components and photos for modification", muted=False, bold=True))
+        ph_hdr.addWidget(_lbl(t("project.report.page_components"), muted=False, bold=True))
         ph_hdr.addStretch()
-        self._add_photo_row_btn = QPushButton("+ Add photo row")
+        self._add_photo_row_btn = QPushButton(t("project.report.page_add_photo_row"))
         self._add_photo_row_btn.setStyleSheet(_BTN_OUTLINE)
         self._add_photo_row_btn.setFixedHeight(26)
         self._add_photo_row_btn.setCursor(Qt.PointingHandCursor)
@@ -93,10 +94,10 @@ class PageWidget(QScrollArea):
         co = QVBoxLayout(co_card)
         co.setContentsMargins(14, 10, 14, 10)
         co.setSpacing(6)
-        co.addWidget(_lbl("Comments", muted=False, bold=True))
+        co.addWidget(_lbl(t("project.report.page_comments"), muted=False, bold=True))
         co.addWidget(_sep())
         self._comments = QTextEdit()
-        self._comments.setPlaceholderText("Comments...")
+        self._comments.setPlaceholderText(t("project.report.page_comments_ph"))
         self._comments.setMinimumHeight(70)
         self._comments.setStyleSheet(_INPUT)
         self._comments.setPlainText(page.comments)

@@ -1,6 +1,7 @@
 """Section 3 — Target Points card."""
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel
 from .shared import _MUTED, LABEL_STYLE, card, section_label, make_input, separator
+from i18n import t
 
 
 class TargetPointsCard(QFrame):
@@ -12,19 +13,19 @@ class TargetPointsCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('3. Target Points'))
+        layout.addWidget(section_label(t('project.brief.s3_title')))
         layout.addWidget(separator())
 
-        hint = QLabel('Preliminary indications — to be refined as the project progresses.')
+        hint = QLabel(t('project.brief.s3_hint'))
         hint.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         fields = [
-            ('Dimensions',        '_f_dimensions',  ''),
-            ('Target weight',     '_f_weight',      'g'),
-            ('Target total cost', '_f_cost',        '€'),
-            ('Other constraints', '_f_constraints', ''),
+            (t('project.brief.s3_dimensions'),  '_f_dimensions',  ''),
+            (t('project.brief.s3_weight'),       '_f_weight',      'g'),
+            (t('project.brief.s3_cost'),         '_f_cost',        '€'),
+            (t('project.brief.s3_constraints'),  '_f_constraints', ''),
         ]
         for label, attr, unit in fields:
             row = QHBoxLayout()

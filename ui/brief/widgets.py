@@ -10,6 +10,7 @@ from .shared import (
     _ACCENT, _MUTED, _TEXT, _BORDER,
     ADD_BTN_STYLE, TOOLTIP_STYLE, make_input, separator,
 )
+from i18n import t
 
 
 # ── Bullet list ───────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ class BulletListWidget(QWidget):
         self._layout.setSpacing(4)
         self._inputs = []
 
-        self._add_btn = QPushButton('+ Add')
+        self._add_btn = QPushButton(t('project.brief.s6_add_bullet'))
         self._add_btn.setStyleSheet(ADD_BTN_STYLE)
         self._add_btn.setCursor(Qt.PointingHandCursor)
         self._add_btn.clicked.connect(self._on_add_clicked)
@@ -93,7 +94,9 @@ class ComponentsTable(QWidget):
     Each row has an edit (✎) button that opens _AddComponentRowDialog pre-filled.
     """
 
-    HEADERS = ['Component', 'Material', 'Colour']
+    @property
+    def HEADERS(self):
+        return [t('project.brief.s6_component'), t('project.brief.s6_material'), t('project.brief.s6_colour')]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -107,7 +110,7 @@ class ComponentsTable(QWidget):
         # Column headers
         hdr = QHBoxLayout(); hdr.setSpacing(8)
         hdr.addSpacing(20)  # align with numbered rows
-        for h in self.HEADERS:
+        for h in self.HEADERS:  # property call
             lbl = QLabel(h)
             lbl.setStyleSheet(
                 f'color: {_ACCENT}; font-size: 10px; font-weight: bold; '
@@ -124,7 +127,7 @@ class ComponentsTable(QWidget):
 
         self._append_row('Component 1', '', '')
 
-        self._add_btn = QPushButton('+ Add a component')
+        self._add_btn = QPushButton(t('project.brief.s6_add'))
         self._add_btn.setStyleSheet(ADD_BTN_STYLE)
         self._add_btn.setCursor(Qt.PointingHandCursor)
         self._add_btn.clicked.connect(self._on_add_clicked)
@@ -149,7 +152,7 @@ class ComponentsTable(QWidget):
         inputs = []
         for val, placeholder in zip(
             [component, material, colour],
-            ['Component name', 'Material', 'Colour'],
+            [t('project.brief.s6_comp_name'), t('project.brief.s6_material'), t('project.brief.s6_colour')],
         ):
             inp = make_input(placeholder)
             inp.setMinimumHeight(26)
@@ -161,7 +164,7 @@ class ComponentsTable(QWidget):
         edit_btn = QPushButton('✎')
         edit_btn.setFixedSize(24, 24)
         edit_btn.setCursor(Qt.PointingHandCursor)
-        edit_btn.setToolTip('Edit this row')
+        edit_btn.setToolTip(t('project.brief.s6_edit_row'))
         edit_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_MUTED};

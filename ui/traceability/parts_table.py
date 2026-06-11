@@ -10,6 +10,7 @@ from .shared import (
 )
 from .dialogs import _PartDialog, _CommentsDialog
 from .part_row import _PartRow, _W_TASK, _W_SUBJECT, _W_PERFORMED_BY, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
+from i18n import t
 
 
 class _PartsTable(QWidget):
@@ -54,16 +55,16 @@ class _PartsTable(QWidget):
 
         # Badge spacer
         hl.addSpacing(38 + 12)
-        hl.addWidget(_ch('TASK', _W_TASK))
+        hl.addWidget(_ch(t('project.traceability.col_task'), _W_TASK))
         hl.addStretch(1)
-        hl.addWidget(_ch('SUBJECT', _W_SUBJECT))
-        hl.addWidget(_ch('PERFORMED BY', _W_PERFORMED_BY))
-        hl.addWidget(_ch('COMMENTS / NOTES', _W_COMMENTS))
-        hl.addWidget(_ch('START DATE', _W_DATE))
-        hl.addWidget(_ch('DUE DATE', _W_DATE))
-        hl.addWidget(_ch('STATUS', _W_STATUS))
+        hl.addWidget(_ch(t('project.traceability.col_subject'), _W_SUBJECT))
+        hl.addWidget(_ch(t('project.traceability.col_performed_by'), _W_PERFORMED_BY))
+        hl.addWidget(_ch(t('project.traceability.col_comments'), _W_COMMENTS))
+        hl.addWidget(_ch(t('project.traceability.col_start_date'), _W_DATE))
+        hl.addWidget(_ch(t('project.traceability.col_due_date'), _W_DATE))
+        hl.addWidget(_ch(t('project.traceability.col_status'), _W_STATUS))
         hl.addSpacing(12)
-        hl.addWidget(_ch('PROGRESS', _W_PROGRESS))
+        hl.addWidget(_ch(t('project.traceability.col_progress'), _W_PROGRESS))
         hl.addSpacing(28)
         root.addWidget(hdr)
 

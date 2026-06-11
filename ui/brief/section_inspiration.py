@@ -1,6 +1,7 @@
 """Section 5 — Inspiration / Idea / Direction card."""
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
 from .shared import _MUTED, card, section_label, make_textarea, separator
+from i18n import t
 
 
 class InspirationCard(QFrame):
@@ -12,16 +13,16 @@ class InspirationCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('5. Inspiration / Idea / Direction'))
+        layout.addWidget(section_label(t('project.brief.s5_title')))
         layout.addWidget(separator())
 
-        hint = QLabel('References, ideas, visual atmosphere, design direction.')
+        hint = QLabel(t('project.brief.s5_hint'))
         hint.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         self._f_inspiration = make_textarea(
-            'Describe the main idea, the inspiration and the design direction...',
+            t('project.brief.s5_ph'),
             min_height=120,
         )
         layout.addWidget(self._f_inspiration)

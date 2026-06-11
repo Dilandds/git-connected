@@ -443,6 +443,7 @@ class ViewControlsToolbar(QWidget):
     draw_text_toggled = pyqtSignal(bool)  # True = text mode on
     draw_font_size_changed = pyqtSignal(float)  # multiplier relative to auto size
     draw_undo_requested = pyqtSignal()
+    draw_undo_text_requested = pyqtSignal()
     draw_clear_requested = pyqtSignal()
     draw_color_picker_requested = pyqtSignal()  # show color picker (pen/text only, not eraser)
     load_file = pyqtSignal()
@@ -616,7 +617,7 @@ class ViewControlsToolbar(QWidget):
         self.draw_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.draw_btn)
         self._eraser_active = False
-        
+
         # Parts button - hidden, state managed via Visual Style dropdown
         self.parts_btn = ToolbarButton("🧩", "Parts", "Toggle part visibility and selection")
         self.parts_btn.clicked.connect(self._on_parts_selected)
@@ -899,6 +900,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         else:
             self.ruler_btn.set_label("Ruler")
             self.ruler_btn.set_icon("📏")
@@ -969,6 +971,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         else:
             self.annotation_btn.set_label("Annotation ▼")
             self.annotation_btn.set_icon("📝")
@@ -1003,6 +1006,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         else:
             self.annotation_btn.set_label("Annotation ▼")
             self.annotation_btn.set_icon("📝")
@@ -1037,6 +1041,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         self.parts_btn.set_active(self.parts_mode_enabled)
         self.toggle_parts.emit()
     
@@ -1065,6 +1070,7 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
 
@@ -1092,19 +1098,14 @@ class ViewControlsToolbar(QWidget):
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
                 self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
         self.texture_btn.set_active(self.texture_mode_enabled)
         self.toggle_texture.emit()
     
     def _show_draw_menu(self):
         """Show dropdown menu with Draw, Eraser, Color, Undo, Clear options.
-        If draw mode is already active, pressing the button again exits it (mirrors screenshot toggle).
+        Always shows the menu so tools and font size remain accessible while draw mode is on.
         """
-        if self.draw_mode_enabled:
-            self.draw_mode_enabled = False
-            self.draw_btn.set_active(False)
-            self.draw_btn.set_label("Draw ▼")
-            self.toggle_draw.emit()
-            return
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -1127,6 +1128,18 @@ class ViewControlsToolbar(QWidget):
         """)
 
         from PyQt5.QtWidgets import QActionGroup
+
+        # Exit draw mode — only shown when already active
+        if self.draw_mode_enabled:
+            def _exit_draw():
+                self.draw_mode_enabled = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
+                self.toggle_draw.emit()
+            exit_action = menu.addAction("✕  Exit Draw Mode")
+            exit_action.triggered.connect(_exit_draw)
+            menu.addSeparator()
 
         # Mutually exclusive tool selection — clicking any tool auto-enables draw mode
         tool_group = QActionGroup(menu)
@@ -1151,14 +1164,12 @@ class ViewControlsToolbar(QWidget):
         text_action.triggered.connect(self._on_text_tool_selected)
         tool_group.addAction(text_action)
 
-        menu.addSeparator()
-
-        # Font size widget (spinbox embedded via QWidgetAction)
+        # Font size — directly below Text (no separator), always visible
         from PyQt5.QtWidgets import QDoubleSpinBox, QHBoxLayout, QWidget, QLabel
         _fs_widget = QWidget()
         _fs_widget.setStyleSheet("background: transparent;")
         _fs_lay = QHBoxLayout(_fs_widget)
-        _fs_lay.setContentsMargins(16, 4, 16, 4)
+        _fs_lay.setContentsMargins(32, 3, 16, 3)
         _fs_lay.setSpacing(8)
         _fs_lbl = QLabel("Font size:")
         _fs_lbl.setStyleSheet(
@@ -1204,12 +1215,18 @@ class ViewControlsToolbar(QWidget):
         _fs_action.setDefaultWidget(_fs_widget)
         menu.addAction(_fs_action)
 
+        menu.addSeparator()
+
         color_action = menu.addAction("🎨  Pen Color")
         color_action.triggered.connect(self.show_draw_color_picker)
 
         undo_action = menu.addAction("↩  Undo Stroke")
         undo_action.setEnabled(self.draw_mode_enabled)
         undo_action.triggered.connect(self.draw_undo_requested.emit)
+
+        undo_text_action = menu.addAction("↩  Undo Word")
+        undo_text_action.setEnabled(self.draw_mode_enabled)
+        undo_text_action.triggered.connect(self.draw_undo_text_requested.emit)
 
         clear_action = menu.addAction("🗑  Clear All")
         clear_action.setEnabled(self.draw_mode_enabled)
@@ -1294,6 +1311,7 @@ class ViewControlsToolbar(QWidget):
             self.draw_btn.set_label("Draw ▼")
             self._eraser_active = False
             self.draw_eraser_toggled.emit(False)
+            self._hide_draw_extras()
         self.draw_btn.set_active(self.draw_mode_enabled)
         self.toggle_draw.emit()
 
@@ -1313,6 +1331,10 @@ class ViewControlsToolbar(QWidget):
             self.draw_eraser_toggled.emit(False)
         self.draw_btn.set_label("Text ▼" if self._draw_text_active else "Drawing ▼")
         self.draw_text_toggled.emit(self._draw_text_active)
+
+    def _hide_draw_extras(self):
+        """Clear text-mode flag when exiting draw mode."""
+        self._draw_text_active = False
 
     def reset_draw_state(self):
         """Reset draw button state (called when exiting draw mode externally)."""

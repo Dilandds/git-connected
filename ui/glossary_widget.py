@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -70,14 +71,15 @@ class _TermDialog(FormModal):
     """Add / Edit a glossary term."""
 
     def __init__(self, term: Optional[GlossaryTerm] = None, parent=None):
-        super().__init__(parent, "Edit Term" if term else "Add Term",
+        super().__init__(parent,
+                         t('project.glossary.edit_title') if term else t('project.glossary.add_title'),
                          min_width=420)
 
-        self.f_term = self.add_field("TERM", QLineEdit(term.term if term else ""), height=30)
-        self.f_term.setPlaceholderText("e.g. CAD")
+        self.f_term = self.add_field(t('project.glossary.term_field'), QLineEdit(term.term if term else ""), height=30)
+        self.f_term.setPlaceholderText(t('project.glossary.term_ph'))
 
-        self.f_def = self.add_field("DEFINITION", QTextEdit(), height_override=100)
-        self.f_def.setPlaceholderText("Enter definition here...")
+        self.f_def = self.add_field(t('project.glossary.def_field'), QTextEdit(), height_override=100)
+        self.f_def.setPlaceholderText(t('project.glossary.def_ph'))
         if term:
             self.f_def.setPlainText(term.definition)
 
@@ -141,14 +143,14 @@ class _TermRow(QFrame):
 
         # Action buttons
         edit_btn = QPushButton("✎")
-        edit_btn.setToolTip("Edit term")
+        edit_btn.setToolTip(t('project.glossary.tip_edit'))
         edit_btn.setFixedSize(28, 28)
         edit_btn.setStyleSheet(_BTN_ICON)
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._term))
 
         del_btn = QPushButton("🗑")
-        del_btn.setToolTip("Delete term")
+        del_btn.setToolTip(t('project.glossary.tip_delete'))
         del_btn.setFixedSize(28, 28)
         del_btn.setStyleSheet(_BTN_DELETE)
         del_btn.setCursor(Qt.PointingHandCursor)
@@ -214,10 +216,10 @@ class GlossaryWidget(QWidget):
 
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
-        title = QLabel("Glossary")
+        title = QLabel(t('project.glossary.title'))
         title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        subtitle = QLabel("Project-specific terms and definitions.")
+        subtitle = QLabel(t('project.glossary.subtitle'))
         subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col.addWidget(title)
         t_col.addWidget(subtitle)
@@ -226,7 +228,7 @@ class GlossaryWidget(QWidget):
 
         # Search
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search terms…")
+        self._search.setPlaceholderText(t('project.glossary.search_ph'))
         self._search.setFixedWidth(220)
         self._search.setFixedHeight(30)
         self._search.setStyleSheet(_INPUT)
@@ -234,7 +236,7 @@ class GlossaryWidget(QWidget):
         tl.addWidget(self._search)
 
         # Add term button
-        add_btn = QPushButton("＋  Add term")
+        add_btn = QPushButton(t('project.glossary.add_term'))
         add_btn.setStyleSheet(_BTN_PRIMARY)
         add_btn.setFixedHeight(30)
         add_btn.setCursor(Qt.PointingHandCursor)
@@ -260,8 +262,8 @@ class GlossaryWidget(QWidget):
                 l.setFixedWidth(w)
             return l
 
-        cl.addWidget(_hdr_lbl("TERM", 160))
-        cl.addWidget(_hdr_lbl("DEFINITION"))
+        cl.addWidget(_hdr_lbl(t('project.glossary.col_term'), 160))
+        cl.addWidget(_hdr_lbl(t('project.glossary.col_def')))
         cl.addStretch()
         root.addWidget(col_hdr)
 
@@ -300,8 +302,8 @@ class GlossaryWidget(QWidget):
         ]
 
         if not filtered:
-            empty = QLabel("No terms found. Click ＋ Add term to get started." if not query
-                           else f'No results for "{self._filter}".')
+            empty = QLabel(t('project.glossary.no_terms') if not query
+                           else f'{t("project.glossary.no_results")} "{self._filter}".')
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
             empty.setContentsMargins(0, 40, 0, 0)

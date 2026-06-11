@@ -26,6 +26,7 @@ from .shared import (
     _sep, _vdiv, _card_frame, _section_title, _lbl, _combo,
     _ProgressCell,
 )
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ class PreparationPanel(QScrollArea):
         self._build_static()
 
     def _build_static(self):
-        hdr = QLabel("Validation preparation")
+        hdr = QLabel(t("project.validation.prep_header"))
         hdr.setFont(make_font(size=14, bold=True))
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none; padding-bottom: 4px;")
         self._layout.addWidget(hdr)
@@ -165,8 +166,8 @@ class PreparationPanel(QScrollArea):
         cl.setSpacing(8)
 
         sh = QHBoxLayout()
-        sh.addWidget(_section_title("Stakeholders & Contributors"))
-        self._add_contributor_btn = QPushButton("+ Add contributor")
+        sh.addWidget(_section_title(t("project.validation.stakeholders")))
+        self._add_contributor_btn = QPushButton(t("project.validation.add_contributor"))
         self._add_contributor_btn.setStyleSheet(_BTN_OUTLINE)
         self._add_contributor_btn.setCursor(Qt.PointingHandCursor)
         self._add_contributor_btn.clicked.connect(self._add_stakeholder)
@@ -176,9 +177,15 @@ class PreparationPanel(QScrollArea):
         cl.addWidget(_sep())
 
         self._stakeholder_table = QTableWidget(0, 7)
-        self._stakeholder_table.setHorizontalHeaderLabels(
-            ["Role", "Name / Company", "Responsibility", "Status", "Progress", "Deliverables", "Comments"]
-        )
+        self._stakeholder_table.setHorizontalHeaderLabels([
+            t("project.validation.col_role"),
+            t("project.validation.col_name_company"),
+            t("project.validation.col_responsibility"),
+            t("project.validation.col_status"),
+            t("project.validation.col_progress"),
+            t("project.validation.col_deliverables"),
+            t("project.validation.col_comments"),
+        ])
         self._stakeholder_table.setStyleSheet(_TABLE_STYLE)
         hdr_h = self._stakeholder_table.horizontalHeader()
         hdr_h.setSectionResizeMode(QHeaderView.Interactive)
@@ -200,7 +207,7 @@ class PreparationPanel(QScrollArea):
         cl2 = QVBoxLayout(card2)
         cl2.setContentsMargins(14, 12, 14, 12)
         cl2.setSpacing(8)
-        cl2.addWidget(_section_title("Presentation Elements"))
+        cl2.addWidget(_section_title(t("project.validation.presentation")))
         cl2.addWidget(_sep())
 
         grid = QGridLayout()
@@ -213,7 +220,7 @@ class PreparationPanel(QScrollArea):
             btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
 
             lbl_inp = QLineEdit()
-            lbl_inp.setPlaceholderText("Stakeholders")
+            lbl_inp.setPlaceholderText(t("project.validation.photo_placeholder"))
             lbl_inp.setFixedWidth(112)
             lbl_inp.setStyleSheet(_INPUT)
             lbl_inp.textChanged.connect(lambda _: self.changed.emit())
@@ -235,9 +242,9 @@ class PreparationPanel(QScrollArea):
         cl3.setSpacing(8)
 
         hdr3 = QHBoxLayout()
-        hdr3.addWidget(_section_title("Estimated Cost & Lead Time"))
+        hdr3.addWidget(_section_title(t("project.validation.cost_section")))
         hdr3.addStretch()
-        auto_note = QLabel("Auto-populated from Estimated Cost screen and Timeline")
+        auto_note = QLabel(t("project.validation.cost_auto_note"))
         auto_note.setStyleSheet(
             f"color: {_MUTED}; font-size: 13px; background: transparent; border: none; font-style: italic;"
         )
@@ -251,12 +258,12 @@ class PreparationPanel(QScrollArea):
         # Left — cost table
         cost_side = QVBoxLayout()
         cost_side.setSpacing(6)
-        cost_cap = QLabel("Cost estimation (EUR)")
+        cost_cap = QLabel(t("project.validation.cost_caption"))
         cost_cap.setStyleSheet(f"color: {_MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
         cost_side.addWidget(cost_cap)
 
         self._cost_table = QTableWidget(len(COST_CATEGORIES) + 3, 2)
-        self._cost_table.setHorizontalHeaderLabels(["Category", "Amount"])
+        self._cost_table.setHorizontalHeaderLabels([t("project.validation.col_category"), t("project.validation.col_amount")])
         self._cost_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self._cost_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self._cost_table.setColumnWidth(1, 90)
@@ -272,15 +279,15 @@ class PreparationPanel(QScrollArea):
 
         total_row = len(COST_CATEGORIES)
         bold_font = make_font(size=11, bold=True)
-        for col, txt in enumerate(["Total est.", "—"]):
+        for col, txt in enumerate([t("project.validation.total_est"), "—"]):
             it = QTableWidgetItem(txt)
             it.setFont(bold_font)
             it.setBackground(QColor("#f1f3f5"))
             self._cost_table.setItem(total_row, col, it)
 
-        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem("Target budget"))
+        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem(t("project.validation.target_budget")))
         self._cost_table.setItem(total_row + 1, 1, QTableWidgetItem("—"))
-        var_label = QTableWidgetItem("Variance")
+        var_label = QTableWidgetItem(t("project.validation.variance"))
         var_label.setForeground(QColor(_MUTED))
         var_value = QTableWidgetItem("—")
         var_value.setForeground(QColor("#22c55e"))
@@ -294,7 +301,7 @@ class PreparationPanel(QScrollArea):
         # Right — schedule milestones
         sched_side = QVBoxLayout()
         sched_side.setSpacing(6)
-        sched_cap = QLabel("Schedule (est.)")
+        sched_cap = QLabel(t("project.validation.schedule_caption"))
         sched_cap.setStyleSheet(f"color: {_MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;")
         sched_side.addWidget(sched_cap)
 
@@ -407,19 +414,19 @@ class PreparationPanel(QScrollArea):
 
         total_row = n
         bold_font = make_font(size=11, bold=True)
-        for col, txt in enumerate(["Total est.", f"{sym}{grand_total:,.2f}"]):
+        for col, txt in enumerate([t("project.validation.total_est"), f"{sym}{grand_total:,.2f}"]):
             it = QTableWidgetItem(txt)
             it.setFont(bold_font)
             it.setBackground(QColor("#f1f3f5"))
             self._cost_table.setItem(total_row, col, it)
 
         budget_text = f"{sym}{target_budget:,.2f}" if target_budget > 0 else "—"
-        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem("Target budget"))
+        self._cost_table.setItem(total_row + 1, 0, QTableWidgetItem(t("project.validation.target_budget")))
         budget_item = QTableWidgetItem(budget_text)
         budget_item.setFont(bold_font if target_budget > 0 else make_font(size=11))
         self._cost_table.setItem(total_row + 1, 1, budget_item)
 
-        var_label = QTableWidgetItem("Variance")
+        var_label = QTableWidgetItem(t("project.validation.variance"))
         var_label.setForeground(QColor(_MUTED))
         self._cost_table.setItem(total_row + 2, 0, var_label)
         if target_budget > 0 and grand_total > 0:
@@ -478,7 +485,12 @@ class PreparationPanel(QScrollArea):
         for col, val in enumerate([stk.role, stk.name, stk.responsibility]):
             self._stakeholder_table.setItem(row, col, QTableWidgetItem(val))
 
-        status_combo = _combo(["In progress", "Not started", "Completed", "On hold"])
+        status_combo = _combo([
+            t("project.validation.status_in_progress"),
+            t("project.validation.status_not_started"),
+            t("project.validation.status_done"),
+            t("project.validation.status_on_hold"),
+        ])
         status_combo.setCurrentText(stk.status)
         status_combo.currentTextChanged.connect(lambda v, r=row: self._on_status_change(r, v))
         self._stakeholder_table.setCellWidget(row, 3, status_combo)
@@ -545,7 +557,7 @@ class ReportPanel(QScrollArea):
         self._build_static()
 
     def _build_static(self):
-        hdr = QLabel("Validation report")
+        hdr = QLabel(t("project.validation.report_header"))
         hdr.setFont(make_font(size=14, bold=True))
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none; padding-bottom: 4px;")
         self._layout.addWidget(hdr)
@@ -561,45 +573,45 @@ class ReportPanel(QScrollArea):
         mc = QVBoxLayout(meet_card)
         mc.setContentsMargins(12, 10, 12, 10)
         mc.setSpacing(4)
-        mc.addWidget(_section_title("Meeting Information"))
+        mc.addWidget(_section_title(t("project.validation.meeting_info")))
         mc.addWidget(_sep())
 
-        mc.addWidget(_lbl("Date"))
+        mc.addWidget(_lbl(t("project.validation.date")))
         self._r_date = EctoDateEdit(QDate.currentDate())
         self._r_date.setFixedHeight(26)
         mc.addWidget(self._r_date)
 
-        mc.addWidget(_lbl("Time (from / to)"))
+        mc.addWidget(_lbl(t("project.validation.time_from_to")))
         tr = QHBoxLayout()
         self._r_time_from = QTimeEdit(QTime(9, 0))
         self._r_time_to   = QTimeEdit(QTime(10, 0))
-        for t in (self._r_time_from, self._r_time_to):
-            t.setStyleSheet(_TIMEEDIT_STYLE)
-            t.setFixedHeight(26)
-        to_lbl = QLabel("to")
+        for tw in (self._r_time_from, self._r_time_to):
+            tw.setStyleSheet(_TIMEEDIT_STYLE)
+            tw.setFixedHeight(26)
+        to_lbl = QLabel(t("project.validation.to"))
         to_lbl.setStyleSheet(f"color: {_MUTED}; background: transparent; border: none; font-size: 14px;")
         tr.addWidget(self._r_time_from)
         tr.addWidget(to_lbl)
         tr.addWidget(self._r_time_to)
         mc.addLayout(tr)
 
-        mc.addWidget(_lbl("Location / Meeting"))
+        mc.addWidget(_lbl(t("project.validation.location")))
         self._r_location = QLineEdit()
-        self._r_location.setPlaceholderText("Location / Link")
+        self._r_location.setPlaceholderText(t("project.validation.location_ph"))
         self._r_location.setStyleSheet(_INPUT)
         self._r_location.setFixedHeight(26)
         mc.addWidget(self._r_location)
 
-        mc.addWidget(_lbl("Decision Maker"))
+        mc.addWidget(_lbl(t("project.validation.decision_maker")))
         self._r_decision_maker = QLineEdit()
-        self._r_decision_maker.setPlaceholderText("Name")
+        self._r_decision_maker.setPlaceholderText(t("project.validation.name_ph"))
         self._r_decision_maker.setStyleSheet(_INPUT)
         self._r_decision_maker.setFixedHeight(26)
         mc.addWidget(self._r_decision_maker)
 
-        mc.addWidget(_lbl("Presentation Lead"))
+        mc.addWidget(_lbl(t("project.validation.presentation_lead")))
         self._r_presentation_lead = QLineEdit()
-        self._r_presentation_lead.setPlaceholderText("Name")
+        self._r_presentation_lead.setPlaceholderText(t("project.validation.name_ph"))
         self._r_presentation_lead.setStyleSheet(_INPUT)
         self._r_presentation_lead.setFixedHeight(26)
         mc.addWidget(self._r_presentation_lead)
@@ -610,10 +622,10 @@ class ReportPanel(QScrollArea):
         od = QVBoxLayout(od_card)
         od.setContentsMargins(12, 10, 12, 10)
         od.setSpacing(4)
-        od.addWidget(_section_title("Overall Decision"))
+        od.addWidget(_section_title(t("project.validation.overall_decision")))
         od.addWidget(_sep())
         self._r_overall_decision = QTextEdit()
-        self._r_overall_decision.setPlaceholderText("Overall decision...")
+        self._r_overall_decision.setPlaceholderText(t("project.validation.overall_dec_ph"))
         self._r_overall_decision.setStyleSheet(_INPUT)
         od.addWidget(self._r_overall_decision, 1)
         row1.addWidget(od_card, 1)
@@ -622,10 +634,10 @@ class ReportPanel(QScrollArea):
         pa = QVBoxLayout(pa_card)
         pa.setContentsMargins(12, 10, 12, 10)
         pa.setSpacing(4)
-        pa.addWidget(_section_title("Present Attendees"))
+        pa.addWidget(_section_title(t("project.validation.present_attendees")))
         pa.addWidget(_sep())
         self._r_attendees = QTextEdit()
-        self._r_attendees.setPlaceholderText("Present attendees...")
+        self._r_attendees.setPlaceholderText(t("project.validation.attendees_ph"))
         self._r_attendees.setStyleSheet(_INPUT)
         pa.addWidget(self._r_attendees, 1)
         row1.addWidget(pa_card, 1)
@@ -634,10 +646,10 @@ class ReportPanel(QScrollArea):
         ar = QVBoxLayout(ar_card)
         ar.setContentsMargins(12, 10, 12, 10)
         ar.setSpacing(4)
-        ar.addWidget(_section_title("Attendees' Remarks"))
+        ar.addWidget(_section_title(t("project.validation.attendees_remarks")))
         ar.addWidget(_sep())
         self._r_attendee_remarks = QTextEdit()
-        self._r_attendee_remarks.setPlaceholderText("Remarks...")
+        self._r_attendee_remarks.setPlaceholderText(t("project.validation.remarks_ph"))
         self._r_attendee_remarks.setStyleSheet(_INPUT)
         ar.addWidget(self._r_attendee_remarks, 1)
         row1.addWidget(ar_card, 1)
@@ -649,13 +661,13 @@ class ReportPanel(QScrollArea):
         cc = QVBoxLayout(ceo_card)
         cc.setContentsMargins(14, 12, 14, 12)
         cc.setSpacing(6)
-        cc.addWidget(_section_title("CEO Feedback & Key Remarks"))
+        cc.addWidget(_section_title(t("project.validation.ceo_feedback")))
         cc.addWidget(_sep())
-        hint = QLabel("Feedback, remarks and key points to take into account.")
+        hint = QLabel(t("project.validation.ceo_hint"))
         hint.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         cc.addWidget(hint)
         self._r_ceo_feedback = QTextEdit()
-        self._r_ceo_feedback.setPlaceholderText("CEO feedback...")
+        self._r_ceo_feedback.setPlaceholderText(t("project.validation.ceo_ph"))
         self._r_ceo_feedback.setMinimumHeight(70)
         self._r_ceo_feedback.setStyleSheet(_INPUT)
         cc.addWidget(self._r_ceo_feedback)
@@ -667,8 +679,8 @@ class ReportPanel(QScrollArea):
         ml.setContentsMargins(14, 12, 14, 12)
         ml.setSpacing(8)
         mod_hdr = QHBoxLayout()
-        mod_hdr.addWidget(_section_title("Modifications / Actions Required"))
-        self._add_mod_btn = QPushButton("+ Add row")
+        mod_hdr.addWidget(_section_title(t("project.validation.modifications")))
+        self._add_mod_btn = QPushButton(t("project.validation.add_row"))
         self._add_mod_btn.setStyleSheet(_BTN_SMALL)
         self._add_mod_btn.setCursor(Qt.PointingHandCursor)
         self._add_mod_btn.clicked.connect(lambda: self._add_modification_row())
@@ -678,9 +690,14 @@ class ReportPanel(QScrollArea):
         ml.addWidget(_sep())
 
         self._mod_table = QTableWidget(0, 6)
-        self._mod_table.setHorizontalHeaderLabels(
-            ["ID", "Description of Modification", "Priority", "Responsible", "Due Date", "Status"]
-        )
+        self._mod_table.setHorizontalHeaderLabels([
+            t("project.validation.col_id"),
+            t("project.validation.col_description"),
+            t("project.validation.col_priority"),
+            t("project.validation.col_responsible"),
+            t("project.validation.col_due_date"),
+            t("project.validation.col_status"),
+        ])
         self._mod_table.setStyleSheet(_TABLE_STYLE)
         self._mod_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self._mod_table.setColumnWidth(0, 36)
@@ -711,8 +728,8 @@ class ReportPanel(QScrollArea):
         al.setContentsMargins(14, 12, 14, 12)
         al.setSpacing(8)
         ap_hdr = QHBoxLayout()
-        ap_hdr.addWidget(_section_title("Action Plan by Stakeholder"))
-        self._add_ap_btn = QPushButton("+ Add row")
+        ap_hdr.addWidget(_section_title(t("project.validation.action_plan")))
+        self._add_ap_btn = QPushButton(t("project.validation.add_row"))
         self._add_ap_btn.setStyleSheet(_BTN_SMALL)
         self._add_ap_btn.setCursor(Qt.PointingHandCursor)
         self._add_ap_btn.clicked.connect(lambda: self._add_action_row())
@@ -722,10 +739,14 @@ class ReportPanel(QScrollArea):
         al.addWidget(_sep())
 
         self._ap_table = QTableWidget(0, 6)
-        self._ap_table.setHorizontalHeaderLabels(
-            ["Stakeholder / Dept", "Actions to Perform", "Deliverables Expected",
-             "Responsible", "Due Date", "Status"]
-        )
+        self._ap_table.setHorizontalHeaderLabels([
+            t("project.validation.col_dept"),
+            t("project.validation.col_actions"),
+            t("project.validation.col_expected_del"),
+            t("project.validation.col_responsible"),
+            t("project.validation.col_due_date"),
+            t("project.validation.col_status"),
+        ])
         self._ap_table.setStyleSheet(_TABLE_STYLE)
         self._ap_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         # Status column: fixed width so "In progress" is never clipped
@@ -743,8 +764,8 @@ class ReportPanel(QScrollArea):
         # ── Risks + Open Comments ────────────────────────────────────────────
         bottom = QHBoxLayout()
         bottom.setSpacing(12)
-        for title, attr in [("Risks & Points of Attention", "_r_risks"),
-                             ("Open Comments", "_r_open_comments")]:
+        for title, attr in [(t("project.validation.risks"), "_r_risks"),
+                             (t("project.validation.open_comments"), "_r_open_comments")]:
             c = _card_frame()
             cl = QVBoxLayout(c)
             cl.setContentsMargins(14, 10, 14, 10)
@@ -885,14 +906,23 @@ class ReportPanel(QScrollArea):
 
         self._mod_table.setItem(row, 1, QTableWidgetItem(m.description))
 
-        priority_combo = _combo(["To modify", "Accepted", "On hold", "Canceled"])
+        priority_combo = _combo([
+            t("project.validation.priority_modify"),
+            t("project.validation.priority_accepted"),
+            t("project.validation.priority_on_hold"),
+            t("project.validation.priority_canceled"),
+        ])
         priority_combo.setCurrentText(m.priority)
         self._mod_table.setCellWidget(row, 2, priority_combo)
 
         self._mod_table.setItem(row, 3, QTableWidgetItem(m.responsible))
         self._mod_table.setItem(row, 4, QTableWidgetItem(m.due_date))
 
-        status_combo = _combo(["To Do", "In progress", "Done"])
+        status_combo = _combo([
+            t("project.validation.status_todo"),
+            t("project.validation.status_in_progress"),
+            t("project.validation.status_done"),
+        ])
         status_combo.setCurrentText(m.status)
         self._mod_table.setCellWidget(row, 5, status_combo)
 
@@ -905,7 +935,11 @@ class ReportPanel(QScrollArea):
         for col, val in enumerate([a.department, a.actions, a.deliverables,
                                     a.responsible, a.due_date]):
             self._ap_table.setItem(row, col, QTableWidgetItem(val or ""))
-        status_combo = _combo(["To Do", "In progress", "Done"])
+        status_combo = _combo([
+            t("project.validation.status_todo"),
+            t("project.validation.status_in_progress"),
+            t("project.validation.status_done"),
+        ])
         status_combo.setCurrentText(a.status)
         self._ap_table.setCellWidget(row, 5, status_combo)
         self.changed.emit()

@@ -8,6 +8,7 @@ from .shared import (
     _MUTED, _INPUT_BG, _BORDER_L, _BORDER, _ACCENT, _ACCENT_H, _TEXT,
     ADD_BTN_STYLE, card, section_label, field_label, make_input, separator,
 )
+from i18n import t
 
 _IMG_W = 280
 _IMG_H = 360
@@ -36,7 +37,7 @@ class ProductOverviewCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('1. Product Overview'))
+        layout.addWidget(section_label(t('project.brief.s1_title')))
         layout.addWidget(separator())
         layout.addLayout(self._build_body())
 
@@ -50,7 +51,7 @@ class ProductOverviewCard(QFrame):
         row.setContentsMargins(0, 0, 0, 0)
 
         # ── Left: image upload button ──────────────────────────────────────
-        self._img_btn = QPushButton('+ Add Image')
+        self._img_btn = QPushButton(t('project.brief.s1_add_image'))
         self._img_btn.setFixedSize(_IMG_W, _IMG_H)
         self._img_btn.setCursor(Qt.PointingHandCursor)
         self._img_btn.setStyleSheet(_IMG_BTN_STYLE)
@@ -63,11 +64,11 @@ class ProductOverviewCard(QFrame):
         fields_col.setContentsMargins(0, 0, 0, 0)
 
         defs = [
-            ('Product name',           '_f_product_name'),
-            ('Reference / Version',    '_f_reference'),
-            ('Short description',      '_f_description'),
-            ('Intended use',           '_f_intended_use'),
-            ('Image / Visual (links)', '_f_visual_links'),
+            (t('project.brief.s1_product_name'), '_f_product_name'),
+            (t('project.brief.s1_reference'),    '_f_reference'),
+            (t('project.brief.s1_description'),  '_f_description'),
+            (t('project.brief.s1_intended_use'), '_f_intended_use'),
+            (t('project.brief.s1_visual_links'), '_f_visual_links'),
         ]
         for label, attr in defs:
             lbl = QLabel(label)
@@ -87,7 +88,7 @@ class ProductOverviewCard(QFrame):
 
     def _upload_image(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Select Product Image', '',
+            self, t('project.brief.s1_select_image'), '',
             'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:

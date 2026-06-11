@@ -183,8 +183,8 @@ class Report:
 def _default_report(rid: int) -> Report:
     today = QDate.currentDate().toString("dd/MM/yyyy")
     r = Report(id=rid, date=today)
-    r.company_extras  = [CompanyRow("other (To be specified)", "")]
-    r.partner_extras  = [CompanyRow("other (To be specified)", "")]
+    r.company_extras  = []
+    r.partner_extras  = []
     r.attendees = [
         AttendeeColumn(h, "") for h in
         ["Production", "Studio", "Marketing", "Partners 1", "Other", "Other"]
@@ -594,7 +594,7 @@ class HeaderSection(QWidget):
             layout.insertLayout(layout.count() - 1, r)
 
     def _add_extra(self, layout: QVBoxLayout, extras: List[CompanyRow], btn: QPushButton):
-        extra = CompanyRow("other (To be specified)", "")
+        extra = CompanyRow("", "")
         extras.append(extra)
         self._add_extra_row(layout, extra)
         self.changed.emit()

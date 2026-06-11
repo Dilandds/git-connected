@@ -15,15 +15,16 @@ from PyQt5.QtGui import QColor
 from ui.modal_utils import FormModal, BaseModal
 from ui.date_picker import EctoDateEdit
 from .models import Task, Operation, Operator, TASK_TYPES, today, BORDER, MUTED, ACCENT, TEXT
+from i18n import t
 
 
 # ── Add Operator ──────────────────────────────────────────────────────────────
 
 class _AddOperatorDialog(FormModal):
     def __init__(self, parent=None):
-        super().__init__(parent, 'Add Operator', theme=FormModal.LIGHT, min_width=380)
-        self.f_name = self.add_field('OPERATOR / COMPANY NAME', QLineEdit())
-        self.f_name.setPlaceholderText('Operator or company name')
+        super().__init__(parent, t('project.timeline.dlg_add_operator'), theme=FormModal.LIGHT, min_width=380)
+        self.f_name = self.add_field(t('project.timeline.dlg_op_name_field'), QLineEdit())
+        self.f_name.setPlaceholderText(t('project.timeline.dlg_op_name_ph'))
         self.finish()
         self.f_name.returnPressed.connect(self.ok_btn.click)
         self.f_name.setFocus()
@@ -37,9 +38,9 @@ class _AddOperatorDialog(FormModal):
 
 class _AddOperationDialog(FormModal):
     def __init__(self, operator_name: str, parent=None):
-        super().__init__(parent, 'Add Operation', theme=FormModal.LIGHT, min_width=380)
-        self.f_name = self.add_field(f'OPERATION NAME  ({operator_name})', QLineEdit())
-        self.f_name.setPlaceholderText('Operation name')
+        super().__init__(parent, t('project.timeline.dlg_add_operation'), theme=FormModal.LIGHT, min_width=380)
+        self.f_name = self.add_field(f'{t("project.timeline.dlg_op_label")}  ({operator_name})', QLineEdit())
+        self.f_name.setPlaceholderText(t('project.timeline.dlg_op_ph'))
         self.finish()
         self.f_name.returnPressed.connect(self.ok_btn.click)
         self.f_name.setFocus()
@@ -53,9 +54,9 @@ class _AddOperationDialog(FormModal):
 
 class _EditOperationDialog(FormModal):
     def __init__(self, operation: Operation, operator_name: str, parent=None):
-        super().__init__(parent, 'Edit Operation', theme=FormModal.LIGHT, min_width=380)
-        self.f_name = self.add_field(f'OPERATION NAME  ({operator_name})', QLineEdit(operation.name))
-        self.f_name.setPlaceholderText('Operation name')
+        super().__init__(parent, t('project.timeline.dlg_edit_operation'), theme=FormModal.LIGHT, min_width=380)
+        self.f_name = self.add_field(f'{t("project.timeline.dlg_op_label")}  ({operator_name})', QLineEdit(operation.name))
+        self.f_name.setPlaceholderText(t('project.timeline.dlg_op_ph'))
         self.finish()
         self.f_name.returnPressed.connect(self.ok_btn.click)
         self.f_name.setFocus()
@@ -75,7 +76,8 @@ class TaskFormDialog(FormModal):
                  current_op_idx: int = 0,
                  current_oper_idx: int = 0,
                  parent=None):
-        super().__init__(parent, 'Edit Event' if task else 'Add Event',
+        super().__init__(parent,
+                         t('project.timeline.dlg_edit_event') if task else t('project.timeline.dlg_add_event'),
                          theme=FormModal.LIGHT, min_width=380)
         self._operators: List[Operator] = operators or []
 
@@ -83,53 +85,58 @@ class TaskFormDialog(FormModal):
         self.f_operation: Optional[QComboBox] = None
 
         if operators:
-            self.add_field('PLACE IN', QLabel('Select the operator and row for this task.'),
-                           height=0)
+            self.add_field(t('project.timeline.dlg_place_in'),
+                           QLabel(t('project.timeline.dlg_place_hint')), height=0)
             self.f_operator = QComboBox()
             for op in operators:
                 self.f_operator.addItem(op.name)
             self.f_operator.setCurrentIndex(max(0, current_op_idx))
-            self.add_hfield('Operator', self.f_operator)
+            self.add_hfield(t('project.timeline.dlg_operator'), self.f_operator)
 
             self._current_oper_idx = current_oper_idx
             self.f_operation = QComboBox()
-            self.add_hfield('Operation', self.f_operation)
+            self.add_hfield(t('project.timeline.dlg_operation'), self.f_operation)
             self._populate_operation_combo()
             self.f_operator.currentIndexChanged.connect(self._populate_operation_combo)
             self.add_separator()
 
-        self.f_name = self.add_hfield('Name', QLineEdit(task.name if task else ''))
-        self.f_name.setPlaceholderText('Task name')
+        self.f_name = self.add_hfield(t('project.timeline.dlg_name'), QLineEdit(task.name if task else ''))
+        self.f_name.setPlaceholderText(t('project.timeline.dlg_name_ph'))
 
-        self.f_type = self.add_hfield('Type', QComboBox())
+        self.f_type = self.add_hfield(t('project.timeline.dlg_type'), QComboBox())
         self.f_type.addItems(list(TASK_TYPES.keys()))
         if task:
             self.f_type.setCurrentText(task.task_type)
 
-        self.f_start = self.add_hfield('Start', EctoDateEdit(task.start if task else today()))
-        self.f_end   = self.add_hfield('End',   EctoDateEdit(task.end   if task else today().addDays(3)))
+        self.f_start = self.add_hfield(t('project.timeline.dlg_start'), EctoDateEdit(task.start if task else today()))
+        self.f_end   = self.add_hfield(t('project.timeline.dlg_end'),   EctoDateEdit(task.end   if task else today().addDays(3)))
 
-        self.f_status = self.add_hfield('Status', QComboBox())
-        self.f_status.addItems(['In progress', 'Awaiting', 'Completed', 'Cancelled'])
+        self.f_status = self.add_hfield(t('project.timeline.dlg_status'), QComboBox())
+        self.f_status.addItems([
+            t('project.timeline.dlg_status_progress'),
+            t('project.timeline.dlg_status_awaiting'),
+            t('project.timeline.dlg_status_completed'),
+            t('project.timeline.dlg_status_cancelled'),
+        ])
         if task:
             self.f_status.setCurrentText(task.status)
 
-        self.f_urgent = QCheckBox('Mark as urgent')
+        self.f_urgent = QCheckBox(t('project.timeline.dlg_urgent'))
         self.f_urgent.setChecked(task.is_urgent if task else False)
         self.add_widget(self.f_urgent)
 
         self.add_separator()
 
         # ── Unavailability period ─────────────────────────────────────────
-        self._unavail_check = QCheckBox('Mark as unavailable for a period')
+        self._unavail_check = QCheckBox(t('project.timeline.dlg_unavail'))
         _has_unavail = bool(task and task.unavailable_start and task.unavailable_end)
         self._unavail_check.setChecked(_has_unavail)
         self.add_widget(self._unavail_check)
 
         _ustart = task.unavailable_start if (task and task.unavailable_start) else today()
         _uend   = task.unavailable_end   if (task and task.unavailable_end)   else today().addDays(1)
-        self.f_unavail_start = self.add_hfield('Unavailable from', EctoDateEdit(_ustart))
-        self.f_unavail_end   = self.add_hfield('Unavailable to',   EctoDateEdit(_uend))
+        self.f_unavail_start = self.add_hfield(t('project.timeline.dlg_unavail_from'), EctoDateEdit(_ustart))
+        self.f_unavail_end   = self.add_hfield(t('project.timeline.dlg_unavail_to'),   EctoDateEdit(_uend))
 
         def _toggle_unavail(checked):
             self.f_unavail_start.setEnabled(checked)
@@ -223,7 +230,7 @@ class LegendEditorDialog(BaseModal):
     """Dialog to add, recolour, rename and remove timeline legend entries."""
 
     def __init__(self, task_types: dict, parent=None):
-        super().__init__(parent, 'Edit Legend', theme='light', min_width=440)
+        super().__init__(parent, t('project.timeline.dlg_edit_legend'), theme='light', min_width=440)
         # Working copy: list of [color_str, name_str] — mutated in-place by row widgets
         self._entries: list[list] = [[color, name] for name, color in task_types.items()]
         self._rows_widget = QWidget()
@@ -250,7 +257,7 @@ class LegendEditorDialog(BaseModal):
         for entry in self._entries:
             self._add_row(entry)
 
-        add_btn = QPushButton('＋  Add Entry')
+        add_btn = QPushButton(t('project.timeline.dlg_add_entry'))
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setStyleSheet(_ADD_STYLE)
         add_btn.clicked.connect(self._add_new_entry)
@@ -263,7 +270,7 @@ class LegendEditorDialog(BaseModal):
         btn_row = QHBoxLayout(); btn_row.setSpacing(8)
         btn_row.addStretch()
         btn_row.addWidget(self._make_cancel_btn())
-        btn_row.addWidget(self._make_ok_btn('Save'))
+        btn_row.addWidget(self._make_ok_btn(t('project.timeline.dlg_save')))
         self._root.addLayout(btn_row)
 
     def _add_row(self, entry: list):
@@ -280,7 +287,7 @@ class LegendEditorDialog(BaseModal):
         swatch = QPushButton('●')
         swatch.setFixedSize(32, 32)
         swatch.setCursor(Qt.PointingHandCursor)
-        swatch.setToolTip('Click to change colour')
+        swatch.setToolTip(t('project.timeline.dlg_change_color'))
         swatch.setStyleSheet(_SWATCH_STYLE.format(c=color))
 
         # Name field
@@ -294,7 +301,7 @@ class LegendEditorDialog(BaseModal):
         del_btn.setFixedSize(28, 28)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(_DEL_STYLE)
-        del_btn.setToolTip('Remove this entry')
+        del_btn.setToolTip(t('project.timeline.dlg_remove_entry'))
         del_btn.clicked.connect(lambda _, e=entry, r=row: self._remove_row(e, r))
 
         rl.addWidget(swatch)

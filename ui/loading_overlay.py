@@ -6,6 +6,7 @@ import sys
 import math
 from pathlib import Path
 
+from typing import Optional
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF
 from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QPixmap, QFontMetricsF
@@ -34,8 +35,14 @@ class LoadingOverlay(QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setWindowFlags(Qt.Widget)
+        # On Windows the WebGPU canvas is a native HWND and always paints over
+        # non-native Qt child widgets regardless of raise_().  Making the overlay
+        # native too gives it its own HWND so Windows z-ordering works correctly.
+        import sys as _sys
+        if _sys.platform == 'win32':
+            self.setAttribute(Qt.WA_NativeWindow)
         self._angle = 0
-        self._logo: QPixmap | None = None
+        self._logo: Optional[QPixmap] = None
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._load_logo()

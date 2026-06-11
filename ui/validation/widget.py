@@ -15,6 +15,7 @@ from .models import ValidationSession, _default_session
 from .shared import _BG, _BORDER, _TEXT, _MUTED, _BTN_PRIMARY, _TAB_ACTIVE, _TAB_INACTIVE
 from .panels import PreparationPanel, ReportPanel
 from .signature import SignatureBar
+from i18n import t
 
 
 class ValidationWidget(QWidget):
@@ -42,10 +43,10 @@ class ValidationWidget(QWidget):
         top.setStyleSheet(f"background-color: {_BG}; border-bottom: 1px solid {_BORDER};")
         tl = QHBoxLayout(top)
         tl.setContentsMargins(16, 0, 16, 0)
-        title = QLabel("Validation")
+        title = QLabel(t("project.validation.title"))
         title.setFont(make_font(size=15, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        subtitle = QLabel("Per-session validation preparation and formal sign-off reporting.")
+        subtitle = QLabel(t("project.validation.subtitle"))
         subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;")
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
@@ -53,7 +54,7 @@ class ValidationWidget(QWidget):
         t_col.addWidget(subtitle)
         tl.addLayout(t_col)
         tl.addStretch()
-        new_btn = QPushButton("＋  New Session")
+        new_btn = QPushButton(t("project.validation.new_session"))
         new_btn.setStyleSheet(_BTN_PRIMARY)
         new_btn.setFixedHeight(30)
         new_btn.setCursor(Qt.PointingHandCursor)
@@ -138,11 +139,10 @@ class ValidationWidget(QWidget):
     def _on_signed(self, sig: str):
         dlg = MessageModal(
             self,
-            f"Sign as '{sig}'?",
-            "This will permanently lock the session and cannot be undone.\n"
-            "Are you sure?",
-            primary_text="Yes, Sign",
-            secondary_text="Cancel",
+            t("project.validation.sign_confirm_title").format(sig=sig),
+            t("project.validation.sign_confirm_body"),
+            primary_text=t("project.validation.sign_btn"),
+            secondary_text=t("common.cancel"),
         )
         dlg.primary_btn.clicked.connect(dlg.accept)
         dlg.secondary_btn.clicked.connect(dlg.reject)

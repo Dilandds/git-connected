@@ -2,6 +2,7 @@
 from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel
 from .shared import _TEXT, _MUTED, card, section_label, separator
 from .widgets import BulletListWidget
+from i18n import t
 
 
 class TechniquesCard(QFrame):
@@ -13,19 +14,19 @@ class TechniquesCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('2. Planned Techniques / Watch Points'))
+        layout.addWidget(section_label(t('project.brief.s2_title')))
         layout.addWidget(separator())
 
         cols = QHBoxLayout()
         cols.setSpacing(16)
         cols.addLayout(self._build_column(
-            'Techniques Considered',
-            'List manufacturing techniques\nor approaches considered.',
+            t('project.brief.s2_techniques'),
+            t('project.brief.s2_tech_hint'),
             '_techniques_list',
         ))
         cols.addLayout(self._build_column(
-            'Watch Points',
-            'Identify critical points, risks\nand constraints to monitor.',
+            t('project.brief.s2_watchpoints'),
+            t('project.brief.s2_watch_hint'),
             '_watchpoints_list',
         ))
         layout.addLayout(cols)

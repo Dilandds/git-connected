@@ -13,6 +13,7 @@ from .shared import (
 )
 from .parts_table import _PartsTable
 from .dialogs import _RenameSubStageDialog
+from i18n import t
 
 
 class _SubStagePanel(QWidget):
@@ -58,7 +59,7 @@ class _SubStagePanel(QWidget):
         footer = QWidget(); footer.setFixedHeight(24)
         footer.setStyleSheet(f'background: #f1f3f5; border-top: 1px solid {_BORDER};')
         fl = QHBoxLayout(footer); fl.setContentsMargins(12, 0, 12, 0)
-        hint = QLabel('ℹ  Click on a sub-stage to view details, add comments, and track progress.')
+        hint = QLabel(t('project.traceability.hint_substage'))
         hint.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
         fl.addWidget(hint)
         root.addWidget(footer)
@@ -109,7 +110,7 @@ class _SubStagePanel(QWidget):
             btn.setFixedHeight(26)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_ta if is_active else _ti)
-            btn.setToolTip('Double-click to rename')
+            btn.setToolTip(t('project.traceability.dbl_click_rename'))
             btn.clicked.connect(lambda _, idx=i: self._switch_sub(idx))
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_sub(idx)
 
@@ -122,7 +123,7 @@ class _SubStagePanel(QWidget):
             ch.addWidget(btn); ch.addWidget(close)
             self._tab_layout.addWidget(container)
 
-        add_btn = QPushButton('＋  Add Sub-stage')
+        add_btn = QPushButton(t('project.traceability.add_substage'))
         add_btn.setStyleSheet(_BTN_SMALL)
         add_btn.setFixedHeight(26)
         add_btn.setCursor(Qt.PointingHandCursor)
@@ -172,7 +173,8 @@ class _SubStagePanel(QWidget):
         if not self._stage:
             return
         sub = self._stage.sub_stages[idx]
-        if not ask_yes_no_dialog(self, 'Remove Sub-stage', f"Remove '{sub.name}' and all its parts?"):
+        if not ask_yes_no_dialog(self, t('project.traceability.remove_substage'),
+                                  t('project.traceability.remove_sub_confirm').format(name=sub.name)):
             return
         self._stage.sub_stages.pop(idx)
         self._current_sub = min(self._current_sub, max(0, len(self._stage.sub_stages) - 1))
@@ -187,7 +189,7 @@ class _SubStagePanel(QWidget):
                 item.widget().hide(); item.widget().setParent(None)
 
         if not self._stage or not self._stage.sub_stages:
-            msg = QLabel('No sub-stages yet. Click ＋ Add Sub-stage to begin.')
+            msg = QLabel(t('project.traceability.no_substages'))
             msg.setAlignment(Qt.AlignCenter)
             msg.setStyleSheet(
                 f'color: {_MUTED}; font-size: 13px; '

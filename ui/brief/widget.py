@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from ui.styles import make_font
 from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, BTN_PRIMARY, BTN_SECONDARY
+from i18n import t
 from .section_overview    import ProductOverviewCard
 from .section_techniques  import TechniquesCard
 from .section_targets     import TargetPointsCard
@@ -54,17 +55,17 @@ class ProjectBriefWidget(QWidget):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        page_title = QLabel('Project Brief')
+        page_title = QLabel(t('project.brief.title'))
         page_title.setFont(make_font(size=20, bold=True))
         page_title.setStyleSheet(f'color: {_TEXT}; background: transparent; border: none;')
-        subtitle = QLabel('Define the essential information and objectives of the project.')
+        subtitle = QLabel(t('project.brief.subtitle'))
         subtitle.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;')
         title_col.addWidget(page_title)
         title_col.addWidget(subtitle)
         layout.addLayout(title_col)
         layout.addStretch()
 
-        self._edit_btn = QPushButton('✎  Edit Brief')
+        self._edit_btn = QPushButton(t('project.brief.edit_btn'))
         self._edit_btn.setStyleSheet(BTN_SECONDARY)
         self._edit_btn.setFixedHeight(32)
         self._edit_btn.setCursor(Qt.PointingHandCursor)
@@ -127,7 +128,7 @@ class ProjectBriefWidget(QWidget):
         layout = QHBoxLayout(w)
         layout.setContentsMargins(0, 8, 0, 0)
         today = date.today().strftime('%d %B %Y')
-        for text, align in [(f'Document generated on {today}', Qt.AlignLeft),
+        for text, align in [(t('project.brief.generated_on').format(today=today), Qt.AlignLeft),
                              ('ECTOFORM v1.2.0', Qt.AlignRight)]:
             lbl = QLabel(text)
             lbl.setStyleSheet(
@@ -147,7 +148,7 @@ class ProjectBriefWidget(QWidget):
 
     def _set_edit_mode(self, enabled: bool):
         self._edit_mode = enabled
-        self._edit_btn.setText('✔  Save Brief' if enabled else '✎  Edit Brief')
+        self._edit_btn.setText(t('project.brief.save_btn') if enabled else t('project.brief.edit_btn'))
         self._edit_btn.setStyleSheet(BTN_PRIMARY if enabled else BTN_SECONDARY)
         for section in self._all_sections():
             section.set_edit_mode(enabled)

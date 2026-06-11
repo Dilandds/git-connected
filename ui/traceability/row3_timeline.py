@@ -13,6 +13,7 @@ from .shared import (
     _STATUS_COLORS, _TOOLTIP_STYLE, _BTN_DEL_CIRCLE,
 )
 from .dialogs import _EditStageDialog
+from i18n import t
 
 _CARD_W  = 180   # stage card width
 _CARD_H  = 76    # stage card height
@@ -136,7 +137,7 @@ class _StageTimelineRow(QWidget):
             self._inner_l.addWidget(self._make_card(stage, i), 0, Qt.AlignVCenter)
 
         # "+ Add stage" button
-        add = QPushButton('＋  Add stage')
+        add = QPushButton(t('project.traceability.add_stage'))
         add.setFixedHeight(36)
         add.setStyleSheet(f"""
             QPushButton {{
@@ -165,7 +166,7 @@ class _StageTimelineRow(QWidget):
         card.setObjectName('stageCard')
         card.setFixedSize(_CARD_W, _CARD_H)
         card.setCursor(Qt.PointingHandCursor)
-        card.setToolTip('Double-click to rename')
+        card.setToolTip(t('project.traceability.dbl_click_rename'))
         # Use #stageCard selector so child widgets are NOT affected
         card.setStyleSheet(f"""
             QWidget#stageCard {{
@@ -237,8 +238,8 @@ class _StageTimelineRow(QWidget):
         if not self._stages or idx >= len(self._stages):
             return
         stage = self._stages[idx]
-        if not ask_yes_no_dialog(self, 'Remove Stage',
-                                  f"Remove '{stage.name}' and all its sub-stages?"):
+        if not ask_yes_no_dialog(self, t('project.traceability.remove_stage'),
+                                  t('project.traceability.remove_stage_confirm').format(name=stage.name)):
             return
         self._stages.pop(idx)
         self._selected = min(self._selected, max(0, len(self._stages) - 1))
@@ -263,8 +264,8 @@ class _StageTimelineRow(QWidget):
             self._refresh()
             self.changed.emit()
         elif result == 2:
-            if ask_yes_no_dialog(self, 'Delete Stage',
-                                  f"Delete '{stage.name}' and all its sub-stages?"):
+            if ask_yes_no_dialog(self, t('project.traceability.delete_stage'),
+                                  t('project.traceability.delete_stage_confirm').format(name=stage.name)):
                 self._stages.pop(idx)
                 self._selected = min(self._selected, max(0, len(self._stages) - 1))
                 self._refresh()

@@ -14,43 +14,50 @@ from PyQt5.QtCore import Qt
 from ui.modal_utils import FormModal, BaseModal, MODAL_BTN_PRIMARY, MODAL_BTN_CANCEL
 from .models import TracePart, TraceStage, TraceComponent, TraceSubStage
 from .shared import _BTN_SMALL, _BTN_PRIMARY, _MUTED, _TEXT, _CARD
+from i18n import t
 
 
 # ── Add / Edit Part ───────────────────────────────────────────────────────────
 
 class _PartDialog(FormModal):
     def __init__(self, part: Optional[TracePart] = None, parent=None):
-        super().__init__(parent, 'Edit Part' if part else 'Add Part', min_width=420)
+        super().__init__(parent,
+                         t('project.traceability.edit_part_title') if part else t('project.traceability.add_part_title'),
+                         min_width=420)
 
-        self.f_name = self.add_field('PART NAME', QLineEdit(part.name if part else ''))
-        self.f_name.setPlaceholderText('e.g. Part 1')
+        self.f_name = self.add_field(t('project.traceability.part_name'), QLineEdit(part.name if part else ''))
+        self.f_name.setPlaceholderText(t('project.traceability.part_name_ph'))
 
-        self.f_subject = self.add_field('SUBJECT', QLineEdit(part.subject if part else ''))
-        self.f_subject.setPlaceholderText('Subject of this task')
+        self.f_subject = self.add_field(t('project.traceability.subject'), QLineEdit(part.subject if part else ''))
+        self.f_subject.setPlaceholderText(t('project.traceability.subject_ph'))
 
-        self.f_performed_by = self.add_field('PERFORMED BY', QLineEdit(part.performed_by if part else ''))
-        self.f_performed_by.setPlaceholderText('Person or team responsible')
+        self.f_performed_by = self.add_field(t('project.traceability.performed_by'), QLineEdit(part.performed_by if part else ''))
+        self.f_performed_by.setPlaceholderText(t('project.traceability.performed_by_ph'))
 
-        self.f_suppliers = self.add_field('SUPPLIERS', QLineEdit(part.suppliers if part else ''))
-        self.f_suppliers.setPlaceholderText('Supplier name(s)')
+        self.f_suppliers = self.add_field(t('project.traceability.suppliers'), QLineEdit(part.suppliers if part else ''))
+        self.f_suppliers.setPlaceholderText(t('project.traceability.suppliers_ph'))
 
-        self.f_action = self.add_field('ACTION', QLineEdit(part.action if part else ''))
-        self.f_action.setPlaceholderText('Action to take')
+        self.f_action = self.add_field(t('project.traceability.action'), QLineEdit(part.action if part else ''))
+        self.f_action.setPlaceholderText(t('project.traceability.action_ph'))
 
-        self.f_task = self.add_field('CURRENT TASK', QTextEdit(), height_override=52)
-        self.f_task.setPlaceholderText('Current task description...')
+        self.f_task = self.add_field(t('project.traceability.current_task'), QTextEdit(), height_override=52)
+        self.f_task.setPlaceholderText(t('project.traceability.current_task_ph'))
         if part:
             self.f_task.setPlainText(part.current_task)
 
         self.f_start, self.f_due = self.add_row_fields(
-            ('START DATE', QLineEdit(part.start_date if part else '')),
-            ('DUE DATE',   QLineEdit(part.due_date   if part else '')),
+            (t('project.traceability.start_date_field'), QLineEdit(part.start_date if part else '')),
+            (t('project.traceability.due_date_field'),   QLineEdit(part.due_date   if part else '')),
         )
-        self.f_start.setPlaceholderText('dd/mm/yyyy')
-        self.f_due.setPlaceholderText('dd/mm/yyyy')
+        self.f_start.setPlaceholderText(t('project.traceability.date_ph'))
+        self.f_due.setPlaceholderText(t('project.traceability.date_ph'))
 
         status_cb = QComboBox()
-        status_cb.addItems(['Upcoming', 'In Progress', 'Completed'])
+        status_cb.addItems([
+            t('project.traceability.status_upcoming'),
+            t('project.traceability.status_in_progress'),
+            t('project.traceability.status_completed'),
+        ])
         if part:
             idx = status_cb.findText(part.status)
             if idx >= 0:
@@ -61,8 +68,8 @@ class _PartDialog(FormModal):
         progress_spin.setValue(part.progress if part else 0)
 
         self.f_status, self.f_progress = self.add_row_fields(
-            ('STATUS',       status_cb),
-            ('PROGRESS (%)', progress_spin),
+            (t('project.traceability.status'),       status_cb),
+            (t('project.traceability.progress_pct'), progress_spin),
         )
         self.finish()
 
@@ -87,7 +94,7 @@ class _CommentsDialog(FormModal):
     """Scrollable comments list + inline add-comment input."""
 
     def __init__(self, part: TracePart, parent=None):
-        super().__init__(parent, f'Comments — {part.name}', min_width=360)
+        super().__init__(parent, t('project.traceability.comments_title').format(name=part.name), min_width=360)
         self._part = part
 
         # Scroll area
@@ -104,14 +111,14 @@ class _CommentsDialog(FormModal):
         self._root.addWidget(scroll, 1)
 
         # New comment input
-        self._inp = self.add_field('ADD COMMENT', QLineEdit(), height=30)
-        self._inp.setPlaceholderText('Type a comment and press Enter…')
+        self._inp = self.add_field(t('project.traceability.add_comment'), QLineEdit(), height=30)
+        self._inp.setPlaceholderText(t('project.traceability.comment_ph'))
         self._inp.returnPressed.connect(self._add_comment)
 
         # Button row (custom — no OK, only Add + Close)
         btn_row = QHBoxLayout()
-        add_btn = self._make_btn('Add Comment', MODAL_BTN_PRIMARY, connect=self._add_comment)
-        close_btn = self._make_btn('Close', MODAL_BTN_CANCEL, connect=self.accept)
+        add_btn = self._make_btn(t('project.traceability.add_comment_btn'), MODAL_BTN_PRIMARY, connect=self._add_comment)
+        close_btn = self._make_btn(t('common.close'), MODAL_BTN_CANCEL, connect=self.accept)
         btn_row.addWidget(add_btn)
         btn_row.addWidget(close_btn)
         self._root.addLayout(btn_row)
@@ -129,7 +136,7 @@ class _CommentsDialog(FormModal):
             )
             self._inner_l.addWidget(lbl)
         if not self._part.comments:
-            no = QLabel('No comments yet.')
+            no = QLabel(t('project.traceability.no_comments'))
             no.setStyleSheet(f'color: {_MUTED}; font-size: 11px; background: transparent; border: none;')
             self._inner_l.addWidget(no)
 
@@ -148,35 +155,39 @@ class _CommentsDialog(FormModal):
 class _EditStageDialog(FormModal):
     def __init__(self, stage: TraceStage, stages: list, parent=None):
         can_delete = len(stages) > 1
-        super().__init__(parent, 'Edit Stage', min_width=300)
+        super().__init__(parent, t('project.traceability.edit_stage_title'), min_width=300)
 
-        self.f_name = self.add_field('STAGE NAME', QLineEdit(stage.name))
+        self.f_name = self.add_field(t('project.traceability.stage_name'), QLineEdit(stage.name))
 
-        self.f_status = self.add_field('STATUS', QComboBox())
-        self.f_status.addItems(['Upcoming', 'In Progress', 'Completed'])
+        self.f_status = self.add_field(t('project.traceability.status'), QComboBox())
+        self.f_status.addItems([
+            t('project.traceability.status_upcoming'),
+            t('project.traceability.status_in_progress'),
+            t('project.traceability.status_completed'),
+        ])
         self.f_status.setCurrentText(stage.status)
 
-        self.finish(delete='Delete Stage' if can_delete else None)
+        self.finish(delete=t('project.traceability.delete_stage_btn') if can_delete else None)
 
 
 # ── Add Component ─────────────────────────────────────────────────────────────
 
 class _AddComponentDialog(FormModal):
     def __init__(self, parent=None):
-        super().__init__(parent, 'Add Component', min_width=300)
+        super().__init__(parent, t('project.traceability.add_comp_title'), min_width=300)
         self._image_path = ''
 
-        self.f_name = self.add_field('COMPONENT NAME', QLineEdit())
-        self.f_name.setPlaceholderText('e.g. Housing')
+        self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit())
+        self.f_name.setPlaceholderText(t('project.traceability.comp_name_ph'))
 
-        self.add_widget(self._make_label('IMAGE (OPTIONAL)'))
+        self.add_widget(self._make_label(t('project.traceability.image_optional')))
         img_row = QHBoxLayout()
-        self._img_lbl = QLabel('No image selected')
+        self._img_lbl = QLabel(t('project.traceability.no_image'))
         self._img_lbl.setStyleSheet(
             f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
         )
         self._img_lbl.setWordWrap(True)
-        browse = self._make_btn('Browse…', _BTN_SMALL, connect=self._browse)
+        browse = self._make_btn(t('project.traceability.browse'), _BTN_SMALL, connect=self._browse)
         browse.setFixedHeight(26)
         img_row.addWidget(self._img_lbl, 1)
         img_row.addWidget(browse)
@@ -187,7 +198,7 @@ class _AddComponentDialog(FormModal):
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Select Image', '', 'Images (*.png *.jpg *.jpeg *.webp)'
+            self, t('project.traceability.select_image'), '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
             self._image_path = path
@@ -206,8 +217,8 @@ class _AddComponentDialog(FormModal):
 
 class _RenameSubStageDialog(FormModal):
     def __init__(self, current_name: str, parent=None):
-        super().__init__(parent, 'Rename Sub-stage', min_width=340)
-        self.f_name = self.add_field('NAME', QLineEdit(current_name))
+        super().__init__(parent, t('project.traceability.rename_substage'), min_width=340)
+        self.f_name = self.add_field(t('project.traceability.name_field'), QLineEdit(current_name))
         self.f_name.selectAll()
         self.finish()
         self.f_name.setFocus()
@@ -221,29 +232,29 @@ class _RenameSubStageDialog(FormModal):
 
 class _EditComponentDialog(FormModal):
     def __init__(self, comp: TraceComponent, parent=None):
-        super().__init__(parent, 'Edit Component', min_width=340)
+        super().__init__(parent, t('project.traceability.edit_comp_title'), min_width=340)
         self._image_path = comp.image_path
 
-        self.f_name = self.add_field('COMPONENT NAME', QLineEdit(comp.name))
+        self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit(comp.name))
 
-        self.add_widget(self._make_label('IMAGE (OPTIONAL)'))
+        self.add_widget(self._make_label(t('project.traceability.image_optional')))
         img_row = QHBoxLayout()
-        self._img_lbl = QLabel(comp.image_path or 'No image')
+        self._img_lbl = QLabel(comp.image_path or t('project.traceability.no_image_set'))
         self._img_lbl.setStyleSheet(
             f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
         )
         self._img_lbl.setWordWrap(True)
-        browse = self._make_btn('Browse…', _BTN_SMALL, connect=self._browse)
+        browse = self._make_btn(t('project.traceability.browse'), _BTN_SMALL, connect=self._browse)
         browse.setFixedHeight(26)
         img_row.addWidget(self._img_lbl, 1)
         img_row.addWidget(browse)
         self._root.addLayout(img_row)
 
-        self.finish(delete='Delete Component' if not comp.is_main else None)
+        self.finish(delete=t('project.traceability.delete_comp_btn') if not comp.is_main else None)
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Select Image', '', 'Images (*.png *.jpg *.jpeg *.webp)'
+            self, t('project.traceability.select_image'), '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
             self._image_path = path

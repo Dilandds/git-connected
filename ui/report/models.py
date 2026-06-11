@@ -69,8 +69,8 @@ class Report:
 def _default_report(rid: int) -> Report:
     today = date.today().strftime("%d/%m/%Y")
     r = Report(id=rid, date=today)
-    r.company_extras = [CompanyRow("other (To be specified)", "")]
-    r.partner_extras = [CompanyRow("other (To be specified)", "")]
+    r.company_extras = []
+    r.partner_extras = []
     r.attendees = [
         AttendeeColumn(h, "") for h in
         ["Production", "Studio", "Marketing", "Partners 1", "Other", "Other"]

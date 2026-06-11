@@ -23,6 +23,7 @@ from PyQt5.QtGui import QColor, QPainter, QBrush, QPen, QFont, QPixmap, QIcon, Q
 
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import ask_yes_no_dialog, ask_text_input_dialog, show_message_dialog
+from i18n import t
 
 logger = logging.getLogger(__name__)
 _ARROW_URL = _get_arrow()
@@ -292,14 +293,14 @@ class _FileRow(QFrame):
         # Actions
         dl_btn = QPushButton("↓")
         dl_btn.setFixedSize(26, 26)
-        dl_btn.setToolTip("Download latest version")
+        dl_btn.setToolTip(t('project.files.tip_download'))
         dl_btn.setStyleSheet(_BTN_ICON)
         dl_btn.setCursor(Qt.PointingHandCursor)
         dl_btn.clicked.connect(self._download)
 
         more_btn = QPushButton("⋮")
         more_btn.setFixedSize(26, 26)
-        more_btn.setToolTip("More actions")
+        more_btn.setToolTip(t('project.files.tip_more'))
         more_btn.setStyleSheet(_BTN_ICON)
         more_btn.setCursor(Qt.PointingHandCursor)
         more_btn.clicked.connect(self._show_menu)
@@ -310,11 +311,11 @@ class _FileRow(QFrame):
     def _download(self):
         lv = self._pf.latest_version
         if not lv or not os.path.exists(lv.file_path):
-            show_message_dialog(self, "File Not Found",
+            show_message_dialog(self, t('project.files.file_not_found'),
                                 "The file could not be found on disk.")
             return
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Save File", self._pf.name + self._pf.extension
+            self, t('project.files.dlg_save'), self._pf.name + self._pf.extension
         )
         if dest:
             import shutil
@@ -330,42 +331,42 @@ class _FileRow(QFrame):
         """)
 
         if self._in_trash:
-            menu.addAction("↩  Restore").triggered.connect(lambda: self.restore.emit(self._pf))
+            menu.addAction(t('project.files.restore')).triggered.connect(lambda: self.restore.emit(self._pf))
             menu.addSeparator()
-            menu.addAction("🗑  Delete permanently").triggered.connect(lambda: self.delete_perm.emit(self._pf))
+            menu.addAction(t('project.files.delete_perm')).triggered.connect(lambda: self.delete_perm.emit(self._pf))
         else:
             ext = self._pf.extension
             if ext in _3D_EXTS:
                 lv = self._pf.latest_version
                 if lv:
-                    menu.addAction("📐  Open in 3D Viewer").triggered.connect(
+                    menu.addAction(t('project.files.open_viewer')).triggered.connect(
                         lambda: self.open_viewer.emit(lv.file_path)
                     )
                     menu.addSeparator()
 
-            menu.addAction("↑  Upload new version").triggered.connect(
+            menu.addAction(t('project.files.upload_version')).triggered.connect(
                 lambda: self.upload_version.emit(self._pf)
             )
-            menu.addAction("🕐  Version history").triggered.connect(self._show_history)
+            menu.addAction(t('project.files.version_history')).triggered.connect(self._show_history)
             menu.addSeparator()
 
-            status_menu = menu.addMenu("Status")
+            status_menu = menu.addMenu(t('project.files.col_status'))
             status_menu.setStyleSheet(menu.styleSheet())
             for s in ("Approved", "In review", "In progress"):
                 a = status_menu.addAction(s)
                 a.triggered.connect(lambda _, st=s: self.status_changed.emit(self._pf, st))
 
-            menu.addAction("✎  Rename").triggered.connect(lambda: self.rename.emit(self._pf))
-            menu.addAction("📁  Move to folder").triggered.connect(lambda: self.move.emit(self._pf))
+            menu.addAction(t('project.files.rename')).triggered.connect(lambda: self.rename.emit(self._pf))
+            menu.addAction(t('project.files.move')).triggered.connect(lambda: self.move.emit(self._pf))
             menu.addSeparator()
-            menu.addAction("↓  Download").triggered.connect(self._download)
+            menu.addAction(t('project.files.download')).triggered.connect(self._download)
             menu.addSeparator()
-            menu.addAction("🗑  Move to Trash").triggered.connect(lambda: self.trash.emit(self._pf))
+            menu.addAction(t('project.files.trash')).triggered.connect(lambda: self.trash.emit(self._pf))
 
         menu.exec_(QCursor.pos())
 
     def _show_history(self):
-        dlg = BaseModal(self, f"Version History — {self._pf.name}",
+        dlg = BaseModal(self, f"{t('project.files.history_title')} — {self._pf.name}",
                         theme=BaseModal.LIGHT, min_width=420)
         lay = dlg._root
         lay.setSpacing(6)
@@ -391,7 +392,7 @@ class _FileRow(QFrame):
             rl.addWidget(sl)
             lay.addWidget(row)
 
-        close_btn = QPushButton("Close")
+        close_btn = QPushButton(t('common.close'))
         close_btn.setStyleSheet(_BTN_PRIMARY)
         close_btn.setFixedHeight(30)
         close_btn.clicked.connect(dlg.accept)
@@ -425,11 +426,11 @@ class _FolderTree(QWidget):
         hdr.setStyleSheet(f"background: {_SIDEBAR}; border-bottom: 1px solid {_BORDER};")
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
-        lbl = QLabel("PROJECT FOLDERS")
+        lbl = QLabel(t('project.files.folders_header'))
         lbl.setStyleSheet(f"color: {_MUTED}; font-size: 16px; font-weight: bold; background: transparent; border: none;")
         add_btn = QPushButton("＋")
         add_btn.setFixedSize(22, 22)
-        add_btn.setToolTip("New root folder")
+        add_btn.setToolTip(t('project.files.new_root_folder'))
         add_btn.setStyleSheet(_BTN_ICON)
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.clicked.connect(lambda: self._create_folder(None))
@@ -520,28 +521,29 @@ class _FolderTree(QWidget):
             QMenu::item:selected {{ background: {_ACCENT}; color: white; }}
         """)
         if not folder.is_trash:
-            menu.addAction("📁  New subfolder").triggered.connect(
+            menu.addAction(t('project.files.dlg_new_subfolder')).triggered.connect(
                 lambda: self._create_folder(folder)
             )
-            menu.addAction("✎  Rename").triggered.connect(
+            menu.addAction(t('project.files.rename')).triggered.connect(
                 lambda: self._rename_folder(folder)
             )
             menu.addSeparator()
-            menu.addAction("🗑  Delete folder").triggered.connect(
+            menu.addAction(t('project.files.dlg_del_folder')).triggered.connect(
                 lambda: self.folder_deleted.emit(folder)
             )
         menu.exec_(QCursor.pos())
 
     def _rename_folder(self, folder: Folder):
         name, ok = ask_text_input_dialog(
-            self, "Rename Folder", "Folder name", placeholder=folder.name
+            self, t('project.files.dlg_rename_folder'), t('project.files.dlg_folder_name'), placeholder=folder.name
         )
         if ok and name:
             self.folder_renamed.emit(folder, name)
 
     def _create_folder(self, parent: Optional[Folder]):
         name, ok = ask_text_input_dialog(
-            self, "New Folder", "Folder name", placeholder="New Folder"
+            self, t('project.files.dlg_new_folder'), t('project.files.dlg_folder_name'),
+            placeholder=t('project.files.dlg_new_folder')
         )
         if ok and name:
             self.folder_created.emit(parent, name)
@@ -570,12 +572,12 @@ class _ColHeader(QWidget):
             return l, stretch
 
         items = [
-            (_h("NAME"),                2),
-            (_h("LATEST VERSION"),      0),
-            (_h("UPDATED",   w=110),    0),
-            (_h("STATUS",    w=90),     0),
-            (_h("SIZE",      w=58),     0),
-            (_h("ACTIONS",   w=64),     0),
+            (_h(t('project.files.col_name')),                    2),
+            (_h(t('project.files.col_version')),                 0),
+            (_h(t('project.files.col_updated'),   w=110),        0),
+            (_h(t('project.files.col_status'),    w=90),         0),
+            (_h(t('project.files.col_size'),      w=58),         0),
+            (_h(t('project.files.col_actions'),   w=64),         0),
         ]
         # thumbnail spacer
         lay.addSpacing(48)
@@ -636,22 +638,22 @@ class FilesVersionsWidget(QWidget):
         tl.setSpacing(10)
 
         t_col = QVBoxLayout(); t_col.setSpacing(1)
-        title = QLabel("Files and versions")
+        title = QLabel(t('project.files.title'))
         title.setFont(make_font(size=19, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        sub = QLabel("All your 3D files and their versions, organised and easy to find.")
+        sub = QLabel(t('project.files.subtitle'))
         sub.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col.addWidget(title); t_col.addWidget(sub)
         tl.addLayout(t_col)
         tl.addStretch()
 
-        new_folder_btn = QPushButton("📁  New folder")
+        new_folder_btn = QPushButton(t('project.files.new_folder'))
         new_folder_btn.setStyleSheet(_BTN_SMALL)
         new_folder_btn.setFixedHeight(30)
         new_folder_btn.setCursor(Qt.PointingHandCursor)
         new_folder_btn.clicked.connect(lambda: self._create_folder(self._selected_folder))
 
-        upload_btn = QPushButton("↑  Upload file")
+        upload_btn = QPushButton(t('project.files.upload'))
         upload_btn.setStyleSheet(_BTN_PRIMARY)
         upload_btn.setFixedHeight(30)
         upload_btn.setCursor(Qt.PointingHandCursor)
@@ -696,7 +698,7 @@ class FilesVersionsWidget(QWidget):
         tb.setSpacing(8)
 
         self._search = QLineEdit()
-        self._search.setPlaceholderText("Search files and versions…")
+        self._search.setPlaceholderText(t('project.files.search_ph'))
         self._search.setFixedWidth(220)
         self._search.setFixedHeight(28)
         self._search.setStyleSheet(_INPUT)
@@ -707,7 +709,7 @@ class FilesVersionsWidget(QWidget):
         self._type_combo.setFixedHeight(28)
         self._type_combo.setStyleSheet(_INPUT)
         self._type_combo.addItems([
-            "All file types",
+            t('project.files.filter_all'),
             ".stl", ".step", ".3dm", ".obj", ".dxf",   # 3D formats
             ".pdf",                                      # Documents
             ".jpg", ".jpeg", ".png",                     # Images
@@ -718,7 +720,7 @@ class FilesVersionsWidget(QWidget):
         self._status_combo = QComboBox()
         self._status_combo.setFixedHeight(28)
         self._status_combo.setStyleSheet(_INPUT)
-        self._status_combo.addItems(["All statuses", "Approved", "In review", "In progress"])
+        self._status_combo.addItems([t('project.files.status_all'), "Approved", "In review", "In progress"])
         self._status_combo.currentTextChanged.connect(self._on_filter_status)
         tb.addWidget(self._status_combo)
 
@@ -791,10 +793,10 @@ class FilesVersionsWidget(QWidget):
             files = [f for f in files
                      if q in f.name.lower() or q in f.extension.lower()]
 
-        if self._filter_type and self._filter_type != "All file types":
+        if self._filter_type and self._filter_type != t('project.files.filter_all'):
             files = [f for f in files if f.extension == self._filter_type]
 
-        if self._filter_status and self._filter_status != "All statuses":
+        if self._filter_status and self._filter_status != t('project.files.status_all'):
             files = [f for f in files if f.status == self._filter_status]
 
         return files
@@ -812,8 +814,7 @@ class FilesVersionsWidget(QWidget):
         self._col_hdr.setVisible(not self._grid_view)
 
         if not files:
-            empty = QLabel("No files here yet. Click ↑ Upload file to add one." if not in_trash
-                           else "Trash is empty.")
+            empty = QLabel(t('project.files.no_files') if not in_trash else t('project.files.trash_empty'))
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(f"color: {_MUTED}; font-size: 15px; background: transparent; border: none;")
             empty.setContentsMargins(0, 40, 0, 0)
@@ -961,7 +962,7 @@ class FilesVersionsWidget(QWidget):
         child_files = [f for f in self._files if f.folder_id == folder.id]
         if child_files:
             if not ask_yes_no_dialog(
-                self, "Delete Folder",
+                self, t('project.files.dlg_del_folder'),
                 f"Delete '{folder.name}'?\n{len(child_files)} file(s) will be moved to Trash."
             ):
                 return
@@ -971,7 +972,8 @@ class FilesVersionsWidget(QWidget):
                     f.folder_id = trash.id
                     f.trashed = True
         else:
-            if not ask_yes_no_dialog(self, "Delete Folder", f"Delete folder '{folder.name}'?"):
+            if not ask_yes_no_dialog(self, t('project.files.dlg_del_folder'),
+                                     f"Delete folder '{folder.name}'?"):
                 return
 
         self._folders = [f for f in self._folders if f.id != folder.id]
@@ -988,7 +990,8 @@ class FilesVersionsWidget(QWidget):
             root_count = len([f for f in self._folders if f.parent_id is None and not f.is_trash])
             num = f"{root_count + 1:02d}_"
             name, ok = ask_text_input_dialog(
-                self, "New Folder", "Folder name", placeholder=f"{num}New Folder"
+                self, t('project.files.dlg_new_folder'), t('project.files.dlg_folder_name'),
+                placeholder=f"{num}{t('project.files.dlg_new_folder')}"
             )
             if not ok or not name:
                 return
@@ -1008,12 +1011,12 @@ class FilesVersionsWidget(QWidget):
     def _upload_files(self):
         target_folder = self._selected_folder
         if target_folder and target_folder.is_trash:
-            show_message_dialog(self, "Cannot Upload", "Cannot upload files to Trash.")
+            show_message_dialog(self, t('project.files.cannot_upload'), t('project.files.cannot_upload_trash'))
             return
         if target_folder is None:
             non_trash = [f for f in self._folders if not f.is_trash]
             if not non_trash:
-                show_message_dialog(self, "No Folder", "Please create a folder first.")
+                show_message_dialog(self, t('project.files.no_folder'), t('project.files.no_folder_msg'))
                 return
 
         paths, _ = QFileDialog.getOpenFileNames(
@@ -1061,7 +1064,7 @@ class FilesVersionsWidget(QWidget):
         self.changed.emit()
 
     def _rename_file(self, pf: ProjectFile):
-        name, ok = ask_text_input_dialog(self, "Rename File", "File name", placeholder=pf.name)
+        name, ok = ask_text_input_dialog(self, t('project.files.dlg_rename'), t('project.files.dlg_rename_field'), placeholder=pf.name)
         if ok and name:
             pf.name = name
             self._refresh()
@@ -1071,9 +1074,9 @@ class FilesVersionsWidget(QWidget):
         non_trash = [f for f in self._folders if not f.is_trash]
         if not non_trash:
             return
-        dlg = FormModal(self, "Move to Folder",
+        dlg = FormModal(self, t('project.files.move'),
                         theme=FormModal.LIGHT, min_width=300)
-        combo = dlg.add_field("DESTINATION FOLDER", QComboBox())
+        combo = dlg.add_field(t('project.files.dlg_dest_folder'), QComboBox())
         for f in non_trash:
             combo.addItem(f.name, f.id)
         dlg.finish()

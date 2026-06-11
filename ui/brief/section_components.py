@@ -2,6 +2,7 @@
 from PyQt5.QtWidgets import QFrame, QVBoxLayout
 from .shared import card, section_label, separator
 from .widgets import ComponentsTable
+from i18n import t
 
 
 class ComponentsCard(QFrame):
@@ -13,7 +14,7 @@ class ComponentsCard(QFrame):
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(section_label('6. Components, Materials & Colours'))
+        layout.addWidget(section_label(t('project.brief.s6_title')))
         layout.addWidget(separator())
 
         self._table = ComponentsTable()

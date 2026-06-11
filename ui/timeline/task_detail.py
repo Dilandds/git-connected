@@ -11,6 +11,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QPixmap
 from ui.styles import default_theme
 from .models import Task, CARD, BORDER, TEXT, MUTED, ACCENT
+from i18n import t
 
 _BTN_DELETE = f"""
     QPushButton {{
@@ -26,7 +27,7 @@ _FIELD_STYLE = f"""
     QLineEdit {{
         background-color: #f5f6f8; color: {TEXT};
         border: 1px solid {BORDER}; border-radius: 5px;
-        padding: 4px 8px; font-size: 14px;
+        padding: 2px 6px; font-size: 12px;
     }}
     QLineEdit:focus    {{ border-color: {ACCENT}; }}
     QLineEdit:disabled {{ background-color: #f1f3f5; color: #9ca3af; }}
@@ -36,7 +37,7 @@ _TEXTAREA_STYLE = f"""
     QTextEdit {{
         background-color: #eef2f7; color: {TEXT};
         border: 1px solid #c8d4e0; border-radius: 5px;
-        font-size: 14px; padding: 6px;
+        font-size: 13px; padding: 4px;
     }}
     QTextEdit:focus {{ border-color: {ACCENT}; }}
 """
@@ -48,8 +49,10 @@ _PRIORITY_COLORS = {
     'Critical': ('#dc2626', '#fee2e2'),
 }
 
-_PANEL_W = 340
-_PHOTO_H = 170
+_PANEL_W = 360
+_PHOTO_H = 120                              # photo height (half-width column)
+_COL     = (_PANEL_W - 24 - 8) // 2        # each column ≈ 164 px
+_PROG_W  = _COL - 12                        # usable width for progress bar fill
 
 
 class TaskDetailPanel(QWidget):
@@ -77,15 +80,13 @@ class TaskDetailPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Keep scroll area as safety net but hide the scrollbar
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{ background: {CARD}; border: none; }}
-            QScrollBar:vertical {{ background: {CARD}; width: 6px; border-radius: 3px; }}
-            QScrollBar::handle:vertical {{ background: {BORDER}; border-radius: 3px; }}
-        """)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(f"QScrollArea {{ background: {CARD}; border: none; }}")
 
         container = QWidget()
         container.setStyleSheet(f'background: {CARD}; border: none;')
@@ -95,13 +96,11 @@ class TaskDetailPanel(QWidget):
 
         lay.addWidget(self._build_info_section())
         lay.addWidget(self._hline())
-        lay.addWidget(self._build_photo_section())
+        lay.addWidget(self._build_photo_meta_section())    # photo ← left | details → right
         lay.addWidget(self._hline())
-        lay.addWidget(self._build_meta_section())
+        lay.addWidget(self._build_comment_components_section())  # comments | components
         lay.addWidget(self._hline())
-        lay.addWidget(self._build_comment_section())
-        lay.addWidget(self._hline())
-        lay.addWidget(self._build_extra_section())
+        lay.addWidget(self._build_priority_status_section())
         lay.addStretch()
 
         scroll.setWidget(container)
@@ -113,11 +112,24 @@ class TaskDetailPanel(QWidget):
         sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-height: 1px; border: none;')
         return sep
 
+    def _vline(self) -> QFrame:
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-width: 1px; border: none;')
+        return sep
+
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text.upper())
         lbl.setStyleSheet(
-            f'color: {MUTED}; font-size: 11px; font-weight: bold; letter-spacing: 0.8px;'
+            f'color: {MUTED}; font-size: 10px; font-weight: bold; letter-spacing: 0.7px;'
             f' background: transparent; border: none;'
+        )
+        return lbl
+
+    def _muted_label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            f'color: {MUTED}; font-size: 11px; background: transparent; border: none;'
         )
         return lbl
 
@@ -126,13 +138,13 @@ class TaskDetailPanel(QWidget):
     def _build_info_section(self) -> QWidget:
         w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
         col = QVBoxLayout(w)
-        col.setContentsMargins(12, 12, 12, 10)
-        col.setSpacing(4)
+        col.setContentsMargins(12, 10, 12, 8)
+        col.setSpacing(2)
 
-        self._lbl_task = QLabel('Click a task to see details')
+        self._lbl_task = QLabel(t('project.timeline.detail_click_task'))
         self._lbl_task.setWordWrap(True)
         self._lbl_task.setStyleSheet(
-            f'color: {TEXT}; font-size: 16px; font-weight: bold; '
+            f'color: {TEXT}; font-size: 15px; font-weight: bold; '
             f'background: transparent; border: none;'
         )
         col.addWidget(self._lbl_task)
@@ -143,21 +155,22 @@ class TaskDetailPanel(QWidget):
         self._lbl_duration = QLabel('')
         for lbl in (self._lbl_dates, self._lbl_type, self._lbl_status, self._lbl_duration):
             lbl.setWordWrap(True)
+            lbl.setStyleSheet(f'color: {MUTED}; font-size: 12px; background: transparent; border: none;')
             col.addWidget(lbl)
 
-        col.addSpacing(6)
+        col.addSpacing(4)
 
         btn_row = QHBoxLayout(); btn_row.setSpacing(6); btn_row.setContentsMargins(0, 0, 0, 0)
 
-        self._edit_btn = QPushButton('✎  Edit Task')
-        self._edit_btn.setFixedHeight(32)
+        self._edit_btn = QPushButton(t('project.timeline.detail_edit'))
+        self._edit_btn.setFixedHeight(28)
         self._edit_btn.setEnabled(False)
         self._edit_btn.setCursor(Qt.PointingHandCursor)
         self._edit_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: #e5e7eb; color: {MUTED};
                 border: 1px solid {BORDER}; border-radius: 4px;
-                font-size: 14px; padding: 4px 10px;
+                font-size: 13px; padding: 2px 8px;
             }}
             QPushButton:enabled {{ color: {TEXT}; border-color: #9ca3af; }}
             QPushButton:enabled:hover {{
@@ -169,8 +182,8 @@ class TaskDetailPanel(QWidget):
             lambda: self._current_task and self.edit_requested.emit(self._current_task)
         )
 
-        self._delete_btn = QPushButton('🗑  Remove')
-        self._delete_btn.setFixedHeight(32)
+        self._delete_btn = QPushButton(t('project.timeline.detail_remove'))
+        self._delete_btn.setFixedHeight(28)
         self._delete_btn.setEnabled(False)
         self._delete_btn.setCursor(Qt.PointingHandCursor)
         self._delete_btn.setStyleSheet(_BTN_DELETE)
@@ -183,16 +196,22 @@ class TaskDetailPanel(QWidget):
         col.addLayout(btn_row)
         return w
 
-    def _build_photo_section(self) -> QWidget:
+    def _build_photo_meta_section(self) -> QWidget:
+        """Photo on the left, project manager fields on the right."""
         w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        col = QVBoxLayout(w)
-        col.setContentsMargins(12, 10, 12, 10)
-        col.setSpacing(6)
+        row = QHBoxLayout(w)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(8)
 
-        # Photo display area
+        # ── Left: photo ───────────────────────────────────────────────────
+        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
+        left_w.setFixedWidth(_COL)
+        left = QVBoxLayout(left_w)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(3)
+
         self._photo_frame = QLabel()
-        self._photo_frame.setFixedHeight(_PHOTO_H)
-        self._photo_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._photo_frame.setFixedSize(_COL, _PHOTO_H)
         self._photo_frame.setAlignment(Qt.AlignCenter)
         self._photo_frame.setCursor(Qt.PointingHandCursor)
         self._photo_frame.setStyleSheet(f"""
@@ -201,86 +220,89 @@ class TaskDetailPanel(QWidget):
                 border: 2px dashed {BORDER};
                 border-radius: 8px;
                 color: {MUTED};
-                font-size: 13px;
+                font-size: 12px;
             }}
         """)
-        self._photo_frame.setText('📷  Click to add photo')
+        self._photo_frame.setText(t('project.timeline.detail_add_photo'))
         self._photo_frame.mousePressEvent = lambda _: self._pick_photo()
-        col.addWidget(self._photo_frame)
+        left.addWidget(self._photo_frame)
 
-        # Remove photo link (hidden until photo set)
-        self._remove_photo_btn = QPushButton('✕  Remove photo')
+        self._remove_photo_btn = QPushButton(t('project.timeline.detail_remove_photo'))
         self._remove_photo_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; border: none;
-                color: {MUTED}; font-size: 11px; padding: 0;
+                color: {MUTED}; font-size: 10px; padding: 0;
             }}
             QPushButton:hover {{ color: #ef4444; }}
         """)
         self._remove_photo_btn.setCursor(Qt.PointingHandCursor)
         self._remove_photo_btn.clicked.connect(self._remove_photo)
         self._remove_photo_btn.hide()
-        col.addWidget(self._remove_photo_btn, 0, Qt.AlignRight)
+        left.addWidget(self._remove_photo_btn, 0, Qt.AlignRight)
+        left.addStretch()
 
-        return w
+        # ── Right: details fields ─────────────────────────────────────────
+        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
+        right = QVBoxLayout(right_w)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(3)
+        right.addWidget(self._section_label(t('project.timeline.detail_details')))
 
-    def _build_meta_section(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        col = QVBoxLayout(w)
-        col.setContentsMargins(12, 10, 12, 10)
-        col.setSpacing(6)
-
-        col.addWidget(self._section_label('Details'))
-        col.addSpacing(2)
-
-        def _field(label_text: str) -> QLineEdit:
-            row = QHBoxLayout(); row.setSpacing(4)
-            lbl = QLabel(label_text)
-            lbl.setFixedWidth(148)
-            lbl.setStyleSheet(
-                f'color: {MUTED}; font-size: 14px; background: transparent; border: none;'
-            )
+        def _stacked_field(label_text: str) -> QLineEdit:
+            lbl = self._muted_label(label_text)
             inp = QLineEdit()
             inp.setPlaceholderText('—')
             inp.setFixedHeight(22)
             inp.setStyleSheet(_FIELD_STYLE)
             inp.setEnabled(False)
-            row.addWidget(lbl)
-            row.addWidget(inp)
-            col.addLayout(row)
+            right.addWidget(lbl)
+            right.addWidget(inp)
             return inp
 
-        self._f_pm      = _field('Project Manager:')
-        self._f_tm      = _field('Technical Manager:')
-        self._f_contrib = _field('Contributors:')
+        self._f_pm      = _stacked_field(t('project.timeline.detail_pm'))
+        self._f_tm      = _stacked_field(t('project.timeline.detail_tm'))
+        self._f_contrib = _stacked_field(t('project.timeline.detail_contrib'))
+        right.addStretch()
+
+        row.addWidget(left_w)
+        row.addWidget(self._vline())
+        row.addWidget(right_w)
         return w
 
-    def _build_comment_section(self) -> QWidget:
+    def _build_comment_components_section(self) -> QWidget:
+        """Comments on the left, components impacted on the right."""
         w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        col = QVBoxLayout(w)
-        col.setContentsMargins(12, 10, 12, 10)
-        col.setSpacing(6)
+        row = QHBoxLayout(w)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(8)
 
-        col.addWidget(self._section_label('Comments'))
+        # ── Left: comments ────────────────────────────────────────────────
+        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
+        left_w.setFixedWidth(_COL)
+        left = QVBoxLayout(left_w)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(4)
+
+        left.addWidget(self._section_label(t('project.timeline.detail_comments')))
 
         self._comment_box = QTextEdit()
-        self._comment_box.setPlaceholderText('Add a comment...')
-        self._comment_box.setMinimumHeight(100)
+        self._comment_box.setPlaceholderText(t('project.timeline.detail_comment_ph'))
+        self._comment_box.setFixedHeight(90)
         self._comment_box.setStyleSheet(_TEXTAREA_STYLE)
         self._comment_box.textChanged.connect(
             lambda: self._save_btn.setEnabled(self._current_task is not None)
         )
-        col.addWidget(self._comment_box)
+        left.addWidget(self._comment_box)
 
-        self._save_btn = QPushButton('Save')
-        self._save_btn.setFixedHeight(32)
+        self._save_btn = QPushButton(t('project.timeline.detail_save'))
+        self._save_btn.setFixedHeight(26)
         self._save_btn.setEnabled(False)
         self._save_btn.setCursor(Qt.PointingHandCursor)
         self._save_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {ACCENT}; color: white; border: none;
-                border-radius: 4px; font-size: 12px; font-weight: bold;
-                padding: 0 18px;
+                border-radius: 4px; font-size: 11px; font-weight: bold;
+                padding: 0 12px;
             }}
             QPushButton:hover {{ background-color: {default_theme.button_primary_hover}; }}
             QPushButton:disabled {{ background-color: #e5e7eb; color: #9ca3af; }}
@@ -289,33 +311,45 @@ class TaskDetailPanel(QWidget):
         save_row = QHBoxLayout(); save_row.setContentsMargins(0, 0, 0, 0)
         save_row.addStretch()
         save_row.addWidget(self._save_btn)
-        col.addLayout(save_row)
-        return w
+        left.addLayout(save_row)
 
-    def _build_extra_section(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        col = QVBoxLayout(w)
-        col.setContentsMargins(12, 10, 12, 14)
-        col.setSpacing(12)
+        # ── Right: components impacted ────────────────────────────────────
+        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
+        right = QVBoxLayout(right_w)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(4)
 
-        # ── Components impacted ───────────────────────────────────────────
-        col.addWidget(self._section_label('Component(s) impacted by this event'))
+        right.addWidget(self._section_label(t('project.timeline.detail_components')))
+
         self._components_box = QTextEdit()
-        self._components_box.setPlaceholderText('List the components affected by this event...')
+        self._components_box.setPlaceholderText(t('project.timeline.detail_comp_ph'))
         self._components_box.setFixedHeight(90)
         self._components_box.setStyleSheet(_TEXTAREA_STYLE)
         self._components_box.setEnabled(False)
         self._components_box.textChanged.connect(self._on_components_changed)
-        col.addWidget(self._components_box)
+        right.addWidget(self._components_box)
+        right.addStretch()
 
-        # ── Priority ──────────────────────────────────────────────────────
-        col.addWidget(self._section_label('Priority'))
+        row.addWidget(left_w)
+        row.addWidget(self._vline())
+        row.addWidget(right_w)
+        return w
+
+    def _build_priority_status_section(self) -> QWidget:
+        """Priority (full width) then execution status | progress side by side."""
+        w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
+        col = QVBoxLayout(w)
+        col.setContentsMargins(12, 8, 12, 10)
+        col.setSpacing(6)
+
+        # ── Priority (full width) ─────────────────────────────────────────
+        col.addWidget(self._section_label(t('project.timeline.detail_priority')))
         priority_row = QHBoxLayout(); priority_row.setSpacing(4); priority_row.setContentsMargins(0, 0, 0, 0)
         self._priority_btns: dict[str, QPushButton] = {}
         for level in ('Low', 'Normal', 'High', 'Critical'):
             fg, bg = _PRIORITY_COLORS[level]
-            btn = QPushButton(level)
-            btn.setFixedHeight(26)
+            btn = QPushButton(t(f'project.timeline.priority_{level.lower()}'))
+            btn.setFixedHeight(24)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setCheckable(True)
             btn.setEnabled(False)
@@ -323,7 +357,7 @@ class TaskDetailPanel(QWidget):
                 QPushButton {{
                     background: #f1f5f9; color: {MUTED};
                     border: 1px solid {BORDER}; border-radius: 4px;
-                    font-size: 11px; font-weight: 600; padding: 2px 6px;
+                    font-size: 11px; font-weight: 600; padding: 1px 4px;
                 }}
                 QPushButton:checked {{
                     background: {bg}; color: {fg};
@@ -337,46 +371,65 @@ class TaskDetailPanel(QWidget):
             priority_row.addWidget(btn)
         col.addLayout(priority_row)
 
-        # ── Auto status ───────────────────────────────────────────────────
-        col.addWidget(self._section_label('Execution Status'))
-        status_row = QHBoxLayout(); status_row.setSpacing(8); status_row.setContentsMargins(0, 0, 0, 0)
+        col.addWidget(self._hline())
+
+        # ── Status (left) | Progress (right) ─────────────────────────────
+        bottom_row = QHBoxLayout(); bottom_row.setSpacing(8); bottom_row.setContentsMargins(0, 0, 0, 0)
+
+        # Left: execution status + delay
+        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
+        left_w.setFixedWidth(_COL)
+        left = QVBoxLayout(left_w)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(3)
+
+        left.addWidget(self._section_label(t('project.timeline.detail_exec_status')))
+        status_row = QHBoxLayout(); status_row.setSpacing(6); status_row.setContentsMargins(0, 0, 0, 0)
         self._exec_status_dot = QLabel('●')
-        self._exec_status_dot.setStyleSheet('font-size: 10px; background: transparent; border: none;')
+        self._exec_status_dot.setStyleSheet('font-size: 9px; background: transparent; border: none;')
         self._exec_status_lbl = QLabel('—')
-        self._exec_status_lbl.setStyleSheet(f'color: {MUTED}; font-size: 13px; font-weight: 600; background: transparent; border: none;')
+        self._exec_status_lbl.setStyleSheet(f'color: {MUTED}; font-size: 12px; font-weight: 600; background: transparent; border: none;')
         status_row.addWidget(self._exec_status_dot)
         status_row.addWidget(self._exec_status_lbl)
         status_row.addStretch()
-        col.addLayout(status_row)
+        left.addLayout(status_row)
 
-        # ── Delay ─────────────────────────────────────────────────────────
         delay_row = QHBoxLayout(); delay_row.setSpacing(4); delay_row.setContentsMargins(0, 0, 0, 0)
-        delay_prefix = QLabel('Delay of:')
-        delay_prefix.setStyleSheet(f'color: {MUTED}; font-size: 13px; background: transparent; border: none;')
+        delay_prefix = QLabel(t('project.timeline.detail_delay'))
+        delay_prefix.setStyleSheet(f'color: {MUTED}; font-size: 12px; background: transparent; border: none;')
         self._delay_lbl = QLabel('—')
-        self._delay_lbl.setStyleSheet(f'color: {TEXT}; font-size: 13px; font-weight: 600; background: transparent; border: none;')
+        self._delay_lbl.setStyleSheet(f'color: {TEXT}; font-size: 12px; font-weight: 600; background: transparent; border: none;')
         delay_row.addWidget(delay_prefix)
         delay_row.addWidget(self._delay_lbl)
         delay_row.addStretch()
-        col.addLayout(delay_row)
+        left.addLayout(delay_row)
+        left.addStretch()
 
-        # ── Progress bar ──────────────────────────────────────────────────
-        col.addWidget(self._section_label('Progress'))
-        prog_header = QHBoxLayout(); prog_header.setContentsMargins(0, 0, 0, 0)
+        # Right: progress
+        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
+        right = QVBoxLayout(right_w)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(3)
+
+        right.addWidget(self._section_label(t('project.timeline.detail_progress')))
         self._progress_pct_lbl = QLabel('0 %')
         self._progress_pct_lbl.setStyleSheet(f'color: {TEXT}; font-size: 13px; font-weight: 700; background: transparent; border: none;')
-        prog_header.addWidget(self._progress_pct_lbl)
-        prog_header.addStretch()
-        col.addLayout(prog_header)
+        right.addWidget(self._progress_pct_lbl)
 
         self._progress_bar_bg = QFrame()
         self._progress_bar_bg.setFixedHeight(8)
-        self._progress_bar_bg.setStyleSheet(f'background: #e5e7eb; border-radius: 4px; border: none;')
+        self._progress_bar_bg.setStyleSheet('background: #e5e7eb; border-radius: 4px; border: none;')
         self._progress_bar_fill = QFrame(self._progress_bar_bg)
         self._progress_bar_fill.setFixedHeight(8)
         self._progress_bar_fill.setStyleSheet(f'background: {ACCENT}; border-radius: 4px; border: none;')
         self._progress_bar_fill.setFixedWidth(0)
-        col.addWidget(self._progress_bar_bg)
+        right.addWidget(self._progress_bar_bg)
+        right.addStretch()
+
+        bottom_row.addWidget(left_w)
+        bottom_row.addWidget(self._vline())
+        bottom_row.addWidget(right_w)
+        col.addLayout(bottom_row)
 
         return w
 
@@ -386,7 +439,7 @@ class TaskDetailPanel(QWidget):
         if not self._current_task:
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, 'Select Photo', '',
+            self, t('project.timeline.detail_photo_title'), '',
             'Images (*.png *.jpg *.jpeg *.webp *.bmp)'
         )
         if path:
@@ -396,14 +449,14 @@ class TaskDetailPanel(QWidget):
     def _remove_photo(self):
         if self._current_task:
             self._current_task.photo_path = ''
-        self._photo_frame.setText('📷  Click to add photo')
+        self._photo_frame.setText(t('project.timeline.detail_add_photo'))
         self._photo_frame.setStyleSheet(f"""
             QLabel {{
                 background: #f1f5f9;
                 border: 2px dashed {BORDER};
                 border-radius: 8px;
                 color: {MUTED};
-                font-size: 13px;
+                font-size: 12px;
             }}
         """)
         self._remove_photo_btn.hide()
@@ -412,12 +465,10 @@ class TaskDetailPanel(QWidget):
         pix = QPixmap(path)
         if pix.isNull():
             return
-        available_w = _PANEL_W - 24
-        scaled = pix.scaled(available_w, _PHOTO_H, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        # Centre-crop to exact size
-        x = (scaled.width() - available_w) // 2
+        scaled = pix.scaled(_COL, _PHOTO_H, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        x = (scaled.width()  - _COL)    // 2
         y = (scaled.height() - _PHOTO_H) // 2
-        cropped = scaled.copy(max(x, 0), max(y, 0), available_w, _PHOTO_H)
+        cropped = scaled.copy(max(x, 0), max(y, 0), _COL, _PHOTO_H)
         self._photo_frame.setPixmap(cropped)
         self._photo_frame.setStyleSheet('border-radius: 8px; border: none;')
         self._remove_photo_btn.show()
@@ -437,27 +488,27 @@ class TaskDetailPanel(QWidget):
     def _update_auto_fields(self, task: Task):
         """Recompute execution status, delay, and progress from task dates."""
         today = QDate.currentDate()
-        total = task.start.daysTo(task.end)
+        total   = task.start.daysTo(task.end)
         elapsed = task.start.daysTo(today)
         pct = max(0, min(100, int(elapsed * 100 / total))) if total > 0 else 0
 
         if today > task.end:
             delay_days = task.end.daysTo(today)
-            self._exec_status_dot.setStyleSheet('color: #ef4444; font-size: 10px; background: transparent; border: none;')
-            self._exec_status_lbl.setText('Late')
-            self._exec_status_lbl.setStyleSheet('color: #ef4444; font-size: 13px; font-weight: 600; background: transparent; border: none;')
-            self._delay_lbl.setText(f'{delay_days} day{"s" if delay_days != 1 else ""}')
-            self._delay_lbl.setStyleSheet('color: #ef4444; font-size: 13px; font-weight: 600; background: transparent; border: none;')
+            day_word = t('project.timeline.day_plural') if delay_days != 1 else t('project.timeline.day_singular')
+            self._exec_status_dot.setStyleSheet('color: #ef4444; font-size: 9px; background: transparent; border: none;')
+            self._exec_status_lbl.setText(t('project.timeline.status_late'))
+            self._exec_status_lbl.setStyleSheet('color: #ef4444; font-size: 12px; font-weight: 600; background: transparent; border: none;')
+            self._delay_lbl.setText(f'{delay_days} {day_word}')
+            self._delay_lbl.setStyleSheet('color: #ef4444; font-size: 12px; font-weight: 600; background: transparent; border: none;')
         else:
-            self._exec_status_dot.setStyleSheet('color: #16a34a; font-size: 10px; background: transparent; border: none;')
-            self._exec_status_lbl.setText('In Progress')
-            self._exec_status_lbl.setStyleSheet('color: #16a34a; font-size: 13px; font-weight: 600; background: transparent; border: none;')
-            self._delay_lbl.setText('None')
-            self._delay_lbl.setStyleSheet(f'color: {MUTED}; font-size: 13px; font-weight: 600; background: transparent; border: none;')
+            self._exec_status_dot.setStyleSheet('color: #16a34a; font-size: 9px; background: transparent; border: none;')
+            self._exec_status_lbl.setText(t('project.timeline.status_in_progress'))
+            self._exec_status_lbl.setStyleSheet('color: #16a34a; font-size: 12px; font-weight: 600; background: transparent; border: none;')
+            self._delay_lbl.setText(t('project.timeline.detail_no_delay'))
+            self._delay_lbl.setStyleSheet(f'color: {MUTED}; font-size: 12px; font-weight: 600; background: transparent; border: none;')
 
         self._progress_pct_lbl.setText(f'{pct} %')
-        available_w = _PANEL_W - 24
-        fill_w = max(0, int(available_w * pct / 100))
+        fill_w = max(0, int(_PROG_W * pct / 100))
         self._progress_bar_fill.setFixedWidth(fill_w)
         bar_color = '#ef4444' if today > task.end else ACCENT
         self._progress_bar_fill.setStyleSheet(f'background: {bar_color}; border-radius: 4px; border: none;')
@@ -483,11 +534,13 @@ class TaskDetailPanel(QWidget):
             f"{task.start.toString('d MMM yyyy')}  →  {task.end.toString('d MMM yyyy')}"
         )
         self._lbl_type.setText(
-            f"Type: {task.task_type}" + ('  🔴 URGENT' if task.is_urgent else '')
+            f"{t('project.timeline.label_type')} {task.task_type}"
+            + (f"  {t('project.timeline.label_urgent')}" if task.is_urgent else '')
         )
-        self._lbl_status.setText(f'Status: {task.status}')
+        self._lbl_status.setText(f"{t('project.timeline.label_status')} {task.status}")
         days = task.start.daysTo(task.end)
-        self._lbl_duration.setText(f"Duration: {days} day{'s' if days != 1 else ''}")
+        day_word = t('project.timeline.day_plural') if days != 1 else t('project.timeline.day_singular')
+        self._lbl_duration.setText(f"{t('project.timeline.label_duration')} {days} {day_word}")
         self._edit_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
         self._save_btn.setEnabled(True)
@@ -537,7 +590,7 @@ class TaskDetailPanel(QWidget):
         self._edit_btn.setEnabled(False)
         self._delete_btn.setEnabled(False)
         self._save_btn.setEnabled(False)
-        self._lbl_task.setText('Click a task to see details')
+        self._lbl_task.setText(t('project.timeline.detail_click_task'))
         for lbl in (self._lbl_dates, self._lbl_type, self._lbl_status, self._lbl_duration):
             lbl.setText('')
         self._comment_box.clear()
@@ -564,4 +617,4 @@ class TaskDetailPanel(QWidget):
             c for c in self._comment_box.toPlainText().split('\n') if c.strip()
         ]
         self._save_btn.setText('✔')
-        QTimer.singleShot(1000, lambda: self._save_btn.setText('Save'))
+        QTimer.singleShot(1000, lambda: self._save_btn.setText(t('project.timeline.detail_save')))

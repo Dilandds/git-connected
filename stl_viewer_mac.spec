@@ -42,11 +42,14 @@ splash_image_paths = [
     ('assets/splash.jpg', 'assets'),
     ('assets/logo.png', 'assets'),
     ('assets/logo.jpg', 'assets'),
+    ('assets/Logo_Ectoform_2_copy-removebg-preview.png', 'assets'),
     ('assets/annotation_icon.png', 'assets'),
     ('assets/xyz_gizmo.png', 'assets'),
     ('assets/dropdown_arrow.png', 'assets'),
     ('assets/arrow_up.png', 'assets'),
     ('assets/arrow_down.png', 'assets'),
+    ('assets/zoom_plus.png', 'assets'),
+    ('assets/zoom_minus.png', 'assets'),
 ]
 
 # Add entire textures directory if it exists

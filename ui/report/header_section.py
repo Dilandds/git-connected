@@ -14,6 +14,7 @@ from .shared import (
     _INPUT, _BTN_OUTLINE,
     _card, _field, _VerticalLabel,
 )
+from i18n import t
 
 
 class HeaderSection(QWidget):
@@ -49,7 +50,7 @@ class HeaderSection(QWidget):
         tl.setSpacing(10)
 
         # Company logo
-        self._logo_btn = QPushButton("＋  Add logo\nof the company")
+        self._logo_btn = QPushButton(t("project.report.header_add_logo"))
         self._logo_btn.setFixedSize(110, 60)
         self._logo_btn.setCursor(Qt.PointingHandCursor)
         self._logo_btn.setStyleSheet(f"""
@@ -67,7 +68,7 @@ class HeaderSection(QWidget):
             self._apply_logo(pix)
 
         # Project photo — created here, inserted into the Company card below (not the top strip)
-        self._project_photo_btn = QPushButton("＋  Add project\nphoto")
+        self._project_photo_btn = QPushButton(t("project.report.header_add_photo"))
         self._project_photo_btn.setFixedWidth(110)
         self._project_photo_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._project_photo_btn.setCursor(Qt.PointingHandCursor)
@@ -83,7 +84,7 @@ class HeaderSection(QWidget):
         self._photo_clear_btn = QPushButton("×")
         self._photo_clear_btn.setFixedSize(18, 18)
         self._photo_clear_btn.setCursor(Qt.PointingHandCursor)
-        self._photo_clear_btn.setToolTip("Remove project photo")
+        self._photo_clear_btn.setToolTip(t("project.report.header_remove_photo"))
         self._photo_clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: #ef4444; color: white;
@@ -100,7 +101,7 @@ class HeaderSection(QWidget):
         mid.setSpacing(4)
 
         title_row = QHBoxLayout()
-        meeting_lbl = QLabel("Meeting report of")
+        meeting_lbl = QLabel(t("project.report.header_meeting_of"))
         meeting_lbl.setStyleSheet(
             f"color: {_HDR_TEXT}; font-size: 13px; font-weight: bold; background: transparent; border: none;"
         )
@@ -124,12 +125,12 @@ class HeaderSection(QWidget):
 
         proj_row = QHBoxLayout()
         proj_row.setSpacing(8)
-        self._f_project = _field("Name of the project")
+        self._f_project = _field(t("project.report.header_project_name"))
         self._f_project.setText(self._report.project_name)
         self._f_project.textChanged.connect(
             lambda v: setattr(self._report, 'project_name', v) or self.changed.emit()
         )
-        self._f_reference = _field("Reference of the project")
+        self._f_reference = _field(t("project.report.header_project_ref"))
         self._f_reference.setText(self._report.project_reference)
         self._f_reference.textChanged.connect(
             lambda v: setattr(self._report, 'project_reference', v) or self.changed.emit()
@@ -142,11 +143,11 @@ class HeaderSection(QWidget):
         # Launch deadline
         dl_col = QVBoxLayout()
         dl_col.setSpacing(4)
-        dl_lbl = QLabel("launch deadline :")
+        dl_lbl = QLabel(t("project.report.header_launch"))
         dl_lbl.setStyleSheet(
             f"color: {_HDR_TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;"
         )
-        self._f_deadline = _field("dd/mm/yyyy")
+        self._f_deadline = _field(t("project.report.header_date_ph"))
         self._f_deadline.setText(self._report.launch_deadline)
         self._f_deadline.setFixedWidth(120)
         self._f_deadline.textChanged.connect(
@@ -165,11 +166,11 @@ class HeaderSection(QWidget):
         gl.setSpacing(0)
 
         company_col = self._build_rotated_section(
-            "Company",
+            t("project.report.header_company"),
             [
-                ("Project manager :", "_f_pm"),
-                ("Technical manager :", "_f_tm"),
-                ("Quality lead :", "_f_ql"),
+                (t("project.report.header_pm"), "_f_pm"),
+                (t("project.report.header_tm"), "_f_tm"),
+                (t("project.report.header_quality"), "_f_ql"),
             ],
             self._report.company_extras,
             "company"
@@ -203,11 +204,11 @@ class HeaderSection(QWidget):
         gl.addWidget(div)
 
         partners_col = self._build_rotated_section(
-            "Suppliers\n& partners",
+            t("project.report.header_partners"),
             [
-                ("Partner 1 :", "_f_p1"),
-                ("Partner 2 :", "_f_p2"),
-                ("Partner 3 :", "_f_p3"),
+                (t("project.report.header_partner1"), "_f_p1"),
+                (t("project.report.header_partner2"), "_f_p2"),
+                (t("project.report.header_partner3"), "_f_p3"),
             ],
             self._report.partner_extras,
             "partner"
@@ -222,13 +223,13 @@ class HeaderSection(QWidget):
         al.setSpacing(6)
 
         att_header = QHBoxLayout()
-        att_lbl = QLabel("Present attendees")
+        att_lbl = QLabel(t("project.report.header_attendees"))
         att_lbl.setStyleSheet(
             f"color: {_MUTED}; font-size: 10px; font-weight: bold; background: transparent; border: none;"
         )
         att_header.addWidget(att_lbl)
         att_header.addStretch()
-        self._add_attendee_btn = QPushButton("+ Add column")
+        self._add_attendee_btn = QPushButton(t("project.report.header_add_col"))
         self._add_attendee_btn.setStyleSheet(_BTN_OUTLINE)
         self._add_attendee_btn.setFixedHeight(24)
         self._add_attendee_btn.setCursor(Qt.PointingHandCursor)
@@ -311,7 +312,7 @@ class HeaderSection(QWidget):
         for extra in extras:
             self._add_extra_row(cl, extra, at_end=True)
 
-        add_btn = QPushButton("+ Add row")
+        add_btn = QPushButton(t("project.report.header_add_row"))
         add_btn.setStyleSheet(_BTN_OUTLINE)
         add_btn.setFixedHeight(24)
         add_btn.setCursor(Qt.PointingHandCursor)
@@ -323,7 +324,7 @@ class HeaderSection(QWidget):
     def _add_extra_row(self, layout: QVBoxLayout, extra: CompanyRow, at_end: bool = False):
         r = QHBoxLayout()
         r.setSpacing(6)
-        lbl_inp = _field("Label")
+        lbl_inp = _field(t("project.report.header_label_ph"))
         lbl_inp.setText(extra.label)
         lbl_inp.setFixedWidth(140)
         lbl_inp.textChanged.connect(
@@ -342,7 +343,7 @@ class HeaderSection(QWidget):
             layout.insertLayout(layout.count() - 1, r)
 
     def _add_extra(self, layout: QVBoxLayout, extras: List[CompanyRow], btn: QPushButton):
-        extra = CompanyRow("other (To be specified)", "")
+        extra = CompanyRow("", "")
         extras.append(extra)
         self._add_extra_row(layout, extra)
         self.changed.emit()
@@ -350,14 +351,14 @@ class HeaderSection(QWidget):
     def _add_att_col_widget(self, att: AttendeeColumn):
         col = QVBoxLayout()
         col.setSpacing(3)
-        hdr_inp = _field("Column header")
+        hdr_inp = _field(t("project.report.header_col_ph"))
         hdr_inp.setText(att.header)
         hdr_inp.setFixedWidth(110)
         hdr_inp.setStyleSheet(_INPUT + "QLineEdit { font-weight: bold; }")
         hdr_inp.textChanged.connect(
             lambda v, a=att: setattr(a, 'header', v) or self.changed.emit()
         )
-        name_inp = _field("Name")
+        name_inp = _field(t("project.report.header_name_ph"))
         name_inp.setText(att.name)
         name_inp.setFixedWidth(110)
         name_inp.textChanged.connect(
@@ -377,7 +378,7 @@ class HeaderSection(QWidget):
 
     def _upload_logo(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Company Logo", "", "Images (*.png *.jpg *.jpeg *.webp)"
+            self, t("project.report.header_select_logo"), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
             pix = QPixmap(path)
@@ -396,7 +397,7 @@ class HeaderSection(QWidget):
 
     def _upload_project_photo(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Project Photo", "", "Images (*.png *.jpg *.jpeg *.webp)"
+            self, t("project.report.header_select_photo"), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
             pix = QPixmap(path)
@@ -420,7 +421,7 @@ class HeaderSection(QWidget):
         self._report.project_photo_path = ""
         self._project_photo_btn.setIcon(QIcon())
         self._project_photo_btn.setIconSize(QSize(0, 0))
-        self._project_photo_btn.setText("＋  Add project\nphoto")
+        self._project_photo_btn.setText(t("project.report.header_add_photo"))
         self._photo_clear_btn.setVisible(False)
         self.changed.emit()
 

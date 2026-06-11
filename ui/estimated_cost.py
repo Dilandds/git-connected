@@ -29,6 +29,7 @@ from ui.modal_utils import (
     ask_yes_no_dialog, ask_password_dialog,
     show_warning_dialog, show_message_dialog, ask_text_input_dialog,
 )
+from i18n import t
 _ARROW_URL = _get_arrow()
 
 logger = logging.getLogger(__name__)
@@ -388,11 +389,11 @@ class PartnerPanel(QScrollArea):
         title_row.addWidget(company_lbl)
         title_row.addStretch()
 
-        self._best_btn = QPushButton("★  Mark as Best")
+        self._best_btn = QPushButton(t('project.cost.mark_best'))
         self._best_btn.setFixedHeight(30)
         self._best_btn.setCursor(Qt.PointingHandCursor)
         self._best_btn.setStyleSheet(_BTN_BEST_ON if self._partner.is_best else _BTN_BEST_OFF)
-        self._best_btn.setText("★  Best Partner" if self._partner.is_best else "☆  Mark as Best")
+        self._best_btn.setText(t('project.cost.best_partner') if self._partner.is_best else t('project.cost.mark_best'))
         self._best_btn.clicked.connect(self._on_best_clicked)
         title_row.addWidget(self._best_btn)
         cl.addLayout(title_row)
@@ -404,14 +405,14 @@ class PartnerPanel(QScrollArea):
 
         left = QVBoxLayout()
         left.setSpacing(6)
-        left.addWidget(_lbl("Partner / Company name"))
+        left.addWidget(_lbl(t('project.cost.partner_name_ph')))
         self._f_name = _field(self._partner.name)
         self._f_name.setText(self._partner.name)
         self._f_name.textChanged.connect(self._on_name_changed)
         left.addWidget(self._f_name)
 
-        left.addWidget(_lbl("Partner activity"))
-        self._f_activity = _field("e.g. Manufacturing, Design…")
+        left.addWidget(_lbl(t('project.cost.activity_ph')))
+        self._f_activity = _field(t('project.cost.activity_hint'))
         self._f_activity.setText(self._partner.activity)
         self._f_activity.textChanged.connect(lambda v: setattr(self._partner, 'activity', v) or self.changed.emit())
         left.addWidget(self._f_activity)
@@ -422,14 +423,14 @@ class PartnerPanel(QScrollArea):
 
         right = QVBoxLayout()
         right.setSpacing(6)
-        right.addWidget(_lbl("Start date"))
-        self._f_start = _field("dd/mm/yyyy")
+        right.addWidget(_lbl(t('project.cost.start_date')))
+        self._f_start = _field(t('project.cost.date_ph'))
         self._f_start.setText(self._partner.start_date)
         self._f_start.textChanged.connect(lambda v: setattr(self._partner, 'start_date', v) or self.changed.emit())
         right.addWidget(self._f_start)
 
-        right.addWidget(_lbl("Delivery date"))
-        self._f_delivery = _field("dd/mm/yyyy")
+        right.addWidget(_lbl(t('project.cost.delivery_date')))
+        self._f_delivery = _field(t('project.cost.date_ph'))
         self._f_delivery.setText(self._partner.delivery_date)
         self._f_delivery.textChanged.connect(lambda v: setattr(self._partner, 'delivery_date', v) or self.changed.emit())
         right.addWidget(self._f_delivery)
@@ -450,7 +451,7 @@ class PartnerPanel(QScrollArea):
     def set_best(self, is_best: bool):
         self._partner.is_best = is_best
         self._best_btn.setStyleSheet(_BTN_BEST_ON if is_best else _BTN_BEST_OFF)
-        self._best_btn.setText("★  Best Partner" if is_best else "☆  Mark as Best")
+        self._best_btn.setText(t('project.cost.best_partner') if is_best else t('project.cost.mark_best'))
 
     # ── task details card ──────────────────────────────────────────────────
 
@@ -461,15 +462,15 @@ class PartnerPanel(QScrollArea):
         cl.setSpacing(8)
 
         hdr = QHBoxLayout()
-        hdr.addWidget(_lbl("Task details", muted=False, bold=True, size=12))
+        hdr.addWidget(_lbl(t('project.cost.task_details'), muted=False, bold=True, size=12))
         hdr.addStretch()
 
-        cur_lbl = _lbl("Currency:", muted=True)
+        cur_lbl = _lbl(t('project.cost.currency_label'), muted=True)
         hdr.addWidget(cur_lbl)
         self._cur_lbl = _lbl(self._currency_fn(), muted=False, bold=True, size=11)
         hdr.addWidget(self._cur_lbl)
 
-        add_row_btn = QPushButton("+ Add row")
+        add_row_btn = QPushButton(t('project.cost.add_row'))
         add_row_btn.setStyleSheet(_BTN_OUTLINE)
         add_row_btn.setFixedHeight(26)
         add_row_btn.setCursor(Qt.PointingHandCursor)
@@ -481,9 +482,14 @@ class PartnerPanel(QScrollArea):
 
         # Table
         self._table = QTableWidget(0, 6)
-        self._table.setHorizontalHeaderLabels(
-            ["Component", "Task", "Est. Hours", "Hourly Rate", "Total Cost", ""]
-        )
+        self._table.setHorizontalHeaderLabels([
+            t('project.cost.col_component'),
+            t('project.cost.col_task'),
+            t('project.cost.col_hours'),
+            t('project.cost.col_rate'),
+            t('project.cost.col_total'),
+            "",
+        ])
         self._table.setStyleSheet(_TABLE_STYLE)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -511,8 +517,8 @@ class PartnerPanel(QScrollArea):
         # Totals row
         totals_row = QHBoxLayout()
         totals_row.addStretch()
-        self._total_hours_lbl = _lbl("Total hours:  0.0", muted=False, bold=True, size=11)
-        self._total_cost_lbl  = _lbl("Total cost:  —", muted=False, bold=True, size=11)
+        self._total_hours_lbl = _lbl(f"{t('project.cost.total_hours')} 0.0", muted=False, bold=True, size=11)
+        self._total_cost_lbl  = _lbl(f"{t('project.cost.total_cost')} —", muted=False, bold=True, size=11)
         totals_row.addWidget(self._total_hours_lbl)
         totals_row.addSpacing(24)
         totals_row.addWidget(self._total_cost_lbl)
@@ -521,7 +527,7 @@ class PartnerPanel(QScrollArea):
         # Tax row
         tax_row = QHBoxLayout()
         tax_row.addStretch()
-        tax_row.addWidget(_lbl("Tax:", muted=True, size=11))
+        tax_row.addWidget(_lbl(t('project.cost.tax'), muted=True, size=11))
         self._tax_spin = QDoubleSpinBox()
         self._tax_spin.setRange(0.0, 30.0)
         self._tax_spin.setDecimals(1)
@@ -567,7 +573,7 @@ class PartnerPanel(QScrollArea):
         # Total with tax row
         total_tax_row = QHBoxLayout()
         total_tax_row.addStretch()
-        self._total_with_tax_lbl = _lbl("Total with tax:  —", muted=False, bold=True, size=12)
+        self._total_with_tax_lbl = _lbl(f"{t('project.cost.total_with_tax')} —", muted=False, bold=True, size=12)
         self._total_with_tax_lbl.setStyleSheet(
             f"color: {_ACCENT}; font-size: 15px; font-weight: bold; background: transparent; border: none;"
         )
@@ -633,7 +639,7 @@ class PartnerPanel(QScrollArea):
             del_btn = QPushButton("×")
             del_btn.setFixedSize(24, 24)
             del_btn.setCursor(Qt.PointingHandCursor)
-            del_btn.setToolTip("Delete row")
+            del_btn.setToolTip(t('project.cost.delete_row'))
             del_btn.setStyleSheet("""
                 QPushButton {
                     background: transparent; color: #9ca3af;
@@ -684,11 +690,11 @@ class PartnerPanel(QScrollArea):
         tax_amount = round(c * tax_rate / 100, 2)
         total_with_tax = round(c + tax_amount, 2)
         cur = self._currency_fn()
-        self._total_hours_lbl.setText(f"Total hours:  {h:,.1f}")
-        self._total_cost_lbl.setText(f"Total cost:  {_fmt(c, cur)}")
+        self._total_hours_lbl.setText(f"{t('project.cost.total_hours')} {h:,.1f}")
+        self._total_cost_lbl.setText(f"{t('project.cost.total_cost')} {_fmt(c, cur)}")
         if tax_rate > 0:
             self._tax_amount_lbl.setText(f"(+{_fmt(tax_amount, cur)})")
-            self._total_with_tax_lbl.setText(f"Total with tax:  {_fmt(total_with_tax, cur)}")
+            self._total_with_tax_lbl.setText(f"{t('project.cost.total_with_tax')} {_fmt(total_with_tax, cur)}")
             self._total_with_tax_lbl.setVisible(True)
         else:
             self._tax_amount_lbl.setText("")
@@ -699,8 +705,8 @@ class PartnerPanel(QScrollArea):
 
     def update_project_info(self, info: dict):
         self._project_info = info
-        self._ctx_project.setText(f"Project: {info.get('title', '') or '—'}")
-        self._ctx_company.setText(f"Company: {info.get('company', '') or '—'}")
+        self._ctx_project.setText(f"{t('project.cost.project_ctx')} {info.get('title', '') or '—'}")
+        self._ctx_company.setText(f"{t('project.cost.company_ctx')} {info.get('company', '') or '—'}")
 
     def refresh_currency(self):
         self._cur_lbl.setText(self._currency_fn())
@@ -721,18 +727,22 @@ class ComparisonPanel(QWidget):
         root.setContentsMargins(16, 14, 16, 14)
         root.setSpacing(10)
 
-        hdr = QLabel("Partner Comparison")
+        hdr = QLabel(t('project.cost.comparison_tab'))
         hdr.setFont(make_font(size=14, bold=True))
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        sub = _lbl("Auto-populated from partner tabs — read only", muted=True)
+        sub = _lbl(t('project.cost.comparison_note'), muted=True)
         root.addWidget(hdr)
         root.addWidget(sub)
         root.addWidget(_sep())
 
         self._table = QTableWidget(0, 5)
-        self._table.setHorizontalHeaderLabels(
-            ["Partner", "Total Hours", "Hourly Rate", "Total Cost", "Delivery Date"]
-        )
+        self._table.setHorizontalHeaderLabels([
+            t('project.cost.col_partner'),
+            t('project.cost.col_total_hours'),
+            t('project.cost.col_rate'),
+            t('project.cost.col_total'),
+            t('project.cost.col_delivery'),
+        ])
         self._table.setStyleSheet(_TABLE_STYLE)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         for c in range(1, 5):
@@ -789,12 +799,12 @@ class OverviewPanel(QWidget):
     def _build_ui(self):
         # Header
         hdr_row = QHBoxLayout()
-        hdr = QLabel("Overview — Best Partner per Trade")
+        hdr = QLabel(t('project.cost.overview_title'))
         hdr.setFont(make_font(size=14, bold=True))
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         hdr_row.addWidget(hdr)
         hdr_row.addStretch()
-        self._lock_btn = QPushButton("🔒  Set Password")
+        self._lock_btn = QPushButton(t('project.cost.set_password'))
         self._lock_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; color: {_MUTED};
@@ -808,14 +818,18 @@ class OverviewPanel(QWidget):
         hdr_row.addWidget(self._lock_btn)
         self._root.addLayout(hdr_row)
 
-        sub = _lbl("Auto-generated from Best partner selection in each trade — read only", muted=True)
+        sub = _lbl(t('project.cost.overview_note'), muted=True)
         self._root.addWidget(sub)
         self._root.addWidget(_sep())
 
         self._table = QTableWidget(0, 5)
-        self._table.setHorizontalHeaderLabels(
-            ["Trade", "Best Partner", "Total Hours", "Hourly Rate", "Total Cost"]
-        )
+        self._table.setHorizontalHeaderLabels([
+            t('project.cost.col_trade'),
+            t('project.cost.col_best_partner'),
+            t('project.cost.col_total_hours'),
+            t('project.cost.col_rate'),
+            t('project.cost.col_total'),
+        ])
         self._table.setStyleSheet(_TABLE_STYLE)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -830,7 +844,7 @@ class OverviewPanel(QWidget):
         # Grand total row
         total_row = QHBoxLayout()
         total_row.addStretch()
-        self._grand_total_lbl = _lbl("Grand Total:  —", muted=False, bold=True, size=12)
+        self._grand_total_lbl = _lbl(f"{t('project.cost.grand_total')} —", muted=False, bold=True, size=12)
         total_row.addWidget(self._grand_total_lbl)
         self._root.addLayout(total_row)
         self._root.addStretch()
@@ -844,10 +858,10 @@ class OverviewPanel(QWidget):
         lock_icon = QLabel("🔒")
         lock_icon.setAlignment(Qt.AlignCenter)
         lock_icon.setStyleSheet("font-size: 40px; background: transparent; border: none;")
-        lock_msg = QLabel("This section is password-protected.")
+        lock_msg = QLabel(t('project.cost.protected_msg'))
         lock_msg.setAlignment(Qt.AlignCenter)
         lock_msg.setStyleSheet(f"color: {_TEXT}; font-size: 16px; background: transparent; border: none;")
-        unlock_btn = QPushButton("🔓  Enter Password")
+        unlock_btn = QPushButton(t('project.cost.enter_password'))
         unlock_btn.setStyleSheet(_BTN_PRIMARY)
         unlock_btn.setFixedWidth(180)
         unlock_btn.setFixedHeight(34)
@@ -884,7 +898,7 @@ class OverviewPanel(QWidget):
                 item = self._table.item(row, col)
                 if item:
                     item.setBackground(QColor("#f0fdf4"))
-        self._grand_total_lbl.setText(f"Grand Total:  {sym}{grand_total:,.2f}")
+        self._grand_total_lbl.setText(f"{t('project.cost.grand_total')} {sym}{grand_total:,.2f}")
 
     def show_and_lock_if_needed(self):
         if self._password and not self._unlocked:
@@ -917,7 +931,7 @@ class OverviewPanel(QWidget):
         if ok:
             self._password = new_pwd.strip()
             self._unlocked = not bool(self._password)
-            self._lock_btn.setText("🔒  Change Password" if self._password else "🔒  Set Password")
+            self._lock_btn.setText(t('project.cost.change_password') if self._password else t('project.cost.set_password'))
             if self._password:
                 show_message_dialog(self, "Password Set", "Overview is now password-protected.")
             else:
@@ -983,7 +997,7 @@ class TradeWidget(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        for idx, label in enumerate(["Overview", "Comparison"]):
+        for idx, label in enumerate([t('project.cost.overview_tab'), t('project.cost.comparison_tab')]):
             btn = QPushButton(label)
             btn.setFixedHeight(28)
             btn.setCursor(Qt.PointingHandCursor)
@@ -1015,7 +1029,7 @@ class TradeWidget(QWidget):
             ch.addWidget(close)
             self._sub_layout.addWidget(container)
 
-        add_btn = QPushButton("＋  Add partner")
+        add_btn = QPushButton(t('project.cost.add_partner'))
         add_btn.setStyleSheet(_BTN_SMALL)
         add_btn.setFixedHeight(28)
         add_btn.setCursor(Qt.PointingHandCursor)
@@ -1082,7 +1096,7 @@ class TradeWidget(QWidget):
             return
         partner = self._trade.partners[idx]
         if not ask_yes_no_dialog(
-            self, "Remove Partner",
+            self, t('project.cost.remove_partner'),
             f"Remove partner '{partner.name}' and all their task data?\n\nThis cannot be undone."
         ):
             return
@@ -1167,10 +1181,10 @@ class EstimatedCostWidget(QWidget):
         tl.setContentsMargins(16, 0, 16, 0)
         tl.setSpacing(10)
 
-        title = QLabel("Estimated Cost")
+        title = QLabel(t('project.cost.title'))
         title.setFont(make_font(size=15, bold=True))
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
-        subtitle = QLabel("Trade-based cost estimation with partner comparison.")
+        subtitle = QLabel(t('project.cost.subtitle'))
         subtitle.setStyleSheet(f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;")
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
@@ -1179,11 +1193,11 @@ class EstimatedCostWidget(QWidget):
         tl.addLayout(t_col)
         tl.addStretch()
 
-        tl.addWidget(_lbl("Currency:", muted=True))
+        tl.addWidget(_lbl(t('project.cost.currency_label'), muted=True))
         self._currency_combo = QComboBox()
         self._currency_combo.addItems(CURRENCIES)
         self._currency_combo.setCurrentText(self._currency)
-        self._currency_combo.setFixedWidth(80)
+        self._currency_combo.setFixedWidth(100)
         self._currency_combo.setFixedHeight(28)
         self._currency_combo.setStyleSheet(f"""
             QComboBox {{
@@ -1288,7 +1302,7 @@ class EstimatedCostWidget(QWidget):
             ch.addWidget(close)
             self._trade_layout.addWidget(container)
 
-        add_btn = QPushButton("＋  Add trade")
+        add_btn = QPushButton(t('project.cost.add_trade'))
         add_btn.setStyleSheet(_BTN_SMALL)
         add_btn.setFixedHeight(28)
         add_btn.setCursor(Qt.PointingHandCursor)
