@@ -3,8 +3,8 @@ Palette constants, shared button styles, and primitive helper widgets
 used across all traceability sub-modules.
 """
 from PyQt5.QtWidgets import QFrame, QLabel, QSizePolicy, QWidget
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QPainter, QBrush
+from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtGui import QColor, QPainter, QBrush, QFontMetrics
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 
 _ARROW_URL = _get_arrow()
@@ -20,6 +20,11 @@ _TEXT    = '#1e2430'
 _MUTED   = '#6b7280'
 _ACCENT  = default_theme.button_primary
 _ACCENT_H = default_theme.button_primary_hover
+
+# ── selection highlight (used across all selection indicators) ─────────────────
+_SEL_BG     = '#ecfdf5'   # light green background
+_SEL_BORDER = '#22c55e'   # green border / active colour
+_SEL_NUM    = '#16a34a'   # dark green for number labels
 
 _STATUS_COLORS = {
     'Completed':   '#22c55e',
@@ -223,3 +228,100 @@ class _ProgressBar(QWidget):
             p.setBrush(QBrush(color))
             p.drawRoundedRect(0, 0, fill_w, h, 3, 3)
         p.end()
+
+
+class _MarqueeLabel(QWidget):
+    """Single-line label that auto-scrolls horizontally when text exceeds widget width."""
+
+    def __init__(self, text: str = '', parent=None):
+        super().__init__(parent)
+        self._text   = text
+        self._offset = 0
+        self._color  = QColor(_TEXT)
+        self._timer  = QTimer(self)
+        self._timer.timeout.connect(self._step)
+        self._pause_timer = QTimer(self)
+        self._pause_timer.setSingleShot(True)
+        self._pause_timer.timeout.connect(self._start_scroll)
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+    def setText(self, text: str):
+        self._text   = text
+        self._offset = 0
+        self._stop_all()
+        self._maybe_autostart()
+        self.update()
+
+    def text(self) -> str:
+        return self._text
+
+    def setColor(self, color):
+        self._color = QColor(color) if isinstance(color, str) else color
+        self.update()
+
+    def _text_w(self) -> int:
+        return QFontMetrics(self.font()).horizontalAdvance(self._text)
+
+    def _stop_all(self):
+        self._timer.stop()
+        self._pause_timer.stop()
+
+    def _start_scroll(self):
+        if self._text_w() > self.width():
+            self._timer.start(25)
+
+    def _maybe_autostart(self):
+        self._stop_all()
+        self._offset = 0
+        if self._text_w() > self.width():
+            self._pause_timer.start(1500)
+
+    def _step(self):
+        self._offset -= 1
+        overflow = self._text_w() - self.width()
+        if overflow <= 0 or self._offset < -(overflow + 4):
+            self._timer.stop()
+            self._offset = 0
+            self._pause_timer.start(1200)
+        self.update()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._maybe_autostart()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._maybe_autostart()
+
+    def enterEvent(self, e):
+        self._stop_all()
+        self._offset = 0
+        if self._text_w() > self.width():
+            self._timer.start(25)
+
+    def leaveEvent(self, e):
+        self._stop_all()
+        self._offset = 0
+        self.update()
+        self._maybe_autostart()
+
+    def paintEvent(self, _e):
+        if not self._text:
+            return
+        p = QPainter(self)
+        p.setFont(self.font())
+        p.setPen(self._color)
+        p.setClipRect(self.rect())
+        fm = QFontMetrics(self.font())
+        y  = fm.ascent() + max(0, (self.height() - fm.height()) // 2)
+        p.drawText(self._offset, y, self._text)
+
+    def sizeHint(self):
+        fm = QFontMetrics(self.font())
+        return QSize(fm.horizontalAdvance(self._text), fm.height() + 2)
+
+    def minimumSizeHint(self):
+        fm = QFontMetrics(self.font())
+        return QSize(20, fm.height() + 2)

@@ -1,15 +1,18 @@
 """Row 4: Sub-stage tab bar + parts table."""
+import copy
 from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QDialog,
+    QFrame, QScrollArea, QDialog, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPoint
+from PyQt5.QtGui import QFont
 from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceStage, TraceSubStage
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _ACCENT_H,
-    _BTN_SMALL, tab_active_style, tab_inactive_style,
+    _BTN_SMALL, tab_active_style, tab_inactive_style, _MarqueeLabel,
+    _SEL_BG, _SEL_BORDER, _SEL_NUM,
 )
 from .parts_table import _PartsTable
 from .dialogs import _RenameSubStageDialog
@@ -24,6 +27,7 @@ class _SubStagePanel(QWidget):
         super().__init__(parent)
         self._stage: Optional[TraceStage] = None
         self._current_sub = 0
+        self._is_main = False
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
@@ -64,8 +68,9 @@ class _SubStagePanel(QWidget):
         fl.addWidget(hint)
         root.addWidget(footer)
 
-    def load_stage(self, stage: Optional[TraceStage]):
+    def load_stage(self, stage: Optional[TraceStage], is_main: bool = False):
         self._stage = stage
+        self._is_main = is_main
         self._current_sub = 0
         self._refresh_tabs()
         self._refresh_table()
@@ -88,7 +93,7 @@ class _SubStagePanel(QWidget):
             is_active = (i == self._current_sub)
             _ca = f"""
                 QPushButton {{
-                    background: {_ACCENT}; color: rgba(255,255,255,0.6);
+                    background: {_SEL_BORDER}; color: rgba(255,255,255,0.6);
                     border: none; border-left: 1px solid rgba(255,255,255,0.2);
                     border-radius: 0 5px 5px 0; font-size: 14px; font-weight: bold; padding: 0 5px;
                 }}
@@ -106,13 +111,79 @@ class _SubStagePanel(QWidget):
             container = QWidget(); container.setStyleSheet('background: transparent;')
             ch = QHBoxLayout(container); ch.setContentsMargins(0, 0, 0, 0); ch.setSpacing(0)
 
-            btn = QPushButton(f'{snum}.{i + 1}  {sub.name}')
+            full_label = f'{snum}.{i + 1}  {sub.name}'
+            tab_font = QFont()
+            tab_font.setPixelSize(14)
+            tab_font.setBold(is_active)
+            tab_color = 'white' if is_active else _MUTED
+
+            _ta_w = f"""
+                QWidget {{
+                    background: {_SEL_BORDER}; border: none;
+                    border-radius: 5px 0 0 5px;
+                }}
+                QWidget:hover {{ background: {_SEL_NUM}; }}
+            """
+            _ti_w = f"""
+                QWidget {{
+                    background: transparent;
+                    border: 1px solid {_BORDER}; border-radius: 5px 0 0 5px;
+                }}
+                QWidget:hover {{ background: {_SEL_BG}; border-color: {_SEL_BORDER}; }}
+            """
+
+            btn = QWidget()
+            btn.setAttribute(Qt.WA_StyledBackground, True)
+            btn.setAttribute(Qt.WA_Hover, True)
             btn.setFixedHeight(26)
+            btn.setMaximumWidth(140)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(_ta if is_active else _ti)
-            btn.setToolTip(t('project.traceability.dbl_click_rename'))
-            btn.clicked.connect(lambda _, idx=i: self._switch_sub(idx))
+            btn.setStyleSheet(_ta_w if is_active else _ti_w)
+            btn.setToolTip(f'{full_label}\n{t("project.traceability.dbl_click_rename")}')
+            btn.mousePressEvent = lambda _e, idx=i: self._switch_sub(idx)
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_sub(idx)
+
+            bl = QHBoxLayout(btn)
+            bl.setContentsMargins(6, 0, 4, 0)
+            bl.setSpacing(3)
+
+            num_lbl = QLabel(f'{snum}.{i + 1}')
+            num_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            num_lbl.setFont(tab_font)
+            num_lbl.setStyleSheet(f'color: {tab_color}; background: transparent; border: none;')
+
+            name_lbl = _MarqueeLabel(sub.name)
+            name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            name_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            name_lbl.setFont(tab_font)
+            name_lbl.setColor(tab_color)
+
+            bl.addWidget(num_lbl)
+            bl.addWidget(name_lbl)
+
+            _da = f"""
+                QPushButton {{
+                    background: {_SEL_BORDER}; color: rgba(255,255,255,0.7);
+                    border: none; border-left: 1px solid rgba(255,255,255,0.15);
+                    border-radius: 0; font-size: 12px; font-weight: bold; padding: 0 5px;
+                }}
+                QPushButton:hover {{ color: white; background: {_SEL_NUM}; }}
+            """
+            _di = f"""
+                QPushButton {{
+                    background: transparent; color: {_MUTED};
+                    border: 1px solid {_BORDER}; border-left: none;
+                    border-radius: 0; font-size: 12px; padding: 0 5px;
+                }}
+                QPushButton:hover {{ color: {_SEL_NUM}; background: {_SEL_BG}; border-color: {_SEL_BORDER}; }}
+            """
+
+            dup = QPushButton('⧉')
+            dup.setFixedSize(20, 26)
+            dup.setCursor(Qt.PointingHandCursor)
+            dup.setToolTip(t('project.traceability.duplicate_substage'))
+            dup.setStyleSheet(_da if is_active else _di)
+            dup.clicked.connect(lambda _, idx=i: self._duplicate_sub(idx))
 
             close = QPushButton('✕')
             close.setFixedSize(20, 26)
@@ -120,7 +191,7 @@ class _SubStagePanel(QWidget):
             close.setStyleSheet(_ca if is_active else _ci)
             close.clicked.connect(lambda _, idx=i: self._remove_sub(idx))
 
-            ch.addWidget(btn); ch.addWidget(close)
+            ch.addWidget(btn); ch.addWidget(dup); ch.addWidget(close)
             self._tab_layout.addWidget(container)
 
         add_btn = QPushButton(t('project.traceability.add_substage'))
@@ -169,6 +240,26 @@ class _SubStagePanel(QWidget):
         self.changed.emit()
         self.tab_switched.emit()
 
+    def _renumber_substages(self):
+        import re
+        for i, sub in enumerate(self._stage.sub_stages):
+            if re.match(r'^Sub-stage \d+$', sub.name):
+                sub.name = f'Sub-stage {i + 1}'
+
+    def _duplicate_sub(self, idx: int):
+        if not self._stage or idx >= len(self._stage.sub_stages):
+            return
+        dup = copy.deepcopy(self._stage.sub_stages[idx])
+        dup.id = max((s.id for s in self._stage.sub_stages), default=0) + 1
+        for j, part in enumerate(dup.parts):
+            part.id = j + 1
+        self._stage.sub_stages.insert(idx + 1, dup)
+        self._renumber_substages()
+        self._current_sub = idx + 1
+        self._refresh_tabs()
+        self._refresh_table()
+        self.changed.emit()
+
     def _remove_sub(self, idx: int):
         if not self._stage:
             return
@@ -177,6 +268,7 @@ class _SubStagePanel(QWidget):
                                   t('project.traceability.remove_sub_confirm').format(name=sub.name)):
             return
         self._stage.sub_stages.pop(idx)
+        self._renumber_substages()
         self._current_sub = min(self._current_sub, max(0, len(self._stage.sub_stages) - 1))
         self._refresh_tabs()
         self._refresh_table()
@@ -202,7 +294,8 @@ class _SubStagePanel(QWidget):
         sub = self._stage.sub_stages[idx]
         table = _PartsTable(sub,
                             stage_num=self._stage.number,
-                            sub_num=idx + 1)
+                            sub_num=idx + 1,
+                            flat_mode=self._is_main)
         table.changed.connect(self.changed)
         self._content_layout.addWidget(table)
         self._content_layout.addStretch()

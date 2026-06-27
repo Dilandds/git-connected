@@ -204,6 +204,12 @@ class ReportWidget(QWidget):
             ed.refresh_logo()
         self.changed.emit()
 
+    def add_screenshot_to_report(self, pixmap: QPixmap) -> bool:
+        """Send a QPixmap to the first empty photo slot in the current report/page."""
+        if 0 <= self._current_idx < len(self._editors):
+            return self._editors[self._current_idx].add_screenshot_to_report(pixmap)
+        return False
+
     # ── public API ────────────────────────────────────────────────────────────
 
     def update_project_info(self, info: dict):

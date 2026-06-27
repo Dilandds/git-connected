@@ -1,0 +1,778 @@
+"""
+Assignment screen — annotate a product image with labeled area cards
+connected by curved bezier arrows, showing who is responsible for each part.
+"""
+import logging
+import math
+import os
+import uuid
+from dataclasses import dataclass, asdict
+from typing import List, Optional
+
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFrame, QScrollArea, QFileDialog, QComboBox, QLineEdit, QDialog,
+)
+from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF
+from PyQt5.QtGui import (
+    QPainter, QColor, QPen, QBrush, QPainterPath,
+    QFont, QPixmap,
+)
+
+from ui.styles import default_theme, TOOLTIP_STYLE
+from ui.modal_utils import FormModal
+from i18n import t
+
+logger = logging.getLogger(__name__)
+
+# ── Palette ───────────────────────────────────────────────────────────────────
+_BG      = '#f0f2f5'
+_CANVAS  = '#ffffff'
+_BORDER  = '#e5e7eb'
+_TEXT    = '#1e2430'
+_MUTED   = '#6b7280'
+_ACCENT  = default_theme.button_primary
+_ACCENT_H = default_theme.button_primary_hover
+
+_BADGE_COLORS = [
+    '#22c55e',  # green
+    '#3b82f6',  # blue
+    '#f97316',  # orange
+    '#8b5cf6',  # purple
+    '#ef4444',  # red
+    '#0d9488',  # teal
+    '#eab308',  # yellow
+    '#ec4899',  # pink
+    '#06b6d4',  # cyan
+    '#f43f5e',  # rose
+]
+
+_STATUS_COLORS = {
+    'Completed':   '#22c55e',
+    'In progress': '#3b82f6',
+    'Pending':     '#f59e0b',
+    'Cancelled':   '#ef4444',
+}
+
+# ── Layout constants ──────────────────────────────────────────────────────────
+_CARD_W, _CARD_H = 148, 88
+_CARD_R   = 8        # corner radius
+_A4_W, _A4_H = 420, 594
+_CANVAS_W, _CANVAS_H = 1120, 760
+_IMG_GAP  = 72       # horizontal gap between card and A4 frame
+
+# ── Styles ────────────────────────────────────────────────────────────────────
+_BTN = f"""
+    QPushButton {{
+        background: #f3f4f6; color: {_TEXT};
+        border: 1px solid {_BORDER}; border-radius: 6px;
+        font-size: 13px; padding: 5px 14px;
+    }}
+    QPushButton:hover {{ background: #e5e7eb; border-color: {_ACCENT}; }}
+    QPushButton:checked {{ background: {_ACCENT}; color: white; border-color: {_ACCENT}; }}
+    QPushButton:pressed {{ background: {_ACCENT}; color: white; }}
+""" + TOOLTIP_STYLE
+
+_BTN_PRIMARY = f"""
+    QPushButton {{
+        background: {_ACCENT}; color: white; border: none;
+        border-radius: 6px; font-size: 13px; padding: 5px 14px;
+    }}
+    QPushButton:hover {{ background: {_ACCENT_H}; }}
+""" + TOOLTIP_STYLE
+
+
+# ── Data model ────────────────────────────────────────────────────────────────
+@dataclass
+class AreaCard:
+    id: str
+    title: str = ''
+    supplier: str = ''
+    status: str = 'In progress'
+    number: int = 1
+    x: float = 0.0
+    y: float = 0.0
+    has_arrow: bool = False
+    arrow_rx: float = 0.5   # 0-1 relative x on image
+    arrow_ry: float = 0.5   # 0-1 relative y on image
+    color: str = '#3b82f6'
+
+    def rect(self) -> QRectF:
+        return QRectF(self.x, self.y, _CARD_W, _CARD_H)
+
+    def is_left_of(self, img_rect: QRectF) -> bool:
+        return (self.x + _CARD_W / 2) < img_rect.center().x()
+
+    def connection_point(self, img_rect: QRectF) -> QPointF:
+        """Right-edge center for left cards, left-edge center for right cards."""
+        if self.is_left_of(img_rect):
+            return QPointF(self.x + _CARD_W, self.y + _CARD_H / 2)
+        return QPointF(self.x, self.y + _CARD_H / 2)
+
+    def arrow_target(self, img_rect: QRectF) -> QPointF:
+        return QPointF(
+            img_rect.x() + self.arrow_rx * img_rect.width(),
+            img_rect.y() + self.arrow_ry * img_rect.height(),
+        )
+
+
+# ── Card edit dialog ──────────────────────────────────────────────────────────
+class CardEditDialog(FormModal):
+    def __init__(self, card: AreaCard, parent=None):
+        super().__init__(parent, t('assignment.edit_card'), theme=FormModal.LIGHT)
+
+        self._f_title = self.add_field(t('assignment.card_title'), QLineEdit(), height=32)
+        self._f_title.setPlaceholderText(t('assignment.card_title_ph'))
+        self._f_title.setText(card.title)
+
+        self._f_supplier = self.add_field(t('assignment.card_supplier'), QLineEdit(), height=32)
+        self._f_supplier.setPlaceholderText(t('assignment.card_supplier_ph'))
+        self._f_supplier.setText(card.supplier)
+
+        self._combo = QComboBox()
+        self._combo.addItems(list(_STATUS_COLORS.keys()))
+        idx = self._combo.findText(card.status)
+        if idx >= 0:
+            self._combo.setCurrentIndex(idx)
+        self.add_field(t('assignment.card_status'), self._combo, height=32)
+
+        self.finish(ok=t('common.save'), cancel=t('common.cancel'))
+
+        self._f_title.returnPressed.connect(self.ok_btn.click)
+        self._f_supplier.returnPressed.connect(self.ok_btn.click)
+        self._f_title.setFocus()
+
+    def get_title(self) -> str:
+        return self._f_title.text().strip()
+
+    def get_supplier(self) -> str:
+        return self._f_supplier.text().strip()
+
+    def get_status(self) -> str:
+        return self._combo.currentText()
+
+
+# ── Drawing canvas ────────────────────────────────────────────────────────────
+class AssignmentCanvas(QWidget):
+    """The interactive paint surface — A4 frame + area cards + bezier arrows."""
+
+    changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(_CANVAS_W, _CANVAS_H)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.ArrowCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+        self._image: Optional[QPixmap] = None
+        self._image_name: str = ''
+        self._image_path: str = ''
+        self._cards: List[AreaCard] = []
+        self._tool: str = 'select'
+        self._selected_id: Optional[str] = None
+
+        # Drag state
+        self._drag_id: Optional[str] = None
+        self._drag_offset: QPointF = QPointF()
+
+        # Line-draw state
+        self._line_card: Optional[AreaCard] = None
+        self._line_pos: Optional[QPointF] = None
+
+        # Undo / redo
+        self._undo_stack: list = []
+        self._redo_stack: list = []
+
+    # ── A4 frame geometry ─────────────────────────────────────────────────────
+
+    def _img_rect(self) -> QRectF:
+        x = (_CANVAS_W - _A4_W) / 2
+        y = (_CANVAS_H - _A4_H) / 2
+        return QRectF(x, y, _A4_W, _A4_H)
+
+    # ── Paint ─────────────────────────────────────────────────────────────────
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        p.fillRect(self.rect(), QColor(_BG))
+
+        img_rect = self._img_rect()
+
+        # Drop shadow
+        p.fillRect(
+            QRectF(img_rect.x() + 4, img_rect.y() + 4,
+                   img_rect.width(), img_rect.height()),
+            QColor(0, 0, 0, 30),
+        )
+
+        # A4 white frame
+        p.fillRect(img_rect, QColor(_CANVAS))
+        p.setPen(QPen(QColor(_BORDER), 1))
+        p.drawRect(img_rect)
+
+        # Image or drop hint
+        if self._image:
+            p.drawPixmap(img_rect.toRect(), self._image)
+        else:
+            p.setPen(QColor(_MUTED))
+            p.setFont(QFont('', 12))
+            p.drawText(img_rect, Qt.AlignCenter, t('assignment.drop_hint'))
+
+        # File label above frame
+        p.setPen(QColor(_MUTED))
+        p.setFont(QFont('', 9))
+        if self._image_name:
+            p.drawText(
+                QRectF(img_rect.x() + 4, img_rect.y() - 20, 280, 16),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                self._image_name,
+            )
+        p.drawText(
+            QRectF(img_rect.right() - 90, img_rect.y() - 20, 90, 16),
+            Qt.AlignRight | Qt.AlignVCenter,
+            'A4 Portrait',
+        )
+
+        # Arrows (drawn behind cards)
+        for card in self._cards:
+            if card.has_arrow:
+                self._paint_arrow(
+                    p,
+                    card.connection_point(img_rect),
+                    card.arrow_target(img_rect),
+                    card.color,
+                )
+
+        # In-progress arrow preview
+        if self._line_card and self._line_pos:
+            self._paint_arrow(
+                p,
+                self._line_card.connection_point(img_rect),
+                self._line_pos,
+                self._line_card.color,
+                alpha=90,
+            )
+
+        # Cards
+        for card in self._cards:
+            self._paint_card(p, card, img_rect)
+
+    def _paint_card(self, p: QPainter, card: AreaCard, img_rect: QRectF):
+        r = card.rect()
+        selected = card.id == self._selected_id
+
+        # Shadow
+        p.fillRect(r.adjusted(2, 2, 2, 2), QColor(0, 0, 0, 18))
+
+        # Card body
+        path = QPainterPath()
+        path.addRoundedRect(r, _CARD_R, _CARD_R)
+        p.setBrush(QBrush(QColor(_CANVAS)))
+        border_color = QColor(_ACCENT) if selected else QColor(_BORDER)
+        p.setPen(QPen(border_color, 1.8 if selected else 1.0))
+        p.drawPath(path)
+
+        # Number badge
+        badge = QRectF(r.x() + 9, r.y() + 9, 22, 22)
+        p.setBrush(QBrush(QColor(card.color)))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(badge)
+        p.setPen(QColor('#ffffff'))
+        p.setFont(QFont('', 9, QFont.Bold))
+        p.drawText(badge, Qt.AlignCenter, str(card.number))
+
+        # Title
+        p.setPen(QColor(_TEXT))
+        p.setFont(QFont('', 10, QFont.Bold))
+        p.drawText(
+            QRectF(r.x() + 38, r.y() + 8, r.width() - 46, 24),
+            Qt.AlignLeft | Qt.AlignVCenter,
+            card.title or '—',
+        )
+
+        # Supplier / task
+        p.setPen(QColor(_MUTED))
+        p.setFont(QFont('', 9))
+        p.drawText(
+            QRectF(r.x() + 9, r.y() + 37, r.width() - 18, 18),
+            Qt.AlignLeft | Qt.AlignVCenter,
+            card.supplier,
+        )
+
+        # Status
+        p.setPen(QColor(_STATUS_COLORS.get(card.status, _MUTED)))
+        p.setFont(QFont('', 9, QFont.Bold))
+        p.drawText(
+            QRectF(r.x() + 9, r.y() + 57, r.width() - 18, 18),
+            Qt.AlignLeft | Qt.AlignVCenter,
+            card.status,
+        )
+
+        # Connection dot on the edge facing the image
+        cp = card.connection_point(img_rect)
+        p.setBrush(QBrush(QColor(card.color)))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(cp, 5, 5)
+
+    def _paint_arrow(
+        self, p: QPainter, start: QPointF, end: QPointF,
+        color_str: str, alpha: int = 210,
+    ):
+        c = QColor(color_str)
+        c.setAlpha(alpha)
+
+        # Bezier with horizontal tangents
+        dx = abs(end.x() - start.x()) * 0.5
+        going_right = end.x() > start.x()
+        ctrl1 = QPointF(start.x() + (dx if going_right else -dx), start.y())
+        ctrl2 = QPointF(end.x()   - (dx if going_right else -dx), end.y())
+
+        path = QPainterPath(start)
+        path.cubicTo(ctrl1, ctrl2, end)
+
+        pen = QPen(c, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
+
+        # Arrowhead at the image end
+        adx = end.x() - ctrl2.x()
+        ady = end.y() - ctrl2.y()
+        angle = math.atan2(ady, adx)
+        sz = 7
+        a1 = QPointF(end.x() - sz * math.cos(angle - 0.42),
+                     end.y() - sz * math.sin(angle - 0.42))
+        a2 = QPointF(end.x() - sz * math.cos(angle + 0.42),
+                     end.y() - sz * math.sin(angle + 0.42))
+        head = QPainterPath()
+        head.moveTo(end)
+        head.lineTo(a1)
+        head.lineTo(a2)
+        head.closeSubpath()
+        p.setBrush(QBrush(c))
+        p.setPen(Qt.NoPen)
+        p.drawPath(head)
+
+        # Dot at the card end
+        p.drawEllipse(start, 4, 4)
+
+    # ── Hit testing ───────────────────────────────────────────────────────────
+
+    def _card_at(self, pos: QPointF) -> Optional[AreaCard]:
+        for card in reversed(self._cards):
+            if card.rect().contains(pos):
+                return card
+        return None
+
+    # ── Mouse events ──────────────────────────────────────────────────────────
+
+    def mousePressEvent(self, e):
+        pos = QPointF(e.pos())
+
+        if self._tool == 'select':
+            card = self._card_at(pos)
+            self._selected_id = card.id if card else None
+            if card:
+                self._drag_id = card.id
+                self._drag_offset = pos - QPointF(card.x, card.y)
+            else:
+                self._drag_id = None
+            self.update()
+
+        elif self._tool == 'line':
+            img = self._img_rect()
+            if self._line_card is None:
+                # First click — pick a card as the source
+                card = self._card_at(pos)
+                if card:
+                    self._line_card = card
+                    self._line_pos = pos
+            else:
+                # Second click — place the arrow endpoint
+                if img.contains(pos):
+                    self._push_undo()
+                    self._line_card.has_arrow = True
+                    self._line_card.arrow_rx = max(0.0, min(1.0,
+                        (pos.x() - img.x()) / img.width()))
+                    self._line_card.arrow_ry = max(0.0, min(1.0,
+                        (pos.y() - img.y()) / img.height()))
+                    self._line_card = None
+                    self._line_pos = None
+                    self.changed.emit()
+                else:
+                    # Clicked elsewhere — allow re-picking a different card
+                    card = self._card_at(pos)
+                    if card:
+                        self._line_card = card
+                        self._line_pos = pos
+                    else:
+                        # Clicked on empty canvas — cancel
+                        self._line_card = None
+                        self._line_pos = None
+            self.update()
+
+        elif self._tool == 'delete':
+            card = self._card_at(pos)
+            if card:
+                self._push_undo()
+                self._cards = [c for c in self._cards if c.id != card.id]
+                self._selected_id = None
+                self.changed.emit()
+                self.update()
+
+    def mouseDoubleClickEvent(self, e):
+        if self._tool == 'select':
+            card = self._card_at(QPointF(e.pos()))
+            if card:
+                self._open_edit_dialog(card)
+
+    def mouseMoveEvent(self, e):
+        pos = QPointF(e.pos())
+
+        if self._drag_id and self._tool == 'select':
+            card = self._find_card(self._drag_id)
+            if card:
+                card.x = pos.x() - self._drag_offset.x()
+                card.y = pos.y() - self._drag_offset.y()
+                self.update()
+
+        elif self._line_card and self._tool == 'line':
+            # Live preview follows the mouse
+            self._line_pos = pos
+            self.update()
+
+    def mouseReleaseEvent(self, e):
+        # Only select-mode drag ends here
+        if self._drag_id and self._tool == 'select':
+            self._drag_id = None
+            self.changed.emit()
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Delete, Qt.Key_Backspace):
+            self.delete_selected()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _find_card(self, card_id: str) -> Optional[AreaCard]:
+        return next((c for c in self._cards if c.id == card_id), None)
+
+    def _open_edit_dialog(self, card: AreaCard):
+        dlg = CardEditDialog(card, self.window())
+        if dlg.exec_() == QDialog.Accepted:
+            self._push_undo()
+            card.title = dlg.get_title()
+            card.supplier = dlg.get_supplier()
+            card.status = dlg.get_status()
+            self.changed.emit()
+            self.update()
+
+    def _default_position(self, side: str) -> tuple:
+        """Calculate x, y for the next card on the given side."""
+        img = self._img_rect()
+        existing = [
+            c for c in self._cards
+            if (c.is_left_of(img) if side == 'left' else not c.is_left_of(img))
+        ]
+        row = len(existing)
+        y = img.y() + 28 + row * (_CARD_H + 18)
+        y = min(y, img.bottom() - _CARD_H - 8)
+
+        if side == 'left':
+            x = img.x() - _IMG_GAP - _CARD_W
+        else:
+            x = img.right() + _IMG_GAP
+        return x, y
+
+    def _load_pixmap(self, path: str) -> bool:
+        """Load image without pushing undo. Returns True on success."""
+        ext = os.path.splitext(path)[1].lower()
+        pix: Optional[QPixmap] = None
+
+        if ext in ('.jpg', '.jpeg', '.png', '.bmp', '.webp', '.gif'):
+            pix = QPixmap(path)
+
+        elif ext in ('.heic', '.heif'):
+            try:
+                from PIL import Image
+                import pillow_heif
+                pillow_heif.register_heif_opener()
+                import io
+                img = Image.open(path).convert('RGB')
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG')
+                pix = QPixmap()
+                pix.loadFromData(buf.getvalue(), 'JPEG')
+            except Exception as ex:
+                logger.warning(f'HEIC load failed: {ex}')
+
+        elif ext == '.pdf':
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(path)
+                page = doc.load_page(0)
+                pmap = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                pix = QPixmap()
+                pix.loadFromData(bytes(pmap.tobytes('png')), 'PNG')
+            except Exception as ex:
+                logger.warning(f'PDF load failed (PyMuPDF not installed?): {ex}')
+
+        if pix and not pix.isNull():
+            self._image = pix
+            self._image_name = os.path.basename(path)
+            self._image_path = path
+            return True
+        return False
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def set_tool(self, tool: str):
+        self._tool = tool
+        cursors = {'line': Qt.CrossCursor, 'delete': Qt.ForbiddenCursor}
+        self.setCursor(cursors.get(tool, Qt.ArrowCursor))
+        self._line_card = None
+        self._line_pos = None
+        self.update()
+
+    def import_image(self, path: str):
+        self._push_undo()
+        if self._load_pixmap(path):
+            self.changed.emit()
+        self.update()
+
+    def add_card(self):
+        n = len(self._cards) + 1
+        color = _BADGE_COLORS[(n - 1) % len(_BADGE_COLORS)]
+        side = 'left' if n % 2 == 1 else 'right'
+        x, y = self._default_position(side)
+
+        card = AreaCard(id=str(uuid.uuid4()), number=n, color=color, x=x, y=y)
+        dlg = CardEditDialog(card, self.window())
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        card.title    = dlg.get_title()
+        card.supplier = dlg.get_supplier()
+        card.status   = dlg.get_status()
+
+        self._push_undo()
+        self._cards.append(card)
+        self._selected_id = card.id
+        self.changed.emit()
+        self.update()
+
+    def delete_selected(self):
+        if self._selected_id:
+            self._push_undo()
+            self._cards = [c for c in self._cards if c.id != self._selected_id]
+            self._selected_id = None
+            self.changed.emit()
+            self.update()
+
+    def undo(self):
+        if self._undo_stack:
+            self._redo_stack.append(self._snapshot())
+            self._restore(self._undo_stack.pop())
+            self.update()
+
+    def redo(self):
+        if self._redo_stack:
+            self._undo_stack.append(self._snapshot())
+            self._restore(self._redo_stack.pop())
+            self.update()
+
+    # ── Undo helpers ──────────────────────────────────────────────────────────
+
+    def _snapshot(self) -> dict:
+        return {
+            'cards': [asdict(c) for c in self._cards],
+            'image_name': self._image_name,
+            'image_path': self._image_path,
+        }
+
+    def _restore(self, state: dict):
+        self._cards = [AreaCard(**d) for d in state['cards']]
+        self._image_name = state.get('image_name', '')
+        self._selected_id = None
+
+    def _push_undo(self):
+        self._undo_stack.append(self._snapshot())
+        self._redo_stack.clear()
+        if len(self._undo_stack) > 50:
+            self._undo_stack.pop(0)
+
+    # ── Serialisation ─────────────────────────────────────────────────────────
+
+    def get_data(self) -> dict:
+        return {
+            'cards': [asdict(c) for c in self._cards],
+            'image_name': self._image_name,
+            'image_path': self._image_path,
+        }
+
+    def set_data(self, data: dict):
+        self._cards = [AreaCard(**d) for d in data.get('cards', [])]
+        self._image_name = data.get('image_name', '')
+        self._image_path = data.get('image_path', '')
+        if self._image_path:
+            self._load_pixmap(self._image_path)
+        self.update()
+
+
+# ── Top-level widget ──────────────────────────────────────────────────────────
+class AssignmentWidget(QWidget):
+    """The Project — Assignment screen."""
+
+    changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._tool_btns: dict = {}
+        self._build_ui()
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # Canvas must exist before _build_toolbar() so its methods can be referenced
+        self._canvas = AssignmentCanvas()
+        self._canvas.changed.connect(self.changed)
+
+        root.addWidget(self._build_header())
+        root.addWidget(self._build_toolbar())
+
+        scroll = QScrollArea()
+        scroll.setWidget(self._canvas)
+        scroll.setWidgetResizable(False)
+        scroll.setStyleSheet(f'background: {_BG}; border: none;')
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        root.addWidget(scroll, 1)
+
+    def _build_header(self) -> QWidget:
+        h = QWidget()
+        h.setFixedHeight(58)
+        h.setStyleSheet(f'background: {_CANVAS}; border-bottom: 1px solid {_BORDER};')
+        lay = QVBoxLayout(h)
+        lay.setContentsMargins(24, 10, 24, 10)
+        lay.setSpacing(2)
+
+        self._title_lbl = QLabel(t('assignment.title'))
+        self._title_lbl.setStyleSheet(
+            f'color: {_TEXT}; font-size: 18px; font-weight: bold; '
+            f'background: transparent; border: none;'
+        )
+        self._subtitle_lbl = QLabel(t('assignment.subtitle'))
+        self._subtitle_lbl.setStyleSheet(
+            f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
+        )
+        lay.addWidget(self._title_lbl)
+        lay.addWidget(self._subtitle_lbl)
+        return h
+
+    def _build_toolbar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedHeight(46)
+        bar.setStyleSheet(f'background: {_CANVAS}; border-bottom: 1px solid {_BORDER};')
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(6)
+
+        # Import image
+        imp_btn = QPushButton('⬆  ' + t('assignment.import_btn'))
+        imp_btn.setStyleSheet(_BTN_PRIMARY)
+        imp_btn.setFixedHeight(30)
+        imp_btn.setCursor(Qt.PointingHandCursor)
+        imp_btn.setToolTip(t('assignment.import_tooltip'))
+        imp_btn.clicked.connect(self._on_import)
+        row.addWidget(imp_btn)
+
+        row.addWidget(self._vsep())
+
+        # Add area
+        add_btn = QPushButton('+ ' + t('assignment.add_area'))
+        add_btn.setStyleSheet(_BTN)
+        add_btn.setFixedHeight(30)
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setToolTip(t('assignment.add_area_tooltip'))
+        add_btn.clicked.connect(lambda: self._canvas.add_card())
+        row.addWidget(add_btn)
+
+        # Toggle-mode tool buttons
+        line_btn = QPushButton(t('assignment.line'))
+        line_btn.setCheckable(True)
+        line_btn.setStyleSheet(_BTN)
+        line_btn.setFixedHeight(30)
+        line_btn.setCursor(Qt.PointingHandCursor)
+        line_btn.setToolTip(t('assignment.line_tooltip'))
+        line_btn.clicked.connect(lambda: self._toggle_tool('line'))
+        self._tool_btns['line'] = line_btn
+        row.addWidget(line_btn)
+
+        row.addWidget(self._vsep())
+
+        undo_btn = QPushButton('↩ ' + t('assignment.undo'))
+        undo_btn.setStyleSheet(_BTN)
+        undo_btn.setFixedHeight(30)
+        undo_btn.setCursor(Qt.PointingHandCursor)
+        undo_btn.clicked.connect(self._canvas.undo)
+        row.addWidget(undo_btn)
+
+        redo_btn = QPushButton('↪ ' + t('assignment.redo'))
+        redo_btn.setStyleSheet(_BTN)
+        redo_btn.setFixedHeight(30)
+        redo_btn.setCursor(Qt.PointingHandCursor)
+        redo_btn.clicked.connect(self._canvas.redo)
+        row.addWidget(redo_btn)
+
+        del_btn = QPushButton('🗑 ' + t('assignment.delete'))
+        del_btn.setStyleSheet(_BTN)
+        del_btn.setFixedHeight(30)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setToolTip(t('assignment.delete_tooltip'))
+        del_btn.clicked.connect(self._canvas.delete_selected)
+        row.addWidget(del_btn)
+
+        row.addStretch()
+        return bar
+
+    def _vsep(self) -> QFrame:
+        s = QFrame()
+        s.setFrameShape(QFrame.VLine)
+        s.setFixedHeight(20)
+        s.setStyleSheet(
+            f'color: {_BORDER}; background: {_BORDER}; max-width: 1px; border: none;'
+        )
+        return s
+
+    def _toggle_tool(self, tool: str):
+        if self._canvas._tool == tool:
+            self._canvas.set_tool('select')
+            for btn in self._tool_btns.values():
+                btn.setChecked(False)
+        else:
+            self._canvas.set_tool(tool)
+            for k, btn in self._tool_btns.items():
+                btn.setChecked(k == tool)
+
+    def _on_import(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            t('assignment.import_title'),
+            '',
+            'Images (*.jpg *.jpeg *.png *.heic *.heif *.pdf)',
+        )
+        if path:
+            self._canvas.import_image(path)
+
+    # ── Project widget API ────────────────────────────────────────────────────
+
+    def get_data(self) -> dict:
+        return self._canvas.get_data()
+
+    def set_data(self, data: dict):
+        self._canvas.set_data(data)

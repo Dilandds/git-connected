@@ -2464,3 +2464,15 @@ class STLViewerWidget(QWidget):
             self.plotter.render()
         except Exception:
             pass
+
+    def capture_thumbnail(self, width: int = 480, height: int = 320):
+        """Return a QPixmap thumbnail of the current view (for Overview tab)."""
+        try:
+            from PyQt5.QtCore import Qt
+            pix = self.grab()
+            if pix.isNull():
+                return None
+            return pix.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        except Exception as e:
+            logger.warning(f"capture_thumbnail: {e}")
+            return None

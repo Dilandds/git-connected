@@ -19,5 +19,7 @@ rendercanvas
 ezdxf>=0.18.0  # DXF file format support
 scipy>=1.10.0
 Pillow>=10.0.0
+imageio>=2.33.0
+imageio-ffmpeg>=0.4.9
 pillow-heif>=0.13.0  # HEIC (iPhone) to JPEG conversion in annotation mode
 # aspose-3d>=24.0.0  # Optional: PDF 3D export. Not needed for STL loading. Uncomment if required.

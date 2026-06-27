@@ -438,6 +438,8 @@ class ViewControlsToolbar(QWidget):
     toggle_screenshot = pyqtSignal()
     toggle_texture = pyqtSignal()
     toggle_draw = pyqtSignal()
+    toggle_rotate = pyqtSignal()
+    toggle_record = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
     draw_text_toggled = pyqtSignal(bool)  # True = text mode on
@@ -465,6 +467,8 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_mode_enabled = False
         self.texture_mode_enabled = False
         self.draw_mode_enabled = False
+        self.rotate_mode_enabled = False
+        self.record_mode_enabled = False
         self._draw_color = '#FF0000'
         self._draw_text_active = False
         self._draw_font_size_multiplier = 1.0
@@ -606,7 +610,17 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
         self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
         content_layout.addWidget(self.screenshot_btn)
-        
+
+        self.rotate_btn = ToolbarButton("↻", "Rotate", "Spin the model in a continuous 360° turntable")
+        self.rotate_btn.clicked.connect(self._on_rotate_clicked)
+        self.rotate_btn.setEnabled(False)
+        content_layout.addWidget(self.rotate_btn)
+
+        self.record_btn = ToolbarButton("⏺", "Record", "Record the 3D view as an MP4 video")
+        self.record_btn.clicked.connect(self._on_record_clicked)
+        self.record_btn.setEnabled(False)
+        content_layout.addWidget(self.record_btn)
+
         self.texture_btn = ToolbarButton("🎨", "Render mode", "Upload and apply textures to model parts")
         self.texture_btn.clicked.connect(self._on_texture_clicked)
         self.texture_btn.setEnabled(False)  # Disabled until model is loaded
@@ -716,6 +730,8 @@ class ViewControlsToolbar(QWidget):
         self.ruler_btn.setEnabled(loaded)
         self.annotation_btn.setEnabled(loaded)
         self.screenshot_btn.setEnabled(loaded)
+        self.rotate_btn.setEnabled(loaded)
+        self.record_btn.setEnabled(loaded)
         self.texture_btn.setEnabled(loaded)
         self.draw_btn.setEnabled(loaded)
         self.parts_btn.setEnabled(loaded)
@@ -1045,6 +1061,44 @@ class ViewControlsToolbar(QWidget):
         self.parts_btn.set_active(self.parts_mode_enabled)
         self.toggle_parts.emit()
     
+    def _on_rotate_clicked(self):
+        """Handle rotate mode toggle (no mode conflicts — rotate works alongside any other mode)."""
+        self.rotate_mode_enabled = not self.rotate_mode_enabled
+        self.rotate_btn.set_active(self.rotate_mode_enabled)
+        self.rotate_btn.set_label("Rotating…" if self.rotate_mode_enabled else "Rotate")
+        self.toggle_rotate.emit()
+
+    def _on_record_clicked(self):
+        """Handle record mode toggle — exits conflicting exclusive modes first."""
+        self.record_mode_enabled = not self.record_mode_enabled
+        if self.record_mode_enabled:
+            # Exit modes that conflict with a clean viewport recording
+            if self.ruler_mode_enabled:
+                self.ruler_mode_enabled = False
+                self.ruler_btn.set_active(False)
+                self.ruler_btn.set_icon("📏")
+            if self.annotation_mode_enabled:
+                self.annotation_mode_enabled = False
+                self.annotation_btn.set_active(False)
+                self.annotation_btn.set_icon("📝")
+            if self.screenshot_mode_enabled:
+                self.screenshot_mode_enabled = False
+                self.screenshot_btn.set_active(False)
+                self.toggle_screenshot.emit()
+            if self.texture_mode_enabled:
+                self.texture_mode_enabled = False
+                self.texture_btn.set_active(False)
+                self.toggle_texture.emit()
+            if self.draw_mode_enabled:
+                self.draw_mode_enabled = False
+                self._eraser_active = False
+                self.draw_btn.set_active(False)
+                self.draw_btn.set_label("Draw ▼")
+                self._hide_draw_extras()
+        self.record_btn.set_active(self.record_mode_enabled)
+        self.record_btn.set_label("● REC" if self.record_mode_enabled else "Record")
+        self.toggle_record.emit()
+
     def _on_screenshot_clicked(self):
         """Handle screenshot mode toggle."""
         self.screenshot_mode_enabled = not self.screenshot_mode_enabled
@@ -1429,6 +1483,18 @@ class ViewControlsToolbar(QWidget):
         """Reset texture button state (called when exiting texture mode externally)."""
         self.texture_mode_enabled = False
         self.texture_btn.set_active(False)
+
+    def reset_rotate_state(self):
+        """Reset rotate button state (called when stopping rotation externally)."""
+        self.rotate_mode_enabled = False
+        self.rotate_btn.set_active(False)
+        self.rotate_btn.set_label("Rotate")
+
+    def reset_record_state(self):
+        """Reset record button state (called when stopping recording externally)."""
+        self.record_mode_enabled = False
+        self.record_btn.set_active(False)
+        self.record_btn.set_label("Record")
     
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (disables annotation button)."""

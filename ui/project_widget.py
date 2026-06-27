@@ -14,7 +14,7 @@ from typing import Optional, Type
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QFrame, QStackedWidget, QFileDialog, QMessageBox,
-    QLineEdit, QComboBox, QDialog,
+    QLineEdit, QComboBox, QDialog, QScrollArea, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
@@ -38,8 +38,8 @@ _ACCENT_H = default_theme.button_primary_hover
 
 # ── nav items — order defines sidebar display order ───────────────────────────
 _NAV_KEYS = [
-    'brief', 'timeline', 'validation', 'report', 'estimated_cost',
-    'files', 'version_comparison', 'traceability', 'glossary',
+    'brief', 'assignment', 'timeline', 'validation', 'report', 'estimated_cost',
+    'files', 'rd', 'prototype', 'version_comparison', 'traceability', 'todo', 'glossary',
 ]
 # Keep a fallback list for print label lookup; labels filled at runtime via t()
 _NAV_ITEMS = [(k, k) for k in _NAV_KEYS]
@@ -57,6 +57,22 @@ _NAV_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED}; border: none;
         border-radius: 6px; padding: 8px 12px; font-size: 13px; text-align: left;
+    }}
+    QPushButton:hover {{ background-color: #2a2e38; color: {_TEXT}; }}
+"""
+
+_NAV_SUBNAV_ACTIVE = f"""
+    QPushButton {{
+        background-color: {_ACCENT}; color: white; border: none;
+        border-radius: 5px; padding: 5px 10px; font-size: 12px; text-align: left;
+        font-weight: 600;
+    }}
+"""
+
+_NAV_SUBNAV_INACTIVE = f"""
+    QPushButton {{
+        background-color: transparent; color: {_MUTED}; border: none;
+        border-radius: 5px; padding: 5px 10px; font-size: 12px; text-align: left;
     }}
     QPushButton:hover {{ background-color: #2a2e38; color: {_TEXT}; }}
 """
@@ -141,6 +157,9 @@ def _import_screen(key: str) -> Type[QWidget]:
     if key == 'brief':
         from ui.brief import ProjectBriefWidget
         return ProjectBriefWidget
+    if key == 'assignment':
+        from ui.assignment_widget import AssignmentWidget
+        return AssignmentWidget
     if key == 'timeline':
         from ui.timeline import TimelineWidget
         return TimelineWidget
@@ -156,12 +175,21 @@ def _import_screen(key: str) -> Type[QWidget]:
     if key == 'files':
         from ui.files_widget import FilesVersionsWidget
         return FilesVersionsWidget
+    if key == 'rd':
+        from ui.rd_widget import RdWidget
+        return RdWidget
+    if key == 'prototype':
+        from ui.prototype_widget import PrototypeWidget
+        return PrototypeWidget
     if key == 'version_comparison':
         from ui.version_comparison import VersionComparisonWidget
         return VersionComparisonWidget
     if key == 'traceability':
         from ui.traceability import TraceabilityWidget
         return TraceabilityWidget
+    if key == 'todo':
+        from ui.todo_widget import TodoWidget
+        return TodoWidget
     if key == 'glossary':
         from ui.glossary_widget import GlossaryWidget
         return GlossaryWidget
@@ -191,7 +219,11 @@ class ProjectNavPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 14, 10, 14)
         layout.setSpacing(2)
-        layout.addWidget(self._build_info_card())
+
+        # Info card — fixed height, never shrinks
+        info_card = self._build_info_card()
+        info_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        layout.addWidget(info_card, 0)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -200,8 +232,34 @@ class ProjectNavPanel(QWidget):
         )
         layout.addWidget(sep)
 
-        self._build_nav_buttons(layout)
-        layout.addStretch()
+        # Nav buttons in a scroll area so R&D sub-tabs never overflow
+        nav_scroll = QScrollArea()
+        nav_scroll.setWidgetResizable(True)
+        nav_scroll.setFrameShape(QFrame.NoFrame)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        nav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        nav_scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{
+                background: transparent; width: 4px; border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {_BORDER}; border-radius: 2px; min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+
+        nav_inner = QWidget()
+        nav_inner.setStyleSheet('background: transparent;')
+        nav_inner_l = QVBoxLayout(nav_inner)
+        nav_inner_l.setContentsMargins(0, 0, 0, 0)
+        nav_inner_l.setSpacing(2)
+
+        self._build_nav_buttons(nav_inner_l)
+        nav_inner_l.addStretch()
+
+        nav_scroll.setWidget(nav_inner)
+        layout.addWidget(nav_scroll, 1)
 
     def _build_info_card(self) -> QFrame:
         card = QFrame()
@@ -260,8 +318,18 @@ class ProjectNavPanel(QWidget):
         return f
 
     def _build_nav_buttons(self, layout: QVBoxLayout):
+        # R&D tab sub-navigation config (key → tab index in RdWidget)
+        _RD_SUB_TABS = [
+            ('rd.tab_textures',   0),
+            ('rd.tab_techniques', 1),
+        ]
+
+        self._rd_sub_btns: list = []
+        self._rd_subnav: Optional[QWidget] = None
+        self._on_rd_tab_switch = None  # set by TheProjectWidget
+
         for key, _label in _NAV_ITEMS:
-            btn = QPushButton(t(f'project.nav.{key}'))
+            btn = QPushButton(t(f'project.nav.{key}').replace('&', '&&'))
             btn.setStyleSheet(_NAV_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setMinimumHeight(34)
@@ -269,6 +337,27 @@ class ProjectNavPanel(QWidget):
             btn.clicked.connect(lambda _, k=key: self._navigate(k))
             self._buttons[key] = btn
             layout.addWidget(btn)
+
+            if key == 'rd':
+                # ── R&D sub-navigation ────────────────────────────────────────
+                sub = QWidget()
+                sub.setVisible(False)
+                sub_lay = QVBoxLayout(sub)
+                sub_lay.setContentsMargins(18, 2, 4, 4)
+                sub_lay.setSpacing(1)
+                for tab_key, tab_idx in _RD_SUB_TABS:
+                    sb = QPushButton(t(tab_key))
+                    sb.setCursor(Qt.PointingHandCursor)
+                    sb.setMinimumHeight(30)
+                    sb.setCheckable(True)
+                    sb.setStyleSheet(_NAV_SUBNAV_INACTIVE)
+                    sb.clicked.connect(
+                        lambda _, i=tab_idx: self._on_rd_sub_clicked(i)
+                    )
+                    self._rd_sub_btns.append(sb)
+                    sub_lay.addWidget(sb)
+                self._rd_subnav = sub
+                layout.addWidget(sub)
 
     # ── event handlers ────────────────────────────────────────────────────────
 
@@ -297,8 +386,28 @@ class ProjectNavPanel(QWidget):
         for k, btn in self._buttons.items():
             btn.setStyleSheet(_NAV_ACTIVE if k == key else _NAV_INACTIVE)
             btn.setChecked(k == key)
+        if self._rd_subnav is not None:
+            self._rd_subnav.setVisible(key == 'rd')
         if self._on_navigate:
             self._on_navigate(key)
+
+    def _on_rd_sub_clicked(self, tab_idx: int):
+        self.set_rd_active_tab(tab_idx)
+        if self._on_rd_tab_switch:
+            self._on_rd_tab_switch(tab_idx)
+
+    def show_rd_subnav(self, visible: bool):
+        if self._rd_subnav is not None:
+            self._rd_subnav.setVisible(visible)
+
+    def set_rd_active_tab(self, idx: int):
+        for i, sb in enumerate(self._rd_sub_btns):
+            active = (i == idx)
+            sb.setStyleSheet(_NAV_SUBNAV_ACTIVE if active else _NAV_SUBNAV_INACTIVE)
+            sb.setChecked(active)
+
+    def set_rd_tab_switch_callback(self, fn):
+        self._on_rd_tab_switch = fn
 
     # ── public API ────────────────────────────────────────────────────────────
 
@@ -356,6 +465,9 @@ class ProjectNavPanel(QWidget):
         self._f_due_date.setPlaceholderText(t('project.sidebar.due_date'))
         for key, btn in self._buttons.items():
             btn.setText(t(f'project.nav.{key}'))
+        _rd_tab_keys = ['rd.tab_textures', 'rd.tab_techniques']
+        for i, sb in enumerate(self._rd_sub_btns):
+            sb.setText(t(_rd_tab_keys[i]))
 
 
 # ── Login dialog ──────────────────────────────────────────────────────────────
@@ -364,7 +476,7 @@ class ProjectLoginDialog(FormModal):
     """Login gate for The Project workspace."""
 
     def __init__(self, parent=None):
-        super().__init__(parent, t('project.login.title'), min_width=380)
+        super().__init__(parent, t('project.login.title'), theme=FormModal.LIGHT, min_width=380)
 
         # Header text (above the standard field area)
         sub = QLabel(t('project.login.subtitle'))
@@ -594,6 +706,10 @@ class TheProjectWidget(QWidget):
             widget.changed.connect(self._sync_traceability_from_brief)
         if key == 'traceability' and hasattr(widget, 'changed'):
             widget.changed.connect(self._sync_brief_from_traceability)
+        if key == 'rd' and hasattr(widget, 'tab_changed'):
+            widget.tab_changed.connect(self._on_rd_tab_changed)
+            # Set the callback so sidebar sub-items call switch_tab on the widget
+            self._nav.set_rd_tab_switch_callback(widget.switch_tab)
 
     # ── navigation ────────────────────────────────────────────────────────────
 
@@ -601,10 +717,19 @@ class TheProjectWidget(QWidget):
         self._current_screen_key = key
         widget = self._ensure_screen(key)
         self._stack.setCurrentIndex(self._screen_idx[key])
-        if key == 'validation':
+        if key == 'rd':
+            # Sync sidebar highlight to whatever tab is currently active
+            current_tab = getattr(widget, '_tabs', None)
+            if current_tab is not None:
+                self._nav.set_rd_active_tab(current_tab.currentIndex())
+        elif key == 'validation':
             self._push_validation_costs()
         elif key == 'traceability':
             self._sync_traceability_from_brief()
+
+    def _on_rd_tab_changed(self, idx: int):
+        """Keep sidebar sub-nav in sync when user clicks a tab directly."""
+        self._nav.set_rd_active_tab(idx)
 
     def _on_print(self):
         key = self._current_screen_key
@@ -620,7 +745,7 @@ class TheProjectWidget(QWidget):
         label = t(f'project.nav.{key}')
         # Strip emoji prefix for the window title
         title = label.split('\xa0')[-1].strip() if '\xa0' in label else label.strip()
-        landscape = key == 'timeline'
+        landscape = (key == 'timeline')
         from ui.print_utils import print_section
         print_section(key, widget, title, self, landscape=landscape)
 

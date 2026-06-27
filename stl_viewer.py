@@ -68,6 +68,8 @@ from ui.scale_canvas import ScaleCanvas
 from ui.scale_sidebar import ScaleSidebar
 from ui.help_panel import HelpWidget
 from ui.project_widget import TheProjectWidget
+from ui.overview_widget import OverviewWidget
+from ui.record_panel import RecordPanel
 from i18n import t, set_language, get_language, on_language_changed
 from core.edition import is_education, WATERMARK_TEXT
 
@@ -123,6 +125,7 @@ class TabState:
     filename: Optional[str] = None  # display name for tab
     loaded_via_conversion: bool = False  # True when file was loaded via Convert File flow
     is_2d_model: bool = False  # True when current model is 2D geometry
+    thumbnail: Any = None  # QPixmap thumbnail for the Overview tab
 
 
 # ======================== Main Window ========================
@@ -326,9 +329,14 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.setDrawBase(False)
         self.tab_bar.setElideMode(Qt.ElideNone)
         self.tab_bar.tabCloseRequested.connect(self._on_tab_close_requested)
-        # Add "+" button as the last tab (before connecting currentChanged so signal doesn't fire before _plus_tab_index exists)
+        # Add Overview pinned tab, then "+" button (before connecting currentChanged)
+        self._overview_tab_index = self.tab_bar.addTab("⊞  Overview")
         self._plus_tab_index = self.tab_bar.addTab("+")
         self.tab_bar.currentChanged.connect(self._on_tab_changed)
+        # Overview: no close button
+        self.tab_bar.setTabButton(self._overview_tab_index, QTabBar.RightSide, None)
+        self.tab_bar.setTabButton(self._overview_tab_index, QTabBar.LeftSide, None)
+        # "+": no close button
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.RightSide, None)
         self.tab_bar.setTabButton(self._plus_tab_index, QTabBar.LeftSide, None)
         tab_bar_container = QWidget()
@@ -355,8 +363,14 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.addWidget(self.ruler_toolbar)
         logger.info("init_ui: Ruler toolbar created")
         
+        # ---- Overview widget (lives in viewer_stack, shown when Overview tab is active) ----
+        self.overview_widget = OverviewWidget()
+        self.overview_widget.tab_requested.connect(self._on_overview_tab_requested)
+        self.overview_widget.set_refresh_callback(self._capture_all_thumbnails)
+
         # ---- Stacked widgets for viewers and annotation/screenshot/arrow/texture panels ----
         self.viewer_stack = QStackedWidget()
+        self.viewer_stack.addWidget(self.overview_widget)   # index 0 = overview
         self.annotation_stack = QStackedWidget()
         self.screenshot_stack = QStackedWidget()
         self.arrow_stack = QStackedWidget()
@@ -366,6 +380,7 @@ class STLViewerWindow(QMainWindow):
         # Shared screenshot panel (one per window, not per tab)
         self.screenshot_panel = ScreenshotPanel()
         self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
+        self.screenshot_panel.save_to_report.connect(self._save_screenshot_to_report)
         self.screenshot_stack.addWidget(self.screenshot_panel)
         
         # Shared texture panel (one per window, not per tab)
@@ -375,7 +390,21 @@ class STLViewerWindow(QMainWindow):
         self.texture_panel.reset_textures_requested.connect(self._on_reset_textures_requested)
         self.texture_stack.addWidget(self.texture_panel)
         
-        # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture visible at a time
+        # Shared record panel
+        self.record_panel = RecordPanel()
+        self.record_panel.start_recording_clicked.connect(self._on_panel_start_recording)
+        self.record_panel.stop_recording_clicked.connect(self._on_panel_stop_recording)
+        self.record_panel.save_recording_clicked.connect(self._on_panel_save_recording)
+        self.record_panel.discard_recording_clicked.connect(self._on_panel_discard_recording)
+        self.record_panel.exit_record_mode.connect(self._exit_record_mode)
+        self.record_panel.rotate_toggled.connect(self._on_record_panel_rotate_toggled)
+        self.record_panel.speed_changed.connect(self._on_record_panel_speed_changed)
+        self.record_panel.direction_changed.connect(self._on_record_panel_direction_changed)
+        self._record_stopped_tmp_path = ""   # held between Stop and Save/Discard
+        self.record_stack = QStackedWidget()
+        self.record_stack.addWidget(self.record_panel)
+
+        # Single right panel: only annotation OR screenshot OR arrow OR parts OR texture OR record visible at a time
         self.right_panel_stack = QStackedWidget()
         self._right_panel_placeholder = QWidget()
         self._right_panel_placeholder.setFixedWidth(0)  # No space when neither mode active
@@ -385,6 +414,7 @@ class STLViewerWindow(QMainWindow):
         self.right_panel_stack.addWidget(self.arrow_stack)
         self.right_panel_stack.addWidget(self.parts_stack)
         self.right_panel_stack.addWidget(self.texture_stack)
+        self.right_panel_stack.addWidget(self.record_stack)
         self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
         self.right_panel_stack.hide()  # No blank space when neither mode active
         
@@ -958,8 +988,10 @@ class STLViewerWindow(QMainWindow):
             display_name = Path(file_path).name
             tab.file_path = file_path
             tab.filename = display_name
-        tab_bar_index = self.tab_bar.insertTab(self._plus_tab_index, _ecto_tab_caption(display_name))
-        self._plus_tab_index += 1  # "+" tab shifted right
+        # Insert before Overview tab (which sits just before "+")
+        tab_bar_index = self.tab_bar.insertTab(self._overview_tab_index, _ecto_tab_caption(display_name))
+        self._overview_tab_index += 1  # overview tab shifts right
+        self._plus_tab_index += 1      # "+" tab also shifts right
         self._attach_tab_close_btn(tab_bar_index)
         
         # Switch to the new tab
@@ -978,13 +1010,27 @@ class STLViewerWindow(QMainWindow):
                 self.tab_bar.blockSignals(False)
             self.upload_stl_file()
             return
-        
+
+        # If the Overview pinned tab is clicked, show the overview grid
+        if index == self._overview_tab_index:
+            self._show_overview()
+            return
+
         if index < 0 or index >= len(self.tabs):
             return
         
         # Save current tab state
         self._save_current_tab_state()
-        
+
+        # Stop rotate/record before switching viewers (they are viewer-specific)
+        if self.toolbar.record_mode_enabled:
+            self._exit_record_mode()
+        elif self.toolbar.rotate_mode_enabled:
+            prev_vw = self.viewer_widget
+            if prev_vw and hasattr(prev_vw, 'stop_auto_rotate'):
+                prev_vw.stop_auto_rotate()
+            self.toolbar.reset_rotate_state()
+
         # Switch to new tab
         self.current_tab_index = index
         tab = self.tabs[index]
@@ -1091,7 +1137,284 @@ class STLViewerWindow(QMainWindow):
             if self.toolbar.texture_mode_enabled:
                 self._exit_texture_mode()
 
+        # Coming back from Overview — make sure toolbar is visible
+        self.toolbar.show()
+        self.ruler_toolbar.setVisible(tab.ruler_active)
+        self.sidebar_panel.show()
+
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
+
+    # ======================== Overview Tab ========================
+
+    def _show_overview(self):
+        """Switch viewer_stack to the Overview widget and refresh its cards."""
+        # Capture a fresh thumbnail for whichever tab was previously active
+        if 0 <= self.current_tab_index < len(self.tabs):
+            self._capture_thumbnail_for(self.current_tab_index)
+
+        # Hide toolbar/ruler while in overview (they don't apply here)
+        self.toolbar.hide()
+        self.ruler_toolbar.hide()
+        self.right_panel_stack.hide()
+
+        # Show overview full-width (collapse sidebar data)
+        self.sidebar_panel.hide()
+
+        self.viewer_stack.setCurrentWidget(self.overview_widget)
+        self.overview_widget.refresh(self.tabs)
+        self.setWindowTitle("ECTOFORM — Overview")
+        logger.info("_show_overview: Overview tab activated")
+
+    def _on_overview_tab_requested(self, tab_index: int):
+        """Jump to a regular tab when the user clicks its card in the Overview."""
+        if 0 <= tab_index < len(self.tabs):
+            tab_bar_index = tab_index  # regular tabs have the same index in the tab bar
+            self.tab_bar.setCurrentIndex(tab_bar_index)
+
+    def _capture_thumbnail_for(self, tab_index: int):
+        """Ask the viewer in the given tab to render a thumbnail and store it."""
+        if tab_index < 0 or tab_index >= len(self.tabs):
+            return
+        tab = self.tabs[tab_index]
+        vw = tab.viewer_widget
+        if vw is None or tab.file_path is None:
+            return
+        if hasattr(vw, 'capture_thumbnail'):
+            try:
+                pix = vw.capture_thumbnail(480, 320)
+                if pix and not pix.isNull():
+                    tab.thumbnail = pix
+            except Exception as e:
+                logger.debug(f"_capture_thumbnail_for tab {tab_index}: {e}")
+
+    def _capture_all_thumbnails(self):
+        """Capture fresh thumbnails for every tab (called by Overview's Refresh button)."""
+        for i in range(len(self.tabs)):
+            self._capture_thumbnail_for(i)
+
+    # ======================== Auto-Rotate ========================
+
+    def _toggle_rotate_mode(self):
+        """Start or stop the turntable rotation."""
+        vw = self.viewer_widget
+        if self.toolbar.rotate_mode_enabled:
+            if vw and hasattr(vw, 'start_auto_rotate') and vw.current_mesh is not None:
+                vw.start_auto_rotate(
+                    speed_deg_per_sec=self.record_panel.current_speed(),
+                    direction=self.record_panel.current_direction(),
+                )
+            else:
+                # No mesh — revert button
+                self.toolbar.reset_rotate_state()
+        else:
+            if vw and hasattr(vw, 'stop_auto_rotate'):
+                vw.stop_auto_rotate()
+
+    # ======================== Recording ========================
+
+    def _toggle_record_mode(self):
+        """Open the record panel (toolbar button). Recording starts only via the panel's Start button."""
+        if self.toolbar.record_mode_enabled:
+            self.record_panel.show_idle()
+            self.right_panel_stack.setCurrentWidget(self.record_stack)
+            self.right_panel_stack.show()
+            self._restore_right_panel_width()
+        else:
+            self._exit_record_mode()
+
+    def _on_panel_start_recording(self):
+        """User clicked ▶ Start Recording inside the panel."""
+        vw = self.viewer_widget
+        if vw is None:
+            return
+        res = self.record_panel.current_resolution()
+        fps = self.record_panel.current_fps()
+        w, h = self._resolve_record_resolution(res, vw)
+        if hasattr(vw, 'start_recording'):
+            ok = vw.start_recording(width=w, height=h, fps=fps)
+            if not ok:
+                show_error_dialog(self, "Recording Error",
+                                  "Could not initialise the offscreen renderer.")
+                return
+            if hasattr(vw, 'recording_frame_captured'):
+                vw.recording_frame_captured.connect(self._on_recording_frame)
+            if hasattr(vw, 'recording_error'):
+                vw.recording_error.connect(self._on_recording_error)
+        if self.record_panel.rotate_enabled():
+            if hasattr(vw, 'start_auto_rotate') and vw.current_mesh is not None:
+                vw.start_auto_rotate(
+                    speed_deg_per_sec=self.record_panel.current_speed(),
+                    direction=self.record_panel.current_direction(),
+                )
+                self.toolbar.rotate_mode_enabled = True
+                self.toolbar.rotate_btn.set_active(True)
+                self.toolbar.rotate_btn.set_label("Rotating…")
+        self.record_panel.show_recording()
+        self._record_stopped_tmp_path = ""
+        logger.info("_on_panel_start_recording: recording started")
+
+    def _on_panel_stop_recording(self):
+        """User clicked ⏹ Stop — stop capture but keep temp file for Save/Discard."""
+        vw = self.viewer_widget
+        tmp_path = ""
+        if vw and hasattr(vw, 'stop_recording'):
+            try:
+                tmp_path = vw.stop_recording()
+            except Exception as e:
+                logger.error(f"_on_panel_stop_recording: {e}")
+            try:
+                vw.recording_frame_captured.disconnect(self._on_recording_frame)
+            except Exception:
+                pass
+            try:
+                vw.recording_error.disconnect(self._on_recording_error)
+            except Exception:
+                pass
+        if vw and hasattr(vw, 'stop_auto_rotate'):
+            vw.stop_auto_rotate()
+        self.toolbar.reset_rotate_state()
+        self._record_stopped_tmp_path = tmp_path or ""
+        self.record_panel.show_stopped()
+        logger.info(f"_on_panel_stop_recording: tmp={tmp_path}")
+
+    def _exit_record_mode(self):
+        """Cancel / close record mode — stop any active capture and delete temp file."""
+        import os
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'stop_recording'):
+            try:
+                tmp = vw.stop_recording()
+                if tmp:
+                    try:
+                        os.unlink(tmp)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(f"_exit_record_mode: stop_recording: {e}")
+            try:
+                vw.recording_frame_captured.disconnect(self._on_recording_frame)
+            except Exception:
+                pass
+            try:
+                vw.recording_error.disconnect(self._on_recording_error)
+            except Exception:
+                pass
+        # Also clean up any leftover stopped-but-unsaved temp file
+        if self._record_stopped_tmp_path:
+            try:
+                os.unlink(self._record_stopped_tmp_path)
+            except Exception:
+                pass
+            self._record_stopped_tmp_path = ""
+        if vw and hasattr(vw, 'stop_auto_rotate'):
+            vw.stop_auto_rotate()
+        self.toolbar.reset_rotate_state()
+        self.record_panel.show_idle()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        self.toolbar.reset_record_state()
+
+    def _on_panel_save_recording(self):
+        """User clicked 💾 Save Video after stopping — prompt for path and move temp file."""
+        import os, shutil
+        tmp_path = self._record_stopped_tmp_path
+        self._record_stopped_tmp_path = ""
+
+        save_path, _ = get_save_file_name(
+            self, "Save Recording", "", "MP4 Video (*.mp4)"
+        )
+        if save_path:
+            if not save_path.lower().endswith(".mp4"):
+                save_path += ".mp4"
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    shutil.move(tmp_path, save_path)
+                    show_message_dialog(self, "Recording Saved",
+                                       f"Video saved to:\n{save_path}")
+                else:
+                    show_error_dialog(self, "Recording Error",
+                                      "No video data was found.")
+            except Exception as e:
+                show_error_dialog(self, "Save Failed", str(e))
+        else:
+            # User cancelled — delete temp
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        self.record_panel.show_idle()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        self.toolbar.reset_record_state()
+
+    def _on_panel_discard_recording(self):
+        """User clicked Discard after stopping — delete temp file and close panel."""
+        import os
+        tmp_path = self._record_stopped_tmp_path
+        self._record_stopped_tmp_path = ""
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+        self.record_panel.show_idle()
+        self.right_panel_stack.setCurrentWidget(self._right_panel_placeholder)
+        self.right_panel_stack.hide()
+        self.toolbar.reset_record_state()
+
+    def _on_recording_frame(self, frame_count: int):
+        """Update the record panel's live frame counter."""
+        self.record_panel.update_frame_count(frame_count)
+
+    def _on_recording_error(self, message: str):
+        """Show recording error and exit mode."""
+        show_error_dialog(self, "Recording Error", message)
+        self._exit_record_mode()
+
+    def _on_record_panel_rotate_toggled(self, enabled: bool):
+        """Checkbox in record panel toggled rotate on/off."""
+        vw = self.viewer_widget
+        if enabled:
+            if vw and hasattr(vw, 'start_auto_rotate') and vw.current_mesh is not None:
+                vw.start_auto_rotate(
+                    speed_deg_per_sec=self.record_panel.current_speed(),
+                    direction=self.record_panel.current_direction(),
+                )
+                self.toolbar.rotate_mode_enabled = True
+                self.toolbar.rotate_btn.set_active(True)
+                self.toolbar.rotate_btn.set_label("Rotating…")
+        else:
+            if vw and hasattr(vw, 'stop_auto_rotate'):
+                vw.stop_auto_rotate()
+            self.toolbar.reset_rotate_state()
+
+    def _on_record_panel_speed_changed(self, speed: float):
+        """Speed slider in record panel moved."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_rotate_speed'):
+            vw.set_rotate_speed(speed)
+
+    def _on_record_panel_direction_changed(self, direction: int):
+        """Direction toggle in record panel changed."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_rotate_direction'):
+            vw.set_rotate_direction(direction)
+
+    @staticmethod
+    def _resolve_record_resolution(res: str, vw) -> tuple:
+        """Convert resolution label to (width, height)."""
+        if res == "720p":
+            return (1280, 720)
+        if res == "1080p":
+            return (1920, 1080)
+        # 'viewport' — use current canvas size
+        try:
+            w, h = vw._canvas.get_logical_size()
+            return (int(w), int(h))
+        except Exception:
+            return (0, 0)
 
     def _scale_export(self):
         """Export the scaled drawing with measurements."""
@@ -1160,6 +1483,8 @@ class STLViewerWindow(QMainWindow):
         """Handle tab close button click."""
         if index == self._plus_tab_index:
             return  # Can't close "+" tab
+        if index == self._overview_tab_index:
+            return  # Can't close the Overview tab
         if index < 0 or index >= len(self.tabs):
             return
         
@@ -1217,6 +1542,7 @@ class STLViewerWindow(QMainWindow):
         # Remove tab from tab bar
         self.tab_bar.blockSignals(True)
         self.tab_bar.removeTab(index)
+        self._overview_tab_index -= 1
         self._plus_tab_index -= 1
         self.tab_bar.blockSignals(False)
         
@@ -1361,6 +1687,8 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.draw_color_picker_requested.connect(self.toolbar.show_draw_color_picker)
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
+        self.toolbar.toggle_rotate.connect(self._toggle_rotate_mode)
+        self.toolbar.toggle_record.connect(self._toggle_record_mode)
         self.toolbar.open_converter.connect(self._open_converter_dialog)
     
     def _connect_ruler_toolbar_signals(self):
@@ -1598,7 +1926,10 @@ class STLViewerWindow(QMainWindow):
             # Update UI state for 2D models
             if hasattr(self.sidebar_panel, 'set_2d_mode'):
                 self.sidebar_panel.set_2d_mode(tab.is_2d_model)
-    
+
+            # Capture thumbnail after model renders (slight delay so GPU has time)
+            QTimer.singleShot(800, lambda idx=self.current_tab_index: self._capture_thumbnail_for(idx))
+
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
         show_warning_dialog(self, "Upload Error", error_msg)
@@ -2288,6 +2619,25 @@ class STLViewerWindow(QMainWindow):
                 pass
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+
+    def _save_screenshot_to_report(self, pixmap):
+        """Send a screenshot pixmap to the first empty slot in the report photo section."""
+        from ui.modal_utils import show_message_dialog, show_error_dialog
+        rw = self.project_widget._screen_widgets.get('report')
+        if rw is None:
+            # Report screen not yet loaded — force it to initialise
+            rw = self.project_widget._ensure_screen('report')
+        if rw is None:
+            show_error_dialog(self, "Report unavailable",
+                              "Open the Report screen at least once before sending screenshots.")
+            return
+        ok = rw.add_screenshot_to_report(pixmap)
+        if ok:
+            show_message_dialog(self, "Saved to report",
+                                "Screenshot added to the next available slot\nin the report's photo section.")
+        else:
+            show_error_dialog(self, "Could not save",
+                              "Failed to write the screenshot into the report.")
 
     # ========== Texture Mode Methods ==========
 

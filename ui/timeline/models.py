@@ -62,6 +62,7 @@ class Task:
     photo_path:        str            = ''
     components_impacted: str          = ''
     priority:          str            = 'Normal'
+    delay_end:         Optional[QDate] = None
 
     def __post_init__(self):
         self.duration_days = max(1, self.start.daysTo(self.end))

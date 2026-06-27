@@ -6,11 +6,14 @@ Settings match PyVista viewer for consistent default view and rendering.
 import sys
 import os
 import logging
+import math
+import queue
+import tempfile
 import threading
 from pathlib import Path
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QStackedLayout, QGridLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent, QPoint, QPointF, QRectF, QSize
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QEvent, QPoint, QPointF, QRectF, QSize, QTimer
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QPixmap
 from ui.drop_zone_overlay import DropZoneOverlay
 from ui.loading_overlay import LoadingOverlay
@@ -254,6 +257,8 @@ class STLViewerWidget(QWidget):
     drop_error = pyqtSignal(str)
     part_clicked = pyqtSignal(int)  # emitted when user clicks a part in parts mode
     material_preset_applied = pyqtSignal(dict)
+    recording_frame_captured = pyqtSignal(int)   # frame index — for panel counter
+    recording_error = pyqtSignal(str)
 
     def __init__(self, parent=None):
         _debug_print("STLViewerWidget (pygfx): Initializing...")
@@ -343,6 +348,27 @@ class STLViewerWidget(QWidget):
         self._draw_texts_data = []  # parallel list for export: [{'text': '...', 'position': [x,y,z], 'color': '...', 'font_size': N}]
         self._draw_pending_pos = None   # last unprocessed mouse pos for throttling
         self._draw_throttle_timer = None  # QTimer, lazy-created
+
+        # Auto-rotate state
+        self._rotate_timer = None
+        self._orbit_angle = 0.0     # degrees, current azimuth
+        self._orbit_radius = 5.0
+        self._orbit_elevation = 0.0
+        self._orbit_center = (0.0, 0.0, 0.0)
+        self._orbit_direction = 1   # +1 = right, -1 = left
+        self._orbit_speed = 15.0    # deg/sec
+
+        # Recording state
+        self._record_timer = None
+        self._record_renderer = None
+        self._record_texture = None
+        self._record_queue = None
+        self._record_thread = None
+        self._record_frame_count = 0
+        self._record_tmp_path = None
+        self._record_fps = 30
+        self._record_width = 0
+        self._record_height = 0
 
         # Parts pick mode state
         self.parts_pick_mode = False
@@ -2637,6 +2663,263 @@ class STLViewerWidget(QWidget):
             except TypeError:
                 # Backwards-compat: callback that only accepts pixmap
                 self._screenshot_captured_callback(cropped)
+
+    # ======================================================================
+    # Auto-Rotate (turntable)
+    # ======================================================================
+
+    def start_auto_rotate(self, speed_deg_per_sec: float = 15.0, direction: int = 1):
+        """Begin continuous turntable rotation. Disables TrackballController input."""
+        if not self._initialized or self._camera is None or self._mesh_obj is None:
+            logger.warning("start_auto_rotate: viewer not ready or no mesh loaded")
+            return
+
+        # Capture orbit parameters from current camera position
+        cam_pos = self._camera.local.position
+        try:
+            import numpy as np
+            bounds = self._mesh_obj.aabb  # (min_xyz, max_xyz)
+            center = ((bounds[0][0] + bounds[1][0]) / 2,
+                      (bounds[0][1] + bounds[1][1]) / 2,
+                      (bounds[0][2] + bounds[1][2]) / 2)
+        except Exception:
+            center = (0.0, 0.0, 0.0)
+
+        self._orbit_center = center
+        dx = cam_pos[0] - center[0]
+        dz = cam_pos[2] - center[2]
+        self._orbit_radius = max(math.sqrt(dx * dx + dz * dz), 0.1)
+        self._orbit_elevation = cam_pos[1] - center[1]
+        self._orbit_angle = math.degrees(math.atan2(dx, dz))
+        self._orbit_direction = direction
+        self._orbit_speed = speed_deg_per_sec
+
+        # Freeze interactive controller so mouse drags don't fight the timer
+        try:
+            self._controller.enabled = False
+        except Exception:
+            pass
+
+        if self._rotate_timer is None:
+            self._rotate_timer = QTimer(self)
+            self._rotate_timer.setInterval(30)  # ~33 fps orbit update
+            self._rotate_timer.timeout.connect(self._rotate_tick)
+        self._rotate_timer.start()
+        logger.info(f"start_auto_rotate: speed={speed_deg_per_sec}°/s dir={direction}")
+
+    def stop_auto_rotate(self):
+        """Stop rotation and re-enable interactive controller."""
+        if self._rotate_timer is not None:
+            self._rotate_timer.stop()
+        try:
+            self._controller.enabled = True
+        except Exception:
+            pass
+        logger.info("stop_auto_rotate")
+
+    def set_rotate_speed(self, speed_deg_per_sec: float):
+        """Change orbit speed without restarting the timer."""
+        self._orbit_speed = max(0.5, speed_deg_per_sec)
+
+    def set_rotate_direction(self, direction: int):
+        """Change orbit direction (+1 right / -1 left) without restarting."""
+        self._orbit_direction = direction
+
+    def _rotate_tick(self):
+        """Called every 30 ms — advance camera azimuth by one step."""
+        if self._camera is None:
+            return
+        dt = 0.030  # seconds per tick
+        self._orbit_angle += self._orbit_direction * self._orbit_speed * dt
+        angle_rad = math.radians(self._orbit_angle)
+        cx, cy, cz = self._orbit_center
+        x = cx + self._orbit_radius * math.sin(angle_rad)
+        z = cz + self._orbit_radius * math.cos(angle_rad)
+        y = cy + self._orbit_elevation
+        try:
+            self._camera.local.position = (x, y, z)
+            self._camera.show_pos((cx, cy, cz))
+            if self._canvas is not None:
+                self._canvas.request_draw()
+        except Exception as e:
+            logger.debug(f"_rotate_tick: {e}")
+
+    # ======================================================================
+    # Video Recording
+    # ======================================================================
+
+    def start_recording(self, width: int = 0, height: int = 0, fps: int = 30) -> bool:
+        """
+        Begin video capture to a temp file.
+        width/height=0 means use the current viewport size.
+        Returns True on success.
+        """
+        if not self._initialized or self._renderer is None:
+            logger.warning("start_recording: viewer not ready")
+            return False
+        if self._record_timer is not None and self._record_timer.isActive():
+            logger.warning("start_recording: already recording")
+            return False
+
+        # Resolve dimensions
+        try:
+            vw, vh = self._canvas.get_logical_size()
+        except Exception:
+            vw, vh = self.viewer_container.width(), self.viewer_container.height()
+
+        if width <= 0 or height <= 0:
+            rw, rh = int(vw), int(vh)
+        else:
+            rw, rh = width, height
+        # Ensure even dimensions (H.264 requirement)
+        rw = rw if rw % 2 == 0 else rw + 1
+        rh = rh if rh % 2 == 0 else rh + 1
+        self._record_width = rw
+        self._record_height = rh
+        self._record_fps = fps
+        self._record_frame_count = 0
+
+        # Create persistent offscreen renderer (reused every frame)
+        try:
+            import pygfx as gfx
+            self._record_texture = gfx.Texture(dim=2, size=(rw, rh, 1), format="rgba8unorm")
+            self._record_renderer = gfx.renderers.wgpu.WgpuRenderer(self._record_texture)
+        except Exception as e:
+            logger.error(f"start_recording: offscreen renderer failed: {e}")
+            self.recording_error.emit(f"Could not create offscreen renderer: {e}")
+            return False
+
+        # Temp output file
+        try:
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            self._record_tmp_path = tmp.name
+            tmp.close()
+        except Exception as e:
+            logger.error(f"start_recording: temp file failed: {e}")
+            self.recording_error.emit(f"Could not create temp file: {e}")
+            return False
+
+        # Frame queue (maxsize caps memory — ~2 sec buffer at 30fps = 60 frames)
+        self._record_queue = queue.Queue(maxsize=90)
+
+        # Background writer thread
+        self._record_thread = threading.Thread(
+            target=self._record_writer_thread,
+            args=(self._record_tmp_path, fps, rw, rh),
+            daemon=True,
+            name="ectoform-record-writer",
+        )
+        self._record_thread.start()
+
+        # Capture timer
+        if self._record_timer is None:
+            self._record_timer = QTimer(self)
+            self._record_timer.timeout.connect(self._capture_record_frame)
+        self._record_timer.setInterval(max(1, 1000 // fps))
+        self._record_timer.start()
+
+        logger.info(f"start_recording: {rw}x{rh} @ {fps}fps → {self._record_tmp_path}")
+        return True
+
+    def stop_recording(self) -> str:
+        """
+        Stop the capture timer, drain the queue, close the writer.
+        Returns the path to the completed MP4 temp file (caller must move/copy it).
+        """
+        if self._record_timer is not None:
+            self._record_timer.stop()
+
+        # Drain remaining frames already in the queue, then send sentinel
+        if self._record_queue is not None:
+            try:
+                self._record_queue.put(None, timeout=2)
+            except queue.Full:
+                pass
+
+        # Wait for writer thread (max 10 s)
+        if self._record_thread is not None:
+            self._record_thread.join(timeout=10)
+            self._record_thread = None
+
+        path = self._record_tmp_path or ""
+        self._record_tmp_path = None
+        self._record_renderer = None
+        self._record_texture = None
+        self._record_queue = None
+        logger.info(f"stop_recording: finished → {path} ({self._record_frame_count} frames)")
+        return path
+
+    def _capture_record_frame(self):
+        """Render one frame to the offscreen texture and enqueue the numpy array."""
+        if self._record_renderer is None or self._scene is None or self._camera is None:
+            return
+        try:
+            self._record_renderer.render(self._scene, self._camera)
+            arr = self._record_renderer.snapshot()
+            if arr is None:
+                return
+            arr = np.ascontiguousarray(arr)
+            # Drop alpha → RGB (uint8)
+            rgb = arr[:, :, :3]
+            try:
+                self._record_queue.put_nowait(rgb)
+            except queue.Full:
+                pass  # drop frame under backpressure rather than blocking main thread
+            self._record_frame_count += 1
+            self.recording_frame_captured.emit(self._record_frame_count)
+        except Exception as e:
+            logger.warning(f"_capture_record_frame: {e}")
+
+    def _record_writer_thread(self, path: str, fps: int, width: int, height: int):
+        """Background thread: consume frames from queue and write to MP4."""
+        try:
+            import imageio
+            writer = imageio.get_writer(
+                path, fps=fps, codec="libx264", quality=8,
+                ffmpeg_params=["-preset", "ultrafast", "-pix_fmt", "yuv420p"],
+            )
+            with writer:
+                while True:
+                    try:
+                        frame = self._record_queue.get(timeout=5)
+                    except queue.Empty:
+                        break  # timed out waiting — assume recording stopped
+                    if frame is None:
+                        break  # sentinel
+                    writer.append_data(frame)
+        except ImportError:
+            logger.error("imageio or imageio-ffmpeg not installed — recording failed")
+            self.recording_error.emit(
+                "imageio and imageio-ffmpeg are required for recording.\n"
+                "Install them with:  pip install imageio imageio-ffmpeg"
+            )
+        except Exception as e:
+            logger.error(f"_record_writer_thread: {e}", exc_info=True)
+            self.recording_error.emit(f"Recording failed: {e}")
+
+    def capture_thumbnail(self, width: int = 480, height: int = 320):
+        """Render the current scene to a QPixmap thumbnail (for Overview tab).
+        Returns None if the scene is not ready or rendering fails."""
+        if not (self._renderer and self._scene and self._camera):
+            return None
+        try:
+            import pygfx as gfx
+            import numpy as np
+            from PyQt5.QtGui import QImage, QPixmap
+            texture = gfx.Texture(dim=2, size=(width, height, 1), format="rgba8unorm")
+            off = gfx.renderers.wgpu.WgpuRenderer(texture)
+            off.render(self._scene, self._camera)
+            arr = off.snapshot()
+            if arr is None:
+                return None
+            arr = np.ascontiguousarray(arr)
+            h, w = arr.shape[:2]
+            fmt = QImage.Format_RGBA8888 if arr.ndim == 3 and arr.shape[2] == 4 else QImage.Format_RGB888
+            qimg = QImage(arr.data, w, h, arr.strides[0], fmt)
+            return QPixmap.fromImage(qimg.copy())
+        except Exception as e:
+            logger.warning(f"capture_thumbnail: {e}")
+            return None
 
     @property
     def _screenshot_captured_callback(self):

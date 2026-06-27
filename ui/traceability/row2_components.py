@@ -10,7 +10,8 @@ from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceComponent, TraceStage, TraceSubStage
 from .shared import (
     _CARD, _BORDER, _TEXT, _MUTED, _ACCENT,
-    _BTN_SMALL, _BTN_DEL_CIRCLE, _TOOLTIP_STYLE,
+    _BTN_SMALL, _BTN_DEL_CIRCLE, _TOOLTIP_STYLE, _MarqueeLabel,
+    _SEL_BG, _SEL_BORDER, _SEL_NUM,
 )
 from .dialogs import _AddComponentDialog, _EditComponentDialog
 from i18n import t
@@ -126,11 +127,11 @@ class _ComponentsRow(QWidget):
         item.setToolTip(t('project.traceability.dbl_click_edit'))
         item.setStyleSheet(f"""
             QWidget#compItem {{
-                background: {'#eff6ff' if is_sel else 'transparent'};
-                border: {'2px' if is_sel else '1px'} solid {_ACCENT if is_sel else 'transparent'};
+                background: {_SEL_BG if is_sel else 'transparent'};
+                border: {'2px' if is_sel else '1px'} solid {_SEL_BORDER if is_sel else 'transparent'};
                 border-radius: 10px;
             }}
-            {'QWidget#compItem:hover { background: #f0f4ff; border-color: ' + _ACCENT + '; }' if not is_sel else ''}
+            {'QWidget#compItem:hover { background: ' + _SEL_BG + '; border-color: ' + _SEL_BORDER + '; }' if not is_sel else ''}
         """ + _TOOLTIP_STYLE)
 
         row = QHBoxLayout(item)
@@ -142,7 +143,7 @@ class _ComponentsRow(QWidget):
         img_frame.setFixedSize(_IMG_SIZE, _IMG_SIZE)
         img_frame.setStyleSheet(f"""
             QWidget {{
-                background: {'#dbeafe' if is_sel else '#f1f5f9'};
+                background: {'#bbf7d0' if is_sel else '#f1f5f9'};
                 border-radius: {_IMG_SIZE // 2}px; border: none;
             }}
         """)
@@ -171,11 +172,9 @@ class _ComponentsRow(QWidget):
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(1)
 
-        name_lbl = QLabel(comp.name)
-        name_lbl.setStyleSheet(
-            f'color: {_ACCENT if is_sel else _TEXT}; font-size: 13px;'
-            f' font-weight: {"700" if is_sel else "600"}; background: transparent; border: none;'
-        )
+        name_lbl = _MarqueeLabel(comp.name)
+        name_lbl.setStyleSheet(f'font-size: 13px; font-weight: {"700" if is_sel else "600"};')
+        name_lbl.setColor(_SEL_NUM if is_sel else _TEXT)
         text_col.addWidget(name_lbl)
 
         if comp.is_main:

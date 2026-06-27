@@ -121,6 +121,21 @@ class PageWidget(QScrollArea):
         self._photos_layout.addWidget(w)
         self._photo_row_widgets.append(w)
 
+    def add_screenshot_to_report(self, pixmap) -> bool:
+        """Fill the first empty photo slot with pixmap. Adds a new row if all are full."""
+        from PyQt5.QtGui import QPixmap as _QPixmap
+        if not isinstance(pixmap, _QPixmap) or pixmap.isNull():
+            return False
+        for row_w in self._photo_row_widgets:
+            idx = row_w.first_empty_slot()
+            if idx != -1:
+                return row_w.set_image_from_pixmap(idx, pixmap)
+        # All rows full — add a new row and use its first slot
+        self._add_photo_row()
+        if self._photo_row_widgets:
+            return self._photo_row_widgets[-1].set_image_from_pixmap(0, pixmap)
+        return False
+
     # ── public API ────────────────────────────────────────────────────────────
 
     def update_project_info(self, info: dict):

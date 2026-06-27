@@ -84,6 +84,29 @@ class PhotoRowWidget(QWidget):
         self._row.photos[idx].caption = text
         self.changed.emit()
 
+    def first_empty_slot(self) -> int:
+        """Return the index of the first slot with no image, or -1 if all full."""
+        for i, cell in enumerate(self._row.photos):
+            if not cell.image_path:
+                return i
+        return -1
+
+    def set_image_from_pixmap(self, idx: int, pixmap: "QPixmap") -> bool:
+        """Write a QPixmap directly into slot idx. Saves to a temp PNG on disk."""
+        import tempfile, os
+        if not (0 <= idx < len(self._photo_btns)):
+            return False
+        tmp_dir = os.path.join(tempfile.gettempdir(), "ectoform_report_photos")
+        os.makedirs(tmp_dir, exist_ok=True)
+        import time
+        path = os.path.join(tmp_dir, f"screenshot_{int(time.time()*1000)}_{idx}.png")
+        if not pixmap.save(path, "PNG"):
+            return False
+        self._row.photos[idx].image_path = path
+        self._apply_image(self._photo_btns[idx], path)
+        self.changed.emit()
+        return True
+
     def lock(self):
         for btn in self._photo_btns:
             btn.setEnabled(False)

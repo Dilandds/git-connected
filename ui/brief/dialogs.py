@@ -12,7 +12,7 @@ class _AddBulletDialog(FormModal):
     """Single-line input for adding a bullet point to a list."""
 
     def __init__(self, label: str = 'Item', parent=None):
-        super().__init__(parent, f'{t("project.brief.s6_add_bullet")} {label}', min_width=320)
+        super().__init__(parent, f'{t("project.brief.s6_add_bullet")} {label}', theme=FormModal.LIGHT, min_width=320)
         self.f_text = self.add_field(label.upper(), QLineEdit())
         self.f_text.setPlaceholderText('…')
         self.finish()
@@ -32,7 +32,7 @@ class _AddComponentRowDialog(FormModal):
         is_edit = bool(component or material or colour)
         super().__init__(parent,
                          t('project.brief.s6_edit_row') if is_edit else t('project.brief.s6_add'),
-                         min_width=400)
+                         theme=FormModal.LIGHT, min_width=400)
 
         self.f_component, self.f_material, self.f_colour = self.add_row_fields(
             (t('project.brief.s6_component').upper(), QLineEdit(component)),

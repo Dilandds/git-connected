@@ -38,8 +38,9 @@ _SS_ORANGE_BOTTOM = "#BF360C"
 class ScreenshotCard(QFrame):
     """A compact card displaying a screenshot thumbnail with Delete / Save buttons."""
 
-    delete_requested = pyqtSignal(int)
-    save_requested = pyqtSignal(int)
+    delete_requested       = pyqtSignal(int)
+    save_requested         = pyqtSignal(int)
+    save_to_report_requested = pyqtSignal(int)
 
     def __init__(self, index: int, pixmap: QPixmap, timestamp: str, parent=None):
         super().__init__(parent)
@@ -231,6 +232,27 @@ class ScreenshotCard(QFrame):
         self.save_btn.clicked.connect(lambda: self.save_requested.emit(self.index))
         actions.addWidget(self.save_btn)
 
+        self.report_btn = QPushButton("📋 Report")
+        self.report_btn.setObjectName("screenshotReportBtn")
+        self.report_btn.setCursor(Qt.PointingHandCursor)
+        self.report_btn.setToolTip("Save this screenshot directly into the report's photo section")
+        self.report_btn.setStyleSheet(f"""
+            QPushButton#screenshotReportBtn {{
+                background-color: #EDE9FE;
+                color: #7C3AED;
+                border: 1px solid #DDD6FE;
+                border-radius: 5px;
+                padding: {_btn_padding};
+                font-size: {_btn_font_px}px;
+                font-weight: bold;
+            }}
+            QPushButton#screenshotReportBtn:hover {{
+                background-color: #C4B5FD;
+            }}
+        """)
+        self.report_btn.clicked.connect(lambda: self.save_to_report_requested.emit(self.index))
+        actions.addWidget(self.report_btn)
+
         layout.addLayout(actions)
 
     def _rebuild_thumb_source(self, smooth: bool = True):
@@ -319,6 +341,7 @@ class ScreenshotPanel(QWidget):
     """Right-side panel listing captured screenshots in a 2-column grid."""
 
     exit_screenshot_mode = pyqtSignal()
+    save_to_report       = pyqtSignal(QPixmap)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -488,6 +511,7 @@ class ScreenshotPanel(QWidget):
         card = ScreenshotCard(idx, pixmap, ts)
         card.delete_requested.connect(self._on_delete)
         card.save_requested.connect(self._on_save)
+        card.save_to_report_requested.connect(self._on_save_to_report)
         self.cards.append(card)
 
         # Add to grid
@@ -511,6 +535,7 @@ class ScreenshotPanel(QWidget):
         card = ScreenshotCard(idx, None, ts)
         card.delete_requested.connect(self._on_delete)
         card.save_requested.connect(self._on_save)
+        card.save_to_report_requested.connect(self._on_save_to_report)
         self.cards.append(card)
         row = idx // GRID_COLUMNS
         col = idx % GRID_COLUMNS
@@ -588,6 +613,12 @@ class ScreenshotPanel(QWidget):
 
         editor.pixmap_updated.connect(_do_save)
         editor.exec_()
+
+    def _on_save_to_report(self, index: int):
+        if 0 <= index < len(self.screenshots):
+            pixmap, _ = self.screenshots[index]
+            if pixmap and not pixmap.isNull():
+                self.save_to_report.emit(pixmap)
 
     def _on_clear_all(self):
         if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):

@@ -188,6 +188,12 @@ class ReportEditor(QWidget):
         self._refresh_page_tabs()
         self.changed.emit()
 
+    def add_screenshot_to_report(self, pixmap) -> bool:
+        """Forward to the currently visible page."""
+        if 0 <= self._current_page < len(self._page_widgets):
+            return self._page_widgets[self._current_page].add_screenshot_to_report(pixmap)
+        return False
+
     # ── public API ────────────────────────────────────────────────────────────
 
     def update_project_info(self, info: dict):

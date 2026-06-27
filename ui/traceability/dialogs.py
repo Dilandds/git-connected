@@ -12,42 +12,58 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from ui.modal_utils import FormModal, BaseModal, MODAL_BTN_PRIMARY, MODAL_BTN_CANCEL
-from .models import TracePart, TraceStage, TraceComponent, TraceSubStage
+from .models import TracePart, TraceTask, TraceStep, TraceStage, TraceComponent, TraceSubStage
 from .shared import _BTN_SMALL, _BTN_PRIMARY, _MUTED, _TEXT, _CARD
 from i18n import t
 
 
-# ── Add / Edit Part ───────────────────────────────────────────────────────────
+# ── Add / Edit Part group (name only) ────────────────────────────────────────
 
 class _PartDialog(FormModal):
+    """Simple dialog for creating/renaming a TracePart group (name only)."""
     def __init__(self, part: Optional[TracePart] = None, parent=None):
-        super().__init__(parent,
-                         t('project.traceability.edit_part_title') if part else t('project.traceability.add_part_title'),
-                         min_width=420)
-
+        title = t('project.traceability.edit_part_title') if part else t('project.traceability.add_part_title')
+        super().__init__(parent, title, theme=FormModal.LIGHT, min_width=340)
         self.f_name = self.add_field(t('project.traceability.part_name'), QLineEdit(part.name if part else ''))
         self.f_name.setPlaceholderText(t('project.traceability.part_name_ph'))
+        self.finish()
+        self.f_name.setFocus()
 
-        self.f_subject = self.add_field(t('project.traceability.subject'), QLineEdit(part.subject if part else ''))
+    def get_data(self) -> dict:
+        return {'name': self.f_name.text().strip() or 'Part'}
+
+
+# ── Add / Edit Task (full task data) ─────────────────────────────────────────
+
+class _TaskDialog(FormModal):
+    """Dialog for creating/editing a TraceTask within a part group."""
+    def __init__(self, task: Optional[TraceTask] = None, parent=None):
+        title = t('project.traceability.edit_part_title') if task else t('project.traceability.add_part_title')
+        super().__init__(parent, title, theme=FormModal.LIGHT, min_width=420)
+
+        self.f_name = self.add_field(t('project.traceability.part_name'), QLineEdit(task.name if task else ''))
+        self.f_name.setPlaceholderText(t('project.traceability.part_name_ph'))
+
+        self.f_subject = self.add_field(t('project.traceability.subject'), QLineEdit(task.subject if task else ''))
         self.f_subject.setPlaceholderText(t('project.traceability.subject_ph'))
 
-        self.f_performed_by = self.add_field(t('project.traceability.performed_by'), QLineEdit(part.performed_by if part else ''))
+        self.f_performed_by = self.add_field(t('project.traceability.performed_by'), QLineEdit(task.performed_by if task else ''))
         self.f_performed_by.setPlaceholderText(t('project.traceability.performed_by_ph'))
 
-        self.f_suppliers = self.add_field(t('project.traceability.suppliers'), QLineEdit(part.suppliers if part else ''))
+        self.f_suppliers = self.add_field(t('project.traceability.suppliers'), QLineEdit(task.suppliers if task else ''))
         self.f_suppliers.setPlaceholderText(t('project.traceability.suppliers_ph'))
 
-        self.f_action = self.add_field(t('project.traceability.action'), QLineEdit(part.action if part else ''))
+        self.f_action = self.add_field(t('project.traceability.action'), QLineEdit(task.action if task else ''))
         self.f_action.setPlaceholderText(t('project.traceability.action_ph'))
 
         self.f_task = self.add_field(t('project.traceability.current_task'), QTextEdit(), height_override=52)
         self.f_task.setPlaceholderText(t('project.traceability.current_task_ph'))
-        if part:
-            self.f_task.setPlainText(part.current_task)
+        if task:
+            self.f_task.setPlainText(task.current_task)
 
         self.f_start, self.f_due = self.add_row_fields(
-            (t('project.traceability.start_date_field'), QLineEdit(part.start_date if part else '')),
-            (t('project.traceability.due_date_field'),   QLineEdit(part.due_date   if part else '')),
+            (t('project.traceability.start_date_field'), QLineEdit(task.start_date if task else '')),
+            (t('project.traceability.due_date_field'),   QLineEdit(task.due_date   if task else '')),
         )
         self.f_start.setPlaceholderText(t('project.traceability.date_ph'))
         self.f_due.setPlaceholderText(t('project.traceability.date_ph'))
@@ -58,14 +74,14 @@ class _PartDialog(FormModal):
             t('project.traceability.status_in_progress'),
             t('project.traceability.status_completed'),
         ])
-        if part:
-            idx = status_cb.findText(part.status)
+        if task:
+            idx = status_cb.findText(task.status)
             if idx >= 0:
                 status_cb.setCurrentIndex(idx)
 
         progress_spin = QSpinBox()
         progress_spin.setRange(0, 100)
-        progress_spin.setValue(part.progress if part else 0)
+        progress_spin.setValue(task.progress if task else 0)
 
         self.f_status, self.f_progress = self.add_row_fields(
             (t('project.traceability.status'),       status_cb),
@@ -75,7 +91,7 @@ class _PartDialog(FormModal):
 
     def get_data(self) -> dict:
         return {
-            'name':         self.f_name.text().strip() or 'Part',
+            'name':         self.f_name.text().strip() or 'Task',
             'subject':      self.f_subject.text().strip(),
             'performed_by': self.f_performed_by.text().strip(),
             'suppliers':    self.f_suppliers.text().strip(),
@@ -88,14 +104,61 @@ class _PartDialog(FormModal):
         }
 
 
+# ── Add / Edit Step ───────────────────────────────────────────────────────────
+
+class _StepDialog(FormModal):
+    """Dialog for creating/editing a TraceStep within a task."""
+    def __init__(self, step: Optional[TraceStep] = None, parent=None):
+        title = 'Edit Sub-step' if step else 'Add Sub-step'
+        super().__init__(parent, title, theme=FormModal.LIGHT, min_width=380)
+
+        self.f_name = self.add_field('STEP NAME', QLineEdit(step.name if step else ''))
+        self.f_name.setPlaceholderText('e.g. Inspect surface')
+
+        self.f_desc = self.add_field('DESCRIPTION', QTextEdit(), height_override=60)
+        self.f_desc.setPlaceholderText('Step description…')
+        if step:
+            self.f_desc.setPlainText(step.description)
+
+        status_cb = QComboBox()
+        status_cb.addItems([
+            t('project.traceability.status_upcoming'),
+            t('project.traceability.status_in_progress'),
+            t('project.traceability.status_completed'),
+        ])
+        if step:
+            idx = status_cb.findText(step.status)
+            if idx >= 0:
+                status_cb.setCurrentIndex(idx)
+
+        progress_spin = QSpinBox()
+        progress_spin.setRange(0, 100)
+        progress_spin.setValue(step.progress if step else 0)
+
+        self.f_status, self.f_progress = self.add_row_fields(
+            (t('project.traceability.status'),       status_cb),
+            (t('project.traceability.progress_pct'), progress_spin),
+        )
+        self.finish()
+        self.f_name.setFocus()
+
+    def get_data(self) -> dict:
+        return {
+            'name':        self.f_name.text().strip() or 'Step',
+            'description': self.f_desc.toPlainText().strip(),
+            'status':      self.f_status.currentText(),
+            'progress':    self.f_progress.value(),
+        }
+
+
 # ── Comments dialog ───────────────────────────────────────────────────────────
 
 class _CommentsDialog(FormModal):
     """Scrollable comments list + inline add-comment input."""
 
-    def __init__(self, part: TracePart, parent=None):
-        super().__init__(parent, t('project.traceability.comments_title').format(name=part.name), min_width=360)
-        self._part = part
+    def __init__(self, task: TraceTask, parent=None):
+        super().__init__(parent, t('project.traceability.comments_title').format(name=task.name), theme=FormModal.LIGHT, min_width=360)
+        self._part = task  # kept as _part internally for compatibility
 
         # Scroll area
         scroll = QScrollArea()
@@ -155,7 +218,7 @@ class _CommentsDialog(FormModal):
 class _EditStageDialog(FormModal):
     def __init__(self, stage: TraceStage, stages: list, parent=None):
         can_delete = len(stages) > 1
-        super().__init__(parent, t('project.traceability.edit_stage_title'), min_width=300)
+        super().__init__(parent, t('project.traceability.edit_stage_title'), theme=FormModal.LIGHT, min_width=300)
 
         self.f_name = self.add_field(t('project.traceability.stage_name'), QLineEdit(stage.name))
 
@@ -174,7 +237,7 @@ class _EditStageDialog(FormModal):
 
 class _AddComponentDialog(FormModal):
     def __init__(self, parent=None):
-        super().__init__(parent, t('project.traceability.add_comp_title'), min_width=300)
+        super().__init__(parent, t('project.traceability.add_comp_title'), theme=FormModal.LIGHT, min_width=300)
         self._image_path = ''
 
         self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit())
@@ -217,7 +280,7 @@ class _AddComponentDialog(FormModal):
 
 class _RenameSubStageDialog(FormModal):
     def __init__(self, current_name: str, parent=None):
-        super().__init__(parent, t('project.traceability.rename_substage'), min_width=340)
+        super().__init__(parent, t('project.traceability.rename_substage'), theme=FormModal.LIGHT, min_width=340)
         self.f_name = self.add_field(t('project.traceability.name_field'), QLineEdit(current_name))
         self.f_name.selectAll()
         self.finish()
@@ -232,7 +295,7 @@ class _RenameSubStageDialog(FormModal):
 
 class _EditComponentDialog(FormModal):
     def __init__(self, comp: TraceComponent, parent=None):
-        super().__init__(parent, t('project.traceability.edit_comp_title'), min_width=340)
+        super().__init__(parent, t('project.traceability.edit_comp_title'), theme=FormModal.LIGHT, min_width=340)
         self._image_path = comp.image_path
 
         self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit(comp.name))

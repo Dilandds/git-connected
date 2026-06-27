@@ -73,7 +73,7 @@ class _TermDialog(FormModal):
     def __init__(self, term: Optional[GlossaryTerm] = None, parent=None):
         super().__init__(parent,
                          t('project.glossary.edit_title') if term else t('project.glossary.add_title'),
-                         min_width=420)
+                         theme=FormModal.LIGHT, min_width=420)
 
         self.f_term = self.add_field(t('project.glossary.term_field'), QLineEdit(term.term if term else ""), height=30)
         self.f_term.setPlaceholderText(t('project.glossary.term_ph'))

@@ -6,6 +6,7 @@ from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QFrame, QLineEdit, QTextEdit, QScrollArea, QFileDialog, QSizePolicy,
+    QCheckBox, QDateEdit,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QPixmap
@@ -50,7 +51,7 @@ _PRIORITY_COLORS = {
 }
 
 _PANEL_W = 360
-_PHOTO_H = 120                              # photo height (half-width column)
+_PHOTO_H = 160                              # photo height (half-width column)
 _COL     = (_PANEL_W - 24 - 8) // 2        # each column ≈ 164 px
 _PROG_W  = _COL - 12                        # usable width for progress bar fill
 
@@ -60,6 +61,7 @@ class TaskDetailPanel(QWidget):
 
     edit_requested   = pyqtSignal(object)
     delete_requested = pyqtSignal(object)
+    task_changed     = pyqtSignal()   # emitted when a field mutates the task visually
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -270,20 +272,14 @@ class TaskDetailPanel(QWidget):
         return w
 
     def _build_comment_components_section(self) -> QWidget:
-        """Comments on the left, components impacted on the right."""
+        """Comments full-width, then components impacted full-width below, save at bottom-right."""
         w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        row = QHBoxLayout(w)
-        row.setContentsMargins(12, 8, 12, 8)
-        row.setSpacing(8)
+        col = QVBoxLayout(w)
+        col.setContentsMargins(12, 8, 12, 8)
+        col.setSpacing(6)
 
-        # ── Left: comments ────────────────────────────────────────────────
-        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
-        left_w.setFixedWidth(_COL)
-        left = QVBoxLayout(left_w)
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(4)
-
-        left.addWidget(self._section_label(t('project.timeline.detail_comments')))
+        # ── Comments (full width) ─────────────────────────────────────────
+        col.addWidget(self._section_label(t('project.timeline.detail_comments')))
 
         self._comment_box = QTextEdit()
         self._comment_box.setPlaceholderText(t('project.timeline.detail_comment_ph'))
@@ -292,8 +288,20 @@ class TaskDetailPanel(QWidget):
         self._comment_box.textChanged.connect(
             lambda: self._save_btn.setEnabled(self._current_task is not None)
         )
-        left.addWidget(self._comment_box)
+        col.addWidget(self._comment_box)
 
+        # ── Components Impacted (full width) ──────────────────────────────
+        col.addWidget(self._section_label(t('project.timeline.detail_components')))
+
+        self._components_box = QTextEdit()
+        self._components_box.setPlaceholderText(t('project.timeline.detail_comp_ph'))
+        self._components_box.setFixedHeight(90)
+        self._components_box.setStyleSheet(_TEXTAREA_STYLE)
+        self._components_box.setEnabled(False)
+        self._components_box.textChanged.connect(self._on_components_changed)
+        col.addWidget(self._components_box)
+
+        # ── Save button (aligned right, below components) ─────────────────
         self._save_btn = QPushButton(t('project.timeline.detail_save'))
         self._save_btn.setFixedHeight(26)
         self._save_btn.setEnabled(False)
@@ -311,28 +319,8 @@ class TaskDetailPanel(QWidget):
         save_row = QHBoxLayout(); save_row.setContentsMargins(0, 0, 0, 0)
         save_row.addStretch()
         save_row.addWidget(self._save_btn)
-        left.addLayout(save_row)
+        col.addLayout(save_row)
 
-        # ── Right: components impacted ────────────────────────────────────
-        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
-        right = QVBoxLayout(right_w)
-        right.setContentsMargins(0, 0, 0, 0)
-        right.setSpacing(4)
-
-        right.addWidget(self._section_label(t('project.timeline.detail_components')))
-
-        self._components_box = QTextEdit()
-        self._components_box.setPlaceholderText(t('project.timeline.detail_comp_ph'))
-        self._components_box.setFixedHeight(90)
-        self._components_box.setStyleSheet(_TEXTAREA_STYLE)
-        self._components_box.setEnabled(False)
-        self._components_box.textChanged.connect(self._on_components_changed)
-        right.addWidget(self._components_box)
-        right.addStretch()
-
-        row.addWidget(left_w)
-        row.addWidget(self._vline())
-        row.addWidget(right_w)
         return w
 
     def _build_priority_status_section(self) -> QWidget:
@@ -403,6 +391,60 @@ class TaskDetailPanel(QWidget):
         delay_row.addWidget(self._delay_lbl)
         delay_row.addStretch()
         left.addLayout(delay_row)
+
+        # ── Delay extension ───────────────────────────────────────────────
+        left.addWidget(self._hline())
+
+        self._delay_ext_cb = QCheckBox(t('project.timeline.detail_delay_ext_check'))
+        self._delay_ext_cb.setStyleSheet(f"""
+            QCheckBox {{ color: {TEXT}; font-size: 11px; font-weight: 600;
+                background: transparent; border: none; }}
+            QCheckBox::indicator {{ width: 13px; height: 13px; border-radius: 3px;
+                border: 1.5px solid {BORDER}; background: white; }}
+            QCheckBox::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
+            QCheckBox:disabled {{ color: #9ca3af; }}
+        """)
+        self._delay_ext_cb.setEnabled(False)
+        self._delay_ext_cb.toggled.connect(self._on_delay_ext_toggled)
+        left.addWidget(self._delay_ext_cb)
+
+        ext_row = QHBoxLayout()
+        ext_row.setSpacing(4)
+        ext_row.setContentsMargins(0, 0, 0, 0)
+
+        self._delay_ext_edit = QDateEdit()
+        self._delay_ext_edit.setCalendarPopup(True)
+        self._delay_ext_edit.setFixedHeight(24)
+        self._delay_ext_edit.setDisplayFormat('d MMM yyyy')
+        self._delay_ext_edit.setEnabled(False)
+        self._delay_ext_edit.setStyleSheet(f"""
+            QDateEdit {{
+                background: #f5f6f8; color: {TEXT};
+                border: 1px solid {BORDER}; border-radius: 4px;
+                padding: 1px 4px; font-size: 11px;
+            }}
+            QDateEdit:focus {{ border-color: {ACCENT}; }}
+            QDateEdit:disabled {{ background: #f1f3f5; color: #9ca3af; }}
+            QDateEdit::drop-down {{ border: none; width: 16px; }}
+            QDateEdit QAbstractItemView {{ color: {TEXT}; background: white; }}
+        """)
+        self._delay_ext_edit.dateChanged.connect(self._on_delay_ext_date_changed)
+
+        self._delay_ext_clear = QPushButton('✕')
+        self._delay_ext_clear.setFixedSize(20, 24)
+        self._delay_ext_clear.setCursor(Qt.PointingHandCursor)
+        self._delay_ext_clear.setEnabled(False)
+        self._delay_ext_clear.setStyleSheet(f"""
+            QPushButton {{ background: #fee2e2; color: #ef4444; border: 1px solid #fca5a5;
+                border-radius: 4px; font-size: 12px; font-weight: bold; padding: 0; }}
+            QPushButton:hover {{ background: #ef4444; color: white; border-color: #ef4444; }}
+            QPushButton:disabled {{ background: #f1f3f5; color: #9ca3af; border-color: {BORDER}; }}
+        """)
+        self._delay_ext_clear.clicked.connect(self._clear_delay_ext)
+
+        ext_row.addWidget(self._delay_ext_edit, 1)
+        ext_row.addWidget(self._delay_ext_clear)
+        left.addLayout(ext_row)
         left.addStretch()
 
         # Right: progress
@@ -582,6 +624,24 @@ class TaskDetailPanel(QWidget):
             btn.setEnabled(True)
         self._set_priority(task.priority or 'Normal')
 
+        # Delay extension
+        self._delay_ext_edit.blockSignals(True)
+        self._delay_ext_cb.blockSignals(True)
+        self._delay_ext_edit.setMinimumDate(task.end.addDays(1))
+        if task.delay_end and task.delay_end > task.end:
+            self._delay_ext_cb.setChecked(True)
+            self._delay_ext_edit.setDate(task.delay_end)
+            self._delay_ext_edit.setEnabled(True)
+            self._delay_ext_clear.setEnabled(True)
+        else:
+            self._delay_ext_cb.setChecked(False)
+            self._delay_ext_edit.setDate(task.end.addDays(1))
+            self._delay_ext_edit.setEnabled(False)
+            self._delay_ext_clear.setEnabled(False)
+        self._delay_ext_cb.setEnabled(True)
+        self._delay_ext_cb.blockSignals(False)
+        self._delay_ext_edit.blockSignals(False)
+
         # Auto-computed fields
         self._update_auto_fields(task)
 
@@ -609,6 +669,12 @@ class TaskDetailPanel(QWidget):
         self._delay_lbl.setText('—')
         self._progress_pct_lbl.setText('0 %')
         self._progress_bar_fill.setFixedWidth(0)
+        self._delay_ext_cb.blockSignals(True)
+        self._delay_ext_cb.setChecked(False)
+        self._delay_ext_cb.setEnabled(False)
+        self._delay_ext_cb.blockSignals(False)
+        self._delay_ext_edit.setEnabled(False)
+        self._delay_ext_clear.setEnabled(False)
 
     def _save_comment(self):
         if not self._current_task:
@@ -618,3 +684,40 @@ class TaskDetailPanel(QWidget):
         ]
         self._save_btn.setText('✔')
         QTimer.singleShot(1000, lambda: self._save_btn.setText(t('project.timeline.detail_save')))
+
+    # ── delay extension slots ─────────────────────────────────────────────────
+
+    def _on_delay_ext_toggled(self, checked: bool):
+        if not self._current_task:
+            return
+        if checked:
+            date = self._delay_ext_edit.date()
+            if not date.isValid() or date <= self._current_task.end:
+                date = self._current_task.end.addDays(1)
+            self._delay_ext_edit.blockSignals(True)
+            self._delay_ext_edit.setDate(date)
+            self._delay_ext_edit.blockSignals(False)
+            self._delay_ext_edit.setEnabled(True)
+            self._delay_ext_clear.setEnabled(True)
+            self._current_task.delay_end = date
+        else:
+            self._current_task.delay_end = None
+            self._delay_ext_edit.setEnabled(False)
+            self._delay_ext_clear.setEnabled(False)
+        self.task_changed.emit()
+
+    def _on_delay_ext_date_changed(self, date: QDate):
+        if self._current_task and self._delay_ext_cb.isChecked():
+            self._current_task.delay_end = date
+            self.task_changed.emit()
+
+    def _clear_delay_ext(self):
+        if not self._current_task:
+            return
+        self._current_task.delay_end = None
+        self._delay_ext_cb.blockSignals(True)
+        self._delay_ext_cb.setChecked(False)
+        self._delay_ext_cb.blockSignals(False)
+        self._delay_ext_edit.setEnabled(False)
+        self._delay_ext_clear.setEnabled(False)
+        self.task_changed.emit()

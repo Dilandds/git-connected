@@ -3,9 +3,18 @@ from typing import List
 
 
 @dataclass
-class TracePart:
+class TraceStep:
+    id:          int
+    name:        str = 'Step'
+    description: str = ''
+    status:      str = 'Upcoming'
+    progress:    int = 0
+
+
+@dataclass
+class TraceTask:
     id:           int
-    name:         str       = 'Part'
+    name:         str       = 'Task'
     subject:      str       = ''
     performed_by: str       = ''
     suppliers:    str       = ''
@@ -16,6 +25,14 @@ class TracePart:
     status:       str       = 'Upcoming'
     progress:     int       = 0
     comments:     List[str] = field(default_factory=list)
+    steps:        List[TraceStep] = field(default_factory=list)
+
+
+@dataclass
+class TracePart:
+    id:    int
+    name:  str             = 'Part'
+    tasks: List[TraceTask] = field(default_factory=list)
 
 
 @dataclass
@@ -28,16 +45,16 @@ class TraceSubStage:
 @dataclass
 class TraceStage:
     id:         int
-    number:     int              = 1
-    name:       str              = 'Stage'
-    status:     str              = 'Upcoming'
-    sub_stages: List[TraceSubStage] = field(default_factory=list)
+    number:     int                  = 1
+    name:       str                  = 'Stage'
+    status:     str                  = 'Upcoming'
+    sub_stages: List[TraceSubStage]  = field(default_factory=list)
 
 
 @dataclass
 class TraceComponent:
     id:         int
-    name:       str            = 'Component'
-    image_path: str            = ''
-    is_main:    bool           = False
+    name:       str              = 'Component'
+    image_path: str              = ''
+    is_main:    bool             = False
     stages:     List[TraceStage] = field(default_factory=list)

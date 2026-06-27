@@ -354,6 +354,25 @@ class GanttCanvas(QWidget):
                 p.drawRect(QRect(hx1, y, hx2 - hx1, h))
                 p.restore()
 
+        # ── Delay extension bar ───────────────────────────────────────────
+        if task.delay_end and task.delay_end > task.end:
+            ex = self._x_for_date(task.end, day_w)
+            ew = task.end.daysTo(task.delay_end) * day_w
+            if ew > 0:
+                ext_color = QColor('#f97316')
+                ext_color.setAlpha(200)
+                ext_path = QPainterPath()
+                ext_path.addRoundedRect(QRectF(ex, y, ew, h), 4, 4)
+                p.fillPath(ext_path, QBrush(ext_color))
+                p.save()
+                p.setClipPath(ext_path)
+                p.setPen(QPen(QColor(255, 255, 255, 60), 3))
+                for sx in range(ex - h, ex + ew + h, 8):
+                    p.drawLine(sx, y, sx + h, y + h)
+                p.restore()
+                p.setPen(QPen(QColor('#ea580c'), 1.5))
+                p.drawPath(ext_path)
+
         if w > 24:
             p.setPen(QColor('white')); p.setFont(make_font(size=11, bold=task.is_urgent))
             text_rect = QRect(x + 5, y, w - 10, h)
@@ -682,6 +701,7 @@ class TimelineWidget(QWidget):
         self._detail = TaskDetailPanel()
         self._detail.edit_requested.connect(self._on_task_edit)
         self._detail.delete_requested.connect(self._on_task_delete)
+        self._detail.task_changed.connect(self._canvas.update)
         return self._detail
 
     # ── tabs ──────────────────────────────────────────────────────────────────
@@ -988,6 +1008,7 @@ class TimelineWidget(QWidget):
                 'contributors':      t.contributors,
                 'unavailable_start': t.unavailable_start.toString('yyyy-MM-dd') if t.unavailable_start else None,
                 'unavailable_end':   t.unavailable_end.toString('yyyy-MM-dd')   if t.unavailable_end   else None,
+                'delay_end':         t.delay_end.toString('yyyy-MM-dd')         if t.delay_end         else None,
             }
         def _op(o: Operation) -> dict:
             return {'id': o.id, 'name': o.name, 'tasks': [_task(t) for t in o.tasks]}
@@ -1019,6 +1040,7 @@ class TimelineWidget(QWidget):
                         contributors=t.get('contributors', ''),
                         unavailable_start=QDate.fromString(t['unavailable_start'], 'yyyy-MM-dd') if t.get('unavailable_start') else None,
                         unavailable_end=QDate.fromString(t['unavailable_end'], 'yyyy-MM-dd')     if t.get('unavailable_end')   else None,
+                        delay_end=QDate.fromString(t['delay_end'], 'yyyy-MM-dd')                 if t.get('delay_end')         else None,
                     )
                     for t in o_d.get('tasks', [])
                 ]

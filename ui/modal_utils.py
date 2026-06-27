@@ -54,6 +54,14 @@ MODAL_BTN_CANCEL = f"""
     QPushButton:hover {{ background-color: rgba(255,255,255,0.06); }}
 """
 
+MODAL_BTN_CANCEL_LIGHT = """
+    QPushButton {
+        background-color: transparent; color: #4b5563;
+        border: none; border-radius: 10px; padding: 10px 20px; font-size: 13px;
+    }
+    QPushButton:hover { background-color: #f3f4f6; }
+"""
+
 MODAL_BTN_DESTRUCTIVE = """
     QPushButton {
         background: transparent; color: #ef4444;
@@ -211,7 +219,8 @@ class BaseModal(QDialog):
         return self._make_btn(text, MODAL_BTN_PRIMARY, connect=self.accept)
 
     def _make_cancel_btn(self, text: str = 'Cancel') -> QPushButton:
-        return self._make_btn(text, MODAL_BTN_CANCEL, connect=self.reject)
+        style = MODAL_BTN_CANCEL_LIGHT if self._theme == 'light' else MODAL_BTN_CANCEL
+        return self._make_btn(text, style, connect=self.reject)
 
     def _make_delete_btn(self, text: str) -> QPushButton:
         """Destructive action button — emits done(2) so callers can branch on result."""

@@ -195,7 +195,7 @@ class PhotoSlot(QPushButton):
 
 class _StarRankingDialog(FormModal):
     def __init__(self, current_number: int, parent=None):
-        super().__init__(parent, t('project.version.set_ranking'), min_width=280)
+        super().__init__(parent, t('project.version.set_ranking'), theme=FormModal.LIGHT, min_width=280)
         hint = QLabel(t('project.version.ranking_hint'))
         hint.setWordWrap(True)
         hint.setStyleSheet(

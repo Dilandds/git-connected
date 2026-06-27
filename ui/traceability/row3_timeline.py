@@ -1,4 +1,5 @@
 """Row 3: Horizontal stage progress timeline."""
+import copy
 from typing import List
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
@@ -10,15 +11,17 @@ from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceStage, TraceSubStage
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _ACCENT_H,
-    _STATUS_COLORS, _TOOLTIP_STYLE, _BTN_DEL_CIRCLE,
+    _STATUS_COLORS, _TOOLTIP_STYLE, _BTN_DEL_CIRCLE, _MarqueeLabel,
+    _SEL_BG, _SEL_BORDER, _SEL_NUM,
 )
 from .dialogs import _EditStageDialog
 from i18n import t
 
 _CARD_W  = 180   # stage card width
-_CARD_H  = 76    # stage card height
-_ROW_H   = 104   # total row height
+_CARD_H  = 58    # stage card height
+_ROW_H   = 84    # total row height
 _ARROW_W = 36    # arrow separator width
+
 
 
 class _StatusDot(QWidget):
@@ -155,7 +158,7 @@ class _StageTimelineRow(QWidget):
 
         n = len(self._stages)
         total_w = n * (_CARD_W + _ARROW_W) + 140 + 24
-        self._inner.setFixedSize(max(total_w, 400), _ROW_H)
+        self._inner.setFixedSize(max(total_w, 400), _CARD_H + 26)
 
     def _make_card(self, stage: TraceStage, idx: int) -> QWidget:
         is_sel = (idx == self._selected)
@@ -170,16 +173,16 @@ class _StageTimelineRow(QWidget):
         # Use #stageCard selector so child widgets are NOT affected
         card.setStyleSheet(f"""
             QWidget#stageCard {{
-                background: {'#eff6ff' if is_sel else 'white'};
-                border: {'2px' if is_sel else '1px'} solid {_ACCENT if is_sel else _BORDER};
+                background: {_SEL_BG if is_sel else 'white'};
+                border: {'2px' if is_sel else '1px'} solid {_SEL_BORDER if is_sel else _BORDER};
                 border-radius: 9px;
             }}
-            {'QWidget#stageCard:hover { border-color: ' + _ACCENT + '; background: #f0f7ff; }' if not is_sel else ''}
+            {'QWidget#stageCard:hover { border-color: ' + _SEL_BORDER + '; background: ' + _SEL_BG + '; }' if not is_sel else ''}
         """ + _TOOLTIP_STYLE)
 
         outer = QVBoxLayout(card)
-        outer.setContentsMargins(10, 9, 8, 9)
-        outer.setSpacing(6)
+        outer.setContentsMargins(10, 6, 8, 6)
+        outer.setSpacing(4)
 
         # ── top row: [num]  [name ···]  [×] ─────────────────────────────
         top = QHBoxLayout()
@@ -189,18 +192,30 @@ class _StageTimelineRow(QWidget):
         num_lbl = QLabel(f'{stage.number:02d}')
         num_lbl.setFixedWidth(26)
         num_lbl.setStyleSheet(
-            f'color: {_ACCENT}; font-size: 17px; font-weight: 800;'
+            f'color: {_SEL_NUM if is_sel else _ACCENT}; font-size: 17px; font-weight: 800;'
             f' background: transparent; border: none;'
         )
         top.addWidget(num_lbl, 0, Qt.AlignVCenter)
 
-        name_lbl = QLabel(stage.name.upper())
-        name_lbl.setStyleSheet(
-            f'color: {_TEXT}; font-size: 13px; font-weight: 700;'
-            f' background: transparent; border: none;'
-        )
-        name_lbl.setWordWrap(False)
+        name_lbl = _MarqueeLabel(stage.name.upper())
+        name_lbl.setStyleSheet('font-size: 13px; font-weight: 700;')
+        name_lbl.setColor(_TEXT)
         top.addWidget(name_lbl, 1, Qt.AlignVCenter)
+
+        dup_btn = QPushButton('⧉')
+        dup_btn.setFixedSize(16, 16)
+        dup_btn.setCursor(Qt.PointingHandCursor)
+        dup_btn.setToolTip(t('project.traceability.duplicate_stage'))
+        dup_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_MUTED};
+                border: none; font-size: 13px; font-weight: bold;
+                padding: 0; min-width: 16px; min-height: 16px;
+            }}
+            QPushButton:hover {{ color: {_ACCENT}; }}
+        """ + _TOOLTIP_STYLE)
+        dup_btn.clicked.connect(lambda _, i=idx: self._duplicate_stage(i))
+        top.addWidget(dup_btn, 0, Qt.AlignVCenter)
 
         del_btn = QPushButton('✕')
         del_btn.setFixedSize(16, 16)
@@ -234,6 +249,24 @@ class _StageTimelineRow(QWidget):
         card.mouseDoubleClickEvent = lambda _, i=idx: self._edit_stage(i)
         return card
 
+    def _renumber_stages(self):
+        for i, s in enumerate(self._stages):
+            s.number = i + 1
+
+    def _duplicate_stage(self, idx: int):
+        if idx >= len(self._stages):
+            return
+        dup = copy.deepcopy(self._stages[idx])
+        dup.id = max((s.id for s in self._stages), default=0) + 1
+        for i, sub in enumerate(dup.sub_stages):
+            sub.id = i + 1
+            for j, part in enumerate(sub.parts):
+                part.id = j + 1
+        self._stages.insert(idx + 1, dup)
+        self._renumber_stages()
+        self._select(idx + 1)
+        self.changed.emit()
+
     def _remove_stage(self, idx: int):
         if not self._stages or idx >= len(self._stages):
             return
@@ -242,6 +275,7 @@ class _StageTimelineRow(QWidget):
                                   t('project.traceability.remove_stage_confirm').format(name=stage.name)):
             return
         self._stages.pop(idx)
+        self._renumber_stages()
         self._selected = min(self._selected, max(0, len(self._stages) - 1))
         self._refresh()
         self.stage_selected.emit(self._selected)
@@ -267,6 +301,7 @@ class _StageTimelineRow(QWidget):
             if ask_yes_no_dialog(self, t('project.traceability.delete_stage'),
                                   t('project.traceability.delete_stage_confirm').format(name=stage.name)):
                 self._stages.pop(idx)
+                self._renumber_stages()
                 self._selected = min(self._selected, max(0, len(self._stages) - 1))
                 self._refresh()
                 self.stage_selected.emit(self._selected)

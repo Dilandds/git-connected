@@ -8,8 +8,9 @@ from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT,
     _PART_PALETTE, _PartBadge,
 )
-from .dialogs import _PartDialog, _CommentsDialog
-from .part_row import _PartRow, _W_TASK, _W_SUBJECT, _W_PERFORMED_BY, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
+from .models import TraceTask
+from .dialogs import _PartDialog, _TaskDialog
+from .part_row import _PartGroupRow, _FlatPartRow, _W_TASK, _W_SUBJECT, _W_PERFORMED_BY, _W_COMMENTS, _W_DATE, _W_STATUS, _W_PROGRESS
 from i18n import t
 
 
@@ -17,11 +18,13 @@ class _PartsTable(QWidget):
     changed = pyqtSignal()
 
     def __init__(self, sub_stage: TraceSubStage,
-                 stage_num: int = 1, sub_num: int = 1, parent=None):
+                 stage_num: int = 1, sub_num: int = 1,
+                 flat_mode: bool = False, parent=None):
         super().__init__(parent)
         self._sub       = sub_stage
         self._stage_num = stage_num
         self._sub_num   = sub_num
+        self._flat      = flat_mode
         self._next_id   = max((p.id for p in sub_stage.parts), default=0) + 1
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
@@ -53,7 +56,6 @@ class _PartsTable(QWidget):
             )
             return l
 
-        # Badge spacer
         hl.addSpacing(38 + 12)
         hl.addWidget(_ch(t('project.traceability.col_task'), _W_TASK))
         hl.addStretch(1)
@@ -68,7 +70,7 @@ class _PartsTable(QWidget):
         hl.addSpacing(28)
         root.addWidget(hdr)
 
-        # ── Part rows ─────────────────────────────────────────────────────
+        # ── Part group rows ───────────────────────────────────────────────
         self._rows_w = QWidget()
         self._rows_w.setStyleSheet(f'background: {_CARD};')
         self._rows_l = QVBoxLayout(self._rows_w)
@@ -76,12 +78,16 @@ class _PartsTable(QWidget):
         self._rows_l.setSpacing(0)
         root.addWidget(self._rows_w)
 
-        # ── Add Task footer row ───────────────────────────────────────────
+        # ── Add Part footer ───────────────────────────────────────────────
         self._footer = self._make_add_row()
         root.addWidget(self._footer)
 
         # ── Bottom hint ───────────────────────────────────────────────────
-        hint = QLabel('ⓘ  Click on a part to view details, add comments and track progress.')
+        if self._flat:
+            hint_text = 'ⓘ  Click on a task to view details, add comments and track progress.'
+        else:
+            hint_text = 'ⓘ  Parts group related tasks. Click ＋ Add Part to create a new part group.'
+        hint = QLabel(hint_text)
         hint.setStyleSheet(
             f'color: {_MUTED}; font-size: 11px; background: {_BG};'
             f' border-top: 1px solid {_BORDER}; padding: 6px 16px;'
@@ -91,26 +97,20 @@ class _PartsTable(QWidget):
         self._refresh_rows()
 
     def _make_add_row(self) -> QWidget:
+        label = 'Add Task' if self._flat else 'Add Part'
         row = QWidget()
         row.setFixedHeight(48)
-        row.setStyleSheet(
-            f'background: {_BG}; border-top: 1px dashed {_BORDER};'
-        )
+        row.setStyleSheet(f'background: {_BG}; border-top: 1px dashed {_BORDER};')
         lay = QHBoxLayout(row)
         lay.setContentsMargins(16, 0, 12, 0)
         lay.setSpacing(12)
 
         next_idx = len(self._sub.parts)
         badge_label = f'{self._stage_num}.{self._sub_num}.{next_idx + 1}'
-        badge = _PartBadge(
-            next_idx + 1,
-            '#d1d5db',   # light gray for the add-row badge
-            label=badge_label,
-            size=38,
-        )
+        badge = _PartBadge(next_idx + 1, '#d1d5db', label=badge_label, size=38)
         lay.addWidget(badge, 0, Qt.AlignVCenter)
 
-        add_lbl = QPushButton('Add Task')
+        add_lbl = QPushButton(label)
         add_lbl.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; border: none;
@@ -122,16 +122,9 @@ class _PartsTable(QWidget):
         add_lbl.setCursor(Qt.PointingHandCursor)
         add_lbl.clicked.connect(self._add_part)
         lay.addWidget(add_lbl)
-
-        for _ in range(4):
-            dash = QLabel('—')
-            dash.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;')
-            dash.setAlignment(Qt.AlignCenter)
-            lay.addWidget(dash)
-
         lay.addStretch()
 
-        add_btn = QPushButton('＋  Add Task')
+        add_btn = QPushButton(f'＋  {label}')
         add_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_ACCENT};
@@ -155,22 +148,31 @@ class _PartsTable(QWidget):
                 item.widget().setParent(None)
 
         if not self._sub.parts:
-            empty = QLabel('No parts yet. Click ＋ Add Task to begin.')
+            label = 'Add Task' if self._flat else 'Add Part'
+            empty = QLabel(f'No tasks yet. Click ＋ {label} to begin.')
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
                 f'color: {_MUTED}; font-size: 13px;'
                 f' background: transparent; border: none; padding: 28px;'
             )
             self._rows_l.addWidget(empty)
-        else:
+        elif self._flat:
             for i, part in enumerate(self._sub.parts):
-                row = _PartRow(part, i,
-                               stage_num=self._stage_num,
-                               sub_num=self._sub_num)
+                row = _FlatPartRow(part, i,
+                                   stage_num=self._stage_num,
+                                   sub_num=self._sub_num)
                 row.edit_requested.connect(self._edit_part)
                 row.delete_requested.connect(self._delete_part)
-                row.comment_requested.connect(self._show_comments)
                 row.data_changed.connect(self.changed)
+                self._rows_l.addWidget(row)
+        else:
+            for i, part in enumerate(self._sub.parts):
+                row = _PartGroupRow(part, i,
+                                    stage_num=self._stage_num,
+                                    sub_num=self._sub_num)
+                row.edit_requested.connect(self._edit_part)
+                row.delete_requested.connect(self._delete_part)
+                row.changed.connect(self.changed)
                 self._rows_l.addWidget(row)
 
         # Rebuild footer so badge number stays correct
@@ -180,32 +182,47 @@ class _PartsTable(QWidget):
         old.hide(); old.setParent(None)
 
     def _add_part(self):
-        dlg = _PartDialog(parent=self)
-        if dlg.exec_() != QDialog.Accepted:
-            return
-        self._sub.parts.append(TracePart(id=self._next_id, **dlg.get_data()))
+        if self._flat:
+            dlg = _TaskDialog(parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            d = dlg.get_data()
+            task = TraceTask(id=1, **d)
+            self._sub.parts.append(TracePart(id=self._next_id, name=d['name'], tasks=[task]))
+        else:
+            dlg = _PartDialog(parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            self._sub.parts.append(TracePart(id=self._next_id, **dlg.get_data()))
         self._next_id += 1
         self._refresh_rows()
         self.changed.emit()
 
     def _edit_part(self, part: TracePart):
-        dlg = _PartDialog(part=part, parent=self)
-        if dlg.exec_() != QDialog.Accepted:
-            return
-        for k, v in dlg.get_data().items():
-            setattr(part, k, v)
+        if self._flat:
+            task = part.tasks[0] if part.tasks else None
+            dlg = _TaskDialog(task=task, parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            d = dlg.get_data()
+            part.name = d['name']
+            if part.tasks:
+                for k, v in d.items():
+                    setattr(part.tasks[0], k, v)
+            else:
+                part.tasks = [TraceTask(id=1, **d)]
+        else:
+            dlg = _PartDialog(part=part, parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            part.name = dlg.get_data()['name']
         self._refresh_rows()
         self.changed.emit()
 
     def _delete_part(self, part: TracePart):
         if not ask_yes_no_dialog(self, 'Delete Part',
-                                  f"Delete '{part.name}'? This cannot be undone."):
+                                  f"Delete '{part.name}' and all its tasks? This cannot be undone."):
             return
         self._sub.parts.remove(part)
-        self._refresh_rows()
-        self.changed.emit()
-
-    def _show_comments(self, part: TracePart):
-        _CommentsDialog(part, parent=self).exec_()
         self._refresh_rows()
         self.changed.emit()

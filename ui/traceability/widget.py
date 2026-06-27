@@ -7,8 +7,8 @@ from typing import List
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
 from PyQt5.QtCore import pyqtSignal, QTimer, QPoint, Qt
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
-from .models import TracePart, TraceSubStage, TraceStage, TraceComponent
-from .shared import _BG, _ACCENT
+from .models import TracePart, TraceTask, TraceStep, TraceSubStage, TraceStage, TraceComponent
+from .shared import _BG, _ACCENT, _SEL_BORDER
 from .row1_product_info import _ProductInfoRow
 from .row2_components import _ComponentsRow
 from .row3_timeline import _StageTimelineRow
@@ -50,13 +50,13 @@ class _ArrowConnector(QWidget):
         path.lineTo(x2, mid_y)
         path.lineTo(x2, tip_y - 9)   # stop just above arrowhead base
 
-        p.setPen(QPen(QColor(_ACCENT), 2, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin))
+        p.setPen(QPen(QColor(_SEL_BORDER), 2, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin))
         p.setBrush(Qt.NoBrush)
         p.drawPath(path)
 
         # Filled arrowhead pointing down
         p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(QColor(_ACCENT)))
+        p.setBrush(QBrush(QColor(_SEL_BORDER)))
         head = QPainterPath()
         head.moveTo(x2,     tip_y)
         head.lineTo(x2 - 6, tip_y - 9)
@@ -133,13 +133,16 @@ class TraceabilityWidget(QWidget):
         comp = self._components[idx]
         self._comp_row.load_components(self._components, idx)
         self._stage_row.load_stages(comp.stages, selected=0)
-        self._sub_panel.load_stage(comp.stages[0] if comp.stages else None)
+        self._sub_panel.load_stage(
+            comp.stages[0] if comp.stages else None,
+            is_main=comp.is_main,
+        )
         QTimer.singleShot(0, self._update_arrows)
 
     def _on_stage_selected(self, stage_idx: int):
         comp  = self._components[self._current_component]
         stage = comp.stages[stage_idx] if 0 <= stage_idx < len(comp.stages) else None
-        self._sub_panel.load_stage(stage)
+        self._sub_panel.load_stage(stage, is_main=comp.is_main)
         QTimer.singleShot(0, self._update_arrows)   # both arrows: comp→stage and stage→sub
 
     def _update_arrow1(self):
@@ -209,14 +212,29 @@ class TraceabilityWidget(QWidget):
     # ── serialisation ──────────────────────────────────────────────────────────
 
     def get_data(self) -> dict:
+        def _sstep(s: TraceStep) -> dict:
+            return {
+                'id': s.id, 'name': s.name,
+                'description': s.description,
+                'status': s.status, 'progress': s.progress,
+            }
+
+        def _stask(t: TraceTask) -> dict:
+            return {
+                'id': t.id, 'name': t.name,
+                'subject': t.subject, 'performed_by': t.performed_by,
+                'suppliers': t.suppliers, 'action': t.action,
+                'current_task': t.current_task,
+                'start_date': t.start_date, 'due_date': t.due_date,
+                'status': t.status, 'progress': t.progress,
+                'comments': t.comments,
+                'steps': [_sstep(s) for s in t.steps],
+            }
+
         def _sp(p: TracePart) -> dict:
             return {
-                'id': p.id, 'name': p.name, 'subject': p.subject,
-                'suppliers': p.suppliers, 'action': p.action,
-                'current_task': p.current_task,
-                'start_date': p.start_date, 'due_date': p.due_date,
-                'status': p.status, 'progress': p.progress,
-                'comments': p.comments,
+                'id': p.id, 'name': p.name,
+                'tasks': [_stask(tk) for tk in p.tasks],
             }
 
         def _ss(s: TraceSubStage) -> dict:
@@ -236,15 +254,16 @@ class TraceabilityWidget(QWidget):
             }
 
         return {
-            'version':           2,
+            'version':           3,
             'current_component': self._current_component,
             'extra':             self._info_row.get_extra_data(),
             'components':        [_sc(c) for c in self._components],
         }
 
     def set_data(self, data: dict):
-        if data.get('version', 1) < 2:
-            return  # old step-based format — start fresh
+        version = data.get('version', 1)
+        if version < 2:
+            return  # too old — start fresh
 
         components = []
         for cd in data.get('components', []):
@@ -252,21 +271,55 @@ class TraceabilityWidget(QWidget):
             for sd in cd.get('stages', []):
                 sub_stages = []
                 for ssd in sd.get('sub_stages', []):
-                    parts = [
-                        TracePart(
-                            id=pd['id'], name=pd.get('name', 'Part'),
-                            subject=pd.get('subject', ''),
-                            suppliers=pd.get('suppliers', ''),
-                            action=pd.get('action', ''),
-                            current_task=pd.get('current_task', ''),
-                            start_date=pd.get('start_date', ''),
-                            due_date=pd.get('due_date', ''),
-                            status=pd.get('status', 'Upcoming'),
-                            progress=pd.get('progress', 0),
-                            comments=pd.get('comments', []),
-                        )
-                        for pd in ssd.get('parts', [])
-                    ]
+                    parts = []
+                    for pd in ssd.get('parts', []):
+                        if version >= 3 and 'tasks' in pd:
+                            # v3: full nested structure
+                            tasks = []
+                            for i, td in enumerate(pd.get('tasks', [])):
+                                steps = [
+                                    TraceStep(
+                                        id=s.get('id', i2 + 1),
+                                        name=s.get('name', 'Step'),
+                                        description=s.get('description', ''),
+                                        status=s.get('status', 'Upcoming'),
+                                        progress=s.get('progress', 0),
+                                    )
+                                    for i2, s in enumerate(td.get('steps', []))
+                                ]
+                                tasks.append(TraceTask(
+                                    id=td.get('id', i + 1),
+                                    name=td.get('name', 'Task'),
+                                    subject=td.get('subject', ''),
+                                    performed_by=td.get('performed_by', ''),
+                                    suppliers=td.get('suppliers', ''),
+                                    action=td.get('action', ''),
+                                    current_task=td.get('current_task', ''),
+                                    start_date=td.get('start_date', ''),
+                                    due_date=td.get('due_date', ''),
+                                    status=td.get('status', 'Upcoming'),
+                                    progress=td.get('progress', 0),
+                                    comments=td.get('comments', []),
+                                    steps=steps,
+                                ))
+                            parts.append(TracePart(id=pd['id'], name=pd.get('name', 'Part'), tasks=tasks))
+                        else:
+                            # v2 backward compat: flat TracePart → one TraceTask per part
+                            task = TraceTask(
+                                id=1,
+                                name=pd.get('name', 'Task'),
+                                subject=pd.get('subject', ''),
+                                performed_by=pd.get('performed_by', ''),
+                                suppliers=pd.get('suppliers', ''),
+                                action=pd.get('action', ''),
+                                current_task=pd.get('current_task', ''),
+                                start_date=pd.get('start_date', ''),
+                                due_date=pd.get('due_date', ''),
+                                status=pd.get('status', 'Upcoming'),
+                                progress=pd.get('progress', 0),
+                                comments=pd.get('comments', []),
+                            )
+                            parts.append(TracePart(id=pd['id'], name=pd.get('name', 'Part'), tasks=[task]))
                     sub_stages.append(TraceSubStage(id=ssd['id'], name=ssd.get('name', 'Sub-stage'), parts=parts))
                 stages.append(TraceStage(
                     id=sd['id'], number=sd.get('number', 1),
