@@ -38,7 +38,7 @@ class TargetDatesCard(QFrame):
         notes_lbl = QLabel(t('project.brief.s4_notes'))
         notes_lbl.setStyleSheet(LABEL_STYLE)
         layout.addWidget(notes_lbl)
-        self._f_date_notes = make_textarea(t('project.brief.s4_notes_ph'), 60)
+        self._f_date_notes = make_textarea(t('project.brief.s4_notes_ph'), 90)
         layout.addWidget(self._f_date_notes)
         layout.addStretch()
 

@@ -35,7 +35,7 @@ class HeaderSection(QWidget):
     def _build(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 4, 0)
-        root.setSpacing(8)
+        root.setSpacing(14)
 
         # ── Top strip: logo | meeting title | launch deadline ──
         top = QFrame()
@@ -46,17 +46,17 @@ class HeaderSection(QWidget):
             }}
         """)
         tl = QHBoxLayout(top)
-        tl.setContentsMargins(10, 8, 10, 8)
-        tl.setSpacing(10)
+        tl.setContentsMargins(14, 12, 14, 12)
+        tl.setSpacing(14)
 
         # Company logo
         self._logo_btn = QPushButton(t("project.report.header_add_logo"))
-        self._logo_btn.setFixedSize(110, 60)
+        self._logo_btn.setFixedSize(150, 90)
         self._logo_btn.setCursor(Qt.PointingHandCursor)
         self._logo_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 1px dashed {_BORDER};
-                border-radius: 6px; color: {_MUTED}; font-size: 9px;
+                border-radius: 8px; color: {_MUTED}; font-size: 12px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
@@ -69,13 +69,13 @@ class HeaderSection(QWidget):
 
         # Project photo — created here, inserted into the Company card below (not the top strip)
         self._project_photo_btn = QPushButton(t("project.report.header_add_photo"))
-        self._project_photo_btn.setFixedWidth(110)
+        self._project_photo_btn.setFixedWidth(140)
         self._project_photo_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._project_photo_btn.setCursor(Qt.PointingHandCursor)
         self._project_photo_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #f1f3f5; border: 1px dashed {_BORDER};
-                border-radius: 6px; color: {_MUTED}; font-size: 9px;
+                border-radius: 8px; color: {_MUTED}; font-size: 12px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
@@ -98,17 +98,17 @@ class HeaderSection(QWidget):
 
         # Title + project fields
         mid = QVBoxLayout()
-        mid.setSpacing(4)
+        mid.setSpacing(10)
 
         title_row = QHBoxLayout()
         meeting_lbl = QLabel(t("project.report.header_meeting_of"))
         meeting_lbl.setStyleSheet(
-            f"color: {_HDR_TEXT}; font-size: 13px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_HDR_TEXT}; font-size: 18px; font-weight: bold; background: transparent; border: none;"
         )
         from ui.date_picker import EctoDateEdit
         self._date_edit = EctoDateEdit()
-        self._date_edit.setFixedHeight(26)
-        self._date_edit.setFixedWidth(110)
+        self._date_edit.setFixedHeight(38)
+        self._date_edit.setFixedWidth(150)
         if self._report.date:
             d = QDate.fromString(self._report.date, "dd/MM/yyyy")
             if d.isValid():
@@ -124,7 +124,7 @@ class HeaderSection(QWidget):
         mid.addLayout(title_row)
 
         proj_row = QHBoxLayout()
-        proj_row.setSpacing(8)
+        proj_row.setSpacing(12)
         self._f_project = _field(t("project.report.header_project_name"))
         self._f_project.setText(self._report.project_name)
         self._f_project.textChanged.connect(
@@ -145,11 +145,11 @@ class HeaderSection(QWidget):
         dl_col.setSpacing(4)
         dl_lbl = QLabel(t("project.report.header_launch"))
         dl_lbl.setStyleSheet(
-            f"color: {_HDR_TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_HDR_TEXT}; font-size: 14px; font-weight: bold; background: transparent; border: none;"
         )
         self._f_deadline = _field(t("project.report.header_date_ph"))
         self._f_deadline.setText(self._report.launch_deadline)
-        self._f_deadline.setFixedWidth(120)
+        self._f_deadline.setFixedWidth(150)
         self._f_deadline.textChanged.connect(
             lambda v: setattr(self._report, 'launch_deadline', v) or self.changed.emit()
         )
@@ -219,27 +219,28 @@ class HeaderSection(QWidget):
         # ── Present Attendees ──
         att_card = _card()
         al = QVBoxLayout(att_card)
-        al.setContentsMargins(10, 8, 10, 8)
-        al.setSpacing(6)
+        al.setContentsMargins(12, 10, 12, 12)
+        al.setSpacing(10)
 
         att_header = QHBoxLayout()
         att_lbl = QLabel(t("project.report.header_attendees"))
         att_lbl.setStyleSheet(
-            f"color: {_MUTED}; font-size: 10px; font-weight: bold; background: transparent; border: none;"
+            f"color: {_MUTED}; font-size: 14px; font-weight: bold; background: transparent; border: none;"
         )
         att_header.addWidget(att_lbl)
         att_header.addStretch()
         self._add_attendee_btn = QPushButton(t("project.report.header_add_col"))
         self._add_attendee_btn.setStyleSheet(_BTN_OUTLINE)
-        self._add_attendee_btn.setFixedHeight(24)
+        self._add_attendee_btn.setFixedHeight(30)
         self._add_attendee_btn.setCursor(Qt.PointingHandCursor)
         self._add_attendee_btn.clicked.connect(self._add_attendee_col)
         att_header.addWidget(self._add_attendee_btn)
         al.addLayout(att_header)
 
         self._att_grid = QHBoxLayout()
-        self._att_grid.setSpacing(6)
-        self._att_col_widgets: List[tuple] = []
+        self._att_grid.setSpacing(10)
+        self._att_col_widgets: List[tuple] = []      # (hdr_inp, name_inp)
+        self._att_col_containers: List[QWidget] = [] # matching container widgets
         for att in self._report.attendees:
             self._add_att_col_widget(att)
         self._att_grid.addStretch()
@@ -260,17 +261,17 @@ class HeaderSection(QWidget):
         content = QWidget()
         content.setStyleSheet("background: transparent;")
         cl = QVBoxLayout(content)
-        cl.setContentsMargins(8, 6, 8, 6)
-        cl.setSpacing(4)
+        cl.setContentsMargins(12, 10, 12, 10)
+        cl.setSpacing(8)
 
         for label, attr in fixed_rows:
             r = QHBoxLayout()
-            r.setSpacing(6)
+            r.setSpacing(8)
             lbl = QLabel(label)
             lbl.setStyleSheet(
-                f"color: {_MUTED}; font-size: 10px; background: transparent; border: none;"
+                f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;"
             )
-            lbl.setFixedWidth(140)
+            lbl.setFixedWidth(160)
             inp = _field("")
             value = ""
             if attr == "_f_pm":   value = self._report.project_manager
@@ -310,23 +311,27 @@ class HeaderSection(QWidget):
             cl.addLayout(r)
 
         for extra in extras:
-            self._add_extra_row(cl, extra, at_end=True)
+            self._add_extra_row(cl, extra, extras, at_end=True)
 
         add_btn = QPushButton(t("project.report.header_add_row"))
         add_btn.setStyleSheet(_BTN_OUTLINE)
-        add_btn.setFixedHeight(24)
+        add_btn.setFixedHeight(30)
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.clicked.connect(lambda: self._add_extra(cl, extras, add_btn))
         cl.addWidget(add_btn, alignment=Qt.AlignLeft)
         row_l.addWidget(content, 1)
         return frame
 
-    def _add_extra_row(self, layout: QVBoxLayout, extra: CompanyRow, at_end: bool = False):
-        r = QHBoxLayout()
+    def _add_extra_row(self, layout: QVBoxLayout, extra: CompanyRow,
+                       extras: List[CompanyRow], at_end: bool = False):
+        row_w = QWidget()
+        row_w.setStyleSheet("background: transparent;")
+        r = QHBoxLayout(row_w)
+        r.setContentsMargins(0, 0, 0, 0)
         r.setSpacing(6)
         lbl_inp = _field(t("project.report.header_label_ph"))
         lbl_inp.setText(extra.label)
-        lbl_inp.setFixedWidth(140)
+        lbl_inp.setFixedWidth(160)
         lbl_inp.textChanged.connect(
             lambda v, e=extra: setattr(e, 'label', v) or self.changed.emit()
         )
@@ -335,40 +340,98 @@ class HeaderSection(QWidget):
         val_inp.textChanged.connect(
             lambda v, e=extra: setattr(e, 'value', v) or self.changed.emit()
         )
+        del_btn = QPushButton("×")
+        del_btn.setFixedSize(18, 18)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_MUTED};
+                border: none; font-size: 13px; font-weight: bold; padding: 0;
+            }}
+            QPushButton:hover {{ color: #ef4444; }}
+        """)
+        del_btn.clicked.connect(
+            lambda _, w=row_w, e=extra, ex=extras: self._remove_extra_row(w, e, ex)
+        )
         r.addWidget(lbl_inp)
         r.addWidget(val_inp, 1)
+        r.addWidget(del_btn)
         if at_end:
-            layout.addLayout(r)
+            layout.insertWidget(layout.count() - 1, row_w)
         else:
-            layout.insertLayout(layout.count() - 1, r)
+            layout.insertWidget(layout.count() - 1, row_w)
+
+    def _remove_extra_row(self, row_w: QWidget, extra: CompanyRow, extras: List[CompanyRow]):
+        if extra in extras:
+            extras.remove(extra)
+        row_w.hide()
+        row_w.setParent(None)
+        self.changed.emit()
 
     def _add_extra(self, layout: QVBoxLayout, extras: List[CompanyRow], btn: QPushButton):
         extra = CompanyRow("", "")
         extras.append(extra)
-        self._add_extra_row(layout, extra)
+        self._add_extra_row(layout, extra, extras)
         self.changed.emit()
 
     def _add_att_col_widget(self, att: AttendeeColumn):
-        col = QVBoxLayout()
-        col.setSpacing(3)
+        col_w = QWidget()
+        col_w.setStyleSheet("background: transparent;")
+        col_l = QVBoxLayout(col_w)
+        col_l.setContentsMargins(0, 0, 0, 0)
+        col_l.setSpacing(2)
+
+        del_row = QHBoxLayout()
+        del_row.setContentsMargins(0, 0, 0, 0)
+        del_row.addStretch()
+        del_btn = QPushButton("×")
+        del_btn.setFixedSize(14, 14)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_MUTED};
+                border: none; font-size: 11px; font-weight: bold; padding: 0;
+            }}
+            QPushButton:hover {{ color: #ef4444; }}
+        """)
+        del_btn.clicked.connect(
+            lambda _, w=col_w, a=att: self._remove_att_col(w, a)
+        )
+        del_row.addWidget(del_btn)
+        col_l.addLayout(del_row)
+
         hdr_inp = _field(t("project.report.header_col_ph"))
         hdr_inp.setText(att.header)
-        hdr_inp.setFixedWidth(110)
+        hdr_inp.setFixedWidth(140)
         hdr_inp.setStyleSheet(_INPUT + "QLineEdit { font-weight: bold; }")
         hdr_inp.textChanged.connect(
             lambda v, a=att: setattr(a, 'header', v) or self.changed.emit()
         )
         name_inp = _field(t("project.report.header_name_ph"))
         name_inp.setText(att.name)
-        name_inp.setFixedWidth(110)
+        name_inp.setFixedWidth(140)
         name_inp.textChanged.connect(
             lambda v, a=att: setattr(a, 'name', v) or self.changed.emit()
         )
-        col.addWidget(hdr_inp)
-        col.addWidget(name_inp)
+        col_l.addWidget(hdr_inp)
+        col_l.addWidget(name_inp)
+
         idx = self._att_grid.count() - 1
-        self._att_grid.insertLayout(idx, col)
+        self._att_grid.insertWidget(idx, col_w)
         self._att_col_widgets.append((hdr_inp, name_inp))
+        self._att_col_containers.append(col_w)
+
+    def _remove_att_col(self, col_w: QWidget, att: AttendeeColumn):
+        if att in self._report.attendees:
+            self._report.attendees.remove(att)
+        if col_w in self._att_col_containers:
+            idx = self._att_col_containers.index(col_w)
+            self._att_col_containers.pop(idx)
+            if idx < len(self._att_col_widgets):
+                self._att_col_widgets.pop(idx)
+        col_w.hide()
+        col_w.setParent(None)
+        self.changed.emit()
 
     def _add_attendee_col(self):
         att = AttendeeColumn("", "")
@@ -458,3 +521,12 @@ class HeaderSection(QWidget):
         for hdr, name in self._att_col_widgets:
             hdr.setReadOnly(True)
             name.setReadOnly(True)
+        for col_w in self._att_col_containers:
+            layout = col_w.layout()
+            if layout and layout.count() > 0:
+                del_row = layout.itemAt(0)
+                if del_row and del_row.layout():
+                    for j in range(del_row.layout().count()):
+                        item = del_row.layout().itemAt(j)
+                        if item and item.widget():
+                            item.widget().setEnabled(False)

@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
 from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, BTN_PRIMARY, BTN_SECONDARY
 from i18n import t
@@ -33,6 +34,7 @@ class ProjectBriefWidget(QWidget):
         self._edit_mode = False
         self._last_auto_title = ''
         self._last_auto_number = ''
+        self._last_auto_photo = ''
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
         self._set_edit_mode(False)
@@ -112,6 +114,7 @@ class ProjectBriefWidget(QWidget):
         layout.addLayout(row2)
 
         # Row 3: Components + Notes
+        self._s_components.setMinimumHeight(380)
         row3 = QHBoxLayout(); row3.setSpacing(16)
         row3.addWidget(self._s_components, 3)
         row3.addWidget(self._s_notes, 2)
@@ -196,3 +199,18 @@ class ProjectBriefWidget(QWidget):
         elif current_ref and current_ref == self._last_auto_number:
             self._s_overview._f_reference.setText('')
             self._last_auto_number = ''
+
+        photo = (info.get('photo_path') or '').strip()
+        current_photo = self._s_overview._image_path
+        if photo and photo != current_photo:
+            if not current_photo or current_photo == self._last_auto_photo:
+                pix = QPixmap(photo)
+                if not pix.isNull():
+                    self._s_overview._image_path = photo
+                    self._s_overview._apply_image(pix)
+                    self._last_auto_photo = photo
+        elif not photo and current_photo and current_photo == self._last_auto_photo:
+            self._s_overview._image_path = ''
+            self._s_overview._img_btn.setIcon(QIcon())
+            self._s_overview._img_btn.setText(t('project.brief.s1_add_image'))
+            self._last_auto_photo = ''

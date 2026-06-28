@@ -398,16 +398,18 @@ class WeightDensityInputRow(QFrame):
         row_layout.setContentsMargins(14, 8, 14, 8)
         row_layout.setSpacing(8)
 
-        label = QLabel("Density")
-        label.setObjectName("weightLabel")
-        label.setStyleSheet(
+        self._density_label = QLabel(t("sidebar.density"))
+        self._density_label.setObjectName("weightLabel")
+        self._density_label.setStyleSheet(
             f"background-color: transparent; color: {default_theme.text_white};"
         )
         label_font = QFont()
         label_font.setPointSize(11)
         label_font.setBold(True)
-        label.setFont(label_font)
-        label.setMinimumWidth(label.fontMetrics().horizontalAdvance("Density") + 8)
+        self._density_label.setFont(label_font)
+        self._density_label.setMinimumWidth(
+            self._density_label.fontMetrics().horizontalAdvance(t("sidebar.density")) + 8
+        )
 
         self.density_input = QLineEdit()
         self.density_input.setObjectName("densityInput")
@@ -450,9 +452,12 @@ class WeightDensityInputRow(QFrame):
         )
         unit_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        row_layout.addWidget(label)
+        row_layout.addWidget(self._density_label)
         row_layout.addWidget(self.density_input, 1)
         row_layout.addWidget(unit_label)
+
+    def set_label(self, text: str):
+        self._density_label.setText(text)
 
     def set_density_silent(self, density: float):
         """Set numeric density without emitting densityChanged."""

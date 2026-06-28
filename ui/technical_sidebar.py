@@ -214,7 +214,7 @@ class TechnicalSidebar(QWidget):
         self.comments_label = _section_label(t("technical.comments"))
         layout.addWidget(self.comments_label)
         self.comments_edit = QTextEdit()
-        self.comments_edit.setPlaceholderText("Add notes, observations, or instructions…")
+        self.comments_edit.setPlaceholderText(t("technical.comments_placeholder"))
         self.comments_edit.setMinimumHeight(120)
         self.comments_edit.setMaximumHeight(250)
         self.comments_edit.setStyleSheet(f"""
@@ -357,6 +357,7 @@ class TechnicalSidebar(QWidget):
         self.start_date_label.setText(t("technical.start_date"))
         self.deadline_label.setText(t("technical.deadline"))
         self.comments_label.setText(t("technical.comments"))
+        self.comments_edit.setPlaceholderText(t("technical.comments_placeholder"))
         self.upload_btn.setText(t("technical.upload_btn"))
         self.annotate_btn.setText(t("technical.annotate"))
         self.export_btn.setText(t("technical.export_ecto"))

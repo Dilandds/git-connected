@@ -69,15 +69,17 @@ class _TaskDialog(FormModal):
         self.f_due.setPlaceholderText(t('project.traceability.date_ph'))
 
         status_cb = QComboBox()
-        status_cb.addItems([
-            t('project.traceability.status_upcoming'),
-            t('project.traceability.status_in_progress'),
-            t('project.traceability.status_completed'),
-        ])
+        for _key, _i18n in [
+            ('Upcoming',    'project.traceability.status_upcoming'),
+            ('In Progress', 'project.traceability.status_in_progress'),
+            ('Completed',   'project.traceability.status_completed'),
+        ]:
+            status_cb.addItem(t(_i18n), _key)
         if task:
-            idx = status_cb.findText(task.status)
-            if idx >= 0:
-                status_cb.setCurrentIndex(idx)
+            for _i in range(status_cb.count()):
+                if status_cb.itemData(_i) == task.status:
+                    status_cb.setCurrentIndex(_i)
+                    break
 
         progress_spin = QSpinBox()
         progress_spin.setRange(0, 100)
@@ -99,7 +101,7 @@ class _TaskDialog(FormModal):
             'current_task': self.f_task.toPlainText().strip(),
             'start_date':   self.f_start.text().strip(),
             'due_date':     self.f_due.text().strip(),
-            'status':       self.f_status.currentText(),
+            'status':       self.f_status.currentData(),
             'progress':     self.f_progress.value(),
         }
 
@@ -121,15 +123,17 @@ class _StepDialog(FormModal):
             self.f_desc.setPlainText(step.description)
 
         status_cb = QComboBox()
-        status_cb.addItems([
-            t('project.traceability.status_upcoming'),
-            t('project.traceability.status_in_progress'),
-            t('project.traceability.status_completed'),
-        ])
+        for _key, _i18n in [
+            ('Upcoming',    'project.traceability.status_upcoming'),
+            ('In Progress', 'project.traceability.status_in_progress'),
+            ('Completed',   'project.traceability.status_completed'),
+        ]:
+            status_cb.addItem(t(_i18n), _key)
         if step:
-            idx = status_cb.findText(step.status)
-            if idx >= 0:
-                status_cb.setCurrentIndex(idx)
+            for _i in range(status_cb.count()):
+                if status_cb.itemData(_i) == step.status:
+                    status_cb.setCurrentIndex(_i)
+                    break
 
         progress_spin = QSpinBox()
         progress_spin.setRange(0, 100)
@@ -146,7 +150,7 @@ class _StepDialog(FormModal):
         return {
             'name':        self.f_name.text().strip() or 'Step',
             'description': self.f_desc.toPlainText().strip(),
-            'status':      self.f_status.currentText(),
+            'status':      self.f_status.currentData(),
             'progress':    self.f_progress.value(),
         }
 
@@ -223,12 +227,16 @@ class _EditStageDialog(FormModal):
         self.f_name = self.add_field(t('project.traceability.stage_name'), QLineEdit(stage.name))
 
         self.f_status = self.add_field(t('project.traceability.status'), QComboBox())
-        self.f_status.addItems([
-            t('project.traceability.status_upcoming'),
-            t('project.traceability.status_in_progress'),
-            t('project.traceability.status_completed'),
-        ])
-        self.f_status.setCurrentText(stage.status)
+        for _key, _i18n in [
+            ('Upcoming',    'project.traceability.status_upcoming'),
+            ('In Progress', 'project.traceability.status_in_progress'),
+            ('Completed',   'project.traceability.status_completed'),
+        ]:
+            self.f_status.addItem(t(_i18n), _key)
+        for _i in range(self.f_status.count()):
+            if self.f_status.itemData(_i) == stage.status:
+                self.f_status.setCurrentIndex(_i)
+                break
 
         self.finish(delete=t('project.traceability.delete_stage_btn') if can_delete else None)
 

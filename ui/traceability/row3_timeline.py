@@ -12,7 +12,7 @@ from .models import TraceStage, TraceSubStage
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _ACCENT_H,
     _STATUS_COLORS, _TOOLTIP_STYLE, _BTN_DEL_CIRCLE, _MarqueeLabel,
-    _SEL_BG, _SEL_BORDER, _SEL_NUM,
+    _SEL_BG, _SEL_BORDER, _SEL_NUM, _translate_status,
 )
 from .dialogs import _EditStageDialog
 from i18n import t
@@ -235,7 +235,7 @@ class _StageTimelineRow(QWidget):
         dot = _StatusDot(status_color)
         st_row.addWidget(dot, 0, Qt.AlignVCenter)
 
-        st_lbl = QLabel(status)
+        st_lbl = QLabel(_translate_status(status))
         st_lbl.setStyleSheet(
             f'color: {status_color}; font-size: 12px; font-weight: 500;'
             f' background: transparent; border: none;'
@@ -294,7 +294,7 @@ class _StageTimelineRow(QWidget):
             n = dlg.f_name.text().strip()
             if n:
                 stage.name = n
-            stage.status = dlg.f_status.currentText()
+            stage.status = dlg.f_status.currentData()
             self._refresh()
             self.changed.emit()
         elif result == 2:

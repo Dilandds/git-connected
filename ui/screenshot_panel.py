@@ -189,67 +189,78 @@ class ScreenshotCard(QFrame):
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 2, 0, 0)
         actions.setSpacing(4)
-        _btn_font_px = 11 if sys.platform == 'win32' else 10
-        _btn_padding = "4px 7px" if sys.platform == 'win32' else "3px 6px"
+        _icon_btn_style = """
+            QToolTip {
+                color: #ffffff;
+                background-color: #1e2430;
+                border: 1px solid #3a4050;
+                padding: 3px 7px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+        """
+        _btn_size = 26
 
-        self.delete_btn = QPushButton("🗑 Delete")
+        self.delete_btn = QPushButton("🗑")
         self.delete_btn.setObjectName("screenshotDeleteBtn")
         self.delete_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_btn.setFixedSize(_btn_size, _btn_size)
+        self.delete_btn.setToolTip("Delete")
         self.delete_btn.setStyleSheet(f"""
             QPushButton#screenshotDeleteBtn {{
                 background-color: #FEE2E2;
                 color: #DC2626;
                 border: 1px solid #FECACA;
                 border-radius: 5px;
-                padding: {_btn_padding};
-                font-size: {_btn_font_px}px;
-                font-weight: bold;
+                font-size: 13px;
+                padding: 0;
             }}
             QPushButton#screenshotDeleteBtn:hover {{
                 background-color: #FCA5A5;
             }}
-        """)
+        """ + _icon_btn_style)
         self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.index))
         actions.addWidget(self.delete_btn)
 
-        self.save_btn = QPushButton("💾 Save")
+        self.save_btn = QPushButton("💾")
         self.save_btn.setObjectName("screenshotSaveBtn")
         self.save_btn.setCursor(Qt.PointingHandCursor)
+        self.save_btn.setFixedSize(_btn_size, _btn_size)
+        self.save_btn.setToolTip("Save to file")
         self.save_btn.setStyleSheet(f"""
             QPushButton#screenshotSaveBtn {{
                 background-color: #D1FAE5;
                 color: #059669;
                 border: 1px solid #A7F3D0;
                 border-radius: 5px;
-                padding: {_btn_padding};
-                font-size: {_btn_font_px}px;
-                font-weight: bold;
+                font-size: 13px;
+                padding: 0;
             }}
             QPushButton#screenshotSaveBtn:hover {{
                 background-color: #6EE7B7;
             }}
-        """)
+        """ + _icon_btn_style)
         self.save_btn.clicked.connect(lambda: self.save_requested.emit(self.index))
         actions.addWidget(self.save_btn)
 
-        self.report_btn = QPushButton("📋 Report")
+        self.report_btn = QPushButton("📋")
         self.report_btn.setObjectName("screenshotReportBtn")
         self.report_btn.setCursor(Qt.PointingHandCursor)
-        self.report_btn.setToolTip("Save this screenshot directly into the report's photo section")
+        self.report_btn.setFixedSize(_btn_size, _btn_size)
+        self.report_btn.setToolTip("Save to Report")
         self.report_btn.setStyleSheet(f"""
             QPushButton#screenshotReportBtn {{
                 background-color: #EDE9FE;
                 color: #7C3AED;
                 border: 1px solid #DDD6FE;
                 border-radius: 5px;
-                padding: {_btn_padding};
-                font-size: {_btn_font_px}px;
-                font-weight: bold;
+                font-size: 13px;
+                padding: 0;
             }}
             QPushButton#screenshotReportBtn:hover {{
                 background-color: #C4B5FD;
             }}
-        """)
+        """ + _icon_btn_style)
         self.report_btn.clicked.connect(lambda: self.save_to_report_requested.emit(self.index))
         actions.addWidget(self.report_btn)
 
@@ -307,6 +318,8 @@ class ScreenshotCard(QFrame):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        new_h = max(self.width() - 16, 80)
+        self.thumb_container.setFixedHeight(new_h)
         if self.pixmap is not None and not self.pixmap.isNull():
             self._update_thumbnail()
 
@@ -325,6 +338,9 @@ class ScreenshotCard(QFrame):
         title = self.name_edit.text().strip() or f"Image {self.index + 1}"
         editor = ScreenshotEditorDialog(self.pixmap, title=title, parent=self.window())
         editor.pixmap_updated.connect(self._on_pixmap_updated)
+        editor.save_to_report_requested.connect(
+            lambda px: self.save_to_report_requested.emit(self.index)
+        )
         editor.exec_()
 
     def _on_pixmap_updated(self, new_pixmap: QPixmap):
@@ -348,14 +364,13 @@ class ScreenshotPanel(QWidget):
         self.screenshots = []  # list of (QPixmap, timestamp_str)
         self.cards = []        # list of ScreenshotCard widgets
         self.setMinimumWidth(280)
-        self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
         self._init_ui()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 8, 4, 8)
+        layout.setSpacing(6)
 
         # Header — same card pattern as annotation mode banner (gradient + rim + dashed rule), orange palette
         banner = QFrame()
@@ -389,7 +404,7 @@ class ScreenshotPanel(QWidget):
         cam_icon.setStyleSheet("background: transparent; border: none; font-size: 16px;")
         title_row.addWidget(cam_icon)
         self.title_label = QLabel()
-        self.title_label.setFont(make_font(size=12, bold=True))
+        self.title_label.setFont(make_font(size=15, bold=True))
         self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(self.title_label)
         title_row.addStretch()
@@ -441,7 +456,7 @@ class ScreenshotPanel(QWidget):
         )
         self.instruction.setWordWrap(True)
         self.instruction.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
+            "color: rgba(255, 255, 255, 0.95); font-size: 15px; background: transparent; border: none;"
         )
         banner_layout.addWidget(self.instruction)
 
@@ -457,7 +472,7 @@ class ScreenshotPanel(QWidget):
         self.cards_container.setStyleSheet("background: transparent;")
         self.grid_layout = QGridLayout(self.cards_container)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(6)
+        self.grid_layout.setSpacing(4)
         self.grid_layout.setAlignment(Qt.AlignTop)
         self.grid_layout.setColumnStretch(0, 1)
         self.grid_layout.setColumnStretch(1, 1)
@@ -489,6 +504,17 @@ class ScreenshotPanel(QWidget):
         on_language_changed(self._update_texts)
         self._update_texts()
 
+    def _apply_card_widths(self):
+        """Force every card to exactly half the available inner width."""
+        inner_w = self.width() - 8  # 4px margin each side
+        card_w = max((inner_w - 4) // 2, 80)  # 4px grid gap, split evenly
+        for card in self.cards:
+            card.setFixedWidth(card_w)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_card_widths()
+
     def _rebuild_grid(self):
         """Rebuild the grid layout from the cards list."""
         # Remove all items from grid (without deleting widgets)
@@ -499,6 +525,7 @@ class ScreenshotPanel(QWidget):
             row = i // GRID_COLUMNS
             col = i % GRID_COLUMNS
             self.grid_layout.addWidget(card, row, col)
+        self._apply_card_widths()
 
     # ---- public API ----
 
@@ -518,6 +545,7 @@ class ScreenshotPanel(QWidget):
         row = idx // GRID_COLUMNS
         col = idx % GRID_COLUMNS
         self.grid_layout.addWidget(card, row, col)
+        self._apply_card_widths()
 
         self.clear_btn.setVisible(len(self.screenshots) > 0)
         _show_hint = len(self.screenshots) == 0
@@ -540,6 +568,7 @@ class ScreenshotPanel(QWidget):
         row = idx // GRID_COLUMNS
         col = idx % GRID_COLUMNS
         self.grid_layout.addWidget(card, row, col)
+        self._apply_card_widths()
         self.clear_btn.setVisible(True)
         self.instruction.hide()
         self._screenshot_banner_divider.hide()

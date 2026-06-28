@@ -627,12 +627,12 @@ class TimelineWidget(QWidget):
         return self._tabs_bar
 
     def _build_controls(self) -> QWidget:
-        controls = QWidget(); controls.setFixedHeight(36)
+        controls = QWidget(); controls.setFixedHeight(40)
         controls.setStyleSheet(f'background-color: {CARD}; border-bottom: 1px solid {BORDER};')
         layout = QHBoxLayout(controls); layout.setContentsMargins(12, 4, 12, 4); layout.setSpacing(6)
 
         lbl = QLabel(t('project.timeline.legend_label'))
-        lbl.setStyleSheet(f'color: {MUTED}; font-size: 11px; font-weight: bold; background: transparent; border: none;')
+        lbl.setStyleSheet(f'color: {MUTED}; font-size: 13px; font-weight: bold; background: transparent; border: none;')
         layout.addWidget(lbl)
 
         # Legend items live in their own container so we can rebuild without touching the rest
@@ -789,7 +789,7 @@ class TimelineWidget(QWidget):
         edit_btn.setStyleSheet(f"""
             QPushButton {{
                 color: {ACCENT}; background: transparent; border: none;
-                font-size: 12px; font-weight: bold; padding: 0 4px;
+                font-size: 13px; font-weight: bold; padding: 0 4px;
             }}
             QPushButton:hover {{ color: {MUTED}; }}
         """ + TOOLTIP_STYLE)
@@ -808,7 +808,7 @@ class TimelineWidget(QWidget):
     def _legend_btn_style(color: str) -> str:
         return f"""
             QPushButton {{
-                color: {color}; font-size: 11px;
+                color: {color}; font-size: 13px;
                 background: transparent; border: none; padding: 0 2px;
             }}
             QPushButton:hover {{

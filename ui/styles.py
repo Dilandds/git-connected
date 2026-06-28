@@ -723,6 +723,16 @@ def get_global_stylesheet(theme=None):
             padding-bottom: 6px;
             padding-left: 28px;
         }}
+        QTabBar#ectoTabBar::tab:first {{
+            min-width: 140px;
+            padding-top: 5px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            padding-left: 14px;
+            font-size: 12px;
+            font-family: {FONTS['family']};
+            font-weight: normal;
+        }}
         QTabBar#ectoTabBar::tab:last {{
             min-width: 32px;
             padding-top: 5px;

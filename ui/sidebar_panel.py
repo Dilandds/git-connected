@@ -90,13 +90,13 @@ class _DimColumn(QWidget):
         icon = _DimIcon(kind, 36)
         lay.addWidget(icon, alignment=Qt.AlignHCenter)
 
-        lbl = QLabel(label)
-        lbl.setAlignment(Qt.AlignCenter)
-        lbl.setWordWrap(True)
-        lbl.setStyleSheet(
+        self._label_lbl = QLabel(label)
+        self._label_lbl.setAlignment(Qt.AlignCenter)
+        self._label_lbl.setWordWrap(True)
+        self._label_lbl.setStyleSheet(
             "color: rgba(255,255,255,0.55); font-size: 13px; background: transparent; border: none;"
         )
-        lay.addWidget(lbl)
+        lay.addWidget(self._label_lbl)
 
         self._value_lbl = QLabel("--")
         self._value_lbl.setAlignment(Qt.AlignCenter)
@@ -111,7 +111,7 @@ class _DimColumn(QWidget):
         self._value_lbl.setText(text)
 
     def set_label(self, text: str):
-        pass   # labels are fixed in this design
+        self._label_lbl.setText(text)
 
 
 class _SurfaceCol(QWidget):
@@ -124,11 +124,11 @@ class _SurfaceCol(QWidget):
         lay.setContentsMargins(14, 12, 14, 12)
         lay.setSpacing(4)
 
-        lbl = QLabel(label)
-        lbl.setStyleSheet(
+        self._label_lbl = QLabel(label)
+        self._label_lbl.setStyleSheet(
             "color: rgba(255,255,255,0.5); font-size: 13px; background: transparent; border: none;"
         )
-        lay.addWidget(lbl)
+        lay.addWidget(self._label_lbl)
 
         self._value_lbl = QLabel("--")
         f = QFont(); f.setPointSize(14); f.setBold(True)
@@ -142,7 +142,7 @@ class _SurfaceCol(QWidget):
         self._value_lbl.setText(text)
 
     def set_label(self, text: str):
-        pass   # labels fixed in this design
+        self._label_lbl.setText(text)
 
 
 class _MaterialCombo(QComboBox):
@@ -735,7 +735,7 @@ class SidebarPanel(QWidget):
             return f
 
         # Material row (clickable — opens hidden combo popup)
-        self._material_display_row = _WeightInfoRow(t("sidebar.material") if hasattr(t("sidebar.material"), "__len__") else "Material", show_arrow=True)
+        self._material_display_row = _WeightInfoRow(t("sidebar.material"), show_arrow=True)
         self._material_display_row.setCursor(Qt.PointingHandCursor)
         self._material_display_row.mousePressEvent = lambda _: self._open_material_picker()
         inner_lay.addWidget(self._material_display_row)
@@ -787,10 +787,11 @@ class SidebarPanel(QWidget):
         card = QFrame()
         card.setObjectName("adjustWeightCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        
+
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(10)
+        self._adjust_weight_card_layout = card_layout
         
         # Header row: use QWidget (not QPushButton) so macOS does not paint an opaque
         # button plate behind the row; nested QPushButtons also confuse native styling.
@@ -807,6 +808,7 @@ class SidebarPanel(QWidget):
         header_layout = QHBoxLayout(self._adjust_weight_header)
         header_layout.setContentsMargins(0, 8, 0, 8)
         header_layout.setSpacing(8)
+        self._adjust_weight_header_layout = header_layout
         
         # QLabel instead of QPushButton — macOS still draws an opaque button plate on tiny flat buttons.
         self._adjust_weight_collapse_lbl = QLabel("▼" if self._adjust_weight_expanded else "▶")
@@ -1025,9 +1027,13 @@ class SidebarPanel(QWidget):
         
         card_layout.addWidget(self._adjust_weight_content)
         self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
-        
+
+        if not self._adjust_weight_expanded:
+            card_layout.setContentsMargins(16, 4, 16, 4)
+            header_layout.setContentsMargins(0, 2, 0, 2)
+
         self._style_section_card(card)
-        
+
         return card
     
     def _toggle_adjust_weight(self):
@@ -1036,6 +1042,12 @@ class SidebarPanel(QWidget):
         self._settings.setValue("adjust_weight_expanded", self._adjust_weight_expanded)
         self._adjust_weight_content.setVisible(self._adjust_weight_expanded)
         self._adjust_weight_collapse_lbl.setText("▼" if self._adjust_weight_expanded else "▶")
+        if self._adjust_weight_expanded:
+            self._adjust_weight_card_layout.setContentsMargins(16, 16, 16, 16)
+            self._adjust_weight_header_layout.setContentsMargins(0, 8, 0, 8)
+        else:
+            self._adjust_weight_card_layout.setContentsMargins(16, 4, 16, 4)
+            self._adjust_weight_header_layout.setContentsMargins(0, 2, 0, 2)
 
     def _toggle_surface_area(self):
         """Toggle the surface area collapsible section."""
@@ -1877,7 +1889,9 @@ class SidebarPanel(QWidget):
         self.surface_total_row.set_label(t("sidebar.total_area"))
         self.surface_cm_row.set_label(t("sidebar.area_cm2"))
         self.weight_title_label.setText(t("sidebar.estimated_weight"))
+        self._material_display_row.set_label(t("sidebar.material"))
         self.weight_volume_row.set_label(t("sidebar.volume"))
+        self.weight_density_row.set_label(t("sidebar.density"))
         self.weight_result_row.set_label(t("sidebar.estimated_weight_result"))
         self.adjust_weight_title_label.setText(t("sidebar.adjust_target_weight"))
         self.results_label.setText(t("sidebar.scaled_results"))

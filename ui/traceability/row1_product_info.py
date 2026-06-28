@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
-from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE
+from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE, _translate_status
 from .shared import _ProgressBar
 from i18n import t
 
@@ -228,7 +228,7 @@ class _ProductInfoRow(QFrame):
         if status and status != '—':
             color = _STATUS_COLORS.get(status, _MUTED)
             bg = color + '22'
-            self._status_lbl.setText(status)
+            self._status_lbl.setText(_translate_status(status))
             self._status_lbl.setStyleSheet(
                 f'color: {color}; background: {bg}; border: 1px solid {color}44;'
                 f'border-radius: 9px; padding: 2px 10px; font-size: 11px; font-weight: bold;'

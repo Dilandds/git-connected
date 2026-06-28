@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QFrame, QLabel, QSizePolicy, QWidget
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtGui import QColor, QPainter, QBrush, QFontMetrics
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
+from i18n import t
 
 _ARROW_URL = _get_arrow()
 
@@ -27,10 +28,23 @@ _SEL_BORDER = '#22c55e'   # green border / active colour
 _SEL_NUM    = '#16a34a'   # dark green for number labels
 
 _STATUS_COLORS = {
-    'Completed':   '#22c55e',
-    'In Progress': _ACCENT,
-    'Upcoming':    '#9ca3af',
+    'In Progress': '#22c55e',   # green  — actively being worked on
+    'Completed':   '#3b82f6',   # blue   — finished / accomplished
+    'Upcoming':    '#f59e0b',   # amber  — not yet started
 }
+
+# Maps canonical English key → i18n translation key
+_STATUS_I18N = {
+    'Upcoming':    'project.traceability.status_upcoming',
+    'In Progress': 'project.traceability.status_in_progress',
+    'Completed':   'project.traceability.status_completed',
+}
+
+
+def _translate_status(status: str) -> str:
+    """Return the translated display label for a canonical status string."""
+    key = _STATUS_I18N.get(status)
+    return t(key) if key else status
 
 _PART_PALETTE = [
     '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b',
@@ -166,7 +180,7 @@ def _field_label(text: str) -> QLabel:
 
 def _status_badge(status: str) -> QLabel:
     color = _STATUS_COLORS.get(status, _MUTED)
-    badge = QLabel(status)
+    badge = QLabel(_translate_status(status))
     badge.setStyleSheet(f"""
         QLabel {{
             background: {color}22; color: {color};

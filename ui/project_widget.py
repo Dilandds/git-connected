@@ -14,7 +14,7 @@ from typing import Optional, Type
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QFrame, QStackedWidget, QFileDialog, QMessageBox,
-    QLineEdit, QComboBox, QDialog, QScrollArea, QSizePolicy,
+    QLineEdit, QComboBox, QDialog, QScrollArea, QSizePolicy, QSplitter,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
@@ -49,14 +49,14 @@ _NAV_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT};
         color: white; border: none; border-radius: 6px;
-        padding: 8px 12px; font-size: 13px; font-weight: bold; text-align: left;
+        padding: 10px 14px; font-size: 15px; font-weight: bold; text-align: left;
     }}
 """
 
 _NAV_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED}; border: none;
-        border-radius: 6px; padding: 8px 12px; font-size: 13px; text-align: left;
+        border-radius: 6px; padding: 10px 14px; font-size: 15px; font-weight: bold; text-align: left;
     }}
     QPushButton:hover {{ background-color: #2a2e38; color: {_TEXT}; }}
 """
@@ -64,7 +64,7 @@ _NAV_INACTIVE = f"""
 _NAV_SUBNAV_ACTIVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 5px; padding: 5px 10px; font-size: 12px; text-align: left;
+        border-radius: 5px; padding: 7px 12px; font-size: 14px; text-align: left;
         font-weight: 600;
     }}
 """
@@ -72,7 +72,7 @@ _NAV_SUBNAV_ACTIVE = f"""
 _NAV_SUBNAV_INACTIVE = f"""
     QPushButton {{
         background-color: transparent; color: {_MUTED}; border: none;
-        border-radius: 5px; padding: 5px 10px; font-size: 12px; text-align: left;
+        border-radius: 5px; padding: 7px 12px; font-size: 14px; text-align: left;
     }}
     QPushButton:hover {{ background-color: #2a2e38; color: {_TEXT}; }}
 """
@@ -81,7 +81,7 @@ _BTN_TOOLBAR = f"""
     QPushButton {{
         background-color: #2e323a; color: {_TEXT};
         border: 1px solid {default_theme.border_light};
-        border-radius: 6px; font-size: 13px; padding: 4px 12px;
+        border-radius: 6px; font-size: 15px; padding: 4px 12px;
     }}
     QPushButton:hover {{ background-color: #3a3e48; border-color: {_ACCENT}; color: white; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; color: white; }}
@@ -91,7 +91,7 @@ _BTN_TOOLBAR = f"""
 _BTN_SAVE = f"""
     QPushButton {{
         background-color: {_ACCENT}; color: white; border: none;
-        border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 14px;
+        border-radius: 6px; font-size: 15px; font-weight: bold; padding: 4px 14px;
     }}
     QPushButton:hover {{ background-color: {_ACCENT_H}; }}
     QPushButton:pressed {{ background-color: {default_theme.button_primary_pressed}; }}
@@ -101,7 +101,7 @@ _BTN_SAVE = f"""
 _BTN_LOCK_ACTIVE = f"""
     QPushButton {{
         background-color: #92400e; color: #fde68a; border: 1px solid #b45309;
-        border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 12px;
+        border-radius: 6px; font-size: 15px; font-weight: bold; padding: 4px 12px;
     }}
     QPushButton:hover {{ background-color: #78350f; border-color: #d97706; }}
     QPushButton:pressed {{ background-color: #451a03; }}
@@ -111,16 +111,33 @@ _INFO_INPUT_STYLE = f"""
     QLineEdit {{
         background-color: #1e2228; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 12px;
+        padding: 3px 6px; font-size: 14px;
     }}
     QLineEdit:focus {{ border: 1px solid {_ACCENT}; }}
 """
 
+_STATUS_KEYS = ['in_progress', 'awaiting', 'completed', 'cancelled']
+
 _STATUS_COLORS = {
-    'In progress': '#4ade80',
-    'Awaiting':    '#facc15',
-    'Completed':   '#22d3ee',
-    'Cancelled':   '#f87171',
+    'in_progress': '#4ade80',
+    'awaiting':    '#facc15',
+    'completed':   '#22d3ee',
+    'cancelled':   '#f87171',
+}
+
+_STATUS_I18N = {
+    'in_progress': 'project.timeline.dlg_status_progress',
+    'awaiting':    'project.timeline.dlg_status_awaiting',
+    'completed':   'project.timeline.dlg_status_completed',
+    'cancelled':   'project.timeline.dlg_status_cancelled',
+}
+
+# Map legacy English strings saved by older project files to internal keys
+_STATUS_LEGACY_MAP = {
+    'In progress': 'in_progress',
+    'Awaiting':    'awaiting',
+    'Completed':   'completed',
+    'Cancelled':   'cancelled',
 }
 
 _CONTENT_BG   = '#ffffff'
@@ -136,7 +153,7 @@ def _status_combo_style(color: str) -> str:
         QComboBox {{
             background-color: #1e2228; color: {color};
             border: 1px solid {_BORDER}; border-radius: 4px;
-            padding: 3px 6px; font-size: 12px; font-weight: bold;
+            padding: 3px 6px; font-size: 14px; font-weight: bold;
         }}
         QComboBox:focus {{ border: 1px solid {_ACCENT}; }}
         QComboBox::drop-down {{ border: none; width: 16px; }}
@@ -205,7 +222,7 @@ class ProjectNavPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(210)
+        self.setMinimumWidth(160)
         self.setStyleSheet(f'background-color: {_SIDEBAR};')
         self._buttons: dict[str, QPushButton] = {}
         self._on_navigate = None
@@ -282,7 +299,7 @@ class ProjectNavPanel(QWidget):
                 background-color: #1e2228;
                 border: 1px dashed {_BORDER};
                 border-radius: 6px;
-                color: {_MUTED}; font-size: 11px;
+                color: {_MUTED}; font-size: 13px;
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
@@ -300,11 +317,11 @@ class ProjectNavPanel(QWidget):
             card_layout.addWidget(f)
 
         self._status_combo = QComboBox()
-        self._status_combo.addItems(list(_STATUS_COLORS.keys()))
+        self._populate_status_combo()
         self._status_combo.setFixedHeight(26)
-        self._status_combo.setStyleSheet(_status_combo_style(_STATUS_COLORS['In progress']))
-        self._status_combo.currentTextChanged.connect(self._on_status_changed)
-        self._status_combo.currentTextChanged.connect(lambda _: self.info_changed.emit())
+        self._status_combo.setStyleSheet(_status_combo_style(_STATUS_COLORS['in_progress']))
+        self._status_combo.currentIndexChanged.connect(self._on_status_changed)
+        self._status_combo.currentIndexChanged.connect(lambda _: self.info_changed.emit())
         card_layout.addWidget(self._status_combo)
 
         return card
@@ -332,7 +349,7 @@ class ProjectNavPanel(QWidget):
             btn = QPushButton(t(f'project.nav.{key}').replace('&', '&&'))
             btn.setStyleSheet(_NAV_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setMinimumHeight(34)
+            btn.setMinimumHeight(40)
             btn.setCheckable(True)
             btn.clicked.connect(lambda _, k=key: self._navigate(k))
             self._buttons[key] = btn
@@ -348,7 +365,7 @@ class ProjectNavPanel(QWidget):
                 for tab_key, tab_idx in _RD_SUB_TABS:
                     sb = QPushButton(t(tab_key))
                     sb.setCursor(Qt.PointingHandCursor)
-                    sb.setMinimumHeight(30)
+                    sb.setMinimumHeight(36)
                     sb.setCheckable(True)
                     sb.setStyleSheet(_NAV_SUBNAV_INACTIVE)
                     sb.clicked.connect(
@@ -361,8 +378,24 @@ class ProjectNavPanel(QWidget):
 
     # ── event handlers ────────────────────────────────────────────────────────
 
-    def _on_status_changed(self, text: str):
-        color = _STATUS_COLORS.get(text, _TEXT)
+    def _populate_status_combo(self):
+        """Fill the status combo with translated labels, storing internal keys as user data."""
+        current_key = self._status_combo.currentData() if self._status_combo.count() else 'in_progress'
+        self._status_combo.blockSignals(True)
+        self._status_combo.clear()
+        for key in _STATUS_KEYS:
+            self._status_combo.addItem(t(_STATUS_I18N[key]), key)
+        # Restore selection
+        for i in range(self._status_combo.count()):
+            if self._status_combo.itemData(i) == current_key:
+                self._status_combo.setCurrentIndex(i)
+                break
+        self._status_combo.blockSignals(False)
+        self._on_status_changed(self._status_combo.currentIndex())
+
+    def _on_status_changed(self, _index: int):
+        key = self._status_combo.currentData() or 'in_progress'
+        color = _STATUS_COLORS.get(key, _TEXT)
         self._status_combo.setStyleSheet(_status_combo_style(color))
 
     def _upload_photo(self):
@@ -425,7 +458,7 @@ class ProjectNavPanel(QWidget):
             'project_manager':  self._f_project_manager.text(),
             'start_date':       self._f_start_date.text(),
             'due_date':         self._f_due_date.text(),
-            'status':           self._status_combo.currentText(),
+            'status':           self._status_combo.currentData() or 'in_progress',
             'photo_path':       self._photo_path,
         }
 
@@ -436,10 +469,13 @@ class ProjectNavPanel(QWidget):
         self._f_project_manager.setText(data.get('project_manager', ''))
         self._f_start_date.setText(data.get('start_date', ''))
         self._f_due_date.setText(data.get('due_date', ''))
-        status = data.get('status', 'In progress')
-        idx = self._status_combo.findText(status)
-        if idx >= 0:
-            self._status_combo.setCurrentIndex(idx)
+        status = data.get('status', 'in_progress')
+        # Migrate legacy English display strings saved by older project files
+        status = _STATUS_LEGACY_MAP.get(status, status)
+        for i in range(self._status_combo.count()):
+            if self._status_combo.itemData(i) == status:
+                self._status_combo.setCurrentIndex(i)
+                break
         photo = data.get('photo_path', '')
         if photo:
             pix = QPixmap(photo)
@@ -464,10 +500,11 @@ class ProjectNavPanel(QWidget):
         self._f_start_date.setPlaceholderText(t('project.sidebar.start_date'))
         self._f_due_date.setPlaceholderText(t('project.sidebar.due_date'))
         for key, btn in self._buttons.items():
-            btn.setText(t(f'project.nav.{key}'))
+            btn.setText(t(f'project.nav.{key}').replace('&', '&&'))
         _rd_tab_keys = ['rd.tab_textures', 'rd.tab_techniques']
         for i, sb in enumerate(self._rd_sub_btns):
             sb.setText(t(_rd_tab_keys[i]))
+        self._populate_status_combo()
 
 
 # ── Login dialog ──────────────────────────────────────────────────────────────
@@ -480,7 +517,7 @@ class ProjectLoginDialog(FormModal):
 
         # Header text (above the standard field area)
         sub = QLabel(t('project.login.subtitle'))
-        sub.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
+        sub.setStyleSheet(f'color: {_MUTED}; font-size: 15px; background: transparent; border: none;')
         self._root.addWidget(sub)
         self._root.addWidget(self._make_hline())
 
@@ -494,7 +531,7 @@ class ProjectLoginDialog(FormModal):
 
         self._error_lbl = QLabel('')
         self._error_lbl.setStyleSheet(
-            'color: #ef4444; font-size: 12px; background: transparent; border: none;'
+            'color: #ef4444; font-size: 14px; background: transparent; border: none;'
         )
         self._error_lbl.setVisible(False)
         self._root.addWidget(self._error_lbl)
@@ -538,6 +575,7 @@ class TheProjectWidget(QWidget):
         self._current_screen_key: Optional[str] = None
         self._project_password_hash: Optional[str] = None  # SHA-256 hash; None = no protection
         self._component_syncing = False  # guard against brief↔traceability sync loops
+        self._logged_in_user: Optional[str] = None
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
@@ -550,20 +588,29 @@ class TheProjectWidget(QWidget):
     # ── construction ──────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.setChildrenCollapsible(False)
+        self._splitter.setHandleWidth(4)
+        self._splitter.setStyleSheet(f"""
+            QSplitter::handle:horizontal {{
+                background-color: {_BORDER};
+                width: 4px;
+            }}
+            QSplitter::handle:horizontal:hover {{
+                background-color: {default_theme.button_primary};
+            }}
+        """)
+        outer.addWidget(self._splitter)
 
         self._nav = ProjectNavPanel()
         self._nav.set_navigate_callback(self._on_navigate)
         self._nav.info_changed.connect(self.mark_unsaved)
         self._nav.info_changed.connect(self._on_project_info_changed)
-        layout.addWidget(self._nav)
-
-        div = QFrame()
-        div.setFrameShape(QFrame.VLine)
-        div.setStyleSheet(f'color: {_BORDER}; background-color: {_BORDER}; max-width: 1px; border: none;')
-        layout.addWidget(div)
+        self._splitter.addWidget(self._nav)
 
         right_panel = QWidget()
         right_panel.setStyleSheet(f'background-color: {_CONTENT_BG};')
@@ -576,7 +623,10 @@ class TheProjectWidget(QWidget):
         self._stack.setStyleSheet(f'background-color: {_CONTENT_BG};')
         right_layout.addWidget(self._stack, 1)
 
-        layout.addWidget(right_panel, 1)
+        self._splitter.addWidget(right_panel)
+        self._splitter.setSizes([240, 9999])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
 
         # Eagerly load only the default screen shown at startup
         self._nav.select('brief')
@@ -638,7 +688,7 @@ class TheProjectWidget(QWidget):
 
         self._project_name_lbl = QLabel(t('project.topbar.no_project'))
         self._project_name_lbl.setStyleSheet(
-            f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
+            f'color: {_MUTED}; font-size: 14px; background: transparent; border: none;'
         )
         layout.addSpacing(6)
         layout.addWidget(self._project_name_lbl)
@@ -658,7 +708,7 @@ class TheProjectWidget(QWidget):
         self._avatar.setStyleSheet(f"""
             QLabel {{
                 background-color: {_MUTED}; color: white; border-radius: 12px;
-                font-size: 13px; font-weight: bold; border: none;
+                font-size: 15px; font-weight: bold; border: none;
             }}
         """)
         self._user_btn = QPushButton(t('project.topbar.not_logged_in'))
@@ -667,7 +717,7 @@ class TheProjectWidget(QWidget):
         self._user_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_MUTED}; border: none;
-                font-size: 13px; font-weight: bold; padding: 0 2px;
+                font-size: 15px; font-weight: bold; padding: 0 2px;
             }}
             QPushButton:hover {{ color: white; }}
         """)
@@ -747,7 +797,9 @@ class TheProjectWidget(QWidget):
         title = label.split('\xa0')[-1].strip() if '\xa0' in label else label.strip()
         landscape = (key == 'timeline')
         from ui.print_utils import print_section
-        print_section(key, widget, title, self, landscape=landscape)
+        print_section(key, widget, title, self,
+                      landscape=landscape,
+                      project_info=self._nav.get_info_data())
 
     def _on_project_info_changed(self):
         info = self._nav.get_info_data()
@@ -857,6 +909,8 @@ class TheProjectWidget(QWidget):
         self._update_lock_btn()
         if not self._project_path:
             self._project_name_lbl.setText(t('project.topbar.no_project'))
+        if not self._logged_in_user:
+            self._user_btn.setText(t('project.topbar.not_logged_in'))
 
     def _on_language_changed(self):
         """Retranslate the shell UI and reload all content screens with preserved data."""
@@ -902,6 +956,7 @@ class TheProjectWidget(QWidget):
     # ── top bar ───────────────────────────────────────────────────────────────
 
     def set_user(self, username: str):
+        self._logged_in_user = username or None
         letter = username[0].upper() if username else '?'
         self._avatar.setText(letter)
         self._avatar.setStyleSheet(f"""
@@ -914,7 +969,7 @@ class TheProjectWidget(QWidget):
         self._user_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_TEXT}; border: none;
-                font-size: 13px; font-weight: bold; padding: 0 2px;
+                font-size: 15px; font-weight: bold; padding: 0 2px;
             }}
             QPushButton:hover {{ color: white; }}
         """)
@@ -1066,12 +1121,12 @@ class TheProjectWidget(QWidget):
             name = Path(self._project_path).stem
             self._project_name_lbl.setText(f'📄  {name}')
             self._project_name_lbl.setStyleSheet(
-                f'color: {_TEXT}; font-size: 12px; background: transparent; border: none;'
+                f'color: {_TEXT}; font-size: 14px; background: transparent; border: none;'
             )
         else:
             self._project_name_lbl.setText(t('project.topbar.no_project'))
             self._project_name_lbl.setStyleSheet(
-                f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
+                f'color: {_MUTED}; font-size: 14px; background: transparent; border: none;'
             )
 
     # ── autosave ──────────────────────────────────────────────────────────────

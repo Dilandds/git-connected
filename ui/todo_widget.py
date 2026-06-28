@@ -7,12 +7,12 @@ from datetime import datetime, timedelta
 from typing import Dict, Set
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCalendarWidget, QScrollArea, QFrame, QCheckBox, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
+    QScrollArea, QFrame, QCheckBox, QLineEdit,
     QComboBox, QTextEdit, QSizePolicy, QApplication,
 )
-from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, pyqtSignal
-from PyQt5.QtGui import QColor, QPainter, QBrush, QPen
+from PyQt5.QtCore import Qt, QTimer, QRectF, QPointF, QSize, pyqtSignal, QDate
+from PyQt5.QtGui import QColor, QPainter, QBrush, QPen, QPixmap, QIcon
 
 from ui.styles import default_theme, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
@@ -159,52 +159,237 @@ class NotificationBubble(QWidget):
         p.drawRoundedRect(0, 0, 5, self.height(), 3, 3)
 
 
-# ─── Custom calendar with dots ────────────────────────────────────────────────
+# ─── Custom calendar — date cell ─────────────────────────────────────────────
 
-class _DotCalendar(QCalendarWidget):
-    """Draws one coloured dot per task under each date cell."""
+class _DateCell(QWidget):
+    """Single day cell: paints number + coloured task dots via QPainter."""
+    clicked = pyqtSignal(object)   # emits QDate
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # date string → list of (priority, done)
-        self._date_tasks: Dict[str, list] = {}
+        self._qdate   = None
+        self._cur_mo  = True
+        self._today   = False
+        self._sel     = False
+        self._weekend = False
+        self._dots    = []   # list of (hex_color, done_bool)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumHeight(60)
 
-    def refresh(self, tasks: Dict[str, TodoTask]):
-        self._date_tasks = {}
-        for task in tasks.values():
-            self._date_tasks.setdefault(task.date, []).append(
-                (task.priority, task.done)
-            )
-        self.updateCells()
+    def configure(self, qdate, cur_mo, today, sel, weekend, dots):
+        self._qdate, self._cur_mo = qdate, cur_mo
+        self._today, self._sel    = today, sel
+        self._weekend, self._dots = weekend, dots
+        self.update()
 
-    def paintCell(self, painter: QPainter, rect, date):
-        super().paintCell(painter, rect, date)
-        ds = date.toString('yyyy-MM-dd')
-        entries = self._date_tasks.get(ds)
-        if not entries:
+    def paintEvent(self, _event):
+        if self._qdate is None:
             return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect())
 
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(Qt.NoPen)
-
-        r = 3
-        gap = 3
-        n = min(len(entries), 7)
-        total_w = n * (2 * r) + (n - 1) * gap
-        start_x = rect.center().x() - total_w // 2 + r
-        cy = rect.bottom() - r - 3
-
-        for i, (priority, done) in enumerate(entries[:n]):
-            if done:
-                color = QColor('#c4cdd8')          # grey — completed
+        if self._sel:
+            p.setBrush(QBrush(QColor(_ACCENT)))
+            p.setPen(Qt.NoPen)
+            p.drawRoundedRect(r.adjusted(3, 3, -3, -3), 10, 10)
+            txt = QColor('white')
+        elif self._today:
+            p.setBrush(QBrush(QColor(_ACCENT + '28')))
+            p.setPen(QPen(QColor(_ACCENT), 1.5))
+            p.drawRoundedRect(r.adjusted(3, 3, -3, -3), 10, 10)
+            txt = QColor(_ACCENT)
+        else:
+            if not self._cur_mo:
+                txt = QColor('#c8d0da')
+            elif self._weekend:
+                txt = QColor('#ef4444')
             else:
-                color = QColor(_PRIORITY[priority][0])
-            painter.setBrush(QBrush(color))
-            cx = start_x + i * (2 * r + gap)
-            painter.drawEllipse(cx - r, cy - r, r * 2, r * 2)
+                txt = QColor(_TEXT)
 
-        painter.restore()
+        p.setPen(txt)
+        f = p.font()
+        f.setPixelSize(14)
+        f.setBold(self._today or self._sel)
+        p.setFont(f)
+        p.drawText(
+            QRectF(r.left(), r.top() + 10, r.width(), r.height() - 22),
+            Qt.AlignHCenter | Qt.AlignTop,
+            str(self._qdate.day()),
+        )
+
+        if self._dots:
+            dr, gap = 3, 3
+            n  = min(len(self._dots), 5)
+            tw = n * (2 * dr) + (n - 1) * gap
+            sx = r.center().x() - tw / 2 + dr
+            cy = r.bottom() - 8
+            p.setPen(Qt.NoPen)
+            for i, (color, done) in enumerate(self._dots[:n]):
+                if self._sel:
+                    dc = QColor('white'); dc.setAlphaF(0.75)
+                else:
+                    dc = QColor('#c4cdd8' if done else color)
+                p.setBrush(QBrush(dc))
+                p.drawEllipse(QRectF(sx + i * (2*dr+gap) - dr, cy - dr, 2*dr, 2*dr))
+        p.end()
+
+    def mousePressEvent(self, _e):
+        if self._qdate is not None:
+            self.clicked.emit(self._qdate)
+
+
+# ─── Custom calendar widget ───────────────────────────────────────────────────
+
+class _CustomCalendar(QWidget):
+    """Full-featured month calendar — pure PyQt5, no QCalendarWidget."""
+    selectionChanged = pyqtSignal()
+    clicked          = pyqtSignal(object)   # QDate
+
+    _MONTHS = ['January','February','March','April','May','June',
+               'July','August','September','October','November','December']
+    _DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._tasks: Dict[str, list] = {}
+        self._today    = QDate.currentDate()
+        self._selected = QDate.currentDate()
+        self._year     = self._today.year()
+        self._month    = self._today.month()
+        self._cells: list = []
+        self._build()
+
+    def _build(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # Navigation bar
+        nav = QFrame()
+        nav.setObjectName('cal_nav')
+        nav.setStyleSheet(f'QFrame#cal_nav {{ background: {_ACCENT}; border-radius: 12px 12px 0 0; }}')
+        nav_row = QHBoxLayout(nav)
+        nav_row.setContentsMargins(14, 10, 14, 10)
+        nav_row.setSpacing(6)
+
+        _btn_ss = f"""
+            QPushButton {{
+                background: transparent; color: white; border: none;
+                font-size: 22px; font-weight: bold; border-radius: 6px; padding: 0 4px;
+            }}
+            QPushButton:hover {{ background: rgba(255,255,255,0.2); }}
+        """
+        self._prev_btn = QPushButton('‹')
+        self._prev_btn.setFixedSize(34, 34)
+        self._prev_btn.setCursor(Qt.PointingHandCursor)
+        self._prev_btn.setStyleSheet(_btn_ss)
+        self._prev_btn.clicked.connect(self._go_prev)
+
+        self._next_btn = QPushButton('›')
+        self._next_btn.setFixedSize(34, 34)
+        self._next_btn.setCursor(Qt.PointingHandCursor)
+        self._next_btn.setStyleSheet(_btn_ss)
+        self._next_btn.clicked.connect(self._go_next)
+
+        self._hdr_lbl = QLabel()
+        self._hdr_lbl.setStyleSheet(
+            'color: white; font-size: 15px; font-weight: bold; background: transparent;'
+        )
+
+        nav_row.addWidget(self._prev_btn)
+        nav_row.addStretch()
+        nav_row.addWidget(self._hdr_lbl)
+        nav_row.addStretch()
+        nav_row.addWidget(self._next_btn)
+        root.addWidget(nav)
+
+        # Day-name header row
+        day_row = QWidget()
+        day_row.setStyleSheet(f'background: {_CARD};')
+        day_hl = QHBoxLayout(day_row)
+        day_hl.setContentsMargins(10, 10, 10, 6)
+        day_hl.setSpacing(0)
+        for i, name in enumerate(self._DAYS):
+            lbl = QLabel(name)
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setStyleSheet(
+                f'color: {"#ef4444" if i >= 5 else _MUTED};'
+                f' font-size: 12px; font-weight: 600; background: transparent;'
+            )
+            day_hl.addWidget(lbl, 1)
+        root.addWidget(day_row)
+
+        # Cell grid
+        grid_w = QWidget()
+        grid_w.setStyleSheet(f'background: {_CARD}; border-radius: 0 0 12px 12px;')
+        self._grid = QGridLayout(grid_w)
+        self._grid.setContentsMargins(8, 4, 8, 10)
+        self._grid.setSpacing(2)
+        for row in range(6):
+            for col in range(7):
+                cell = _DateCell()
+                cell.clicked.connect(self._on_cell_clicked)
+                self._cells.append(cell)
+                self._grid.addWidget(cell, row, col)
+        root.addWidget(grid_w, 1)
+
+        self._refresh_grid()
+
+    def _refresh_grid(self):
+        self._hdr_lbl.setText(f'{self._MONTHS[self._month - 1]}   {self._year}')
+        first  = QDate(self._year, self._month, 1)
+        cur    = first.addDays(-(first.dayOfWeek() - 1))
+        for i, cell in enumerate(self._cells):
+            col    = i % 7
+            is_cur = (cur.month() == self._month and cur.year() == self._year)
+            cell.configure(
+                qdate   = cur,
+                cur_mo  = is_cur,
+                today   = (cur == self._today),
+                sel     = (cur == self._selected),
+                weekend = col >= 5,
+                dots    = self._tasks.get(cur.toString('yyyy-MM-dd'), []),
+            )
+            cur = cur.addDays(1)
+
+    def _on_cell_clicked(self, qdate):
+        old = self._selected
+        self._selected = qdate
+        if qdate.month() != self._month or qdate.year() != self._year:
+            self._year  = qdate.year()
+            self._month = qdate.month()
+        self._refresh_grid()
+        if old != self._selected:
+            self.selectionChanged.emit()
+        self.clicked.emit(qdate)
+
+    def _go_prev(self):
+        self._month -= 1
+        if self._month < 1:
+            self._month, self._year = 12, self._year - 1
+        self._refresh_grid()
+
+    def _go_next(self):
+        self._month += 1
+        if self._month > 12:
+            self._month, self._year = 1, self._year + 1
+        self._refresh_grid()
+
+    def selectedDate(self):
+        return self._selected
+
+    def refresh(self, tasks: dict):
+        self._tasks = {}
+        for task in tasks.values():
+            self._tasks.setdefault(task.date, []).append(
+                (_PRIORITY[task.priority][0], task.done)
+            )
+        self._refresh_grid()
+
+    def setVerticalHeaderFormat(self, _):
+        pass
 
 
 # ─── Custom check button ──────────────────────────────────────────────────────
@@ -432,6 +617,9 @@ class _DayPanel(QWidget):
 
         self._list_layout.addStretch()
 
+    def open_add_dialog(self):
+        self._add_task()
+
     def _add_task(self):
         dlg = TaskDialog(date_str=self._date_str, parent=self)
         if dlg.exec_():
@@ -511,24 +699,13 @@ class TodoWidget(QWidget):
         content = QHBoxLayout()
         content.setSpacing(20)
 
-        # Calendar card — cap the card, not the widget, so calendar fills naturally
-        cal_card = QFrame()
-        cal_card.setStyleSheet(
-            f'QFrame {{ background: {_CARD}; border-radius: 12px; border: 1px solid {_BORDER}; }}'
-        )
-        cal_card.setMaximumHeight(480)
-        cal_inner = QVBoxLayout(cal_card)
-        cal_inner.setContentsMargins(0, 0, 0, 0)
-        cal_inner.setSpacing(0)
-
-        self._calendar = _DotCalendar()
-        self._calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
+        # Calendar — custom widget, no wrapper card needed (it draws its own border)
+        self._calendar = _CustomCalendar()
         self._calendar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._calendar.setMinimumWidth(380)
-        self._style_calendar()
         self._calendar.selectionChanged.connect(self._on_date_selected)
-        cal_inner.addWidget(self._calendar)
-        content.addWidget(cal_card, 3)
+        self._calendar.clicked.connect(self._on_date_clicked)
+        content.addWidget(self._calendar, 3)
 
         # Day panel card
         panel_card = QFrame()
@@ -548,97 +725,14 @@ class TodoWidget(QWidget):
         root.addLayout(content, 1)
         self._on_date_selected()
 
-    def _style_calendar(self):
-        self._calendar.setStyleSheet(f"""
-            QCalendarWidget {{
-                background-color: {_CARD};
-                color: {_TEXT};
-                border: none;
-            }}
-            QCalendarWidget QAbstractItemView {{
-                background-color: {_CARD};
-                color: {_TEXT};
-                selection-background-color: {_ACCENT};
-                selection-color: white;
-                font-size: 13px;
-                outline: none;
-                border: none;
-            }}
-            QCalendarWidget QAbstractItemView:enabled {{
-                color: {_TEXT};
-            }}
-            QCalendarWidget QAbstractItemView:disabled {{
-                color: #c8d0da;
-            }}
-            QCalendarWidget QWidget#qt_calendar_navigationbar {{
-                background-color: {_ACCENT};
-                padding: 8px 6px;
-                border-radius: 11px 11px 0 0;
-            }}
-            QCalendarWidget QToolButton {{
-                background-color: transparent;
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 4px 12px;
-                border-radius: 6px;
-                border: none;
-            }}
-            QCalendarWidget QToolButton:hover {{
-                background-color: rgba(255,255,255,0.25);
-            }}
-            QCalendarWidget QToolButton::menu-indicator {{
-                image: none;
-            }}
-            QCalendarWidget QSpinBox {{
-                background-color: transparent;
-                color: white;
-                border: none;
-                font-size: 14px;
-                font-weight: bold;
-                selection-background-color: rgba(255,255,255,0.3);
-                selection-color: white;
-            }}
-            QCalendarWidget QMenu {{
-                background-color: white;
-                color: {_TEXT};
-                border: 1px solid {_BORDER};
-                border-radius: 6px;
-                font-size: 13px;
-                padding: 4px;
-            }}
-            QCalendarWidget QMenu::item {{
-                color: {_TEXT};
-                padding: 5px 20px;
-                border-radius: 4px;
-            }}
-            QCalendarWidget QMenu::item:selected {{
-                background-color: {_ACCENT};
-                color: white;
-            }}
-            QCalendarWidget QListView {{
-                background-color: white;
-                color: {_TEXT};
-                border: 1px solid {_BORDER};
-                border-radius: 6px;
-                font-size: 13px;
-                outline: none;
-            }}
-            QCalendarWidget QListView::item {{
-                color: {_TEXT};
-                padding: 3px 8px;
-            }}
-            QCalendarWidget QListView::item:selected {{
-                background-color: {_ACCENT};
-                color: white;
-            }}
-        """)
-
     # ── Slots ─────────────────────────────────────────────────────────────────
 
     def _on_date_selected(self):
         date_str = self._calendar.selectedDate().toString('yyyy-MM-dd')
         self._day_panel.set_date(date_str, self._tasks)
+
+    def _on_date_clicked(self, _qdate):
+        self._day_panel.open_add_dialog()
 
     def _on_tasks_changed(self):
         self._calendar.refresh(self._tasks)

@@ -24,12 +24,12 @@ VALIDATED_COLOR = '#4ade80'  # Light green - validated
 READER_UNREAD_COLOR = '#36cd2e'  # Green - unread in reader mode
 READER_READ_COLOR = '#1821b4'    # Blue - read in reader mode
 
-# Annotation mode top banner — warm leather / skeuomorphic (vertical gradient + bevel)
-_ANNO_LEATHER_TOP = '#D4926A'
-_ANNO_LEATHER_UPPER = '#B8653A'
-_ANNO_LEATHER_MID = '#A0522D'
-_ANNO_LEATHER_DEEP = '#6B3818'
-_ANNO_LEATHER_BOTTOM = '#4B2504'
+# Annotation mode top banner — blue/indigo gradient (matches screenshot/texture card style)
+_ANNO_LEATHER_TOP = '#64B5F6'
+_ANNO_LEATHER_UPPER = '#42A5F5'
+_ANNO_LEATHER_MID = '#1976D2'
+_ANNO_LEATHER_DEEP = '#1565C0'
+_ANNO_LEATHER_BOTTOM = '#0D47A1'
 
 # Dark annotation list cards — glassy teal slate (gradient + light rim on all sides)
 _ANNO_CARD_BORDER = """
@@ -389,26 +389,26 @@ class AnnotationCard(QFrame):
                 base_grad = _ANNO_CARD_VALIDATED
                 self.status_icon.setPixmap(_checkmark_pixmap(12, status_color))
                 self.status_icon.setVisible(True)
-                self.status_label.setText("Read")
+                self.status_label.setText(t("annotation.read"))
                 self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
             else:
                 base_grad = _ANNO_CARD_READER_UNREAD
                 self.status_icon.setPixmap(QPixmap())
                 self.status_icon.setVisible(False)
-                self.status_label.setText("Unread")
+                self.status_label.setText(t("annotation.unread"))
                 self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
         elif self.annotation.is_validated:
             validated_color = '#4ade80'   # light green
             base_grad = _ANNO_CARD_VALIDATED
             self.status_icon.setPixmap(_checkmark_pixmap(12, validated_color))
             self.status_icon.setVisible(True)
-            self.status_label.setText("Validated")
+            self.status_label.setText(t("annotation.validated"))
             self.status_label.setStyleSheet('color: %s; background: transparent;' % validated_color)
         else:
             base_grad = _ANNO_CARD_PENDING
             self.status_icon.setPixmap(QPixmap())
             self.status_icon.setVisible(False)
-            self.status_label.setText("Click to edit")
+            self.status_label.setText(t("annotation.click_to_edit"))
             self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
 
         # Style the clickable dot as a colored round button
@@ -505,8 +505,7 @@ class AnnotationPanel(QWidget):
     def init_ui(self):
         """Initialize the panel UI."""
         self.setMinimumWidth(280)
-        self.setMaximumWidth(350)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(8)
@@ -646,7 +645,7 @@ class AnnotationPanel(QWidget):
         self.content_layout.setAlignment(Qt.AlignTop)
         
         # Empty state
-        self.empty_label = QLabel("No annotations yet")
+        self.empty_label = QLabel(t("annotation.no_annotations_short"))
         self.empty_label.setAlignment(Qt.AlignCenter)
         self.empty_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 15px; padding: 20px;")
         self.content_layout.addWidget(self.empty_label)
@@ -815,6 +814,7 @@ class AnnotationPanel(QWidget):
         self.title_label.setText(t("annotation.panel_title"))
         self.instructions_label.setText(t("annotation.subtitle"))
         self.clear_btn.setText(t("annotation.clear_all"))
+        self.empty_label.setText(t("annotation.no_annotations_short"))
     
     def load_annotations(self, data: List[dict]):
         """Load annotations from serialized data."""

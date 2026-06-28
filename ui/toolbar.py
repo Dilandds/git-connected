@@ -7,7 +7,7 @@ import sys
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QLabel,
     QSizePolicy, QFrame, QSpacerItem, QApplication, QMenu, QAction,
-    QScrollArea, QWidgetAction,
+    QScrollArea, QWidgetAction, QSlider,
 )
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
 from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
@@ -137,7 +137,7 @@ class _PartsMenuRow(QWidget):
             pix_lbl.setFixedSize(12, 12)
         pix_lbl.setStyleSheet("background: transparent; border: none;")
 
-        txt = QLabel("Parts")
+        txt = QLabel(t("toolbar.parts"))
         txt.setFont(menu_font)
         txt.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px;")
 
@@ -165,10 +165,12 @@ class _PartsMenuRow(QWidget):
 # Toolbar chips: white background + black labels (selected tab uses dark style in styles.py)
 _TB_BG = "#ffffff"
 _TB_FG = "#000000"
-_TB_HOVER = "#f0f0f0"
+_TB_HOVER = "#F5F3FF"
+_TB_HOVER_BORDER = "#5B21B6"
 _TB_ACTIVE = "#c8c8c8"
 _TB_BORDER = "#d0d0d0"
 _TB_ACTIVE_BORDER = "#a8a8a8"
+_TB_SEP = "#5B21B6"
 
 
 def _toolbar_label_font(size=10):
@@ -340,12 +342,12 @@ class ToolbarButton(QPushButton):
             self.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {_TB_HOVER};
-                    border: 1px solid {_TB_BORDER};
+                    border: 1px solid {_TB_HOVER_BORDER};
                     border-radius: 6px;
                 }}
                 QPushButton:pressed {{
                     background-color: {_TB_ACTIVE};
-                    border: 1px solid {_TB_BORDER};
+                    border: 1px solid {_TB_HOVER_BORDER};
                     border-radius: 6px;
                 }}
             """ + TOOLTIP_STYLE)
@@ -439,6 +441,7 @@ class ViewControlsToolbar(QWidget):
     toggle_texture = pyqtSignal()
     toggle_draw = pyqtSignal()
     toggle_rotate = pyqtSignal()
+    rotate_speed_changed = pyqtSignal(float)
     toggle_record = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
@@ -497,7 +500,7 @@ class ViewControlsToolbar(QWidget):
                     stop:0 {default_theme.gradient_start},
                     stop:0.5 {default_theme.gradient_mid},
                     stop:1 {default_theme.gradient_end});
-                border-bottom: 1px solid {default_theme.border_standard};
+                border-bottom: 2px solid {_TB_SEP};
             }}
         """)
         
@@ -550,117 +553,185 @@ class ViewControlsToolbar(QWidget):
         self.toolbar_content.setObjectName("toolbarContent")
         content_layout = QHBoxLayout(self.toolbar_content)
         content_layout.setContentsMargins(10, 6, 10, 6)
-        content_layout.setSpacing(8)
-        
-        # === Display & Mode Controls ===
-        self.grid_btn = ToolbarButton("⊞", "Grid", "")
+        content_layout.setSpacing(6)
+
+        def _sep():
+            """Vertical divider between toolbar groups."""
+            line = QFrame()
+            line.setFrameShape(QFrame.VLine)
+            line.setFixedWidth(1)
+            line.setFixedHeight(20)
+            line.setStyleSheet(
+                f'background-color: {_TB_SEP}; border: none;'
+            )
+            return line
+
+        # ── Group 1: Scene display ────────────────────────────────────────────
+        self.grid_btn = ToolbarButton("⊞", t("toolbar.grid"), "")
         self.grid_btn.set_active(True)
         self.grid_btn.clicked.connect(self._on_grid_clicked)
         content_layout.addWidget(self.grid_btn)
-        
-        self.theme_btn = ToolbarButton("☀", "Light", "")
+
+        self.theme_btn = ToolbarButton("☀", t("toolbar.light"), "")
         self.theme_btn.clicked.connect(self._on_theme_clicked)
         content_layout.addWidget(self.theme_btn)
-        
-        self.render_mode_btn = ToolbarButton("◇", "Visual Style ▼", "")
+
+        self.render_mode_btn = ToolbarButton("◇", t("toolbar.visual_style"), "")
         self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
         content_layout.addWidget(self.render_mode_btn)
-        
-        # Spacer between groups
-        content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
-        
-        # === View Orientation Controls ===
-        self.reset_btn = ToolbarButton("↺", "Reset", "")
+
+        content_layout.addSpacing(2)
+        content_layout.addWidget(_sep())
+        content_layout.addSpacing(2)
+
+        # ── Group 2: Camera / navigation ─────────────────────────────────────
+        self.reset_btn = ToolbarButton("↺", t("toolbar.reset"), "")
         self.reset_btn.clicked.connect(self._on_reset_clicked)
         self.reset_btn.setEnabled(False)
         content_layout.addWidget(self.reset_btn)
-        
-        # 2D Views dropdown (six orthographic presets)
+
         self._current_view = "front"
         self.view_btn = ToolbarButton(
-            "⬚", "2D Views ▼",
-            "2D orthographic views: Front, Left, Right, Rear, Top, Bottom",
+            "⬚", t("toolbar.2d_views"),
+            t("toolbar.2d_views_tooltip"),
         )
         self.view_btn.clicked.connect(self._show_view_menu)
         self.view_btn.setEnabled(False)
         content_layout.addWidget(self.view_btn)
-        
-        # Spacer between groups
-        content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
-        
-        # === Utility Actions ===
+
+        content_layout.addSpacing(2)
+        content_layout.addWidget(_sep())
+        content_layout.addSpacing(2)
+
+        # ── Group 3: Markup / measurement ────────────────────────────────────
         _ruler_label_px = 12 if sys.platform == 'win32' else 10
         self.ruler_btn = ToolbarButton(
-            "📏", "Ruler", "Measure distances on the model", label_font_size=_ruler_label_px
+            "📏", t("toolbar.ruler"), t("toolbar.measure_tooltip"), label_font_size=_ruler_label_px
         )
         self.ruler_btn.clicked.connect(self._on_ruler_clicked)
-        self.ruler_btn.setEnabled(False)  # Disabled until model is loaded
+        self.ruler_btn.setEnabled(False)
         content_layout.addWidget(self.ruler_btn)
-        
+
         _anno_icon = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets", "annotation_icon.png"))
         self.annotation_btn = ToolbarButton(
-            "📝", "Annotation ▼", "Add annotations or 3D arrows",
+            "📝", t("toolbar.annotate"), t("toolbar.annotate_tooltip"),
             icon_path=_anno_icon if os.path.exists(_anno_icon) else None
         )
         self.annotation_btn.clicked.connect(self._show_annotate_menu)
-        self.annotation_btn.setEnabled(False)  # Disabled until model is loaded
+        self.annotation_btn.setEnabled(False)
         content_layout.addWidget(self.annotation_btn)
-        
-        self.screenshot_btn = ToolbarButton("📷", "Screenshot", "Capture a region of the 3D view")
+
+        self.draw_btn = ToolbarButton("🖊", t("toolbar.draw"), t("toolbar.draw_tooltip"))
+        self.draw_btn.clicked.connect(self._show_draw_menu)
+        self.draw_btn.setEnabled(False)
+        content_layout.addWidget(self.draw_btn)
+        self._eraser_active = False
+
+        content_layout.addSpacing(2)
+        content_layout.addWidget(_sep())
+        content_layout.addSpacing(2)
+
+        # ── Group 4: Capture / output ─────────────────────────────────────────
+        self.screenshot_btn = ToolbarButton("📷", t("toolbar.screenshot"), t("toolbar.screenshot_tooltip"))
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
-        self.screenshot_btn.setEnabled(False)  # Disabled until model is loaded
+        self.screenshot_btn.setEnabled(False)
         content_layout.addWidget(self.screenshot_btn)
 
-        self.rotate_btn = ToolbarButton("↻", "Rotate", "Spin the model in a continuous 360° turntable")
+        self.rotate_btn = ToolbarButton("↻", t("toolbar.rotate"), t("toolbar.rotate_tooltip"))
         self.rotate_btn.clicked.connect(self._on_rotate_clicked)
         self.rotate_btn.setEnabled(False)
         content_layout.addWidget(self.rotate_btn)
 
-        self.record_btn = ToolbarButton("⏺", "Record", "Record the 3D view as an MP4 video")
+        # ── Rotate speed control (shown only while rotating) ─────────────────
+        self._rotate_speed_widget = QWidget()
+        self._rotate_speed_widget.setStyleSheet("background: transparent;")
+        self._rotate_speed_widget.hide()
+        _rs_lay = QHBoxLayout(self._rotate_speed_widget)
+        _rs_lay.setContentsMargins(4, 0, 4, 0)
+        _rs_lay.setSpacing(4)
+
+        _rs_icon = QLabel("⚡")
+        _rs_icon.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 11px; background: transparent;")
+        _rs_lay.addWidget(_rs_icon)
+
+        self._rotate_speed_slider = QSlider(Qt.Horizontal)
+        self._rotate_speed_slider.setMinimum(2)
+        self._rotate_speed_slider.setMaximum(90)
+        self._rotate_speed_slider.setValue(15)
+        self._rotate_speed_slider.setFixedWidth(80)
+        self._rotate_speed_slider.setFixedHeight(18)
+        self._rotate_speed_slider.setToolTip("Rotation speed (°/sec)")
+        self._rotate_speed_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 4px;
+                background: {default_theme.border_standard};
+                border-radius: 2px;
+            }}
+            QSlider::handle:horizontal {{
+                width: 12px; height: 12px;
+                background: {default_theme.button_primary};
+                border-radius: 6px;
+                margin: -4px 0;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {default_theme.button_primary};
+                border-radius: 2px;
+            }}
+        """ + TOOLTIP_STYLE)
+        self._rotate_speed_slider.valueChanged.connect(self._on_rotate_speed_slider_changed)
+        _rs_lay.addWidget(self._rotate_speed_slider)
+
+        self._rotate_speed_label = QLabel("15°/s")
+        self._rotate_speed_label.setStyleSheet(
+            f"color: {default_theme.text_primary}; font-size: 10px; font-weight: bold; background: transparent; min-width: 30px;"
+        )
+        _rs_lay.addWidget(self._rotate_speed_label)
+
+        content_layout.addWidget(self._rotate_speed_widget)
+
+        self.record_btn = ToolbarButton("⏺", t("toolbar.record"), t("toolbar.record_tooltip"))
         self.record_btn.clicked.connect(self._on_record_clicked)
         self.record_btn.setEnabled(False)
         content_layout.addWidget(self.record_btn)
 
-        self.texture_btn = ToolbarButton("🎨", "Render mode", "Upload and apply textures to model parts")
-        self.texture_btn.clicked.connect(self._on_texture_clicked)
-        self.texture_btn.setEnabled(False)  # Disabled until model is loaded
-        content_layout.addWidget(self.texture_btn)
-        
-        self.draw_btn = ToolbarButton("🖊", "Draw ▼", "Freehand draw on model surface")
-        self.draw_btn.clicked.connect(self._show_draw_menu)
-        self.draw_btn.setEnabled(False)  # Disabled until model is loaded
-        content_layout.addWidget(self.draw_btn)
-        self._eraser_active = False
+        content_layout.addSpacing(2)
+        content_layout.addWidget(_sep())
+        content_layout.addSpacing(2)
 
-        # Parts button - hidden, state managed via Visual Style dropdown
-        self.parts_btn = ToolbarButton("🧩", "Parts", "Toggle part visibility and selection")
+        # ── Group 5: Appearance ───────────────────────────────────────────────
+        self.texture_btn = ToolbarButton("🎨", t("toolbar.texture"), t("toolbar.texture_tooltip"))
+        self.texture_btn.clicked.connect(self._on_texture_clicked)
+        self.texture_btn.setEnabled(False)
+        content_layout.addWidget(self.texture_btn)
+
+        # Parts button — hidden, accessed via Visual Style dropdown
+        self.parts_btn = ToolbarButton("🧩", t("toolbar.parts"), "")
         self.parts_btn.clicked.connect(self._on_parts_selected)
         self.parts_btn.setEnabled(False)
-        self.parts_btn.setVisible(False)  # Not shown in toolbar; accessed via Visual Style menu
-        
-        # Spacer before utility group
-        content_layout.addSpacerItem(QSpacerItem(16, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
+        self.parts_btn.setVisible(False)
 
-        # Convert button - always enabled
-        self.convert_btn = ToolbarButton("🔄", "Convert", "Convert between 3D file formats (3DM, STEP, STL)")
+        content_layout.addSpacing(2)
+        content_layout.addWidget(_sep())
+        content_layout.addSpacing(2)
+
+        # ── Group 6: File / window ────────────────────────────────────────────
+        self.convert_btn = ToolbarButton("🔄", t("toolbar.convert"), t("toolbar.convert_tooltip"))
         self.convert_btn.clicked.connect(self._on_convert_clicked)
         content_layout.addWidget(self.convert_btn)
 
-        self.fullscreen_btn = ToolbarButton("⛶", "Fullscreen", "")
+        self.fullscreen_btn = ToolbarButton("⛶", t("toolbar.fullscreen"), "")
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
-        
-        # Load button - icon only with tooltip for filename
+
         self.load_btn = ToolbarButton("📂", "", "Load or replace 3D file (STL/STEP/3DM/OBJ/IGES)")
         self.load_btn.clicked.connect(self._on_load_clicked)
         self.load_btn.setFixedWidth(44)
         content_layout.addWidget(self.load_btn)
-        
-        # Reset button - icon only to clear current model
+
         self.reset_model_btn = ToolbarButton("↻", "", "Clear current model from view")
         self.reset_model_btn.clicked.connect(self._on_reset_model_clicked)
         self.reset_model_btn.setFixedWidth(44)
-        self.reset_model_btn.setEnabled(False)  # Disabled until a model is loaded
+        self.reset_model_btn.setEnabled(False)
         content_layout.addWidget(self.reset_model_btn)
         
         # Apply tooltip styling for black text
@@ -747,10 +818,10 @@ class ViewControlsToolbar(QWidget):
         """Handle theme toggle."""
         self.dark_theme = not self.dark_theme
         if self.dark_theme:
-            self.theme_btn.set_label("Dark")
+            self.theme_btn.set_label(t("toolbar.dark"))
             self.theme_btn.set_icon("🌙")
         else:
-            self.theme_btn.set_label("Light")
+            self.theme_btn.set_label(t("toolbar.light"))
             self.theme_btn.set_icon("☀")
         self.theme_btn.set_active(self.dark_theme)
         self.toggle_theme.emit()
@@ -791,9 +862,9 @@ class ViewControlsToolbar(QWidget):
             """)
 
             modes = [
-                ("shaded", "◆", "Shaded"),
-                ("solid", "◇", "Solid"),
-                ("wireframe", "◈", "Wireframe"),
+                ("shaded",    "◆", t("toolbar.shaded")),
+                ("solid",     "◇", t("toolbar.solid")),
+                ("wireframe", "◈", t("toolbar.wireframe")),
             ]
             for mode_id, icon, label in modes:
                 action = menu.addAction(f"{icon}  {label}")
@@ -849,12 +920,12 @@ class ViewControlsToolbar(QWidget):
             }}
         """)
         views_2d = [
-            ("front", "⬚", "Front"),
-            ("left", "⊏", "Left"),
-            ("right", "⊐", "Right"),
-            ("rear", "⬛", "Rear"),
-            ("top", "⊤", "Top"),
-            ("bottom", "⊥", "Bottom"),
+            ("front",  "⬚", t("toolbar.front")),
+            ("left",   "⊏", t("toolbar.left")),
+            ("right",  "⊐", t("toolbar.right")),
+            ("rear",   "⬛", t("toolbar.rear")),
+            ("top",    "⊤", t("toolbar.top")),
+            ("bottom", "⊥", t("toolbar.bottom")),
         ]
         for view_id, icon, label in views_2d:
             action = menu.addAction(f"{icon}  {label}")
@@ -889,7 +960,7 @@ class ViewControlsToolbar(QWidget):
         self.render_mode = mode
         icons = {'solid': '◇', 'wireframe': '◈', 'shaded': '◆'}
         self.render_mode_btn.set_icon(icons[mode])
-        self.render_mode_btn.set_label("Visual Style ▼")
+        self.render_mode_btn.set_label(t("toolbar.visual_style"))
         self.render_mode_btn.set_active(mode != 'shaded')
         self.render_mode_changed.emit(mode)
     
@@ -901,7 +972,7 @@ class ViewControlsToolbar(QWidget):
         """Handle ruler toggle."""
         self.ruler_mode_enabled = not self.ruler_mode_enabled
         if self.ruler_mode_enabled:
-            self.ruler_btn.set_label("Ruler")
+            self.ruler_btn.set_label(t("toolbar.ruler"))
             self.ruler_btn.set_icon("📐")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
@@ -915,10 +986,10 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         else:
-            self.ruler_btn.set_label("Ruler")
+            self.ruler_btn.set_label(t("toolbar.ruler"))
             self.ruler_btn.set_icon("📏")
         self.ruler_btn.set_active(self.ruler_mode_enabled)
         self.toggle_ruler.emit()
@@ -946,12 +1017,12 @@ class ViewControlsToolbar(QWidget):
             }}
         """)
 
-        annotate_action = menu.addAction("📝  Annotation")
+        annotate_action = menu.addAction(f"📝  {t('toolbar.annotate_item')}")
         annotate_action.setCheckable(True)
         annotate_action.setChecked(self.annotation_mode_enabled)
         annotate_action.triggered.connect(self._on_annotation_selected)
 
-        arrow_action = menu.addAction("➤  3D Arrow")
+        arrow_action = menu.addAction(f"➤  {t('toolbar.arrow_3d_item')}")
         arrow_action.setCheckable(True)
         arrow_action.setChecked(self.arrow_mode_enabled)
         arrow_action.triggered.connect(self._on_arrow_selected)
@@ -969,7 +1040,7 @@ class ViewControlsToolbar(QWidget):
 
         self.annotation_mode_enabled = not self.annotation_mode_enabled
         if self.annotation_mode_enabled:
-            self.annotation_btn.set_label("Annotation ▼")
+            self.annotation_btn.set_label(t("toolbar.annotate"))
             self.annotation_btn.set_icon("✏️")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
@@ -986,10 +1057,10 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         else:
-            self.annotation_btn.set_label("Annotation ▼")
+            self.annotation_btn.set_label(t("toolbar.annotate"))
             self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(self.annotation_mode_enabled)
         self.toggle_annotation.emit()
@@ -1004,7 +1075,7 @@ class ViewControlsToolbar(QWidget):
 
         self.arrow_mode_enabled = not self.arrow_mode_enabled
         if self.arrow_mode_enabled:
-            self.annotation_btn.set_label("Arrow ▼")
+            self.annotation_btn.set_label(t("toolbar.arrow"))
             self.annotation_btn.set_icon("➤")
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
@@ -1021,10 +1092,10 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         else:
-            self.annotation_btn.set_label("Annotation ▼")
+            self.annotation_btn.set_label(t("toolbar.annotate"))
             self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(self.arrow_mode_enabled)
         self.toggle_arrow.emit()
@@ -1056,7 +1127,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         self.parts_btn.set_active(self.parts_mode_enabled)
         self.toggle_parts.emit()
@@ -1065,8 +1136,13 @@ class ViewControlsToolbar(QWidget):
         """Handle rotate mode toggle (no mode conflicts — rotate works alongside any other mode)."""
         self.rotate_mode_enabled = not self.rotate_mode_enabled
         self.rotate_btn.set_active(self.rotate_mode_enabled)
-        self.rotate_btn.set_label("Rotating…" if self.rotate_mode_enabled else "Rotate")
+        self.rotate_btn.set_label(t("toolbar.rotating") if self.rotate_mode_enabled else t("toolbar.rotate"))
+        self._rotate_speed_widget.setVisible(self.rotate_mode_enabled)
         self.toggle_rotate.emit()
+
+    def _on_rotate_speed_slider_changed(self, value: int):
+        self._rotate_speed_label.setText(f"{value}°/s")
+        self.rotate_speed_changed.emit(float(value))
 
     def _on_record_clicked(self):
         """Handle record mode toggle — exits conflicting exclusive modes first."""
@@ -1093,10 +1169,10 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         self.record_btn.set_active(self.record_mode_enabled)
-        self.record_btn.set_label("● REC" if self.record_mode_enabled else "Record")
+        self.record_btn.set_label(t("toolbar.rec") if self.record_mode_enabled else t("toolbar.record"))
         self.toggle_record.emit()
 
     def _on_screenshot_clicked(self):
@@ -1123,7 +1199,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         self.screenshot_btn.set_active(self.screenshot_mode_enabled)
         self.toggle_screenshot.emit()
@@ -1151,7 +1227,7 @@ class ViewControlsToolbar(QWidget):
                 self.draw_mode_enabled = False
                 self._eraser_active = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
         self.texture_btn.set_active(self.texture_mode_enabled)
         self.toggle_texture.emit()
@@ -1188,10 +1264,10 @@ class ViewControlsToolbar(QWidget):
             def _exit_draw():
                 self.draw_mode_enabled = False
                 self.draw_btn.set_active(False)
-                self.draw_btn.set_label("Draw ▼")
+                self.draw_btn.set_label(t("toolbar.draw"))
                 self._hide_draw_extras()
                 self.toggle_draw.emit()
-            exit_action = menu.addAction("✕  Exit Draw Mode")
+            exit_action = menu.addAction(f"✕  {t('toolbar.exit_draw')}")
             exit_action.triggered.connect(_exit_draw)
             menu.addSeparator()
 
@@ -1200,19 +1276,19 @@ class ViewControlsToolbar(QWidget):
         tool_group.setExclusive(True)
 
         pen_active = self.draw_mode_enabled and not self._eraser_active and not self._draw_text_active
-        pen_action = menu.addAction("✏  Pen")
+        pen_action = menu.addAction(f"✏  {t('toolbar.pen')}")
         pen_action.setCheckable(True)
         pen_action.setChecked(pen_active)
         pen_action.triggered.connect(self._on_pen_tool_selected)
         tool_group.addAction(pen_action)
 
-        eraser_action = menu.addAction("🧹  Eraser")
+        eraser_action = menu.addAction(f"🧹  {t('toolbar.eraser')}")
         eraser_action.setCheckable(True)
         eraser_action.setChecked(self.draw_mode_enabled and self._eraser_active)
         eraser_action.triggered.connect(self._on_eraser_tool_selected)
         tool_group.addAction(eraser_action)
 
-        text_action = menu.addAction("T  Text")
+        text_action = menu.addAction(f"T  {t('toolbar.text_tool')}")
         text_action.setCheckable(True)
         text_action.setChecked(self.draw_mode_enabled and self._draw_text_active)
         text_action.triggered.connect(self._on_text_tool_selected)
@@ -1225,7 +1301,7 @@ class ViewControlsToolbar(QWidget):
         _fs_lay = QHBoxLayout(_fs_widget)
         _fs_lay.setContentsMargins(32, 3, 16, 3)
         _fs_lay.setSpacing(8)
-        _fs_lbl = QLabel("Font size:")
+        _fs_lbl = QLabel(t("toolbar.font_size"))
         _fs_lbl.setStyleSheet(
             f"color: {default_theme.text_primary}; font-size: 11px; background: transparent;"
         )
@@ -1271,18 +1347,18 @@ class ViewControlsToolbar(QWidget):
 
         menu.addSeparator()
 
-        color_action = menu.addAction("🎨  Pen Color")
+        color_action = menu.addAction(f"🎨  {t('toolbar.draw_color')}")
         color_action.triggered.connect(self.show_draw_color_picker)
 
-        undo_action = menu.addAction("↩  Undo Stroke")
+        undo_action = menu.addAction(f"↩  {t('toolbar.undo_stroke')}")
         undo_action.setEnabled(self.draw_mode_enabled)
         undo_action.triggered.connect(self.draw_undo_requested.emit)
 
-        undo_text_action = menu.addAction("↩  Undo Word")
+        undo_text_action = menu.addAction(f"↩  {t('toolbar.undo_word')}")
         undo_text_action.setEnabled(self.draw_mode_enabled)
         undo_text_action.triggered.connect(self.draw_undo_text_requested.emit)
 
-        clear_action = menu.addAction("🗑  Clear All")
+        clear_action = menu.addAction(f"🗑  {t('toolbar.clear_all')}")
         clear_action.setEnabled(self.draw_mode_enabled)
         clear_action.triggered.connect(self.draw_clear_requested.emit)
 
@@ -1315,7 +1391,7 @@ class ViewControlsToolbar(QWidget):
         self._ensure_draw_mode_on()
         self._eraser_active = False
         self._draw_text_active = False
-        self.draw_btn.set_label("Drawing ▼")
+        self.draw_btn.set_label(t("toolbar.drawing"))
         self.draw_eraser_toggled.emit(False)
         self.draw_text_toggled.emit(False)
         if was_off:
@@ -1326,7 +1402,7 @@ class ViewControlsToolbar(QWidget):
         self._ensure_draw_mode_on()
         self._eraser_active = True
         self._draw_text_active = False
-        self.draw_btn.set_label("Eraser ▼")
+        self.draw_btn.set_label(f"{t('toolbar.eraser')} ▼")
         self.draw_text_toggled.emit(False)
         self.draw_eraser_toggled.emit(True)
 
@@ -1336,7 +1412,7 @@ class ViewControlsToolbar(QWidget):
         self._ensure_draw_mode_on()
         self._eraser_active = False
         self._draw_text_active = True
-        self.draw_btn.set_label("Text ▼")
+        self.draw_btn.set_label(f"{t('toolbar.text_tool')} ▼")
         self.draw_eraser_toggled.emit(False)
         self.draw_text_toggled.emit(True)
         if was_off:
@@ -1346,7 +1422,7 @@ class ViewControlsToolbar(QWidget):
         """Toggle draw mode on/off."""
         self.draw_mode_enabled = not self.draw_mode_enabled
         if self.draw_mode_enabled:
-            self.draw_btn.set_label("Drawing ▼")
+            self.draw_btn.set_label(t("toolbar.drawing"))
             if self.parts_mode_enabled:
                 self.parts_mode_enabled = False
                 self.parts_btn.set_active(False)
@@ -1362,7 +1438,7 @@ class ViewControlsToolbar(QWidget):
             # Screenshot: do not clear flags here — main window must run _exit_screenshot_mode()
             # (overlay + panel). Clearing only the toolbar flag prevented that from running.
         else:
-            self.draw_btn.set_label("Draw ▼")
+            self.draw_btn.set_label(t("toolbar.draw"))
             self._eraser_active = False
             self.draw_eraser_toggled.emit(False)
             self._hide_draw_extras()
@@ -1373,7 +1449,7 @@ class ViewControlsToolbar(QWidget):
         """Toggle eraser mode."""
         self._eraser_active = not self._eraser_active
         self._draw_text_active = False
-        self.draw_btn.set_label("Eraser ▼" if self._eraser_active else "Drawing ▼")
+        self.draw_btn.set_label(f"{t('toolbar.eraser')} ▼" if self._eraser_active else t("toolbar.drawing"))
         self.draw_eraser_toggled.emit(self._eraser_active)
         self.draw_text_toggled.emit(False)
 
@@ -1383,7 +1459,7 @@ class ViewControlsToolbar(QWidget):
         if self._draw_text_active:
             self._eraser_active = False
             self.draw_eraser_toggled.emit(False)
-        self.draw_btn.set_label("Text ▼" if self._draw_text_active else "Drawing ▼")
+        self.draw_btn.set_label(f"{t('toolbar.text_tool')} ▼" if self._draw_text_active else t("toolbar.drawing"))
         self.draw_text_toggled.emit(self._draw_text_active)
 
     def _hide_draw_extras(self):
@@ -1395,7 +1471,7 @@ class ViewControlsToolbar(QWidget):
         self.draw_mode_enabled = False
         self._eraser_active = False
         self._draw_text_active = False
-        self.draw_btn.set_label("Draw ▼")
+        self.draw_btn.set_label(t("toolbar.draw"))
         self.draw_btn.set_active(False)
     
     def show_draw_color_picker(self):
@@ -1416,10 +1492,10 @@ class ViewControlsToolbar(QWidget):
         """Handle fullscreen toggle."""
         self.is_fullscreen = not self.is_fullscreen
         if self.is_fullscreen:
-            self.fullscreen_btn.set_label("Exit")
+            self.fullscreen_btn.set_label(t("toolbar.fullscreen_exit"))
             self.fullscreen_btn.set_icon("⛶")
         else:
-            self.fullscreen_btn.set_label("Fullscreen")
+            self.fullscreen_btn.set_label(t("toolbar.fullscreen"))
             self.fullscreen_btn.set_icon("⛶")
         self.fullscreen_btn.set_active(self.is_fullscreen)
         self.toggle_fullscreen.emit()
@@ -1432,7 +1508,7 @@ class ViewControlsToolbar(QWidget):
         """Keep label '2D Views ▼'; icon reflects current orthographic view."""
         icons = {"front": "⬚", "rear": "⬛", "left": "⊏", "right": "⊐", "top": "⊤", "bottom": "⊥"}
         self.view_btn.set_icon(icons.get(self._current_view, "⬚"))
-        self.view_btn.set_label("2D Views ▼")
+        self.view_btn.set_label(t("toolbar.2d_views"))
 
     def _restore_view_btn(self):
         """Restore 2D Views button icon after exiting Parts mode."""
@@ -1455,14 +1531,14 @@ class ViewControlsToolbar(QWidget):
     def reset_fullscreen_state(self):
         """Reset fullscreen button state (called when exiting fullscreen externally)."""
         self.is_fullscreen = False
-        self.fullscreen_btn.set_label("Fullscreen")
+        self.fullscreen_btn.set_label(t("toolbar.fullscreen"))
         self.fullscreen_btn.set_active(False)
     
     def reset_annotation_state(self):
         """Reset annotation button state (called when exiting annotation mode externally)."""
         self.annotation_mode_enabled = False
         self.arrow_mode_enabled = False
-        self.annotation_btn.set_label("Annotate ▼")
+        self.annotation_btn.set_label(t("toolbar.annotate"))
         self.annotation_btn.set_icon("📝")
         self.annotation_btn.set_active(False)
 
@@ -1470,7 +1546,7 @@ class ViewControlsToolbar(QWidget):
         """Reset arrow button state (called when exiting arrow mode externally)."""
         self.arrow_mode_enabled = False
         if not self.annotation_mode_enabled:
-            self.annotation_btn.set_label("Annotate ▼")
+            self.annotation_btn.set_label(t("toolbar.annotate"))
             self.annotation_btn.set_icon("📝")
             self.annotation_btn.set_active(False)
     
@@ -1488,31 +1564,32 @@ class ViewControlsToolbar(QWidget):
         """Reset rotate button state (called when stopping rotation externally)."""
         self.rotate_mode_enabled = False
         self.rotate_btn.set_active(False)
-        self.rotate_btn.set_label("Rotate")
+        self.rotate_btn.set_label(t("toolbar.rotate"))
+        self._rotate_speed_widget.hide()
 
     def reset_record_state(self):
         """Reset record button state (called when stopping recording externally)."""
         self.record_mode_enabled = False
         self.record_btn.set_active(False)
-        self.record_btn.set_label("Record")
-    
+        self.record_btn.set_label(t("toolbar.record"))
+
     def set_reader_mode(self, enabled: bool):
         """Enable or disable reader mode (disables annotation button)."""
         if enabled:
             self.annotation_btn.setEnabled(False)
-            self.annotation_btn.setToolTip("Annotations are read-only for this file")
+            self.annotation_btn.setToolTip(t("toolbar.reader_mode_tooltip"))
         else:
             # Re-enable only if model is loaded
             if self.stl_loaded:
                 self.annotation_btn.setEnabled(True)
-            self.annotation_btn.setToolTip("Add annotations to the model")
+            self.annotation_btn.setToolTip(t("toolbar.annotations_tooltip"))
     
     def set_loaded_filename(self, filename):
         """Update the load button tooltip to show the loaded filename."""
         if filename:
             self.load_btn.setToolTip(filename)
         else:
-            self.load_btn.setToolTip("Load or replace 3D file (STL/STEP/3DM/OBJ/IGES)")
+            self.load_btn.setToolTip(t("toolbar.load_tooltip"))
     
     def _apply_tooltip_style(self):
         """Tooltip style is defined centrally in get_global_stylesheet — nothing to do here."""
@@ -1539,14 +1616,18 @@ class ViewControlsToolbar(QWidget):
         self.texture_btn.set_label(t("toolbar.texture"))
         if self.draw_mode_enabled:
             if self._eraser_active:
-                self.draw_btn.set_label(t("toolbar.eraser") + " ▼")
+                self.draw_btn.set_label(f"{t('toolbar.eraser')} ▼")
+            elif self._draw_text_active:
+                self.draw_btn.set_label(f"{t('toolbar.text_tool')} ▼")
             else:
-                self.draw_btn.set_label(t("toolbar.draw").replace(" ▼", "ing ▼"))
+                self.draw_btn.set_label(t("toolbar.drawing"))
         else:
             self.draw_btn.set_label(t("toolbar.draw"))
         self.convert_btn.set_label(t("toolbar.convert"))
+        self.rotate_btn.set_label(t("toolbar.rotating") if self.rotate_mode_enabled else t("toolbar.rotate"))
+        self.record_btn.set_label(t("toolbar.rec") if self.record_mode_enabled else t("toolbar.record"))
         if self.is_fullscreen:
-            self.fullscreen_btn.set_label("Exit")
+            self.fullscreen_btn.set_label(t("toolbar.fullscreen_exit"))
         else:
             self.fullscreen_btn.set_label(t("toolbar.fullscreen"))
         self.ruler_btn.setToolTip(t("toolbar.measure_tooltip"))
@@ -1555,5 +1636,8 @@ class ViewControlsToolbar(QWidget):
         self.texture_btn.setToolTip(t("toolbar.texture_tooltip"))
         self.draw_btn.setToolTip(t("toolbar.draw_tooltip"))
         self.convert_btn.setToolTip(t("toolbar.convert_tooltip"))
+        self.rotate_btn.setToolTip(t("toolbar.rotate_tooltip"))
+        self.record_btn.setToolTip(t("toolbar.record_tooltip"))
+        self.view_btn.setToolTip(t("toolbar.2d_views_tooltip"))
         self.load_btn.setToolTip(t("toolbar.load_tooltip"))
         self.reset_model_btn.setToolTip(t("toolbar.clear_tooltip"))

@@ -28,14 +28,14 @@ _INPUT = f"""
     QLineEdit, QTextEdit, QDateEdit {{
         background-color: #f5f6f8; color: {_TEXT};
         border: 1px solid {_BORDER}; border-radius: 4px;
-        padding: 3px 6px; font-size: 15px;
+        padding: 4px 8px; font-size: 17px;
     }}
     QLineEdit:focus, QTextEdit:focus, QDateEdit:focus {{ border-color: {_ACCENT}; }}
     QLineEdit:read-only, QTextEdit:read-only {{
         background-color: #f1f3f5; color: {_MUTED};
     }}
-    QDateEdit::drop-down {{ border: none; width: 18px; }}
-    QDateEdit::down-arrow {{ image: url({_ARROW_URL}); width: 10px; height: 10px; }}
+    QDateEdit::drop-down {{ border: none; width: 20px; }}
+    QDateEdit::down-arrow {{ image: url({_ARROW_URL}); width: 12px; height: 12px; }}
 """
 
 # ── button styles ─────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ def _lbl(text: str, muted=True, bold=False, size=10) -> QLabel:
     return l
 
 
-def _field(placeholder: str = "", h: int = 26) -> QLineEdit:
+def _field(placeholder: str = "", h: int = 38) -> QLineEdit:
     w = QLineEdit()
     w.setPlaceholderText(placeholder)
     w.setStyleSheet(_INPUT)

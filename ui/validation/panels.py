@@ -17,7 +17,8 @@ from ui.styles import make_font
 
 from .models import (
     Stakeholder, ModificationRow, ActionRow, ValidationSession,
-    COST_CATEGORIES, SCHEDULE_MILESTONES,
+    COST_CATEGORIES, COST_CATEGORY_I18N_KEYS,
+    SCHEDULE_MILESTONES, MILESTONE_I18N_KEYS,
 )
 from .shared import (
     _BG, _CARD, _BORDER, _TEXT, _MUTED, _ACCENT,
@@ -26,7 +27,7 @@ from .shared import (
     _sep, _vdiv, _card_frame, _section_title, _lbl, _combo,
     _ProgressCell,
 )
-from i18n import t
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class _PhotoButton(QPushButton):
         self._apply_empty_style()
 
     def _apply_empty_style(self):
-        self.setText("+\nAdd photo")
+        self.setText(t("project.validation.add_photo"))
         self.setIcon(QIcon())
         self.setStyleSheet(f"""
             QPushButton {{
@@ -137,6 +138,7 @@ class PreparationPanel(QScrollArea):
         super().__init__(parent)
         self._session: Optional[ValidationSession] = None
         self._progress_cells: List[_ProgressCell] = []
+        self._milestone_name_labels: List[QLabel] = []
 
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
@@ -152,6 +154,7 @@ class PreparationPanel(QScrollArea):
         self._layout.setSpacing(14)
         self.setWidget(self._body)
         self._build_static()
+        on_language_changed(self._update_texts)
 
     def _build_static(self):
         hdr = QLabel(t("project.validation.prep_header"))
@@ -273,8 +276,8 @@ class PreparationPanel(QScrollArea):
         self._cost_table.setSelectionMode(QAbstractItemView.NoSelection)
         self._cost_table.setStyleSheet(_TABLE_STYLE)
 
-        for i, cat in enumerate(COST_CATEGORIES):
-            self._cost_table.setItem(i, 0, QTableWidgetItem(cat))
+        for i, key in enumerate(COST_CATEGORY_I18N_KEYS):
+            self._cost_table.setItem(i, 0, QTableWidgetItem(t(key)))
             self._cost_table.setItem(i, 1, QTableWidgetItem("—"))
 
         total_row = len(COST_CATEGORIES)
@@ -310,7 +313,7 @@ class PreparationPanel(QScrollArea):
         _NULL_DATE = QDate(2000, 1, 1)
 
         from ui.date_picker import EctoDateEdit
-        for idx, milestone in enumerate(SCHEDULE_MILESTONES):
+        for idx, key in enumerate(MILESTONE_I18N_KEYS):
             row_w = QWidget()
             row_w.setStyleSheet("background: transparent;")
             row_l = QHBoxLayout(row_w)
@@ -321,7 +324,7 @@ class PreparationPanel(QScrollArea):
             dot.setFixedWidth(14)
             dot.setStyleSheet(f"color: {_MUTED}; font-size: 13px; background: transparent; border: none;")
 
-            name_lbl = QLabel(milestone)
+            name_lbl = QLabel(t(key))
             name_lbl.setFixedWidth(120)
             name_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 14px; background: transparent; border: none;")
 
@@ -336,6 +339,7 @@ class PreparationPanel(QScrollArea):
             row_l.addWidget(de)
             sched_side.addWidget(row_w)
             self._milestone_indicators.append(dot)
+            self._milestone_name_labels.append(name_lbl)
             self._milestone_date_edits.append(de)
 
         sched_side.addStretch()
@@ -343,6 +347,19 @@ class PreparationPanel(QScrollArea):
         cl3.addLayout(split)
         self._layout.addWidget(card3)
         self._layout.addStretch()
+
+    # ── language ───────────────────────────────────────────────────────────────
+
+    def _update_texts(self):
+        for lbl, key in zip(self._milestone_name_labels, MILESTONE_I18N_KEYS):
+            lbl.setText(t(key))
+        for i, key in enumerate(COST_CATEGORY_I18N_KEYS):
+            item = self._cost_table.item(i, 0)
+            if item:
+                item.setText(t(key))
+        for btn in self._photo_btns:
+            if not btn._photo_path:
+                btn._apply_empty_style()
 
     # ── public ─────────────────────────────────────────────────────────────────
 

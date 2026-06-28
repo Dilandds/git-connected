@@ -1,14 +1,116 @@
 """Section 5 — Inspiration / Idea / Direction card."""
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
-from .shared import _MUTED, card, section_label, make_textarea, separator
+from typing import List, Optional
+
+from PyQt5.QtWidgets import (
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog,
+    QApplication,
+)
+from PyQt5.QtCore import Qt, QSize, QPoint
+from PyQt5.QtGui import QPixmap, QIcon, QCursor
+
+from .shared import (
+    _MUTED, _BORDER, _BORDER_L, _ACCENT, _ACCENT_H, _INPUT_BG,
+    card, section_label, make_textarea, separator,
+)
 from i18n import t
+
+_PHOTO_W = 160
+_PHOTO_H = 130
+
+
+_PHOTO_BTN_STYLE = f"""
+    QPushButton {{
+        background-color: {_INPUT_BG};
+        border: 1.5px dashed {_BORDER_L};
+        border-radius: 8px;
+        color: {_MUTED}; font-size: 10px; font-weight: bold;
+    }}
+    QPushButton:hover {{
+        border-color: {_ACCENT}; color: {_ACCENT};
+        background-color: #eff6ff;
+    }}
+"""
+
+_PHOTO_BTN_STYLE_FILLED = f"""
+    QPushButton {{
+        background-color: {_INPUT_BG};
+        border: 1.5px solid {_BORDER};
+        border-radius: 8px;
+    }}
+    QPushButton:hover {{
+        border-color: {_ACCENT};
+    }}
+"""
+
+
+class _HoverPreview(QFrame):
+    """Frameless floating widget that shows an enlarged photo on hover."""
+
+    def __init__(self, parent=None):
+        super().__init__(
+            parent,
+            Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint,
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self._lbl = QLabel(self)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(6, 6, 6, 6)
+        lay.addWidget(self._lbl)
+        self._lbl.setStyleSheet(
+            'border: 2px solid #d0d0d0; border-radius: 10px; background: #ffffff;'
+        )
+
+    def show_for(self, pixmap: QPixmap, global_pos: QPoint):
+        if pixmap.isNull():
+            return
+        preview = pixmap.scaled(680, 520, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._lbl.setPixmap(preview)
+        self._lbl.setFixedSize(preview.size())
+        self.adjustSize()
+        screen = QApplication.screenAt(global_pos)
+        x = global_pos.x() + 16
+        y = global_pos.y() - self.height() // 2
+        if screen:
+            sr = screen.availableGeometry()
+            if x + self.width() > sr.right():
+                x = global_pos.x() - self.width() - 16
+            y = max(sr.top() + 4, min(y, sr.bottom() - self.height() - 4))
+        self.move(x, y)
+        self.show()
+        self.raise_()
+
+
+class _PhotoBtn(QPushButton):
+    """Photo slot with hover-zoom preview."""
+
+    def __init__(self, preview: _HoverPreview, parent=None):
+        super().__init__(parent)
+        self._preview = preview
+        self._orig_pix: Optional[QPixmap] = None
+
+    def set_orig_pixmap(self, pix: Optional[QPixmap]):
+        self._orig_pix = pix
+
+    def enterEvent(self, event):
+        if self._orig_pix and not self._orig_pix.isNull():
+            self._preview.show_for(self._orig_pix, QCursor.pos())
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._preview.hide()
+        super().leaveEvent(event)
 
 
 class InspirationCard(QFrame):
-    """Section 5: Inspiration / Idea / Direction."""
+    """Section 5: Inspiration / Idea / Direction — compact textarea + 4 photo slots with hover zoom."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._photo_paths: List[str] = ['', '', '', '']
+        self._photo_btns:  List[_PhotoBtn] = []
+        self._edit_enabled = True
+        self._preview = _HoverPreview()
+
         c = card()
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
@@ -17,26 +119,86 @@ class InspirationCard(QFrame):
         layout.addWidget(separator())
 
         hint = QLabel(t('project.brief.s5_hint'))
-        hint.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+        hint.setStyleSheet(
+            f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+        )
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self._f_inspiration = make_textarea(
-            t('project.brief.s5_ph'),
-            min_height=120,
-        )
+        # ── Compact text area ──────────────────────────────────────────────
+        self._f_inspiration = make_textarea(t('project.brief.s5_ph'), min_height=70)
+        self._f_inspiration.setMaximumHeight(100)
         layout.addWidget(self._f_inspiration)
+
+        # ── 4 photo slots ─────────────────────────────────────────────────
+        photos_row = QHBoxLayout()
+        photos_row.setSpacing(10)
+        photos_row.setContentsMargins(0, 4, 0, 0)
+
+        for i in range(4):
+            btn = _PhotoBtn(self._preview)
+            btn.setText(f'＋\n{t("project.brief.s5_add_photo")}')
+            btn.setFixedSize(_PHOTO_W, _PHOTO_H)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(_PHOTO_BTN_STYLE)
+            btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
+            photos_row.addWidget(btn)
+            self._photo_btns.append(btn)
+
+        layout.addLayout(photos_row)
         layout.addStretch()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(c)
 
+    # ── photo handling ─────────────────────────────────────────────────────
+
+    def _upload_photo(self, idx: int):
+        if not self._edit_enabled:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, t('project.brief.s5_select_photo'), '',
+            'Images (*.png *.jpg *.jpeg *.webp)'
+        )
+        if path:
+            pix = QPixmap(path)
+            if not pix.isNull():
+                self._photo_paths[idx] = path
+                self._apply_photo(idx, pix)
+
+    def _apply_photo(self, idx: int, pix: QPixmap):
+        btn = self._photo_btns[idx]
+        scaled = pix.scaled(
+            QSize(_PHOTO_W, _PHOTO_H), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+        )
+        btn.setIcon(QIcon(scaled))
+        btn.setIconSize(QSize(_PHOTO_W, _PHOTO_H))
+        btn.setText('')
+        btn.setStyleSheet(_PHOTO_BTN_STYLE_FILLED)
+        btn.set_orig_pixmap(pix)
+
+    # ── public API ─────────────────────────────────────────────────────────
+
     def set_edit_mode(self, enabled: bool):
+        self._edit_enabled = enabled
         self._f_inspiration.setReadOnly(not enabled)
+        for btn in self._photo_btns:
+            btn.setEnabled(enabled)
 
     def get_data(self) -> dict:
-        return {'inspiration': self._f_inspiration.toPlainText()}
+        return {
+            'inspiration': self._f_inspiration.toPlainText(),
+            'photo_paths': list(self._photo_paths),
+        }
 
     def set_data(self, data: dict):
         self._f_inspiration.setPlainText(data.get('inspiration', ''))
+        paths = data.get('photo_paths', ['', '', '', ''])
+        for i in range(4):
+            path = paths[i] if i < len(paths) else ''
+            self._photo_paths[i] = path
+            if path:
+                pix = QPixmap(path)
+                if not pix.isNull():
+                    self._apply_photo(i, pix)

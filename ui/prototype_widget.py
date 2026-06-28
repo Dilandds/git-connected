@@ -4,20 +4,20 @@ Prototype tab — manage prototype versions with photos, files, status and comme
 import uuid
 import os
 from dataclasses import dataclass, field, asdict
-from typing import List, Dict
+from typing import List
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QComboBox, QTextEdit, QFileDialog,
-    QSizePolicy, QLineEdit,
+    QSizePolicy, QLineEdit, QStackedWidget,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap
 
 from ui.styles import default_theme
 from i18n import t
 
-# ── Theme ────────────────────────────────────────────────────────────────────
+# ── Theme ─────────────────────────────────────────────────────────────────────
 _CARD     = '#ffffff'
 _TEXT     = '#1a2033'
 _MUTED    = '#6b7280'
@@ -41,8 +41,11 @@ _STATUS_KEYS = [
 
 _LBL_CSS = f'color: {_MUTED}; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;'
 
+_THUMB_W = 150
+_THUMB_H = 120
 
-# ── Data model ────────────────────────────────────────────────────────────────
+
+# ── Data model ─────────────────────────────────────────────────────────────────
 
 @dataclass
 class PrototypeVersion:
@@ -51,14 +54,14 @@ class PrototypeVersion:
     date: str = ''
     status: str = 'in_progress'
     comments: str = ''
-    image_path: str = ''
+    image_paths: List[str] = field(default_factory=list)
     file_paths: List[str] = field(default_factory=list)
 
 
-# ── Photo area ────────────────────────────────────────────────────────────────
+# ── Main photo area ────────────────────────────────────────────────────────────
 
-class _PhotoArea(QFrame):
-    """Clickable area showing a photo thumbnail or an upload placeholder."""
+class _MainPhotoArea(QFrame):
+    """Large clickable main photo area."""
     changed = pyqtSignal(str)
 
     def __init__(self, path: str = '', parent=None):
@@ -67,14 +70,14 @@ class _PhotoArea(QFrame):
         self._build()
 
     def _build(self):
-        self.setMinimumHeight(200)
-        self.setMaximumHeight(240)
+        self.setMinimumHeight(380)
         self.setCursor(Qt.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setStyleSheet(f"""
             QFrame {{
                 background: #f8fafc;
                 border: 2px dashed {_BORDER};
-                border-radius: 10px;
+                border-radius: 12px;
             }}
             QFrame:hover {{
                 border-color: {_ACCENT};
@@ -83,22 +86,23 @@ class _PhotoArea(QFrame):
         """)
         lay = QVBoxLayout(self)
         lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(6)
+        lay.setSpacing(8)
 
         self._icon_lbl = QLabel('📷')
         self._icon_lbl.setAlignment(Qt.AlignCenter)
-        self._icon_lbl.setStyleSheet('background: transparent; font-size: 32px; border: none;')
+        self._icon_lbl.setStyleSheet('background: transparent; font-size: 48px; border: none;')
         lay.addWidget(self._icon_lbl)
 
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignCenter)
         self._img_lbl.setStyleSheet('background: transparent; border: none;')
-        lay.addWidget(self._img_lbl)
+        self._img_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.addWidget(self._img_lbl, 1)
 
         self._hint_lbl = QLabel()
         self._hint_lbl.setAlignment(Qt.AlignCenter)
         self._hint_lbl.setStyleSheet(
-            f'background: transparent; color: {_MUTED}; font-size: 12px; border: none;'
+            f'background: transparent; color: {_MUTED}; font-size: 13px; border: none;'
         )
         lay.addWidget(self._hint_lbl)
 
@@ -108,7 +112,7 @@ class _PhotoArea(QFrame):
         has_img = bool(self._path and os.path.exists(self._path))
         if has_img:
             pix = QPixmap(self._path).scaled(
-                self.width() - 24 if self.width() > 24 else 260, 180,
+                max(self.width() - 32, 300), max(self.height() - 60, 300),
                 Qt.KeepAspectRatio, Qt.SmoothTransformation,
             )
             self._img_lbl.setPixmap(pix)
@@ -118,6 +122,10 @@ class _PhotoArea(QFrame):
             self._img_lbl.clear()
             self._icon_lbl.show()
             self._hint_lbl.setText(t('proto.click_to_add_photo'))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh()
 
     def set_path(self, path: str):
         self._path = path
@@ -137,7 +145,119 @@ class _PhotoArea(QFrame):
             self.changed.emit(path)
 
 
-# ── File chip ─────────────────────────────────────────────────────────────────
+# ── Thumbnail photo slot ───────────────────────────────────────────────────────
+
+class _ThumbPhoto(QFrame):
+    """Small clickable photo thumbnail for the gallery row."""
+    changed = pyqtSignal(int, str)       # index, path
+    remove_requested = pyqtSignal(int)   # index
+
+    def __init__(self, index: int, path: str = '', parent=None):
+        super().__init__(parent)
+        self._index = index
+        self._path = path
+        self._build()
+
+    def _build(self):
+        self.setFixedSize(_THUMB_W, _THUMB_H)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: #f8fafc;
+                border: 2px dashed {_BORDER};
+                border-radius: 8px;
+            }}
+            QFrame:hover {{
+                border-color: {_ACCENT};
+                background: #eff6ff;
+            }}
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setAlignment(Qt.AlignCenter)
+        lay.setSpacing(4)
+
+        # Remove button (top-right corner overlay)
+        self._remove_btn = QPushButton('×')
+        self._remove_btn.setFixedSize(18, 18)
+        self._remove_btn.setCursor(Qt.PointingHandCursor)
+        self._remove_btn.hide()
+        self._remove_btn.setStyleSheet("""
+            QPushButton {
+                background: #ef4444; color: white; border: none;
+                border-radius: 9px; font-size: 12px; font-weight: bold; padding: 0;
+            }
+            QPushButton:hover { background: #dc2626; }
+        """)
+        self._remove_btn.clicked.connect(lambda: self.remove_requested.emit(self._index))
+
+        self._icon_lbl = QLabel('📷')
+        self._icon_lbl.setAlignment(Qt.AlignCenter)
+        self._icon_lbl.setStyleSheet('background: transparent; font-size: 22px; border: none;')
+        lay.addWidget(self._icon_lbl)
+
+        self._img_lbl = QLabel()
+        self._img_lbl.setAlignment(Qt.AlignCenter)
+        self._img_lbl.setStyleSheet('background: transparent; border: none;')
+        lay.addWidget(self._img_lbl)
+
+        self._hint_lbl = QLabel(t('proto.click_to_add_photo'))
+        self._hint_lbl.setAlignment(Qt.AlignCenter)
+        self._hint_lbl.setWordWrap(True)
+        self._hint_lbl.setStyleSheet(
+            f'background: transparent; color: {_MUTED}; font-size: 10px; border: none;'
+        )
+        lay.addWidget(self._hint_lbl)
+
+        self._refresh()
+
+    def _refresh(self):
+        has_img = bool(self._path and os.path.exists(self._path))
+        if has_img:
+            pix = QPixmap(self._path).scaled(
+                _THUMB_W - 12, _THUMB_H - 28,
+                Qt.KeepAspectRatio, Qt.SmoothTransformation,
+            )
+            self._img_lbl.setPixmap(pix)
+            self._icon_lbl.hide()
+            self._hint_lbl.hide()
+            self._remove_btn.show()
+        else:
+            self._img_lbl.clear()
+            self._icon_lbl.show()
+            self._hint_lbl.show()
+            self._remove_btn.hide()
+
+    def set_path(self, path: str):
+        self._path = path
+        self._refresh()
+
+    def get_path(self) -> str:
+        return self._path
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Position remove button at top-right
+        self._remove_btn.move(self.width() - 22, 4)
+        self._remove_btn.raise_()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._remove_btn.move(self.width() - 22, 4)
+        self._remove_btn.raise_()
+
+    def mousePressEvent(self, _event):
+        path, _ = QFileDialog.getOpenFileName(
+            self, t('proto.select_photo'), '',
+            'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
+        )
+        if path:
+            self._path = path
+            self._refresh()
+            self.changed.emit(self._index, path)
+
+
+# ── File chip ──────────────────────────────────────────────────────────────────
 
 class _FileChip(QFrame):
     """Inline chip for an attached file with a remove ×."""
@@ -178,15 +298,15 @@ class _FileChip(QFrame):
         row.addWidget(btn)
 
 
-# ── Version panel ─────────────────────────────────────────────────────────────
+# ── Version panel ──────────────────────────────────────────────────────────────
 
 class _VersionPanel(QFrame):
     changed = pyqtSignal()
-    remove_requested = pyqtSignal(str)
 
     def __init__(self, version: PrototypeVersion, parent=None):
         super().__init__(parent)
         self._v = version
+        self._thumb_widgets: List[_ThumbPhoto] = []
         self._build()
 
     def _build(self):
@@ -195,72 +315,69 @@ class _VersionPanel(QFrame):
             QFrame#version_panel {
                 background: #ffffff;
                 border: 1px solid #e2e8f0;
-                border-radius: 12px;
+                border-radius: 0 12px 12px 12px;
             }
         """)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(16)
 
-        # ── Panel header ─────────────────────────────────────────────
-        hdr = QFrame()
-        hdr.setObjectName('proto_hdr')
-        hdr.setStyleSheet(f"""
-            QFrame#proto_hdr {{
-                background: {_HDR_BG};
-                border-radius: 12px 12px 0 0;
-                border-bottom: 1px solid {_BORDER};
-            }}
-        """)
-        hdr_row = QHBoxLayout(hdr)
-        hdr_row.setContentsMargins(18, 12, 14, 12)
-        hdr_row.setSpacing(10)
+        # ── Main content row ──────────────────────────────────────────
+        content_row = QHBoxLayout()
+        content_row.setSpacing(24)
 
-        s_color, _ = _STATUS.get(self._v.status, ('#6b7280', '#f9fafb'))
-        self._v_badge = QLabel(f'V{self._v.version_number}')
-        self._v_badge.setStyleSheet(
-            f'background: {s_color}; color: white; border-radius: 5px;'
-            f' padding: 2px 9px; font-size: 12px; font-weight: bold;'
-        )
-        hdr_row.addWidget(self._v_badge)
-
-        lbl_ver = QLabel(f'{t("proto.version")} {self._v.version_number}')
-        lbl_ver.setStyleSheet(
-            f'background: transparent; color: {_TEXT}; font-size: 14px; font-weight: bold;'
-        )
-        hdr_row.addWidget(lbl_ver)
-        hdr_row.addStretch()
-
-        btn_remove = QPushButton(t('proto.remove_version'))
-        btn_remove.setCursor(Qt.PointingHandCursor)
-        btn_remove.setStyleSheet("""
-            QPushButton {
-                background: #fff5f5; color: #dc2626;
-                border: 1px solid #fecaca; border-radius: 5px;
-                font-size: 11px; font-weight: 600; padding: 4px 12px;
-            }
-            QPushButton:hover { background: #fee2e2; }
-        """)
-        btn_remove.clicked.connect(lambda: self.remove_requested.emit(self._v.id))
-        hdr_row.addWidget(btn_remove)
-        root.addWidget(hdr)
-
-        # ── Panel body ───────────────────────────────────────────────
-        body = QWidget()
-        body.setStyleSheet('background: transparent;')
-        body_row = QHBoxLayout(body)
-        body_row.setContentsMargins(18, 16, 18, 18)
-        body_row.setSpacing(24)
-
-        # Left column — photo + attached files
+        # Left column — large photo + gallery + files
         left = QVBoxLayout()
-        left.setSpacing(10)
+        left.setSpacing(12)
 
-        self._photo = _PhotoArea(self._v.image_path)
-        self._photo.changed.connect(self._on_photo_changed)
-        left.addWidget(self._photo)
+        self._main_photo = _MainPhotoArea(
+            self._v.image_paths[0] if self._v.image_paths else ''
+        )
+        self._main_photo.changed.connect(self._on_main_photo_changed)
+        left.addWidget(self._main_photo, 1)
 
+        # Gallery row label + add button
+        gallery_hdr = QHBoxLayout()
+        lbl_views = QLabel('PHOTO VIEWS')
+        lbl_views.setStyleSheet(_LBL_CSS)
+        gallery_hdr.addWidget(lbl_views)
+        gallery_hdr.addStretch()
+
+        btn_add_photo = QPushButton(f'+ {t("proto.click_to_add_photo").replace("Click to add a ", "Add ")}')
+        btn_add_photo.setToolTip('Add another photo view')
+        btn_add_photo.setCursor(Qt.PointingHandCursor)
+        btn_add_photo.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_ACCENT};
+                border: none; font-size: 11px; font-weight: 600; padding: 0;
+            }}
+            QPushButton:hover {{ color: {_ACCENT_H}; }}
+        """)
+        btn_add_photo.clicked.connect(self._add_photo_slot)
+        gallery_hdr.addWidget(btn_add_photo)
+        left.addLayout(gallery_hdr)
+
+        # Gallery scroll area
+        gallery_scroll = QScrollArea()
+        gallery_scroll.setFixedHeight(_THUMB_H + 20)
+        gallery_scroll.setWidgetResizable(True)
+        gallery_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        gallery_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        gallery_scroll.setFrameShape(QFrame.NoFrame)
+        gallery_scroll.setStyleSheet('background: transparent; border: none;')
+
+        self._gallery_widget = QWidget()
+        self._gallery_widget.setStyleSheet('background: transparent;')
+        self._gallery_lay = QHBoxLayout(self._gallery_widget)
+        self._gallery_lay.setContentsMargins(0, 4, 0, 4)
+        self._gallery_lay.setSpacing(10)
+        self._gallery_lay.addStretch()
+
+        gallery_scroll.setWidget(self._gallery_widget)
+        left.addWidget(gallery_scroll)
+
+        # Attached files
         files_hdr = QHBoxLayout()
         lbl_files = QLabel(t('proto.attached_files'))
         lbl_files.setStyleSheet(_LBL_CSS)
@@ -288,14 +405,12 @@ class _VersionPanel(QFrame):
         left.addWidget(self._file_container)
         self._refresh_files()
 
-        left.addStretch()
-        body_row.addLayout(left, 4)
+        content_row.addLayout(left, 6)
 
         # Right column — status, date, comments
         right = QVBoxLayout()
         right.setSpacing(6)
 
-        # Status
         lbl_status = QLabel(t('proto.status'))
         lbl_status.setStyleSheet(_LBL_CSS)
         right.addWidget(lbl_status)
@@ -311,7 +426,6 @@ class _VersionPanel(QFrame):
         self._apply_status_style()
         right.addWidget(self._status_combo)
 
-        # Date
         lbl_date = QLabel(t('proto.date'))
         lbl_date.setStyleSheet(_LBL_CSS + ' margin-top: 8px;')
         right.addWidget(lbl_date)
@@ -329,7 +443,6 @@ class _VersionPanel(QFrame):
         self._date_edit.textChanged.connect(self._on_date_changed)
         right.addWidget(self._date_edit)
 
-        # Comments
         lbl_comments = QLabel(t('proto.comments'))
         lbl_comments.setStyleSheet(_LBL_CSS + ' margin-top: 8px;')
         right.addWidget(lbl_comments)
@@ -344,14 +457,19 @@ class _VersionPanel(QFrame):
             }}
             QTextEdit:focus {{ border-color: {_ACCENT}; }}
         """)
-        self._comments_edit.setMinimumHeight(120)
+        self._comments_edit.setMinimumHeight(150)
         self._comments_edit.textChanged.connect(self._on_comments_changed)
         right.addWidget(self._comments_edit, 1)
 
-        body_row.addLayout(right, 6)
-        root.addWidget(body)
+        right.addStretch()
+        content_row.addLayout(right, 4)
+        root.addLayout(content_row, 1)
 
-    # ── Style helpers ─────────────────────────────────────────────────────────
+        # Populate existing gallery photos (index 1+)
+        for i, path in enumerate(self._v.image_paths[1:], start=1):
+            self._add_thumb(i, path)
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
 
     def _apply_status_style(self):
         val = self._status_combo.currentData() or 'in_progress'
@@ -371,19 +489,59 @@ class _VersionPanel(QFrame):
             }}
         """)
 
+    def _add_thumb(self, index: int, path: str = ''):
+        thumb = _ThumbPhoto(index, path)
+        thumb.changed.connect(self._on_thumb_changed)
+        thumb.remove_requested.connect(self._on_thumb_removed)
+        self._thumb_widgets.append(thumb)
+        # Insert before the stretch
+        pos = self._gallery_lay.count() - 1
+        self._gallery_lay.insertWidget(pos, thumb)
+
+    def _add_photo_slot(self):
+        index = len(self._v.image_paths)
+        self._v.image_paths.append('')
+        self._add_thumb(index, '')
+        self.changed.emit()
+
     # ── Slots ─────────────────────────────────────────────────────────────────
 
-    def _on_photo_changed(self, path: str):
-        self._v.image_path = path
+    def _on_main_photo_changed(self, path: str):
+        if self._v.image_paths:
+            self._v.image_paths[0] = path
+        else:
+            self._v.image_paths.append(path)
+        self.changed.emit()
+
+    def _on_thumb_changed(self, index: int, path: str):
+        while len(self._v.image_paths) <= index:
+            self._v.image_paths.append('')
+        self._v.image_paths[index] = path
+        self.changed.emit()
+
+    def _on_thumb_removed(self, index: int):
+        # Remove from data
+        if 0 < index < len(self._v.image_paths):
+            self._v.image_paths.pop(index)
+
+        # Remove from UI
+        widget_to_remove = None
+        for w in self._thumb_widgets:
+            if w._index == index:
+                widget_to_remove = w
+                break
+        if widget_to_remove:
+            self._thumb_widgets.remove(widget_to_remove)
+            widget_to_remove.setParent(None)
+
+        # Re-index remaining thumbs
+        for i, w in enumerate(self._thumb_widgets):
+            w._index = i + 1
+
         self.changed.emit()
 
     def _on_status_changed(self):
         self._v.status = self._status_combo.currentData() or 'in_progress'
-        s_color, _ = _STATUS.get(self._v.status, ('#6b7280', '#f9fafb'))
-        self._v_badge.setStyleSheet(
-            f'background: {s_color}; color: white; border-radius: 5px;'
-            f' padding: 2px 9px; font-size: 12px; font-weight: bold;'
-        )
         self._apply_status_style()
         self.changed.emit()
 
@@ -428,7 +586,81 @@ class _VersionPanel(QFrame):
             self._file_lay.addWidget(lbl)
 
 
-# ── Main widget ───────────────────────────────────────────────────────────────
+# ── Tab button ─────────────────────────────────────────────────────────────────
+
+class _VersionTabBtn(QWidget):
+    """A single tab button: label + × close."""
+    clicked = pyqtSignal(str)
+    close_requested = pyqtSignal(str)
+
+    def __init__(self, version_id: str, label: str, active: bool = False, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self._id = version_id
+        self._label = label
+        self._active = active
+        self._build()
+        self._apply_style()
+
+    def _build(self):
+        self.setCursor(Qt.PointingHandCursor)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(14, 8, 8, 8)
+        lay.setSpacing(8)
+
+        self._lbl = QLabel(self._label)
+        self._lbl.setStyleSheet('background: transparent; border: none; font-size: 13px; font-weight: 600;')
+        lay.addWidget(self._lbl)
+
+        self._close = QPushButton('×')
+        self._close.setFixedSize(18, 18)
+        self._close.setCursor(Qt.PointingHandCursor)
+        self._close.clicked.connect(lambda: self.close_requested.emit(self._id))
+        lay.addWidget(self._close)
+
+    def _apply_style(self):
+        if self._active:
+            bg = _ACCENT
+            fg = '#ffffff'
+            close_fg = 'rgba(255,255,255,0.75)'
+            close_hover = '#ffffff'
+            border = f'border: 1px solid {_ACCENT}; border-bottom: none;'
+        else:
+            bg = '#e9eef5'
+            fg = '#374151'
+            close_fg = '#9ca3af'
+            close_hover = '#ef4444'
+            border = f'border: 1px solid {_BORDER}; border-bottom: none;'
+
+        self.setStyleSheet(f"""
+            QWidget {{
+                background: {bg};
+                {border}
+                border-radius: 8px 8px 0 0;
+            }}
+        """)
+        self._lbl.setStyleSheet(
+            f'background: transparent; border: none; color: {fg};'
+            f' font-size: 13px; font-weight: 600;'
+        )
+        self._close.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; border: none; border-radius: 9px;
+                color: {close_fg}; font-size: 15px; font-weight: bold; padding: 0;
+            }}
+            QPushButton:hover {{ color: {close_hover}; background: rgba(0,0,0,0.12); }}
+        """)
+
+    def set_active(self, active: bool):
+        self._active = active
+        self._apply_style()
+
+    def mousePressEvent(self, event):
+        if not self._close.geometry().contains(event.pos()):
+            self.clicked.emit(self._id)
+
+
+# ── Main widget ────────────────────────────────────────────────────────────────
 
 class PrototypeWidget(QWidget):
     changed = pyqtSignal()
@@ -437,72 +669,100 @@ class PrototypeWidget(QWidget):
         super().__init__(parent)
         self._versions: List[PrototypeVersion] = []
         self._next_number = 1
+        self._active_id: str = ''
+        self._tab_buttons: dict = {}   # id -> _VersionTabBtn
+        self._panels: dict = {}        # id -> _VersionPanel
         self._build_ui()
 
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 22)
-        root.setSpacing(12)
+        root.setSpacing(0)
 
-        # Header
+        # ── Header ────────────────────────────────────────────────────
         hdr_row = QHBoxLayout()
+        hdr_row.setContentsMargins(0, 0, 0, 10)
         lbl_title = QLabel(t('proto.title'))
         lbl_title.setStyleSheet(
             f'color: {_TEXT}; font-size: 22px; font-weight: bold; letter-spacing: 0.3px;'
         )
         hdr_row.addWidget(lbl_title)
+
+        lbl_sub = QLabel(f'  —  {t("proto.subtitle")}')
+        lbl_sub.setStyleSheet(f'color: {_MUTED}; font-size: 13px;')
+        hdr_row.addWidget(lbl_sub)
         hdr_row.addStretch()
+        root.addLayout(hdr_row)
+
+        # ── Tab bar row ───────────────────────────────────────────────
+        tab_row = QHBoxLayout()
+        tab_row.setContentsMargins(0, 0, 0, 0)
+        tab_row.setSpacing(4)
+
+        self._tab_scroll = QScrollArea()
+        self._tab_scroll.setFixedHeight(44)
+        self._tab_scroll.setWidgetResizable(True)
+        self._tab_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._tab_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._tab_scroll.setFrameShape(QFrame.NoFrame)
+        self._tab_scroll.setStyleSheet('background: transparent; border: none;')
+
+        self._tab_container = QWidget()
+        self._tab_container.setStyleSheet('background: transparent;')
+        self._tab_lay = QHBoxLayout(self._tab_container)
+        self._tab_lay.setContentsMargins(0, 0, 0, 0)
+        self._tab_lay.setSpacing(4)
+        self._tab_lay.addStretch()
+        self._tab_scroll.setWidget(self._tab_container)
+        tab_row.addWidget(self._tab_scroll, 1)
 
         btn_add = QPushButton(f'+ {t("proto.add_version")}')
         btn_add.setCursor(Qt.PointingHandCursor)
+        btn_add.setFixedHeight(34)
         btn_add.setStyleSheet(f"""
             QPushButton {{
                 background: {_ACCENT}; color: white; border: none;
-                border-radius: 6px; padding: 7px 16px;
+                border-radius: 6px; padding: 0 16px;
                 font-size: 13px; font-weight: 600;
             }}
             QPushButton:hover {{ background: {_ACCENT_H}; }}
         """)
         btn_add.clicked.connect(self._add_version)
-        hdr_row.addWidget(btn_add)
-        root.addLayout(hdr_row)
+        tab_row.addWidget(btn_add)
+        root.addLayout(tab_row)
 
-        lbl_sub = QLabel(t('proto.subtitle'))
-        lbl_sub.setStyleSheet(f'color: {_MUTED}; font-size: 13px;')
-        root.addWidget(lbl_sub)
-
+        # ── Separator under tabs ──────────────────────────────────────
         sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setMaximumHeight(1)
+        sep.setFixedHeight(1)
         sep.setStyleSheet(f'background: {_BORDER}; border: none;')
         root.addWidget(sep)
 
-        # Scroll area for version panels
+        # ── Stacked content area ──────────────────────────────────────
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet('background: transparent; border: none;')
         scroll.viewport().setStyleSheet('background: transparent;')
 
-        self._container = QWidget()
-        self._container.setStyleSheet('background: transparent;')
-        self._lay = QVBoxLayout(self._container)
-        self._lay.setContentsMargins(0, 4, 4, 16)
-        self._lay.setSpacing(16)
+        self._stack_container = QWidget()
+        self._stack_container.setStyleSheet('background: transparent;')
+        self._stack_lay = QVBoxLayout(self._stack_container)
+        self._stack_lay.setContentsMargins(0, 16, 0, 16)
+        self._stack_lay.setSpacing(0)
 
         self._empty_lbl = QLabel(t('proto.no_versions'))
         self._empty_lbl.setAlignment(Qt.AlignCenter)
         self._empty_lbl.setWordWrap(True)
         self._empty_lbl.setStyleSheet(
-            f'color: {_MUTED}; font-size: 14px; padding: 60px;'
+            f'color: {_MUTED}; font-size: 14px; padding: 80px;'
         )
-        self._lay.addWidget(self._empty_lbl)
-        self._lay.addStretch()
+        self._stack_lay.addWidget(self._empty_lbl)
+        self._stack_lay.addStretch()
 
-        scroll.setWidget(self._container)
+        scroll.setWidget(self._stack_container)
         root.addWidget(scroll, 1)
 
-    # ── Version management ────────────────────────────────────────────────────
+    # ── Version management ─────────────────────────────────────────────────────
 
     def _add_version(self):
         v = PrototypeVersion(
@@ -511,35 +771,70 @@ class PrototypeWidget(QWidget):
         )
         self._versions.append(v)
         self._next_number += 1
-        self._rebuild()
+        self._create_tab(v)
+        self._create_panel(v)
+        self._switch_to(v.id)
         self.changed.emit()
 
     def _remove_version(self, vid: str):
+        # Remove data
         self._versions = [v for v in self._versions if v.id != vid]
-        self._rebuild()
+
+        # Remove tab
+        if tab := self._tab_buttons.pop(vid, None):
+            tab.setParent(None)
+
+        # Remove panel
+        if panel := self._panels.pop(vid, None):
+            panel.setParent(None)
+
+        # Switch to last available version
+        if self._active_id == vid:
+            self._active_id = ''
+            if self._versions:
+                self._switch_to(self._versions[-1].id)
+            else:
+                self._show_empty()
+
         self.changed.emit()
 
-    def _rebuild(self):
-        while self._lay.count():
-            item = self._lay.takeAt(0)
-            if w := item.widget():
-                if w is not self._empty_lbl:
-                    w.setParent(None)
+    def _create_tab(self, v: PrototypeVersion):
+        label = f'{t("proto.version")} {v.version_number}'
+        tab = _VersionTabBtn(v.id, label, active=False)
+        tab.clicked.connect(self._switch_to)
+        tab.close_requested.connect(self._remove_version)
+        self._tab_buttons[v.id] = tab
 
-        if not self._versions:
-            self._lay.addWidget(self._empty_lbl)
-            self._empty_lbl.show()
-        else:
+        # Insert before the stretch
+        pos = self._tab_lay.count() - 1
+        self._tab_lay.insertWidget(pos, tab)
+
+    def _create_panel(self, v: PrototypeVersion):
+        panel = _VersionPanel(v)
+        panel.changed.connect(self.changed.emit)
+        panel.hide()
+        self._panels[v.id] = panel
+        self._stack_lay.insertWidget(self._stack_lay.count() - 1, panel)
+
+    def _switch_to(self, vid: str):
+        # Deactivate current
+        if self._active_id and self._active_id in self._tab_buttons:
+            self._tab_buttons[self._active_id].set_active(False)
+        if self._active_id and self._active_id in self._panels:
+            self._panels[self._active_id].hide()
+
+        self._active_id = vid
+
+        if vid in self._tab_buttons:
+            self._tab_buttons[vid].set_active(True)
+        if vid in self._panels:
+            self._panels[vid].show()
             self._empty_lbl.hide()
-            for v in self._versions:
-                panel = _VersionPanel(v)
-                panel.changed.connect(self.changed.emit)
-                panel.remove_requested.connect(self._remove_version)
-                self._lay.addWidget(panel)
 
-        self._lay.addStretch()
+    def _show_empty(self):
+        self._empty_lbl.show()
 
-    # ── Persistence ───────────────────────────────────────────────────────────
+    # ── Persistence ────────────────────────────────────────────────────────────
 
     def get_data(self) -> dict:
         return {
@@ -548,12 +843,36 @@ class PrototypeWidget(QWidget):
         }
 
     def set_data(self, data: dict):
+        # Clear existing
+        for tab in self._tab_buttons.values():
+            tab.setParent(None)
+        for panel in self._panels.values():
+            panel.setParent(None)
+        self._tab_buttons.clear()
+        self._panels.clear()
+        self._active_id = ''
         self._versions = []
+
         for d in data.get('versions', []):
             try:
+                # Migrate legacy single image_path -> image_paths
+                if 'image_path' in d and d['image_path'] and 'image_paths' not in d:
+                    d = dict(d)
+                    d['image_paths'] = [d.pop('image_path')]
+                elif 'image_path' in d:
+                    d = {k: v for k, v in d.items() if k != 'image_path'}
+
                 v = PrototypeVersion(**d)
                 self._versions.append(v)
             except TypeError:
                 pass
+
         self._next_number = data.get('next_number', len(self._versions) + 1)
-        self._rebuild()
+
+        if self._versions:
+            for v in self._versions:
+                self._create_tab(v)
+                self._create_panel(v)
+            self._switch_to(self._versions[-1].id)
+        else:
+            self._show_empty()

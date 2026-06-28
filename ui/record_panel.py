@@ -69,7 +69,6 @@ class RecordPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(260)
-        self.setMaximumWidth(340)
         self.setStyleSheet(f"background-color: {_BG};")
 
         self._state = self.IDLE
@@ -92,9 +91,10 @@ class RecordPanel(QWidget):
 
         # Banner (always visible)
         banner = QWidget()
+        banner.setObjectName("recordBanner")
         banner.setFixedHeight(52)
         banner.setStyleSheet(f"""
-            QWidget {{
+            QWidget#recordBanner {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 {_REC}, stop:1 #b91c1c);
                 border-bottom: 1px solid {_BORD};

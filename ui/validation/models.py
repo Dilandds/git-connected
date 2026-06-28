@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import date as _date
 from typing import List
 
+from i18n import t
+
 
 COST_CATEGORIES = [
     "Design & Engineering",
@@ -12,6 +14,14 @@ COST_CATEGORIES = [
     "Materials",
     "Manufacturing",
     "Other (items, logistics…)",
+]
+
+COST_CATEGORY_I18N_KEYS = [
+    "project.validation.cat_design_eng",
+    "project.validation.cat_prototyping",
+    "project.validation.cat_materials",
+    "project.validation.cat_manufacturing",
+    "project.validation.cat_other",
 ]
 
 SCHEDULE_MILESTONES = [
@@ -22,6 +32,16 @@ SCHEDULE_MILESTONES = [
     "Prototype ready",
     "Production start",
     "Delivery",
+]
+
+MILESTONE_I18N_KEYS = [
+    "project.validation.ms_project_start",
+    "project.validation.ms_concept_review",
+    "project.validation.ms_design_freeze",
+    "project.validation.ms_validation_meeting",
+    "project.validation.ms_prototype_ready",
+    "project.validation.ms_production_start",
+    "project.validation.ms_delivery",
 ]
 
 
@@ -91,11 +111,22 @@ def _default_session(session_id: int) -> ValidationSession:
     today = _date.today().strftime("%d/%m/%Y")
     s = ValidationSession(id=session_id, date=today)
     s.stakeholders = [
-        Stakeholder(i + 1, role) for i, role in enumerate(
-            ["Design", "Engineering", "Sourcing", "Quality", "Production", "Marketing"]
-        )
+        Stakeholder(i + 1, t(key)) for i, key in enumerate([
+            "project.validation.dept_design",
+            "project.validation.dept_engineering",
+            "project.validation.dept_sourcing",
+            "project.validation.dept_quality",
+            "project.validation.dept_production",
+            "project.validation.dept_marketing",
+        ])
     ]
     s.modifications = [ModificationRow() for _ in range(3)]
-    s.action_plan   = [ActionRow(dept) for dept in
-                       ["Design", "Engineering", "Procurement", "Quality", "Production", "Marketing"]]
+    s.action_plan   = [ActionRow(t(key)) for key in [
+        "project.validation.dept_design",
+        "project.validation.dept_engineering",
+        "project.validation.dept_procurement",
+        "project.validation.dept_quality",
+        "project.validation.dept_production",
+        "project.validation.dept_marketing",
+    ]]
     return s

@@ -22,6 +22,8 @@ from PyQt5.QtGui import (
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import show_message_dialog, ask_yes_no_dialog
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 # Arrow annotation colours
@@ -237,10 +239,10 @@ class ImageCanvas(QWidget):
         helper_rect = QRectF(r.left(), start_y + primary_height + spacing, r.width(), helper_height)
         painter.setFont(font_primary)
         painter.setPen(QColor(_ink))
-        painter.drawText(primary_rect, Qt.AlignCenter, "Click or drag to upload")
+        painter.drawText(primary_rect, Qt.AlignCenter, t("technical.upload_prompt"))
         painter.setFont(font_helper)
         painter.setPen(QColor(_ink))
-        painter.drawText(helper_rect, Qt.AlignCenter, "JPEG · PNG · PDF")
+        painter.drawText(helper_rect, Qt.AlignCenter, t("technical.upload_formats"))
 
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):
         """Draw a callout arrow from the origin (badge) to the annotation target (tip)."""
@@ -716,7 +718,7 @@ class TechnicalAnnotationPanel(QWidget):
         title.setStyleSheet(f"color: {default_theme.text_primary}; background-color: transparent; border: none;")
         info.addWidget(title)
 
-        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or "Click to edit")
+        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or t("annotation.click_to_edit"))
         desc = QLabel(desc_text)
         desc.setStyleSheet(f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
         desc.setWordWrap(True)
@@ -731,11 +733,11 @@ class TechnicalAnnotationPanel(QWidget):
         if ann.is_validated:
             status_icon.setPixmap(_checkmark_pixmap(11, VALIDATED_GREEN))
             status_icon.setVisible(True)
-            status_lbl.setText("Validated")
+            status_lbl.setText(t("annotation.validated"))
             status_lbl.setStyleSheet(f"color: {VALIDATED_GREEN}; font-size: 13px; background: transparent; border: none;")
         else:
             status_icon.setVisible(False)
-            status_lbl.setText("Click to edit")
+            status_lbl.setText(t("annotation.click_to_edit"))
             status_lbl.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 13px; background: transparent; border: none;")
         status_row.addWidget(status_icon)
         status_row.addWidget(status_lbl)

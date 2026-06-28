@@ -381,7 +381,8 @@ class _EditorCanvas(QWidget):
 class ScreenshotEditorDialog(QDialog):
     """Modal dialog for annotating a screenshot with text and lines before saving."""
 
-    pixmap_updated = pyqtSignal(QPixmap)  # emitted when user saves edits
+    pixmap_updated          = pyqtSignal(QPixmap)  # emitted when user saves edits
+    save_to_report_requested = pyqtSignal(QPixmap)  # emitted when user saves to report
 
     def __init__(self, pixmap: QPixmap, title: str = "Edit Screenshot", parent=None):
         super().__init__(parent)
@@ -451,22 +452,22 @@ class ScreenshotEditorDialog(QDialog):
         self._active_css = active_css + TOOLTIP_STYLE
 
         # Tool buttons
-        self._line_btn = QPushButton("✏ Line")
-        self._line_btn.setToolTip("Draw straight lines")
+        self._line_btn = QPushButton(t("screenshot_editor.line"))
+        self._line_btn.setToolTip(t("screenshot_editor.hint_line"))
         self._line_btn.setCursor(Qt.PointingHandCursor)
         self._line_btn.setStyleSheet(btn_css)
         self._line_btn.clicked.connect(lambda: self._set_tool(TOOL_LINE))
         toolbar.addWidget(self._line_btn)
 
-        self._arrow_btn = QPushButton("➜ Arrow")
-        self._arrow_btn.setToolTip("Draw arrows")
+        self._arrow_btn = QPushButton(t("screenshot_editor.arrow"))
+        self._arrow_btn.setToolTip(t("screenshot_editor.hint_arrow"))
         self._arrow_btn.setCursor(Qt.PointingHandCursor)
         self._arrow_btn.setStyleSheet(btn_css)
         self._arrow_btn.clicked.connect(lambda: self._set_tool(TOOL_ARROW))
         toolbar.addWidget(self._arrow_btn)
 
-        self._text_btn = QPushButton("T Text")
-        self._text_btn.setToolTip("Click on image to add text")
+        self._text_btn = QPushButton(t("screenshot_editor.text"))
+        self._text_btn.setToolTip(t("screenshot_editor.hint_text"))
         self._text_btn.setCursor(Qt.PointingHandCursor)
         self._text_btn.setStyleSheet(btn_css)
         self._text_btn.clicked.connect(lambda: self._set_tool(TOOL_TEXT))
@@ -515,16 +516,14 @@ class ScreenshotEditorDialog(QDialog):
         # Smaller values were too thin/small to be readable on screenshots.
 
         # Undo
-        undo_btn = QPushButton("↩ Undo")
-        undo_btn.setToolTip("Undo last annotation")
+        undo_btn = QPushButton(t("screenshot_editor.undo"))
         undo_btn.setCursor(Qt.PointingHandCursor)
         undo_btn.setStyleSheet(self._btn_css)
         undo_btn.clicked.connect(self._undo)
         toolbar.addWidget(undo_btn)
 
         # Clear
-        clear_btn = QPushButton("🗑 Clear")
-        clear_btn.setToolTip("Remove all annotations")
+        clear_btn = QPushButton(t("screenshot_editor.clear"))
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(self._btn_css)
         clear_btn.clicked.connect(self._clear)
@@ -533,7 +532,7 @@ class ScreenshotEditorDialog(QDialog):
         toolbar.addStretch()
 
         # Hint label
-        self._hint = QLabel("Select a tool to start annotating")
+        self._hint = QLabel(t("screenshot_editor.hint"))
         self._hint.setStyleSheet(f"color: {default_theme.text_subtext}; font-size: 11px;")
         toolbar.addWidget(self._hint)
 
@@ -549,7 +548,7 @@ class ScreenshotEditorDialog(QDialog):
         bottom = QHBoxLayout()
         bottom.addStretch()
 
-        save_file_btn = QPushButton("💾  Save to File")
+        save_file_btn = QPushButton(t("screenshot_editor.save_file"))
         save_file_btn.setCursor(Qt.PointingHandCursor)
         save_file_btn.setStyleSheet(f"""
             QPushButton {{
@@ -562,7 +561,20 @@ class ScreenshotEditorDialog(QDialog):
         save_file_btn.clicked.connect(self._save_to_file)
         bottom.addWidget(save_file_btn)
 
-        apply_btn = QPushButton("✓  Apply & Close")
+        report_btn = QPushButton(t("screenshot_editor.save_report"))
+        report_btn.setCursor(Qt.PointingHandCursor)
+        report_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #EDE9FE; color: #7C3AED;
+                border: 1px solid #DDD6FE; border-radius: 6px;
+                padding: 8px 20px; font-size: 12px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #C4B5FD; }}
+        """)
+        report_btn.clicked.connect(self._save_to_report)
+        bottom.addWidget(report_btn)
+
+        apply_btn = QPushButton(t("screenshot_editor.apply_close"))
         apply_btn.setCursor(Qt.PointingHandCursor)
         apply_btn.setStyleSheet(f"""
             QPushButton {{
@@ -575,7 +587,7 @@ class ScreenshotEditorDialog(QDialog):
         apply_btn.clicked.connect(self._apply_and_close)
         bottom.addWidget(apply_btn)
 
-        close_btn = QPushButton("✕  Cancel")
+        close_btn = QPushButton(t("screenshot_editor.cancel"))
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(f"""
             QPushButton {{
@@ -600,11 +612,11 @@ class ScreenshotEditorDialog(QDialog):
         self._text_btn.setStyleSheet(self._active_css if tool == TOOL_TEXT else self._btn_css)
         # Update hint
         hints = {
-            TOOL_LINE: "Click and drag to draw a line",
-            TOOL_ARROW: "Click and drag to draw an arrow",
-            TOOL_TEXT: "Click on the image to place text",
+            TOOL_LINE:  t("screenshot_editor.hint_line"),
+            TOOL_ARROW: t("screenshot_editor.hint_arrow"),
+            TOOL_TEXT:  t("screenshot_editor.hint_text"),
         }
-        self._hint.setText(hints.get(tool, "Select a tool to start annotating"))
+        self._hint.setText(hints.get(tool, t("screenshot_editor.hint")))
 
     def _on_font_size_changed(self, size: int):
         if hasattr(self, '_canvas'):
@@ -651,6 +663,12 @@ class ScreenshotEditorDialog(QDialog):
         if path:
             result.save(path)
             logger.info(f"Annotated screenshot saved to {path}")
+
+    def _save_to_report(self):
+        result = self._canvas.get_result_pixmap()
+        self.pixmap_updated.emit(result)
+        self.save_to_report_requested.emit(result)
+        self.accept()
 
     def _apply_and_close(self):
         result = self._canvas.get_result_pixmap()

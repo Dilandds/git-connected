@@ -436,7 +436,7 @@ class ScaleSidebar(QWidget):
         shape_layout.addWidget(tools_scroll)
         
         # Color picker button
-        self.color_btn = QPushButton("🎨 Color: ")
+        self.color_btn = QPushButton(t("scale.color"))
         self.color_btn.setFixedHeight(32)
         self.color_btn.setCursor(Qt.PointingHandCursor)
         self.color_btn.clicked.connect(self._on_color_picker)
@@ -458,19 +458,14 @@ class ScaleSidebar(QWidget):
 
         self.how_to_use_label = _section_label(t("scale.how_to_use"))
         layout.addWidget(self.how_to_use_label)
-        instructions = QLabel(
-            "1. Upload a drawing (PDF/image)\n"
-            "2. Use scroll wheel to resize the drawing proportionally\n"
-            "3. Align the drawing's reference dimension with the ruler frame\n"
-            "4. Enable Ruler Tool to measure"
-        )
-        instructions.setWordWrap(True)
-        instructions.setFont(make_font(size=13))
-        instructions.setStyleSheet(
+        self._instructions_label = QLabel(t("scale.instructions"))
+        self._instructions_label.setWordWrap(True)
+        self._instructions_label.setFont(make_font(size=13))
+        self._instructions_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; line-height: 1.45; "
             f"background: transparent; border: none;"
         )
-        layout.addWidget(instructions)
+        layout.addWidget(self._instructions_label)
 
         layout.addStretch()
 
@@ -496,7 +491,13 @@ class ScaleSidebar(QWidget):
         self.reset_btn.setText(t("scale.reset"))
         self.export_btn.setText(t("scale.export_scaled"))
         self.draw_shapes_label.setText(t("scale.draw_shapes"))
+        self.color_btn.setText(t("scale.color"))
         self.how_to_use_label.setText(t("scale.how_to_use"))
+        self._instructions_label.setText(t("scale.instructions"))
+        self._update_static_border_btn_style(self._static_border_visible)
+        self._update_moving_border_btn_style(self._moving_border_visible)
+        self._update_ref_lines_btn_style(self._ref_lines_visible)
+        self._update_lock_btn_style(self._pdf_locked)
 
     def _on_unit_changed(self, index: int):
         units = ["cm", "mm", "inches", "m"]
@@ -577,7 +578,7 @@ class ScaleSidebar(QWidget):
                 }}
             """
         self.static_border_btn.setStyleSheet(style)
-        self.static_border_btn.setText("👁 Show Static Border" if not visible else "👁 Hide Static Border")
+        self.static_border_btn.setText(t("scale.show_static_border") if not visible else t("scale.hide_static_border"))
 
     def _update_moving_border_btn_style(self, visible: bool):
         """Update button appearance based on moving border visibility."""
@@ -612,7 +613,7 @@ class ScaleSidebar(QWidget):
                 }}
             """
         self.moving_border_btn.setStyleSheet(style)
-        self.moving_border_btn.setText("👁 Show Moving Border" if not visible else "👁 Hide Moving Border")
+        self.moving_border_btn.setText(t("scale.show_moving_border") if not visible else t("scale.hide_moving_border"))
 
     def _update_ref_lines_btn_style(self, visible: bool):
         """Update button appearance based on reference lines visibility."""
@@ -647,7 +648,7 @@ class ScaleSidebar(QWidget):
                 }}
             """
         self.ref_lines_btn.setStyleSheet(style)
-        self.ref_lines_btn.setText("👁 Show References" if not visible else "👁 Hide References")
+        self.ref_lines_btn.setText(t("scale.show_references") if not visible else t("scale.hide_references"))
 
     def _on_static_border_toggled(self):
         """Handle static border visibility toggle."""
@@ -735,7 +736,7 @@ class ScaleSidebar(QWidget):
                 }}
             """
         self.lock_btn.setStyleSheet(style)
-        self.lock_btn.setText("🔒 Lock Zoom" if not locked else "🔓 Unlock Zoom")
+        self.lock_btn.setText(t("scale.lock_zoom") if not locked else t("scale.unlock_zoom"))
 
     def _on_pdf_locked(self):
         """Handle zoom lock/unlock toggle."""

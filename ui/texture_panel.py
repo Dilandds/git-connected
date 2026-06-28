@@ -1066,7 +1066,6 @@ class TexturePanel(QWidget):
         self.textures = []  # list of {'path': str, 'name': str, 'pixmap': QPixmap}
         self.cards = []
         self.setMinimumWidth(280)
-        self.setMaximumWidth(350)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
         self._materials_loaded = False
         self._material_grid = None
@@ -1084,11 +1083,12 @@ class TexturePanel(QWidget):
             for i, preset in enumerate(MATERIAL_PRESETS):
                 card = MaterialPresetCard(preset)
                 self._material_grid.addWidget(card, i // GRID_COLUMNS, i % GRID_COLUMNS)
+            self._apply_card_widths()
 
         QTimer.singleShot(0, _populate)
 
     def _create_slider_row(self, label_text, min_val, max_val, default_val, suffix="", divisor=1):
-        """Helper to create a labeled slider row. Returns (container, slider, value_label)."""
+        """Helper to create a labeled slider row. Returns (container, slider, value_label, name_label)."""
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         h = QHBoxLayout(container)
@@ -1142,7 +1142,7 @@ class TexturePanel(QWidget):
             self._emit_settings()
 
         slider.valueChanged.connect(_on_change)
-        return container, slider, val_lbl
+        return container, slider, val_lbl, lbl
 
     def sync_material_controls(self, preset_data: dict):
         """Sync the simple material sliders to match an applied preset.
@@ -1349,12 +1349,13 @@ class TexturePanel(QWidget):
         tex_icon.setStyleSheet("background: transparent; border: none; font-size: 16px;")
         title_row.addWidget(tex_icon)
         self.title_label = QLabel()
-        self.title_label.setFont(make_font(size=12, bold=True))
+        self.title_label.setFont(make_font(size=15, bold=True))
         self.title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(self.title_label)
         title_row.addStretch()
 
-        reset_btn = QPushButton("Reset")
+        self._reset_btn = QPushButton(t("toolbar.reset"))
+        reset_btn = self._reset_btn
         reset_btn.setObjectName("resetTextureBtn")
         reset_btn.setCursor(Qt.PointingHandCursor)
         reset_btn.setToolTip("Remove all applied textures and return to the default view")
@@ -1427,17 +1428,17 @@ class TexturePanel(QWidget):
         )
         self.instruction.setWordWrap(True)
         self.instruction.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
+            "color: rgba(255, 255, 255, 0.95); font-size: 15px; background: transparent; border: none;"
         )
         banner_layout.addWidget(self.instruction)
 
         layout.addWidget(banner)
 
         # ---- Materials section ----
-        mat_label = QLabel("Materials")
-        mat_label.setFont(make_font(size=11, bold=True))
-        mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
-        layout.addWidget(mat_label)
+        self._mat_label = QLabel(t("texture.materials"))
+        self._mat_label.setFont(make_font(size=11, bold=True))
+        self._mat_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(self._mat_label)
 
         self._material_grid = QGridLayout()
         self._material_grid.setContentsMargins(0, 0, 0, 0)
@@ -1447,21 +1448,21 @@ class TexturePanel(QWidget):
         layout.addLayout(self._material_grid)
 
         # ---- Upload button ----
-        upload_label = QLabel("Custom Textures")
-        upload_label.setFont(make_font(size=11, bold=True))
-        upload_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
-        layout.addWidget(upload_label)
+        self._upload_label = QLabel(t("texture.custom_textures"))
+        self._upload_label.setFont(make_font(size=11, bold=True))
+        self._upload_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(self._upload_label)
 
         # Size hint
-        size_hint = QLabel("Recommended: 1–15 MB · JPG/PNG · min 1024×1024 px")
-        size_hint.setWordWrap(True)
-        size_hint.setStyleSheet(
+        self._size_hint_label = QLabel(t("texture.size_hint"))
+        self._size_hint_label.setWordWrap(True)
+        self._size_hint_label.setStyleSheet(
             f"color: {default_theme.text_secondary}; font-size: 9px; "
             f"background: transparent; border: none; padding: 0 0 2px 0;"
         )
-        layout.addWidget(size_hint)
+        layout.addWidget(self._size_hint_label)
 
-        self.upload_btn = QPushButton("📁  Upload Texture")
+        self.upload_btn = QPushButton(t("texture.upload_btn"))
         self.upload_btn.setObjectName("uploadTextureBtn")
 
         if is_education():
@@ -1567,11 +1568,11 @@ class TexturePanel(QWidget):
         metal_layout.setContentsMargins(0, 0, 0, 0)
         metal_layout.setSpacing(4)
 
-        row, self._slider_shine, self._lbl_shine = self._create_slider_row("Shine", 0, 100, 70, "%")
+        row, self._slider_shine, self._lbl_shine, self._name_shine = self._create_slider_row(t("texture.shine"), 0, 100, 70, "%")
         metal_layout.addWidget(row)
-        row, self._slider_shadow, self._lbl_shadow = self._create_slider_row("Shadow", 0, 100, 50, "%")
+        row, self._slider_shadow, self._lbl_shadow, self._name_shadow = self._create_slider_row(t("texture.shadow"), 0, 100, 50, "%")
         metal_layout.addWidget(row)
-        row, self._slider_brightness, self._lbl_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
+        row, self._slider_brightness, self._lbl_brightness, self._name_brightness = self._create_slider_row(t("texture.brightness"), 0, 100, 50, "%")
         metal_layout.addWidget(row)
 
         layout.addWidget(self._metal_sliders_container)
@@ -1583,13 +1584,13 @@ class TexturePanel(QWidget):
         fabric_layout.setContentsMargins(0, 0, 0, 0)
         fabric_layout.setSpacing(4)
 
-        row, self._slider_grain, self._lbl_grain = self._create_slider_row("Grain", 0, 100, 50, "%")
+        row, self._slider_grain, self._lbl_grain, self._name_grain = self._create_slider_row(t("texture.grain"), 0, 100, 50, "%")
         fabric_layout.addWidget(row)
-        row, self._slider_softness, self._lbl_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
+        row, self._slider_softness, self._lbl_softness, self._name_softness = self._create_slider_row(t("texture.softness"), 0, 100, 50, "%")
         fabric_layout.addWidget(row)
-        row, self._slider_wear, self._lbl_wear = self._create_slider_row("Wear", 0, 100, 0, "%")
+        row, self._slider_wear, self._lbl_wear, self._name_wear = self._create_slider_row(t("texture.wear"), 0, 100, 0, "%")
         fabric_layout.addWidget(row)
-        row, self._slider_tile_density, self._lbl_tile_density = self._create_slider_row("Tile Density", 1, 500, 200, "x")
+        row, self._slider_tile_density, self._lbl_tile_density, self._name_tile_density = self._create_slider_row(t("texture.tile_density"), 1, 500, 200, "x")
         fabric_layout.addWidget(row)
 
         self._fabric_sliders_container.hide()  # Default to metal sliders
@@ -1602,11 +1603,11 @@ class TexturePanel(QWidget):
         image_layout.setContentsMargins(0, 0, 0, 0)
         image_layout.setSpacing(4)
 
-        row, self._slider_img_softness, self._lbl_img_softness = self._create_slider_row("Softness", 0, 100, 50, "%")
+        row, self._slider_img_softness, self._lbl_img_softness, self._name_img_softness = self._create_slider_row(t("texture.softness"), 0, 100, 50, "%")
         image_layout.addWidget(row)
-        row, self._slider_img_brightness, self._lbl_img_brightness = self._create_slider_row("Brightness", 0, 100, 50, "%")
+        row, self._slider_img_brightness, self._lbl_img_brightness, self._name_img_brightness = self._create_slider_row(t("texture.brightness"), 0, 100, 50, "%")
         image_layout.addWidget(row)
-        row, self._slider_img_contrast, self._lbl_img_contrast = self._create_slider_row("Contrast", 0, 100, 50, "%")
+        row, self._slider_img_contrast, self._lbl_img_contrast, self._name_img_contrast = self._create_slider_row(t("texture.contrast"), 0, 100, 50, "%")
         image_layout.addWidget(row)
 
         self._image_sliders_container.hide()
@@ -1619,11 +1620,11 @@ class TexturePanel(QWidget):
         glass_layout.setContentsMargins(0, 0, 0, 0)
         glass_layout.setSpacing(4)
 
-        row, self._slider_opacity, self._lbl_opacity = self._create_slider_row("Opacity", 0, 100, 30, "%")
+        row, self._slider_opacity, self._lbl_opacity, self._name_opacity = self._create_slider_row(t("texture.opacity"), 0, 100, 30, "%")
         glass_layout.addWidget(row)
-        row, self._slider_clarity, self._lbl_clarity = self._create_slider_row("Clarity", 0, 100, 98, "%")
+        row, self._slider_clarity, self._lbl_clarity, self._name_clarity = self._create_slider_row(t("texture.clarity"), 0, 100, 98, "%")
         glass_layout.addWidget(row)
-        row, self._slider_tint, self._lbl_tint = self._create_slider_row("Tint", 0, 100, 0, "%")
+        row, self._slider_tint, self._lbl_tint, self._name_tint = self._create_slider_row(t("texture.tint"), 0, 100, 0, "%")
         glass_layout.addWidget(row)
 
         self._glass_sliders_container.hide()  # Default hidden
@@ -1632,17 +1633,17 @@ class TexturePanel(QWidget):
         self._active_category = "metal"
 
         # ---- Shading Settings ----
-        shading_label = QLabel("Shading")
-        shading_label.setFont(make_font(size=11, bold=True))
-        shading_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
-        layout.addWidget(shading_label)
+        self._shading_label = QLabel(t("texture.shading"))
+        self._shading_label.setFont(make_font(size=11, bold=True))
+        self._shading_label.setStyleSheet(f"color: {default_theme.text_primary}; background: transparent;")
+        layout.addWidget(self._shading_label)
 
         # Smoothness: 0% = flat shading, 100% = smooth shading
-        row, self._slider_smoothness, _ = self._create_slider_row("Smoothness", 0, 100, 100, "%")
+        row, self._slider_smoothness, _, self._name_smoothness = self._create_slider_row(t("texture.smoothness"), 0, 100, 100, "%")
         layout.addWidget(row)
 
         # Crease Angle: 0-180 degrees (lower = sharper shaded view by default)
-        row, self._slider_crease_angle, _ = self._create_slider_row("Crease Angle", 0, 180, 10, u"\u00b0")
+        row, self._slider_crease_angle, _, self._name_crease_angle = self._create_slider_row(t("texture.crease_angle"), 0, 180, 10, u"\u00b0")
         layout.addWidget(row)
 
         layout.addStretch()
@@ -1660,6 +1661,26 @@ class TexturePanel(QWidget):
             row = i // GRID_COLUMNS
             col = i % GRID_COLUMNS
             self.grid_layout.addWidget(card, row, col)
+        self._apply_card_widths()
+
+    def _apply_card_widths(self):
+        """Force all grid cards to exactly half the available inner width."""
+        inner_w = self.width() - 20  # 10px margin each side
+        card_w = max((inner_w - 6) // 2, 80)  # 6px grid gap
+        if self._material_grid:
+            for i in range(self._material_grid.count()):
+                item = self._material_grid.itemAt(i)
+                if item and item.widget():
+                    item.widget().setFixedWidth(card_w)
+        if hasattr(self, 'grid_layout'):
+            for i in range(self.grid_layout.count()):
+                item = self.grid_layout.itemAt(i)
+                if item and item.widget():
+                    item.widget().setFixedWidth(card_w)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_card_widths()
 
     def _on_upload(self):
         """Open file dialog to add texture images with size validation."""
@@ -1724,6 +1745,7 @@ class TexturePanel(QWidget):
         row = idx // GRID_COLUMNS
         col = idx % GRID_COLUMNS
         self.grid_layout.addWidget(card, row, col)
+        self._apply_card_widths()
 
         self.clear_btn.setVisible(len(self.textures) > 0)
 
@@ -1772,3 +1794,24 @@ class TexturePanel(QWidget):
         self.instruction.setText(t("texture.instruction"))
         self.clear_btn.setText(t("texture.clear_all"))
         self.settings_label.setText(t("texture.settings"))
+        self._reset_btn.setText(t("toolbar.reset"))
+        self._mat_label.setText(t("texture.materials"))
+        self._upload_label.setText(t("texture.custom_textures"))
+        self._size_hint_label.setText(t("texture.size_hint"))
+        self.upload_btn.setText(t("texture.upload_btn"))
+        self._shading_label.setText(t("texture.shading"))
+        self._name_shine.setText(t("texture.shine"))
+        self._name_shadow.setText(t("texture.shadow"))
+        self._name_brightness.setText(t("texture.brightness"))
+        self._name_grain.setText(t("texture.grain"))
+        self._name_softness.setText(t("texture.softness"))
+        self._name_wear.setText(t("texture.wear"))
+        self._name_tile_density.setText(t("texture.tile_density"))
+        self._name_img_softness.setText(t("texture.softness"))
+        self._name_img_brightness.setText(t("texture.brightness"))
+        self._name_img_contrast.setText(t("texture.contrast"))
+        self._name_opacity.setText(t("texture.opacity"))
+        self._name_clarity.setText(t("texture.clarity"))
+        self._name_tint.setText(t("texture.tint"))
+        self._name_smoothness.setText(t("texture.smoothness"))
+        self._name_crease_angle.setText(t("texture.crease_angle"))

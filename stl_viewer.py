@@ -367,6 +367,7 @@ class STLViewerWindow(QMainWindow):
         self.overview_widget = OverviewWidget()
         self.overview_widget.tab_requested.connect(self._on_overview_tab_requested)
         self.overview_widget.set_refresh_callback(self._capture_all_thumbnails)
+        self.overview_widget.set_rotate_callback(self._on_overview_rotate)
 
         # ---- Stacked widgets for viewers and annotation/screenshot/arrow/texture panels ----
         self.viewer_stack = QStackedWidget()
@@ -1192,7 +1193,53 @@ class STLViewerWindow(QMainWindow):
         for i in range(len(self.tabs)):
             self._capture_thumbnail_for(i)
 
+    def _on_overview_rotate(self, tab_index: int, dx: float, dy: float):
+        """Rotate the camera in the given tab's viewer and refresh its thumbnail card."""
+        if tab_index < 0 or tab_index >= len(self.tabs):
+            return
+        vw = self.tabs[tab_index].viewer_widget
+        if vw is None or not hasattr(vw, '_on_gizmo_rotate'):
+            return
+        try:
+            vw._on_gizmo_rotate(dx, dy)
+        except Exception as e:
+            logger.debug(f"_on_overview_rotate: {e}")
+            return
+        # Throttled thumbnail refresh — schedule once, cancel pending
+        if not hasattr(self, '_overview_refresh_timers'):
+            self._overview_refresh_timers: dict = {}
+        timer = self._overview_refresh_timers.get(tab_index)
+        if timer and timer.isActive():
+            timer.stop()
+        t = QTimer(self)
+        t.setSingleShot(True)
+        t.timeout.connect(lambda idx=tab_index: self._refresh_overview_card(idx))
+        t.start(40)   # ~25 fps cap
+        self._overview_refresh_timers[tab_index] = t
+
+    def _refresh_overview_card(self, tab_index: int):
+        """Re-capture thumbnail for one tab and push it to the overview card."""
+        if tab_index < 0 or tab_index >= len(self.tabs):
+            return
+        tab = self.tabs[tab_index]
+        vw  = tab.viewer_widget
+        if vw is None or not hasattr(vw, 'capture_thumbnail'):
+            return
+        try:
+            pix = vw.capture_thumbnail(480, 320)
+            if pix and not pix.isNull():
+                tab.thumbnail = pix
+                self.overview_widget.update_card_thumbnail(tab_index, pix)
+        except Exception as e:
+            logger.debug(f"_refresh_overview_card tab {tab_index}: {e}")
+
     # ======================== Auto-Rotate ========================
+
+    def _on_rotate_speed_changed(self, speed: float):
+        """Live-update the rotation speed while rotating."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_rotate_speed'):
+            vw.set_rotate_speed(speed)
 
     def _toggle_rotate_mode(self):
         """Start or stop the turntable rotation."""
@@ -1200,7 +1247,7 @@ class STLViewerWindow(QMainWindow):
         if self.toolbar.rotate_mode_enabled:
             if vw and hasattr(vw, 'start_auto_rotate') and vw.current_mesh is not None:
                 vw.start_auto_rotate(
-                    speed_deg_per_sec=self.record_panel.current_speed(),
+                    speed_deg_per_sec=float(self.toolbar._rotate_speed_slider.value()),
                     direction=self.record_panel.current_direction(),
                 )
             else:
@@ -1688,6 +1735,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.load_file.connect(self.upload_stl_file)
         self.toolbar.clear_model.connect(self._clear_current_model)
         self.toolbar.toggle_rotate.connect(self._toggle_rotate_mode)
+        self.toolbar.rotate_speed_changed.connect(self._on_rotate_speed_changed)
         self.toolbar.toggle_record.connect(self._toggle_record_mode)
         self.toolbar.open_converter.connect(self._open_converter_dialog)
     

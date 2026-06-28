@@ -12,7 +12,7 @@ from ui.styles import make_font
 from ui.modal_utils import MessageModal
 
 from .models import ValidationSession, _default_session
-from .shared import _BG, _BORDER, _TEXT, _MUTED, _BTN_PRIMARY, _TAB_ACTIVE, _TAB_INACTIVE
+from .shared import _BG, _BORDER, _TEXT, _MUTED, _ACCENT, _BTN_PRIMARY, _TAB_ACTIVE, _TAB_INACTIVE
 from .panels import PreparationPanel, ReportPanel
 from .signature import SignatureBar
 from i18n import t
@@ -104,13 +104,69 @@ class ValidationWidget(QWidget):
                 item.widget().deleteLater()
 
         for i, session in enumerate(self._sessions):
+            is_active = (i == self._current_idx)
             label = ("🔒  " if session.locked else "") + session.display_name()
-            btn = QPushButton(label)
-            btn.setStyleSheet(_TAB_ACTIVE if i == self._current_idx else _TAB_INACTIVE)
-            btn.setFixedHeight(28)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(lambda _, idx=i: self._load_session(idx))
-            self._tabs_layout.addWidget(btn)
+
+            # Compound tab: [label btn] [× btn]
+            tab_w = QWidget()
+            tab_w.setStyleSheet("background: transparent;")
+            tab_l = QHBoxLayout(tab_w)
+            tab_l.setContentsMargins(0, 0, 0, 0)
+            tab_l.setSpacing(0)
+
+            name_btn = QPushButton(label)
+            name_btn.setFixedHeight(28)
+            name_btn.setCursor(Qt.PointingHandCursor)
+            name_btn.clicked.connect(lambda _, idx=i: self._load_session(idx))
+
+            del_btn = QPushButton("×")
+            del_btn.setFixedSize(22, 28)
+            del_btn.setCursor(Qt.PointingHandCursor)
+            del_btn.clicked.connect(lambda _, idx=i: self._delete_session(idx))
+
+            if is_active:
+                name_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {_ACCENT}; color: white; border: none;
+                        border-top-left-radius: 5px; border-bottom-left-radius: 5px;
+                        border-top-right-radius: 0px; border-bottom-right-radius: 0px;
+                        padding: 5px 10px 5px 14px; font-size: 15px; font-weight: bold;
+                    }}
+                """)
+                del_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {_ACCENT}; color: rgba(255,255,255,180); border: none;
+                        border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+                        border-top-left-radius: 0px; border-bottom-left-radius: 0px;
+                        font-size: 14px; font-weight: bold; padding: 0;
+                    }}
+                    QPushButton:hover {{ color: white; background-color: #ef4444; }}
+                """)
+            else:
+                name_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent; color: {_MUTED};
+                        border: 1px solid {_BORDER}; border-right: none;
+                        border-top-left-radius: 5px; border-bottom-left-radius: 5px;
+                        border-top-right-radius: 0px; border-bottom-right-radius: 0px;
+                        padding: 5px 10px 5px 14px; font-size: 15px;
+                    }}
+                    QPushButton:hover {{ color: {_TEXT}; border-color: {_BORDER}; background-color: #e8f0fe; }}
+                """)
+                del_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent; color: {_MUTED};
+                        border: 1px solid {_BORDER}; border-left: none;
+                        border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+                        border-top-left-radius: 0px; border-bottom-left-radius: 0px;
+                        font-size: 14px; font-weight: bold; padding: 0;
+                    }}
+                    QPushButton:hover {{ color: white; background-color: #ef4444; border-color: #ef4444; }}
+                """)
+
+            tab_l.addWidget(name_btn)
+            tab_l.addWidget(del_btn)
+            self._tabs_layout.addWidget(tab_w)
 
         self._tabs_layout.addStretch()
 
@@ -134,6 +190,48 @@ class ValidationWidget(QWidget):
         self._next_id += 1
         self._sessions.append(s)
         self._load_session(len(self._sessions) - 1)
+        self.changed.emit()
+
+    def _delete_session(self, idx: int):
+        session = self._sessions[idx]
+
+        if len(self._sessions) <= 1:
+            dlg = MessageModal(self, t("project.validation.delete_session_title"),
+                               t("project.validation.cannot_delete_last"),
+                               primary_text=t("common.ok"))
+            dlg.primary_btn.clicked.connect(dlg.accept)
+            dlg.exec_()
+            return
+
+        if session.locked:
+            dlg = MessageModal(self, t("project.validation.delete_session_title"),
+                               t("project.validation.cannot_delete_locked"),
+                               primary_text=t("common.ok"))
+            dlg.primary_btn.clicked.connect(dlg.accept)
+            dlg.exec_()
+            return
+
+        dlg = MessageModal(
+            self,
+            t("project.validation.delete_session_title"),
+            t("project.validation.delete_session_body").format(name=session.display_name()),
+            primary_text=t("project.validation.delete_session_btn"),
+            secondary_text=t("common.cancel"),
+        )
+        dlg.primary_btn.setStyleSheet(
+            dlg.primary_btn.styleSheet() +
+            "QPushButton { background-color: #ef4444; }"
+            "QPushButton:hover { background-color: #dc2626; }"
+        )
+        dlg.primary_btn.clicked.connect(dlg.accept)
+        dlg.secondary_btn.clicked.connect(dlg.reject)
+        if dlg.exec_() != dlg.Accepted:
+            return
+
+        self._sessions.pop(idx)
+        new_idx = min(idx, len(self._sessions) - 1)
+        self._current_idx = new_idx
+        self._load_session(new_idx)
         self.changed.emit()
 
     def _on_signed(self, sig: str):

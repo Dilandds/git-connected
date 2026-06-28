@@ -22,6 +22,7 @@ from PyQt5.QtGui import (
 )
 
 from ui.styles import default_theme
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -1073,7 +1074,7 @@ class ScaleCanvas(QWidget):
         painter.setFont(font)
         painter.setPen(QColor("#666666"))
         painter.drawText(canvas.toRect(), Qt.AlignCenter,
-                         "Drop a drawing here\nor click Upload")
+                         t("scale.drop_prompt"))
 
     def _draw_reference_line(self, painter: QPainter, canvas: QRectF):
         """Draw a 1-unit reference line (static, not draggable).

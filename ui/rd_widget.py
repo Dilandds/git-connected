@@ -4,7 +4,7 @@ Three-panel layout: component list | proposal card grid | selection + brief
 """
 import uuid
 import os
-import tempfile
+import base64
 from dataclasses import dataclass, field, asdict
 from datetime import date as _date_cls
 from typing import List, Optional, Tuple
@@ -50,6 +50,22 @@ _BADGE_COLORS = [
 _COLS = 3
 
 _LBL = f'color: {_MUTED}; font-size: 10px; font-weight: 700; letter-spacing: 0.7px; background: transparent;'
+_MENU_CSS = f"""
+    QMenu {{
+        background: #ffffff; color: {_TEXT};
+        border: 1px solid {_BORDER}; border-radius: 8px;
+        padding: 4px 0;
+    }}
+    QMenu::item {{
+        padding: 7px 20px; font-size: 13px;
+    }}
+    QMenu::item:selected {{
+        background: #eff6ff; color: {_ACCENT};
+    }}
+    QMenu::separator {{
+        height: 1px; background: {_BORDER}; margin: 4px 0;
+    }}
+"""
 _INPUT_CSS = f"""
     QLineEdit, QTextEdit, QComboBox {{
         background: {_CARD}; color: {_TEXT};
@@ -60,8 +76,8 @@ _INPUT_CSS = f"""
 """
 
 
-def _make_check_icon() -> str:
-    """Write a white checkmark SVG to a temp file; return its path for use in stylesheets."""
+def _make_check_icon_url() -> str:
+    """Return a data-URI for a white checkmark SVG — works on all platforms."""
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
         '<polyline points="2.5,8.5 6.5,12.5 13.5,3.5" '
@@ -69,12 +85,10 @@ def _make_check_icon() -> str:
         'stroke-linecap="round" stroke-linejoin="round"/>'
         '</svg>'
     )
-    path = os.path.join(tempfile.gettempdir(), 'ectoform_rd_check.svg')
-    with open(path, 'w') as f:
-        f.write(svg)
-    return path
+    b64 = base64.b64encode(svg.encode()).decode()
+    return f"data:image/svg+xml;base64,{b64}"
 
-_CHECK_ICON = _make_check_icon()
+_CHECK_ICON = _make_check_icon_url()
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
@@ -510,6 +524,7 @@ class _ComponentRow(QFrame):
 
     def _show_menu(self):
         menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
         menu.addAction(t('rd.rename_component'), lambda: self.edit_req.emit(self._id))
         menu.addSeparator()
         menu.addAction(t('rd.remove_component'), lambda: self.delete_req.emit(self._id))
@@ -664,6 +679,7 @@ class _ProposalCard(QFrame):
 
     def _show_menu(self):
         menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
         menu.addAction(t('rd.edit_proposal'), lambda: self.edit_req.emit(self._prop.id))
         menu.addAction(t('rd.reject_proposal'), lambda: self.reject_req.emit(self._prop.id))
         menu.addSeparator()
@@ -813,6 +829,7 @@ class _TechniqueCard(QFrame):
 
     def _show_menu(self):
         menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
         menu.addAction(t('rd.edit_technique'),   lambda: self.edit_req.emit(self._prop.id))
         menu.addAction(t('rd.reject_technique'), lambda: self.reject_req.emit(self._prop.id))
         menu.addSeparator()
@@ -937,6 +954,17 @@ class RdWidget(QWidget):
         lbl.setStyleSheet(_LBL)
         lay.addWidget(lbl)
 
+        btn_add = QPushButton(f'+ {t("rd.add_component")}')
+        btn_add.setCursor(Qt.PointingHandCursor)
+        btn_add.setStyleSheet(f"""
+            QPushButton {{ background: {_ACCENT}; color: white;
+                border: none; border-radius: 6px;
+                font-size: 12px; font-weight: 600; padding: 7px; }}
+            QPushButton:hover {{ background: {_ACCENT_H}; }}
+        """)
+        btn_add.clicked.connect(self._add_component)
+        lay.addWidget(btn_add)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -950,23 +978,6 @@ class RdWidget(QWidget):
         self._comp_lay.addStretch()
         scroll.setWidget(self._comp_container)
         lay.addWidget(scroll, 1)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setMaximumHeight(1)
-        sep.setStyleSheet(f'background: {_BORDER}; border: none;')
-        lay.addWidget(sep)
-
-        btn_add = QPushButton(f'+ {t("rd.add_component")}')
-        btn_add.setCursor(Qt.PointingHandCursor)
-        btn_add.setStyleSheet(f"""
-            QPushButton {{ background: transparent; color: {_ACCENT};
-                border: 1px solid {_ACCENT}; border-radius: 6px;
-                font-size: 12px; font-weight: 600; padding: 6px; }}
-            QPushButton:hover {{ background: #eff6ff; }}
-        """)
-        btn_add.clicked.connect(self._add_component)
-        lay.addWidget(btn_add)
 
         hint = QLabel(t('rd.how_it_works'))
         hint.setWordWrap(True)
@@ -999,18 +1010,6 @@ class RdWidget(QWidget):
         # Filter bar
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
-
-        self._combo_comp = self._make_filter_combo()
-        self._combo_comp.currentIndexChanged.connect(self._on_comp_combo)
-        filter_row.addWidget(self._combo_comp)
-
-        self._combo_cat = self._make_filter_combo()
-        self._combo_cat.currentIndexChanged.connect(lambda _: self._apply_filters())
-        filter_row.addWidget(self._combo_cat)
-
-        self._combo_sup = self._make_filter_combo()
-        self._combo_sup.currentIndexChanged.connect(lambda _: self._apply_filters())
-        filter_row.addWidget(self._combo_sup)
 
         self._search_edit = QLineEdit()
         self._search_edit.setPlaceholderText(t('rd.search_ph'))
@@ -1095,8 +1094,9 @@ class RdWidget(QWidget):
             QTabBar {{ background: {_BG}; border: none; }}
             QTabBar::tab {{
                 background: transparent; color: {_MUTED};
-                padding: 8px 16px; font-size: 12px; border: none;
+                padding: 8px 18px; font-size: 12px; border: none;
                 border-bottom: 2px solid transparent;
+                min-width: 140px;
             }}
             QTabBar::tab:selected {{
                 color: {_ACCENT}; border-bottom: 2px solid {_ACCENT};
@@ -1104,6 +1104,8 @@ class RdWidget(QWidget):
             }}
             QTabBar::tab:hover:!selected {{ color: {_TEXT}; }}
         """)
+        self._tabs.tabBar().setElideMode(Qt.ElideNone)
+        self._tabs.tabBar().setUsesScrollButtons(False)
 
         # Tab 0: Textures & Materials — proposal grid
         tab0 = QWidget()
@@ -1167,20 +1169,6 @@ class RdWidget(QWidget):
         self._tabs.tabBar().setExpanding(False)
         self._tabs.currentChanged.connect(self._on_tab_changed)
         lay.addWidget(self._tabs, 1)
-
-    @staticmethod
-    def _make_filter_combo() -> QComboBox:
-        cb = QComboBox()
-        cb.setFixedHeight(32)
-        cb.setStyleSheet(f"""
-            QComboBox {{ background: {_CARD}; color: {_TEXT}; border: 1px solid {_BORDER};
-                border-radius: 6px; padding: 0 10px; font-size: 12px; min-width: 130px; }}
-            QComboBox::drop-down {{ border: none; padding-right: 6px; }}
-            QComboBox QAbstractItemView {{ background: {_CARD}; color: {_TEXT};
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                selection-background-color: {_ACCENT}; selection-color: white; }}
-        """)
-        return cb
 
     # ── Right: selection + brief ──────────────────────────────────────────────
 
@@ -1303,24 +1291,9 @@ class RdWidget(QWidget):
 
     # ── Slots ─────────────────────────────────────────────────────────────────
 
-    def _on_comp_combo(self, idx: int):
-        val = self._combo_comp.itemData(idx)
-        # None → all components
-        if val != self._active_id:
-            self._active_id = val
-            self._rebuild_comp_rows()
-            self._update_comp_header()
-            self._rebuild_grid()
-            self._rebuild_technique_grid()
-            self._rebuild_brief()
-            self._btn_add_prop.setEnabled(self._active_id is not None)
-            self._btn_add_prop.setToolTip(
-                '' if self._active_id else t('rd.select_component_first')
-            )
-
     def _apply_filters(self):
-        self._cat_filter  = self._combo_cat.currentData() or ''
-        self._sup_filter  = self._combo_sup.currentData() or ''
+        self._cat_filter  = ''
+        self._sup_filter  = ''
         self._search_text = self._search_edit.text().strip().lower()
         self._rebuild_grid()
 
@@ -1607,39 +1580,7 @@ class RdWidget(QWidget):
         )
 
     def _repopulate_combos(self):
-        # "All components" combo
-        self._combo_comp.blockSignals(True)
-        self._combo_comp.clear()
-        self._combo_comp.addItem(t('rd.all_components'), None)
-        for comp in self._components:
-            self._combo_comp.addItem(comp.name, comp.id)
-        # Sync to active_id
-        for i in range(self._combo_comp.count()):
-            if self._combo_comp.itemData(i) == self._active_id:
-                self._combo_comp.setCurrentIndex(i)
-                break
-        else:
-            self._combo_comp.setCurrentIndex(0)
-        self._combo_comp.blockSignals(False)
-
-        # Gather all unique categories and suppliers from visible proposals
-        proposals = self._get_visible_proposals()
-        cats = sorted({p.category for p in proposals if p.category})
-        sups = sorted({p.supplier for p in proposals if p.supplier})
-
-        self._combo_cat.blockSignals(True)
-        self._combo_cat.clear()
-        self._combo_cat.addItem(t('rd.all_categories'), '')
-        for c in cats:
-            self._combo_cat.addItem(c, c)
-        self._combo_cat.blockSignals(False)
-
-        self._combo_sup.blockSignals(True)
-        self._combo_sup.clear()
-        self._combo_sup.addItem(t('rd.all_suppliers'), '')
-        for s in sups:
-            self._combo_sup.addItem(s, s)
-        self._combo_sup.blockSignals(False)
+        pass  # filter combos removed
 
     def _update_comp_header(self):
         comp = self._get_comp(self._active_id)

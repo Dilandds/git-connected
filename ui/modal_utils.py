@@ -313,6 +313,7 @@ class FormModal(BaseModal):
         """
         Append the button row and wire standard buttons.
         Call once, last, after all add_field() calls.
+        OK (primary action) on the LEFT, Cancel on the RIGHT.
         """
         row = QHBoxLayout()
         self.delete_btn = None
@@ -320,10 +321,10 @@ class FormModal(BaseModal):
             self.delete_btn = self._make_delete_btn(delete)
             row.addWidget(self.delete_btn)
         row.addStretch()
-        self.cancel_btn = self._make_cancel_btn(cancel)
         self.ok_btn     = self._make_ok_btn(ok)
-        row.addWidget(self.cancel_btn)
+        self.cancel_btn = self._make_cancel_btn(cancel)
         row.addWidget(self.ok_btn)
+        row.addWidget(self.cancel_btn)
         self._root.addLayout(row)
 
 
@@ -361,6 +362,10 @@ class MessageModal(BaseModal):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
+        # Primary (Yes/OK) on the LEFT, secondary (No) on the RIGHT
+        self.primary_btn = self._make_btn(primary_text, MODAL_BTN_PRIMARY)
+        btn_row.addWidget(self.primary_btn)
+
         self.secondary_btn = None
         if secondary_text:
             self.secondary_btn = self._make_btn(secondary_text, MODAL_BTN_SECONDARY)
@@ -369,13 +374,8 @@ class MessageModal(BaseModal):
         self.tertiary_btn = None
         if tertiary_text:
             self.tertiary_btn = self._make_btn(tertiary_text, MODAL_BTN_CANCEL)
-            if self.secondary_btn:
-                btn_row.insertWidget(btn_row.count() - 1, self.tertiary_btn)
-            else:
-                btn_row.addWidget(self.tertiary_btn)
+            btn_row.addWidget(self.tertiary_btn)
 
-        self.primary_btn = self._make_btn(primary_text, MODAL_BTN_PRIMARY)
-        btn_row.addWidget(self.primary_btn)
         self._root.addLayout(btn_row)
 
 
@@ -385,7 +385,7 @@ StyledModalDialog = MessageModal
 
 # ── Public dialog helpers ─────────────────────────────────────────────────────
 
-def show_message_dialog(parent, title: str, message: str, *, light: bool = False):
+def show_message_dialog(parent, title: str, message: str, *, light: bool = True):
     dlg = MessageModal(parent, title, message,
                        theme=BaseModal.LIGHT if light else BaseModal.DARK,
                        primary_text='OK')
@@ -393,15 +393,15 @@ def show_message_dialog(parent, title: str, message: str, *, light: bool = False
     dlg.exec_()
 
 
-def show_warning_dialog(parent, title: str, message: str, *, light: bool = False):
+def show_warning_dialog(parent, title: str, message: str, *, light: bool = True):
     show_message_dialog(parent, title, message, light=light)
 
 
-def show_error_dialog(parent, title: str, message: str, *, light: bool = False):
+def show_error_dialog(parent, title: str, message: str, *, light: bool = True):
     show_message_dialog(parent, title, message, light=light)
 
 
-def ask_yes_no_dialog(parent, title: str, message: str, *, light: bool = False) -> bool:
+def ask_yes_no_dialog(parent, title: str, message: str, *, light: bool = True) -> bool:
     dlg = MessageModal(parent, title, message,
                        theme=BaseModal.LIGHT if light else BaseModal.DARK,
                        primary_text='Yes', secondary_text='No')
@@ -413,7 +413,7 @@ def ask_yes_no_dialog(parent, title: str, message: str, *, light: bool = False) 
 
 
 def ask_yes_no_cancel_dialog(parent, title: str, message: str,
-                              *, light: bool = False) -> str:
+                              *, light: bool = True) -> str:
     """Return 'yes', 'no', or 'cancel'."""
     dlg = MessageModal(parent, title, message,
                        theme=BaseModal.LIGHT if light else BaseModal.DARK,
@@ -430,7 +430,7 @@ def ask_yes_no_cancel_dialog(parent, title: str, message: str,
 
 def ask_text_input_dialog(parent, title: str, label: str,
                           placeholder: str = '', *,
-                          default_text: str = '', light: bool = False) -> tuple:
+                          default_text: str = '', light: bool = True) -> tuple:
     """Single-line text input. Returns (text, accepted)."""
     dlg = FormModal(parent, title,
                     theme=BaseModal.LIGHT if light else BaseModal.DARK)
@@ -447,7 +447,7 @@ def ask_text_input_dialog(parent, title: str, label: str,
 
 
 def ask_password_dialog(parent, title: str, label: str,
-                        *, light: bool = False) -> tuple:
+                        *, light: bool = True) -> tuple:
     """Password input (masked). Returns (text, accepted)."""
     dlg = FormModal(parent, title,
                     theme=BaseModal.LIGHT if light else BaseModal.DARK)

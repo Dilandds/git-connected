@@ -18,12 +18,11 @@ class ComponentsCard(QFrame):
         layout.addWidget(separator())
 
         self._table = ComponentsTable()
-        layout.addWidget(self._table)
-        layout.addStretch()
+        layout.addWidget(self._table, 1)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(c)
+        outer.addWidget(c, 1)
 
     def set_edit_mode(self, enabled: bool):
         self._table.set_edit_mode(enabled)

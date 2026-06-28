@@ -494,7 +494,7 @@ class PartnerPanel(QScrollArea):
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self._table.setColumnWidth(2, 90)
+        self._table.setColumnWidth(2, 115)
         self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
         self._table.setColumnWidth(3, 100)
         self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
@@ -1337,7 +1337,16 @@ class EstimatedCostWidget(QWidget):
             self.changed.emit()
 
     def _add_trade(self):
+        new_idx = len(self._trades)
         trade = _default_trade(self._next_available_id())
+        new_name, ok = ask_text_input_dialog(
+            self, "New Trade", "TRADE NAME",
+            default_text=trade.name, light=True
+        )
+        if not ok:
+            return
+        if new_name:
+            trade.name = new_name
         self._trades.append(trade)
         tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency)
         tw.changed.connect(self.changed)
@@ -1345,7 +1354,7 @@ class EstimatedCostWidget(QWidget):
             tw.update_project_info(self._project_info)
         self._stack.addWidget(tw)
         self._trade_widgets.append(tw)
-        self._switch_trade(len(self._trades) - 1)
+        self._switch_trade(new_idx)
         self.changed.emit()
 
     def _remove_trade(self, idx: int):

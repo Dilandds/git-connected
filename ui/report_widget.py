@@ -676,6 +676,7 @@ class PageWidget(QScrollArea):
         self._report  = report
         self._is_first = is_first
         self._photo_row_widgets: List[PhotoRowWidget] = []
+        self._photo_row_containers: List[QWidget] = []
         self._header: Optional[HeaderSection] = None
         self._locked = False
 
@@ -768,10 +769,45 @@ class PageWidget(QScrollArea):
         self.changed.emit()
 
     def _add_photo_row_widget(self, pr: PhotoRow):
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        cl = QVBoxLayout(container)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(4)
+
+        del_row = QHBoxLayout()
+        del_row.setContentsMargins(0, 0, 0, 0)
+        del_row.addStretch()
+        del_btn = QPushButton("× Remove row")
+        del_btn.setFixedHeight(20)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_MUTED};
+                border: none; font-size: 10px; padding: 0 4px;
+            }}
+            QPushButton:hover {{ color: #ef4444; }}
+        """)
+        del_btn.clicked.connect(lambda _, c=container, p=pr: self._remove_photo_row(c, p))
+        del_row.addWidget(del_btn)
+        cl.addLayout(del_row)
+
         w = PhotoRowWidget(pr)
         w.changed.connect(self.changed)
-        self._photos_layout.addWidget(w)
+        cl.addWidget(w)
+
+        self._photos_layout.addWidget(container)
         self._photo_row_widgets.append(w)
+        self._photo_row_containers.append(container)
+
+    def _remove_photo_row(self, container: QWidget, pr: 'PhotoRow'):
+        if pr in self._page.photo_rows:
+            self._page.photo_rows.remove(pr)
+        if container in self._photo_row_containers:
+            self._photo_row_containers.remove(container)
+        container.hide()
+        container.setParent(None)
+        self.changed.emit()
 
     def update_project_info(self, info: dict):
         if self._header:
@@ -790,6 +826,15 @@ class PageWidget(QScrollArea):
         self._comments.setReadOnly(True)
         for w in self._photo_row_widgets:
             w.lock()
+        for c in self._photo_row_containers:
+            layout = c.layout()
+            if layout and layout.count() > 0:
+                del_row = layout.itemAt(0)
+                if del_row and del_row.layout():
+                    for j in range(del_row.layout().count()):
+                        item = del_row.layout().itemAt(j)
+                        if item and item.widget():
+                            item.widget().setEnabled(False)
         if self._header:
             self._header.lock()
 
