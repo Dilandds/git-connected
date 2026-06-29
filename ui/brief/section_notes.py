@@ -17,7 +17,7 @@ class NotesCard(QFrame):
         layout.addWidget(separator())
 
         hint = QLabel(t('project.brief.s7_hint'))
-        hint.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+        hint.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
         hint.setWordWrap(True)
         layout.addWidget(hint)
 

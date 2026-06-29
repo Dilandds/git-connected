@@ -16,6 +16,7 @@ from i18n import t
 
 _PHOTO_W = 160
 _PHOTO_H = 130
+_NUM_PHOTOS = 8   # 2 rows × 4 columns
 
 
 _PHOTO_BTN_STYLE = f"""
@@ -23,7 +24,7 @@ _PHOTO_BTN_STYLE = f"""
         background-color: {_INPUT_BG};
         border: 1.5px dashed {_BORDER_L};
         border-radius: 8px;
-        color: {_MUTED}; font-size: 10px; font-weight: bold;
+        color: {_MUTED}; font-size: 13px; font-weight: bold;
     }}
     QPushButton:hover {{
         border-color: {_ACCENT}; color: {_ACCENT};
@@ -102,11 +103,11 @@ class _PhotoBtn(QPushButton):
 
 
 class InspirationCard(QFrame):
-    """Section 5: Inspiration / Idea / Direction — compact textarea + 4 photo slots with hover zoom."""
+    """Section 5: Inspiration — textarea + 8 photo slots (2 rows × 4)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._photo_paths: List[str] = ['', '', '', '']
+        self._photo_paths: List[str] = [''] * _NUM_PHOTOS
         self._photo_btns:  List[_PhotoBtn] = []
         self._edit_enabled = True
         self._preview = _HoverPreview()
@@ -120,7 +121,7 @@ class InspirationCard(QFrame):
 
         hint = QLabel(t('project.brief.s5_hint'))
         hint.setStyleSheet(
-            f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+            f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -130,23 +131,21 @@ class InspirationCard(QFrame):
         self._f_inspiration.setMaximumHeight(100)
         layout.addWidget(self._f_inspiration)
 
-        # ── 4 photo slots ─────────────────────────────────────────────────
-        photos_row = QHBoxLayout()
-        photos_row.setSpacing(10)
-        photos_row.setContentsMargins(0, 4, 0, 0)
-
-        for i in range(4):
-            btn = _PhotoBtn(self._preview)
-            btn.setText(f'＋\n{t("project.brief.s5_add_photo")}')
-            btn.setFixedSize(_PHOTO_W, _PHOTO_H)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(_PHOTO_BTN_STYLE)
-            btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
-            photos_row.addWidget(btn)
-            self._photo_btns.append(btn)
-
-        layout.addLayout(photos_row)
-        layout.addStretch()
+        # ── 2 rows × 4 photo slots ─────────────────────────────────────────
+        for row_start in (0, 4):
+            photos_row = QHBoxLayout()
+            photos_row.setSpacing(10)
+            photos_row.setContentsMargins(0, 4 if row_start == 0 else 0, 0, 0)
+            for i in range(row_start, row_start + 4):
+                btn = _PhotoBtn(self._preview)
+                btn.setText(f'＋\n{t("project.brief.s5_add_photo")}')
+                btn.setFixedSize(_PHOTO_W, _PHOTO_H)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setStyleSheet(_PHOTO_BTN_STYLE)
+                btn.clicked.connect(lambda _, idx=i: self._upload_photo(idx))
+                photos_row.addWidget(btn)
+                self._photo_btns.append(btn)
+            layout.addLayout(photos_row)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -194,8 +193,8 @@ class InspirationCard(QFrame):
 
     def set_data(self, data: dict):
         self._f_inspiration.setPlainText(data.get('inspiration', ''))
-        paths = data.get('photo_paths', ['', '', '', ''])
-        for i in range(4):
+        paths = data.get('photo_paths', [])
+        for i in range(_NUM_PHOTOS):
             path = paths[i] if i < len(paths) else ''
             self._photo_paths[i] = path
             if path:

@@ -18,6 +18,13 @@ class PhotoRow:
 
 
 @dataclass
+class PhotoBlock:
+    """One bordered block: 6 photo+caption slots (2 cols × 3 rows) + a comment."""
+    photos:  List[PhotoCell] = field(default_factory=lambda: [PhotoCell() for _ in range(6)])
+    comment: str = ""
+
+
+@dataclass
 class AttendeeColumn:
     header: str = ""
     name:   str = ""
@@ -31,10 +38,11 @@ class CompanyRow:
 
 @dataclass
 class ReportPage:
-    id:         int
-    followup:   str            = ""
-    comments:   str            = ""
-    photo_rows: List[PhotoRow] = field(default_factory=list)
+    id:           int
+    followup:     str             = ""
+    comments:     str             = ""
+    photo_rows:   List[PhotoRow]  = field(default_factory=list)   # legacy
+    photo_blocks: List[PhotoBlock] = field(default_factory=list)  # current
 
 
 @dataclass
@@ -76,6 +84,6 @@ def _default_report(rid: int) -> Report:
         ["Production", "Studio", "Marketing", "Partners 1", "Other", "Other"]
     ]
     page = ReportPage(id=1)
-    page.photo_rows = [PhotoRow()]
+    page.photo_blocks = [PhotoBlock()]
     r.pages = [page]
     return r

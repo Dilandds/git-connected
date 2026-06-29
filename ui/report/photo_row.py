@@ -89,8 +89,8 @@ class PhotoCardWidget(QWidget):
     changed          = pyqtSignal()
     delete_requested = pyqtSignal()   # emitted when the user clicks ×
 
-    PHOTO_H   = 120
-    COMMENT_H = 28
+    PHOTO_H   = 160
+    COMMENT_H = 30
 
     def __init__(self, cell: PhotoCell, hover: _HoverPreview, parent=None):
         super().__init__(parent)
@@ -109,10 +109,10 @@ class PhotoCardWidget(QWidget):
         self._btn.setCursor(Qt.PointingHandCursor)
         self._btn.setStyleSheet(f"""
             QPushButton {{
-                background: #f1f3f5; border: 1px dashed {_BORDER};
-                border-radius: 6px; color: {_MUTED}; font-size: 10px;
+                background: #f5f6f8; border: 1px solid {_BORDER};
+                border-radius: 8px; color: {_MUTED}; font-size: 11px;
             }}
-            QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
+            QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; background: #eef6ff; }}
         """)
         self._btn.setText('+\nAdd photo')
         self._btn.clicked.connect(self._upload)
@@ -221,9 +221,9 @@ class PhotoFlowWidget(QWidget):
 
     changed = pyqtSignal()
 
-    CARD_W  = 150
+    CARD_W  = 195
     CARD_H  = PhotoCardWidget.PHOTO_H + PhotoCardWidget.COMMENT_H + 4 + 8  # total card height
-    GAP     = 10
+    GAP     = 6
 
     def __init__(self, page: ReportPage, parent=None):
         super().__init__(parent)
@@ -240,9 +240,9 @@ class PhotoFlowWidget(QWidget):
         self._add_btn.setStyleSheet(f"""
             QPushButton {{
                 background: #ffffff; border: 2px dashed {_ACCENT};
-                border-radius: 6px; color: {_ACCENT}; font-size: 12px; font-weight: bold;
+                border-radius: 8px; color: {_ACCENT}; font-size: 13px; font-weight: bold;
             }}
-            QPushButton:hover {{ background: #eaf5fb; }}
+            QPushButton:hover {{ background: #eef6ff; }}
         """)
         self._add_btn.clicked.connect(self._on_add)
 

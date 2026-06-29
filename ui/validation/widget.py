@@ -198,7 +198,7 @@ class ValidationWidget(QWidget):
         if len(self._sessions) <= 1:
             dlg = MessageModal(self, t("project.validation.delete_session_title"),
                                t("project.validation.cannot_delete_last"),
-                               primary_text=t("common.ok"))
+                               theme='light', primary_text=t("common.ok"))
             dlg.primary_btn.clicked.connect(dlg.accept)
             dlg.exec_()
             return
@@ -206,7 +206,7 @@ class ValidationWidget(QWidget):
         if session.locked:
             dlg = MessageModal(self, t("project.validation.delete_session_title"),
                                t("project.validation.cannot_delete_locked"),
-                               primary_text=t("common.ok"))
+                               theme='light', primary_text=t("common.ok"))
             dlg.primary_btn.clicked.connect(dlg.accept)
             dlg.exec_()
             return
@@ -215,6 +215,7 @@ class ValidationWidget(QWidget):
             self,
             t("project.validation.delete_session_title"),
             t("project.validation.delete_session_body").format(name=session.display_name()),
+            theme='light',
             primary_text=t("project.validation.delete_session_btn"),
             secondary_text=t("common.cancel"),
         )
@@ -239,6 +240,7 @@ class ValidationWidget(QWidget):
             self,
             t("project.validation.sign_confirm_title").format(sig=sig),
             t("project.validation.sign_confirm_body"),
+            theme='light',
             primary_text=t("project.validation.sign_btn"),
             secondary_text=t("common.cancel"),
         )

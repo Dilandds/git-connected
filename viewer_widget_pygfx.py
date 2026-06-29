@@ -370,6 +370,12 @@ class STLViewerWidget(QWidget):
         self._record_width = 0
         self._record_height = 0
 
+        # Cached offscreen renderer for thumbnail captures (reused to avoid per-call GPU alloc)
+        self._thumb_renderer = None
+        self._thumb_texture  = None
+        self._THUMB_W = 240
+        self._THUMB_H = 160
+
         # Parts pick mode state
         self.parts_pick_mode = False
         self._parts_pick_event_filter_installed = False
@@ -2761,6 +2767,16 @@ class STLViewerWidget(QWidget):
             logger.warning("start_recording: already recording")
             return False
 
+        # Pre-flight: check imageio is available before spinning up any threads
+        try:
+            import imageio  # noqa: F401
+        except ImportError:
+            self.recording_error.emit(
+                "imageio and imageio-ffmpeg are required for recording.\n"
+                "Install them with:  pip install imageio imageio-ffmpeg"
+            )
+            return False
+
         # Resolve dimensions
         try:
             vw, vh = self._canvas.get_logical_size()
@@ -2897,8 +2913,9 @@ class STLViewerWidget(QWidget):
             logger.error(f"_record_writer_thread: {e}", exc_info=True)
             self.recording_error.emit(f"Recording failed: {e}")
 
-    def capture_thumbnail(self, width: int = 480, height: int = 320):
+    def capture_thumbnail(self, width: int = 240, height: int = 160):
         """Render the current scene to a QPixmap thumbnail (for Overview tab).
+        The offscreen renderer is created once and reused to avoid per-call GPU allocation.
         Returns None if the scene is not ready or rendering fails."""
         if not (self._renderer and self._scene and self._camera):
             return None
@@ -2906,10 +2923,14 @@ class STLViewerWidget(QWidget):
             import pygfx as gfx
             import numpy as np
             from PyQt5.QtGui import QImage, QPixmap
-            texture = gfx.Texture(dim=2, size=(width, height, 1), format="rgba8unorm")
-            off = gfx.renderers.wgpu.WgpuRenderer(texture)
-            off.render(self._scene, self._camera)
-            arr = off.snapshot()
+
+            tw, th = self._THUMB_W, self._THUMB_H
+            if self._thumb_renderer is None:
+                self._thumb_texture  = gfx.Texture(dim=2, size=(tw, th, 1), format="rgba8unorm")
+                self._thumb_renderer = gfx.renderers.wgpu.WgpuRenderer(self._thumb_texture)
+
+            self._thumb_renderer.render(self._scene, self._camera)
+            arr = self._thumb_renderer.snapshot()
             if arr is None:
                 return None
             arr = np.ascontiguousarray(arr)
@@ -2919,6 +2940,8 @@ class STLViewerWidget(QWidget):
             return QPixmap.fromImage(qimg.copy())
         except Exception as e:
             logger.warning(f"capture_thumbnail: {e}")
+            self._thumb_renderer = None   # force re-init on next call if renderer went bad
+            self._thumb_texture  = None
             return None
 
     @property

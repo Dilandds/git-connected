@@ -25,12 +25,25 @@ print(f"[PyInstaller] Project root: {project_root}")
 print(f"[PyInstaller] Checking for assets/splash.png: {(project_root / 'assets' / 'splash.png').exists()}")
 print(f"[PyInstaller] Checking for assets/icon.ico: {(project_root / 'assets' / 'icon.ico').exists()}")
 
+# Collect imageio + imageio-ffmpeg (includes the bundled ffmpeg binary).
+# collect_all captures data files (including the ffmpeg.exe inside imageio_ffmpeg),
+# native binaries, and any submodule hidden imports in one call.
+try:
+    from PyInstaller.utils.hooks import collect_all
+    imageio_datas,       imageio_binaries,       imageio_hidden       = collect_all('imageio')
+    imageio_ffmpeg_datas, imageio_ffmpeg_binaries, imageio_ffmpeg_hidden = collect_all('imageio_ffmpeg')
+    print("[PyInstaller] [OK] imageio + imageio_ffmpeg collected via collect_all")
+except Exception as _e:
+    print(f"[PyInstaller] WARNING: collect_all failed ({_e}), falling back to empty lists")
+    imageio_datas = imageio_binaries = imageio_hidden = []
+    imageio_ffmpeg_datas = imageio_ffmpeg_binaries = imageio_ffmpeg_hidden = []
+
 # Build datas list with assets
 datas = [
     ('ui', 'ui'),
     ('core', 'core'),
     ('i18n', 'i18n'),
-]
+] + imageio_datas + imageio_ffmpeg_datas
 
 # Add splash screen and icon assets if they exist
 splash_image_paths = [
@@ -82,6 +95,8 @@ try:
 except Exception as e:
     print(f"[PyInstaller] Warning: Could not collect casadi DLLs: {e}")
     print("[PyInstaller] casadi DLLs may need to be manually added")
+
+binaries_list += imageio_binaries + imageio_ffmpeg_binaries
 
 a = Analysis(
     ['main.py'],
@@ -138,11 +153,13 @@ a = Analysis(
         'core.license_validator',
         'core.image_utils',
         'core.procedural_textures',
-        # Video recording
+        # Video recording (extras from collect_all added via imageio_hidden + imageio_ffmpeg_hidden)
         'imageio',
         'imageio.plugins',
         'imageio.plugins.ffmpeg',
         'imageio_ffmpeg',
+        *imageio_hidden,
+        *imageio_ffmpeg_hidden,
         # HEIC (iPhone) to JPEG conversion in annotation mode
         'PIL',
         'PIL.Image',

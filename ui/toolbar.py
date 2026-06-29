@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QFrame, QSpacerItem, QApplication, QMenu, QAction,
     QScrollArea, QWidgetAction, QSlider,
 )
-from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings
-from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage
+from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings, QTimer
+from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage, QBrush
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE, arrow_up_url as _arrow_up, arrow_down_url as _arrow_down
 from i18n import t, on_language_changed
 
@@ -185,6 +185,95 @@ def _toolbar_label_style(color: str, size: int = 10) -> str:
     """QLabel stylesheet for toolbar text; bold on Windows so QSS matches QFont."""
     w = 'font-weight: bold;' if sys.platform == 'win32' else ''
     return f'color: {color}; font-size: {size}px; background: transparent; {w}'
+
+
+class _RecButton(QPushButton):
+    """Broadcast-style REC button drawn entirely via QPainter."""
+
+    _W, _H = 76, 30
+    _DOT_R  = 6      # dot radius
+    _DOT_X  = 12     # dot left edge
+    _GAP    = 8      # gap between dot and text
+
+    def __init__(self, tooltip: str = '', parent=None):
+        super().__init__(parent)
+        self._active   = False
+        self._blink_on = True
+        self._hover    = False
+
+        self.setToolTip(tooltip)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(self._W, self._H)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        # Suppress default QPushButton paint
+        self.setStyleSheet('QPushButton { background: transparent; border: none; }')
+
+        self._blink_timer = QTimer(self)
+        self._blink_timer.timeout.connect(self._blink)
+
+    # ── painting ──────────────────────────────────────────────────────────────
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+
+        # Background
+        bg = QColor('#1a1a1a') if self._hover else QColor('#000000')
+        p.setBrush(QBrush(bg))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(0, 0, self._W, self._H, 7, 7)
+
+        # Red dot
+        dot_color = QColor('#e63946' if (self._blink_on or not self._active) else '#4a0a0a')
+        p.setBrush(QBrush(dot_color))
+        p.setPen(Qt.NoPen)
+        cy = self._H // 2
+        p.drawEllipse(self._DOT_X, cy - self._DOT_R, self._DOT_R * 2, self._DOT_R * 2)
+
+        # REC text
+        p.setPen(QColor('#ffffff'))
+        font = QFont()
+        font.setPixelSize(13)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.AbsoluteSpacing, 2)
+        p.setFont(font)
+        tx = self._DOT_X + self._DOT_R * 2 + self._GAP
+        p.drawText(tx, 0, self._W - tx - 6, self._H,
+                   Qt.AlignVCenter | Qt.AlignLeft, 'REC')
+        p.end()
+
+    # ── hover tracking ────────────────────────────────────────────────────────
+
+    def enterEvent(self, e):
+        self._hover = True
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self._hover = False
+        self.update()
+        super().leaveEvent(e)
+
+    # ── blink ─────────────────────────────────────────────────────────────────
+
+    def _blink(self):
+        self._blink_on = not self._blink_on
+        self.update()
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def set_active(self, active: bool):
+        self._active = active
+        if active:
+            self._blink_on = True
+            self._blink_timer.start(500)
+        else:
+            self._blink_timer.stop()
+            self._blink_on = True
+        self.update()
+
+    def set_label(self, _text: str = ''):
+        pass  # label is always "REC"
 
 
 class ToolbarButton(QPushButton):
@@ -632,12 +721,18 @@ class ViewControlsToolbar(QWidget):
         content_layout.addSpacing(2)
 
         # ── Group 4: Capture / output ─────────────────────────────────────────
-        self.screenshot_btn = ToolbarButton("📷", t("toolbar.screenshot"), t("toolbar.screenshot_tooltip"))
+        self.screenshot_btn = ToolbarButton("📷", "", t("toolbar.screenshot_tooltip"))
+        self.screenshot_btn.text_label.hide()
+        self.screenshot_btn.icon_label.setFixedSize(26, 26)
+        self.screenshot_btn.icon_label.setStyleSheet(
+            f"color: {_TB_FG}; font-size: 20px; background: transparent;"
+        )
+        self.screenshot_btn._update_min_width()
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
         self.screenshot_btn.setEnabled(False)
         content_layout.addWidget(self.screenshot_btn)
 
-        self.rotate_btn = ToolbarButton("↻", t("toolbar.rotate"), t("toolbar.rotate_tooltip"))
+        self.rotate_btn = ToolbarButton("↻", "360°", t("toolbar.rotate_tooltip"))
         self.rotate_btn.clicked.connect(self._on_rotate_clicked)
         self.rotate_btn.setEnabled(False)
         content_layout.addWidget(self.rotate_btn)
@@ -689,7 +784,7 @@ class ViewControlsToolbar(QWidget):
 
         content_layout.addWidget(self._rotate_speed_widget)
 
-        self.record_btn = ToolbarButton("⏺", t("toolbar.record"), t("toolbar.record_tooltip"))
+        self.record_btn = _RecButton(t("toolbar.record_tooltip"))
         self.record_btn.clicked.connect(self._on_record_clicked)
         self.record_btn.setEnabled(False)
         content_layout.addWidget(self.record_btn)
@@ -1136,7 +1231,7 @@ class ViewControlsToolbar(QWidget):
         """Handle rotate mode toggle (no mode conflicts — rotate works alongside any other mode)."""
         self.rotate_mode_enabled = not self.rotate_mode_enabled
         self.rotate_btn.set_active(self.rotate_mode_enabled)
-        self.rotate_btn.set_label(t("toolbar.rotating") if self.rotate_mode_enabled else t("toolbar.rotate"))
+        self.rotate_btn.set_label("360°")
         self._rotate_speed_widget.setVisible(self.rotate_mode_enabled)
         self.toggle_rotate.emit()
 
@@ -1564,7 +1659,7 @@ class ViewControlsToolbar(QWidget):
         """Reset rotate button state (called when stopping rotation externally)."""
         self.rotate_mode_enabled = False
         self.rotate_btn.set_active(False)
-        self.rotate_btn.set_label(t("toolbar.rotate"))
+        self.rotate_btn.set_label("360°")
         self._rotate_speed_widget.hide()
 
     def reset_record_state(self):
@@ -1612,7 +1707,7 @@ class ViewControlsToolbar(QWidget):
             self.annotation_btn.set_label(t("toolbar.annotate"))
         else:
             self.annotation_btn.set_label(t("toolbar.annotate"))
-        self.screenshot_btn.set_label(t("toolbar.screenshot"))
+        self.screenshot_btn.set_label("")
         self.texture_btn.set_label(t("toolbar.texture"))
         if self.draw_mode_enabled:
             if self._eraser_active:
@@ -1624,7 +1719,7 @@ class ViewControlsToolbar(QWidget):
         else:
             self.draw_btn.set_label(t("toolbar.draw"))
         self.convert_btn.set_label(t("toolbar.convert"))
-        self.rotate_btn.set_label(t("toolbar.rotating") if self.rotate_mode_enabled else t("toolbar.rotate"))
+        self.rotate_btn.set_label("360°")
         self.record_btn.set_label(t("toolbar.rec") if self.record_mode_enabled else t("toolbar.record"))
         if self.is_fullscreen:
             self.fullscreen_btn.set_label(t("toolbar.fullscreen_exit"))

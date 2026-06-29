@@ -199,7 +199,8 @@ class _ThumbPhoto(QFrame):
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignCenter)
         self._img_lbl.setStyleSheet('background: transparent; border: none;')
-        lay.addWidget(self._img_lbl)
+        self._img_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.addWidget(self._img_lbl, 1)
 
         self._hint_lbl = QLabel(t('proto.click_to_add_photo'))
         self._hint_lbl.setAlignment(Qt.AlignCenter)
@@ -215,7 +216,7 @@ class _ThumbPhoto(QFrame):
         has_img = bool(self._path and os.path.exists(self._path))
         if has_img:
             pix = QPixmap(self._path).scaled(
-                _THUMB_W - 12, _THUMB_H - 28,
+                _THUMB_W - 8, _THUMB_H - 8,
                 Qt.KeepAspectRatio, Qt.SmoothTransformation,
             )
             self._img_lbl.setPixmap(pix)
@@ -302,6 +303,7 @@ class _FileChip(QFrame):
 
 class _VersionPanel(QFrame):
     changed = pyqtSignal()
+    remove_requested = pyqtSignal(str)   # emits version id
 
     def __init__(self, version: PrototypeVersion, parent=None):
         super().__init__(parent)
@@ -320,8 +322,50 @@ class _VersionPanel(QFrame):
         """)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
+        root.setContentsMargins(20, 16, 20, 20)
         root.setSpacing(16)
+
+        # ── Panel header: badge + name + Remove Version ───────────────
+        panel_hdr = QHBoxLayout()
+        panel_hdr.setSpacing(10)
+
+        badge = QLabel(f'V{self._v.version_number}')
+        badge.setFixedSize(32, 22)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet(f"""
+            QLabel {{
+                background: {_ACCENT}; color: #ffffff;
+                border-radius: 6px; font-size: 11px; font-weight: bold;
+            }}
+        """)
+        panel_hdr.addWidget(badge)
+
+        name_lbl = QLabel(f'{t("proto.version")} {self._v.version_number}')
+        name_lbl.setStyleSheet(f'color: {_TEXT}; font-size: 14px; font-weight: 600;')
+        panel_hdr.addWidget(name_lbl)
+        panel_hdr.addStretch()
+
+        btn_remove = QPushButton(t('proto.remove_version'))
+        btn_remove.setCursor(Qt.PointingHandCursor)
+        btn_remove.setFixedHeight(26)
+        btn_remove.setStyleSheet(f"""
+            QPushButton {{
+                background: #f1f5f9; color: {_MUTED};
+                border: 1px solid {_BORDER}; border-radius: 5px;
+                font-size: 12px; padding: 0 12px;
+            }}
+            QPushButton:hover {{ background: #fee2e2; color: #ef4444; border-color: #fca5a5; }}
+        """)
+        btn_remove.clicked.connect(lambda: self.remove_requested.emit(self._v.id))
+        panel_hdr.addWidget(btn_remove)
+
+        root.addLayout(panel_hdr)
+
+        # Thin separator under header
+        hdr_sep = QFrame()
+        hdr_sep.setFixedHeight(1)
+        hdr_sep.setStyleSheet(f'background: {_BORDER}; border: none;')
+        root.addWidget(hdr_sep)
 
         # ── Main content row ──────────────────────────────────────────
         content_row = QHBoxLayout()
@@ -589,9 +633,8 @@ class _VersionPanel(QFrame):
 # ── Tab button ─────────────────────────────────────────────────────────────────
 
 class _VersionTabBtn(QWidget):
-    """A single tab button: label + × close."""
+    """A single tab button: label only (no × — remove is done via the panel header)."""
     clicked = pyqtSignal(str)
-    close_requested = pyqtSignal(str)
 
     def __init__(self, version_id: str, label: str, active: bool = False, parent=None):
         super().__init__(parent)
@@ -605,31 +648,21 @@ class _VersionTabBtn(QWidget):
     def _build(self):
         self.setCursor(Qt.PointingHandCursor)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 8, 8, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(16, 8, 16, 8)
+        lay.setSpacing(0)
 
         self._lbl = QLabel(self._label)
         self._lbl.setStyleSheet('background: transparent; border: none; font-size: 13px; font-weight: 600;')
         lay.addWidget(self._lbl)
 
-        self._close = QPushButton('×')
-        self._close.setFixedSize(18, 18)
-        self._close.setCursor(Qt.PointingHandCursor)
-        self._close.clicked.connect(lambda: self.close_requested.emit(self._id))
-        lay.addWidget(self._close)
-
     def _apply_style(self):
         if self._active:
             bg = _ACCENT
             fg = '#ffffff'
-            close_fg = 'rgba(255,255,255,0.75)'
-            close_hover = '#ffffff'
             border = f'border: 1px solid {_ACCENT}; border-bottom: none;'
         else:
             bg = '#e9eef5'
             fg = '#374151'
-            close_fg = '#9ca3af'
-            close_hover = '#ef4444'
             border = f'border: 1px solid {_BORDER}; border-bottom: none;'
 
         self.setStyleSheet(f"""
@@ -643,21 +676,13 @@ class _VersionTabBtn(QWidget):
             f'background: transparent; border: none; color: {fg};'
             f' font-size: 13px; font-weight: 600;'
         )
-        self._close.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; border: none; border-radius: 9px;
-                color: {close_fg}; font-size: 15px; font-weight: bold; padding: 0;
-            }}
-            QPushButton:hover {{ color: {close_hover}; background: rgba(0,0,0,0.12); }}
-        """)
 
     def set_active(self, active: bool):
         self._active = active
         self._apply_style()
 
-    def mousePressEvent(self, event):
-        if not self._close.geometry().contains(event.pos()):
-            self.clicked.emit(self._id)
+    def mousePressEvent(self, _event):
+        self.clicked.emit(self._id)
 
 
 # ── Main widget ────────────────────────────────────────────────────────────────
@@ -802,7 +827,6 @@ class PrototypeWidget(QWidget):
         label = f'{t("proto.version")} {v.version_number}'
         tab = _VersionTabBtn(v.id, label, active=False)
         tab.clicked.connect(self._switch_to)
-        tab.close_requested.connect(self._remove_version)
         self._tab_buttons[v.id] = tab
 
         # Insert before the stretch
@@ -812,6 +836,7 @@ class PrototypeWidget(QWidget):
     def _create_panel(self, v: PrototypeVersion):
         panel = _VersionPanel(v)
         panel.changed.connect(self.changed.emit)
+        panel.remove_requested.connect(self._remove_version)
         panel.hide()
         self._panels[v.id] = panel
         self._stack_lay.insertWidget(self._stack_lay.count() - 1, panel)

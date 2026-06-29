@@ -684,7 +684,7 @@ def get_global_stylesheet(theme=None):
             margin-right: 2px;
             font-size: 12px;
             font-family: {FONTS['family']};
-            min-width: 80px;
+            min-width: 120px;
             min-height: 24px;
         }}
         QTabBar#ectoTabBar::tab:selected {{

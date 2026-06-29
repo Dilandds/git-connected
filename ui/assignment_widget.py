@@ -710,7 +710,6 @@ class AssignmentWidget(QWidget):
 
         root.addWidget(self._build_header())
         root.addWidget(self._build_toolbar())
-        root.addWidget(self._build_style_bar())
 
         self._scroll = QScrollArea()
         self._scroll.setWidget(self._canvas)
@@ -813,6 +812,37 @@ class AssignmentWidget(QWidget):
         del_btn.setToolTip(t('assignment.delete_tooltip'))
         del_btn.clicked.connect(self._canvas.delete_selected)
         row.addWidget(del_btn)
+
+        row.addWidget(self._vsep())
+
+        clr_lbl = QLabel('Color:')
+        clr_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent;')
+        row.addWidget(clr_lbl)
+
+        self._color_btn = QPushButton('🎨  Pick color')
+        self._color_btn.setFixedHeight(30)
+        self._color_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #f3f4f6; color: {_TEXT};
+                border: 1px solid {_BORDER}; border-radius: 6px;
+                font-size: 12px; padding: 0 12px;
+            }}
+            QPushButton:hover {{ background: #e5e7eb; border-color: {_ACCENT}; }}
+        """ + TOOLTIP_STYLE)
+        self._color_btn.setCursor(Qt.PointingHandCursor)
+        self._color_btn.setToolTip('Pick a color for the selected card')
+        self._color_btn.clicked.connect(self._on_color_btn_clicked)
+        row.addWidget(self._color_btn)
+
+        row.addWidget(self._vsep())
+
+        self._orient_btn = QPushButton('⇄  Landscape')
+        self._orient_btn.setStyleSheet(_BTN)
+        self._orient_btn.setFixedHeight(30)
+        self._orient_btn.setCursor(Qt.PointingHandCursor)
+        self._orient_btn.setToolTip('Toggle between A4 portrait and landscape')
+        self._orient_btn.clicked.connect(self._toggle_orientation)
+        row.addWidget(self._orient_btn)
 
         row.addStretch()
         return bar

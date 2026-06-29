@@ -70,6 +70,7 @@ def _grid_dims(n: int):
 class _ThumbnailCard(QFrame):
     clicked          = pyqtSignal(int)
     rotate_requested = pyqtSignal(int, float, float)
+    drag_released    = pyqtSignal(int)   # emitted once when drag ends → trigger GPU capture
 
     def __init__(self, tab_index: int, filename: str,
                  thumbnail: Optional[QPixmap],
@@ -228,6 +229,7 @@ class _ThumbnailCard(QFrame):
             if self._dragging:
                 dx, dy = float(delta.x()), float(delta.y())
                 if dx != 0 or dy != 0:
+                    # Rotate the 3D camera immediately; thumbnail stays frozen until release
                     self.rotate_requested.emit(self._tab_index, dx, dy)
                 self._last_drag_pos = event.pos()
         super().mouseMoveEvent(event)
@@ -236,6 +238,9 @@ class _ThumbnailCard(QFrame):
         if event.button() == Qt.LeftButton:
             if not self._dragging:
                 self.clicked.emit(self._tab_index)
+            else:
+                # Drag ended — request one accurate GPU capture
+                self.drag_released.emit(self._tab_index)
             self._dragging = False
             self._last_drag_pos = None
             self._press_pos = None
@@ -343,10 +348,18 @@ class OverviewWidget(QWidget):
             self._request_refresh()
         self._rebuild(self._tabs_ref)
 
+    def set_drag_released_callback(self, cb):
+        self._drag_released_callback = cb
+
     def _on_rotate(self, tab_index: int, dx: float, dy: float):
         if self._rotate_callback:
             self._rotate_callback(tab_index, dx, dy)
         self.rotate_requested.emit(tab_index, dx, dy)
+
+    def _on_drag_released(self, tab_index: int):
+        cb = getattr(self, '_drag_released_callback', None)
+        if cb:
+            cb(tab_index)
 
     def _rebuild(self, tabs: list):
         self._cards.clear()
@@ -406,6 +419,7 @@ class OverviewWidget(QWidget):
             )
             card.clicked.connect(self.tab_requested)
             card.rotate_requested.connect(self._on_rotate)
+            card.drag_released.connect(self._on_drag_released)
             self._cards[tab_index] = card
 
             row, col_idx = divmod(pos, cols)

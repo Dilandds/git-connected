@@ -11,7 +11,7 @@ from PyQt5.QtGui import QPixmap
 from .models import Report, ReportPage
 from .shared import _BG, _BORDER, _INPUT, _card, _sep, _lbl
 from i18n import t
-from .photo_row import PhotoFlowWidget
+from .photo_block import PhotoBlockFlow
 from .header_section import HeaderSection
 
 
@@ -65,7 +65,7 @@ class PageWidget(QScrollArea):
         fl.addWidget(self._followup)
         self._root.addWidget(fu_card)
 
-        # Photos section — flow grid, no external "add row" button needed
+        # Photos section — block-based flow (2×3 photos per block + comment)
         photos_card = _card()
         pl = QVBoxLayout(photos_card)
         pl.setContentsMargins(14, 10, 14, 10)
@@ -76,7 +76,7 @@ class PageWidget(QScrollArea):
         pl.addLayout(ph_hdr)
         pl.addWidget(_sep())
 
-        self._flow = PhotoFlowWidget(page)
+        self._flow = PhotoBlockFlow(page)
         self._flow.changed.connect(self.changed)
         pl.addWidget(self._flow)
         self._root.addWidget(photos_card)
@@ -102,7 +102,7 @@ class PageWidget(QScrollArea):
         self.setWidget(body)
 
     def add_screenshot_to_report(self, pixmap: QPixmap) -> bool:
-        """Fill the first empty photo slot, or add a new card if all are full."""
+        """Fill the first empty block slot (or add a new block) with this screenshot."""
         if not isinstance(pixmap, QPixmap) or pixmap.isNull():
             return False
         return self._flow.add_screenshot(pixmap)

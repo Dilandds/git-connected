@@ -223,13 +223,16 @@ class ReportWidget(QWidget):
         def _ser_cell(c: PhotoCell) -> dict:
             return {"caption": c.caption, "image_path": c.image_path}
 
-        def _ser_photo_row(pr: PhotoRow) -> dict:
-            return {"photos": [_ser_cell(c) for c in pr.photos]}
+        def _ser_block(b) -> dict:
+            return {
+                "photos": [_ser_cell(c) for c in b.photos],
+                "comment": b.comment,
+            }
 
         def _ser_page(p: ReportPage) -> dict:
             return {
                 "id": p.id, "followup": p.followup, "comments": p.comments,
-                "photo_rows": [_ser_photo_row(pr) for pr in p.photo_rows],
+                "photo_blocks": [_ser_block(b) for b in p.photo_blocks],
             }
 
         def _ser_att(a: AttendeeColumn) -> dict:
@@ -288,9 +291,24 @@ class ReportWidget(QWidget):
                     followup=pd.get("followup", ""),
                     comments=pd.get("comments", ""),
                 )
-                for prd in pd.get("photo_rows", []):
-                    pr = PhotoRow(photos=[PhotoCell(**c) for c in prd.get("photos", [])])
-                    page.photo_rows.append(pr)
+                from .models import PhotoBlock
+                for bd in pd.get("photo_blocks", []):
+                    cells = [PhotoCell(**c) for c in bd.get("photos", [])]
+                    while len(cells) < 6:
+                        cells.append(PhotoCell())
+                    blk = PhotoBlock(photos=cells, comment=bd.get("comment", ""))
+                    page.photo_blocks.append(blk)
+                # Migrate legacy photo_rows → one block per old row
+                if not page.photo_blocks:
+                    for prd in pd.get("photo_rows", []):
+                        old_cells = [PhotoCell(**c) for c in prd.get("photos", [])]
+                        cells = old_cells[:6]
+                        while len(cells) < 6:
+                            cells.append(PhotoCell())
+                        page.photo_blocks.append(PhotoBlock(photos=cells))
+                # Default: one empty block if none
+                if not page.photo_blocks:
+                    page.photo_blocks.append(PhotoBlock())
                 r.pages.append(page)
             reports.append(r)
 

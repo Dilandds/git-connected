@@ -136,6 +136,11 @@ a = Analysis(
         'core.license_validator',
         'core.image_utils',
         'core.procedural_textures',
+        # Video recording
+        'imageio',
+        'imageio.plugins',
+        'imageio.plugins.ffmpeg',
+        'imageio_ffmpeg',
         # HEIC (iPhone) to JPEG conversion in annotation mode
         'PIL',
         'PIL.Image',

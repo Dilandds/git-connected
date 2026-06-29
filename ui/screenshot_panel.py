@@ -191,10 +191,10 @@ class ScreenshotCard(QFrame):
         actions.setSpacing(4)
         _icon_btn_style = """
             QToolTip {
-                color: #ffffff;
-                background-color: #1e2430;
-                border: 1px solid #3a4050;
-                padding: 3px 7px;
+                color: #1e2430;
+                background-color: #ffffff;
+                border: 1px solid #d1d5db;
+                padding: 4px 8px;
                 border-radius: 4px;
                 font-size: 11px;
             }

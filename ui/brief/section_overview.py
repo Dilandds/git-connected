@@ -1,17 +1,17 @@
 """Section 1 — Product Overview card."""
 from PyQt5.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog, QSizePolicy,
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFileDialog, QSizePolicy, QTextEdit,
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon
 from .shared import (
-    _MUTED, _INPUT_BG, _BORDER_L, _BORDER, _ACCENT, _ACCENT_H, _TEXT,
-    ADD_BTN_STYLE, card, section_label, field_label, make_input, separator,
+    _MUTED, _INPUT_BG, _BORDER_L, _BORDER, _ACCENT, _TEXT,
+    card, section_label, make_input, separator,
 )
 from i18n import t
 
-_IMG_W = 280
-_IMG_H = 360
+_IMG_W = 210
 
 _IMG_BTN_STYLE = f"""
     QPushButton {{
@@ -26,9 +26,24 @@ _IMG_BTN_STYLE = f"""
     }}
 """
 
+_TEXTAREA_STYLE = f"""
+    QTextEdit {{
+        background: {_INPUT_BG};
+        border: 1px solid {_BORDER};
+        border-radius: 8px;
+        color: {_TEXT};
+        font-size: 13px;
+        padding: 8px 10px;
+    }}
+    QTextEdit:focus {{
+        border-color: {_ACCENT};
+        background: #ffffff;
+    }}
+"""
+
 
 class ProductOverviewCard(QFrame):
-    """Section 1: Product Overview — image left, fields right."""
+    """Section 1: Product Overview — image left, fields right (4 fields)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,40 +62,61 @@ class ProductOverviewCard(QFrame):
 
     def _build_body(self) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setSpacing(16)
+        row.setSpacing(20)
         row.setContentsMargins(0, 0, 0, 0)
 
-        # ── Left: image upload button ──────────────────────────────────────
+        # ── Left: image upload — fixed width, stretches to match right column ──
         self._img_btn = QPushButton(t('project.brief.s1_add_image'))
-        self._img_btn.setFixedSize(_IMG_W, _IMG_H)
+        self._img_btn.setFixedWidth(_IMG_W)
+        self._img_btn.setMinimumHeight(280)
+        self._img_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._img_btn.setCursor(Qt.PointingHandCursor)
         self._img_btn.setStyleSheet(_IMG_BTN_STYLE)
         self._img_btn.clicked.connect(self._upload_image)
-        row.addWidget(self._img_btn, 0, Qt.AlignTop)
+        row.addWidget(self._img_btn)
 
-        # ── Right: fields stacked vertically ──────────────────────────────
+        # ── Right: 4 fields ────────────────────────────────────────────────
         fields_col = QVBoxLayout()
-        fields_col.setSpacing(8)
+        fields_col.setSpacing(6)
         fields_col.setContentsMargins(0, 0, 0, 0)
 
-        defs = [
-            (t('project.brief.s1_product_name'), '_f_product_name'),
-            (t('project.brief.s1_reference'),    '_f_reference'),
-            (t('project.brief.s1_description'),  '_f_description'),
-            (t('project.brief.s1_intended_use'), '_f_intended_use'),
-            (t('project.brief.s1_visual_links'), '_f_visual_links'),
-        ]
-        for label, attr in defs:
-            lbl = QLabel(label)
+        for label_key, attr in [
+            ('project.brief.s1_product_name', '_f_product_name'),
+            ('project.brief.s1_reference',    '_f_reference'),
+        ]:
+            lbl = QLabel(t(label_key))
             lbl.setStyleSheet(
-                f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;'
+                f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
             )
-            inp = make_input(label)
+            inp = make_input(t(label_key))
+            inp.setMinimumHeight(36)
             setattr(self, attr, inp)
             fields_col.addWidget(lbl)
             fields_col.addWidget(inp)
 
-        fields_col.addStretch()
+        # Description — expanding textarea (takes up remaining height)
+        desc_lbl = QLabel(t('project.brief.s1_description'))
+        desc_lbl.setStyleSheet(
+            f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
+        )
+        self._f_description = QTextEdit()
+        self._f_description.setPlaceholderText(t('project.brief.s1_description'))
+        self._f_description.setStyleSheet(_TEXTAREA_STYLE)
+        self._f_description.setMinimumHeight(120)
+        self._f_description.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        fields_col.addWidget(desc_lbl)
+        fields_col.addWidget(self._f_description, 1)
+
+        # Visual links
+        vis_lbl = QLabel(t('project.brief.s1_visual_links'))
+        vis_lbl.setStyleSheet(
+            f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
+        )
+        self._f_visual_links = make_input(t('project.brief.s1_visual_links'))
+        self._f_visual_links.setMinimumHeight(36)
+        fields_col.addWidget(vis_lbl)
+        fields_col.addWidget(self._f_visual_links)
+
         row.addLayout(fields_col, 1)
         return row
 
@@ -98,27 +134,27 @@ class ProductOverviewCard(QFrame):
                 self._apply_image(pix)
 
     def _apply_image(self, pix: QPixmap):
-        scaled = pix.scaled(
-            QSize(_IMG_W, _IMG_H), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
+        w = self._img_btn.width() or _IMG_W
+        h = self._img_btn.height() or 280
+        scaled = pix.scaled(QSize(w, h), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._img_btn.setIcon(QIcon(scaled))
-        self._img_btn.setIconSize(QSize(_IMG_W, _IMG_H))
+        self._img_btn.setIconSize(QSize(w, h))
         self._img_btn.setText('')
 
     # ── public API ─────────────────────────────────────────────────────────
 
     def set_edit_mode(self, enabled: bool):
         self._img_btn.setEnabled(enabled)
-        for attr in ('_f_product_name', '_f_reference', '_f_description',
-                     '_f_intended_use', '_f_visual_links'):
+        self._f_description.setReadOnly(not enabled)
+        for attr in ('_f_product_name', '_f_reference', '_f_visual_links'):
             getattr(self, attr).setReadOnly(not enabled)
 
     def get_data(self) -> dict:
         return {
             'product_name': self._f_product_name.text(),
             'reference':    self._f_reference.text(),
-            'description':  self._f_description.text(),
-            'intended_use': self._f_intended_use.text(),
+            'description':  self._f_description.toPlainText(),
+            'intended_use': '',   # removed field — kept in dict for backward compat
             'visual_links': self._f_visual_links.text(),
             'image_path':   self._image_path,
         }
@@ -126,8 +162,7 @@ class ProductOverviewCard(QFrame):
     def set_data(self, data: dict):
         self._f_product_name.setText(data.get('product_name', ''))
         self._f_reference.setText(data.get('reference', ''))
-        self._f_description.setText(data.get('description', ''))
-        self._f_intended_use.setText(data.get('intended_use', ''))
+        self._f_description.setPlainText(data.get('description', ''))
         self._f_visual_links.setText(data.get('visual_links', ''))
         path = data.get('image_path', '')
         if path:

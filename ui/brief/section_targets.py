@@ -1,7 +1,22 @@
 """Section 3 — Target Points card."""
-from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel
-from .shared import _MUTED, LABEL_STYLE, card, section_label, make_input, separator
+from PyQt5.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy, QTextEdit
+from .shared import _MUTED, _INPUT_BG, _BORDER, _ACCENT, _TEXT, LABEL_STYLE, card, section_label, make_input, separator
 from i18n import t
+
+_TEXTAREA_STYLE = f"""
+    QTextEdit {{
+        background: {_INPUT_BG};
+        border: 1px solid {_BORDER};
+        border-radius: 8px;
+        color: {_TEXT};
+        font-size: 13px;
+        padding: 8px 10px;
+    }}
+    QTextEdit:focus {{
+        border-color: {_ACCENT};
+        background: #ffffff;
+    }}
+"""
 
 
 class TargetPointsCard(QFrame):
@@ -17,42 +32,53 @@ class TargetPointsCard(QFrame):
         layout.addWidget(separator())
 
         hint = QLabel(t('project.brief.s3_hint'))
-        hint.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
+        hint.setStyleSheet(f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;')
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        fields = [
-            (t('project.brief.s3_dimensions'),  '_f_dimensions',  ''),
-            (t('project.brief.s3_weight'),       '_f_weight',      'g'),
-            (t('project.brief.s3_cost'),         '_f_cost',        '€'),
-            (t('project.brief.s3_constraints'),  '_f_constraints', ''),
-        ]
-        for label, attr, unit in fields:
+        # Fixed single-line fields
+        for label_key, attr, unit in [
+            (t('project.brief.s3_dimensions'), '_f_dimensions', ''),
+            (t('project.brief.s3_weight'),     '_f_weight',     'g'),
+            (t('project.brief.s3_cost'),       '_f_cost',       '€'),
+        ]:
             row = QHBoxLayout()
             row.setSpacing(6)
-            lbl = QLabel(label)
+            lbl = QLabel(label_key)
             lbl.setStyleSheet(LABEL_STYLE)
             row.addWidget(lbl, 1)
             inp = make_input('')
-            inp.setMinimumHeight(26)
+            inp.setMinimumHeight(36)
             setattr(self, attr, inp)
             row.addWidget(inp, 2)
             if unit:
                 u = QLabel(unit)
                 u.setStyleSheet(
-                    f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
+                    f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
                 )
                 u.setFixedWidth(14)
                 row.addWidget(u)
             layout.addLayout(row)
 
-        layout.addStretch()
+        # Other constraints — expands to fill remaining height
+        cons_lbl = QLabel(t('project.brief.s3_constraints'))
+        cons_lbl.setStyleSheet(LABEL_STYLE)
+        layout.addWidget(cons_lbl)
+
+        self._f_constraints = QTextEdit()
+        self._f_constraints.setPlaceholderText(t('project.brief.s3_constraints'))
+        self._f_constraints.setStyleSheet(_TEXTAREA_STYLE)
+        self._f_constraints.setMinimumHeight(60)
+        self._f_constraints.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self._f_constraints, 1)   # stretch=1 fills remaining space
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(c)
 
     def set_edit_mode(self, enabled: bool):
-        for attr in ('_f_dimensions', '_f_weight', '_f_cost', '_f_constraints'):
+        self._f_constraints.setReadOnly(not enabled)
+        for attr in ('_f_dimensions', '_f_weight', '_f_cost'):
             getattr(self, attr).setReadOnly(not enabled)
 
     def get_data(self) -> dict:
@@ -60,11 +86,11 @@ class TargetPointsCard(QFrame):
             'dimensions':  self._f_dimensions.text(),
             'weight':      self._f_weight.text(),
             'cost':        self._f_cost.text(),
-            'constraints': self._f_constraints.text(),
+            'constraints': self._f_constraints.toPlainText(),
         }
 
     def set_data(self, data: dict):
         self._f_dimensions.setText(data.get('dimensions', ''))
         self._f_weight.setText(data.get('weight', ''))
         self._f_cost.setText(data.get('cost', ''))
-        self._f_constraints.setText(data.get('constraints', ''))
+        self._f_constraints.setPlainText(data.get('constraints', ''))

@@ -23,9 +23,9 @@ _ACCENT  = default_theme.button_primary
 _ACCENT_H = default_theme.button_primary_hover
 
 # ── selection highlight (used across all selection indicators) ─────────────────
-_SEL_BG     = '#ecfdf5'   # light green background
-_SEL_BORDER = '#22c55e'   # green border / active colour
-_SEL_NUM    = '#16a34a'   # dark green for number labels
+_SEL_BG     = '#e0f4fb'   # light blue background
+_SEL_BORDER = _ACCENT     # blue border / active colour  (#2596BE)
+_SEL_NUM    = _ACCENT_H   # dark blue for number labels  (#1E7FA3)
 
 _STATUS_COLORS = {
     'In Progress': '#22c55e',   # green  — actively being worked on

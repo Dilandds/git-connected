@@ -368,6 +368,7 @@ class STLViewerWindow(QMainWindow):
         self.overview_widget.tab_requested.connect(self._on_overview_tab_requested)
         self.overview_widget.set_refresh_callback(self._capture_all_thumbnails)
         self.overview_widget.set_rotate_callback(self._on_overview_rotate)
+        self.overview_widget.set_drag_released_callback(self._on_overview_drag_released)
 
         # ---- Stacked widgets for viewers and annotation/screenshot/arrow/texture panels ----
         self.viewer_stack = QStackedWidget()
@@ -1194,7 +1195,7 @@ class STLViewerWindow(QMainWindow):
             self._capture_thumbnail_for(i)
 
     def _on_overview_rotate(self, tab_index: int, dx: float, dy: float):
-        """Rotate the camera in the given tab's viewer and refresh its thumbnail card."""
+        """Rotate the 3D camera in the given tab — thumbnail update deferred to drag end."""
         if tab_index < 0 or tab_index >= len(self.tabs):
             return
         vw = self.tabs[tab_index].viewer_widget
@@ -1204,18 +1205,10 @@ class STLViewerWindow(QMainWindow):
             vw._on_gizmo_rotate(dx, dy)
         except Exception as e:
             logger.debug(f"_on_overview_rotate: {e}")
-            return
-        # Throttled thumbnail refresh — schedule once, cancel pending
-        if not hasattr(self, '_overview_refresh_timers'):
-            self._overview_refresh_timers: dict = {}
-        timer = self._overview_refresh_timers.get(tab_index)
-        if timer and timer.isActive():
-            timer.stop()
-        t = QTimer(self)
-        t.setSingleShot(True)
-        t.timeout.connect(lambda idx=tab_index: self._refresh_overview_card(idx))
-        t.start(40)   # ~25 fps cap
-        self._overview_refresh_timers[tab_index] = t
+
+    def _on_overview_drag_released(self, tab_index: int):
+        """Drag ended — do one GPU capture and update the card with the final view."""
+        self._refresh_overview_card(tab_index)
 
     def _refresh_overview_card(self, tab_index: int):
         """Re-capture thumbnail for one tab and push it to the overview card."""
@@ -1226,7 +1219,7 @@ class STLViewerWindow(QMainWindow):
         if vw is None or not hasattr(vw, 'capture_thumbnail'):
             return
         try:
-            pix = vw.capture_thumbnail(480, 320)
+            pix = vw.capture_thumbnail()
             if pix and not pix.isNull():
                 tab.thumbnail = pix
                 self.overview_widget.update_card_thumbnail(tab_index, pix)

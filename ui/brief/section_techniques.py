@@ -41,7 +41,7 @@ class TechniquesCard(QFrame):
 
         lbl = QLabel(title)
         lbl.setStyleSheet(
-            f'color: {_TEXT}; font-size: 10px; font-weight: bold; background: transparent; border: none;'
+            f'color: {_TEXT}; font-size: 13px; font-weight: bold; background: transparent; border: none;'
         )
         col.addWidget(lbl)
 
@@ -51,7 +51,7 @@ class TechniquesCard(QFrame):
 
         hint_lbl = QLabel(hint)
         hint_lbl.setStyleSheet(
-            f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;'
+            f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
         )
         hint_lbl.setWordWrap(True)
         col.addWidget(hint_lbl)
