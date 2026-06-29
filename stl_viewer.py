@@ -1195,7 +1195,7 @@ class STLViewerWindow(QMainWindow):
             self._capture_thumbnail_for(i)
 
     def _on_overview_rotate(self, tab_index: int, dx: float, dy: float):
-        """Rotate the 3D camera in the given tab — thumbnail update deferred to drag end."""
+        """Rotate camera and update thumbnail live at ~30 fps during drag."""
         if tab_index < 0 or tab_index >= len(self.tabs):
             return
         vw = self.tabs[tab_index].viewer_widget
@@ -1203,6 +1203,14 @@ class STLViewerWindow(QMainWindow):
             return
         try:
             vw._on_gizmo_rotate(dx, dy)
+            import time as _time
+            now = _time.monotonic()
+            if not hasattr(self, '_overview_thumb_times'):
+                self._overview_thumb_times = {}
+            last = self._overview_thumb_times.get(tab_index, 0.0)
+            if now - last >= 0.033:   # ~30 fps cap
+                self._overview_thumb_times[tab_index] = now
+                self._refresh_overview_card(tab_index)
         except Exception as e:
             logger.debug(f"_on_overview_rotate: {e}")
 

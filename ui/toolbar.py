@@ -723,11 +723,14 @@ class ViewControlsToolbar(QWidget):
         # ── Group 4: Capture / output ─────────────────────────────────────────
         self.screenshot_btn = ToolbarButton("📷", "", t("toolbar.screenshot_tooltip"))
         self.screenshot_btn.text_label.hide()
-        self.screenshot_btn.icon_label.setFixedSize(26, 26)
+        self.screenshot_btn.icon_label.setFixedSize(24, 24)
         self.screenshot_btn.icon_label.setStyleSheet(
-            f"color: {_TB_FG}; font-size: 20px; background: transparent;"
+            f"color: {_TB_FG}; font-size: 22px; background: transparent;"
         )
-        self.screenshot_btn._update_min_width()
+        self.screenshot_btn._icon_label_font_px = 22
+        self.screenshot_btn._icon_size = 24
+        self.screenshot_btn._layout.setContentsMargins(8, 2, 8, 2)
+        self.screenshot_btn.setFixedSize(44, 28)
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
         self.screenshot_btn.setEnabled(False)
         content_layout.addWidget(self.screenshot_btn)
