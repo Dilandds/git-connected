@@ -356,8 +356,9 @@ class ScreenshotCard(QFrame):
 class ScreenshotPanel(QWidget):
     """Right-side panel listing captured screenshots in a 2-column grid."""
 
-    exit_screenshot_mode = pyqtSignal()
-    save_to_report       = pyqtSignal(QPixmap)
+    exit_screenshot_mode     = pyqtSignal()
+    save_to_report           = pyqtSignal(QPixmap)
+    capture_desktop_requested = pyqtSignal()   # user clicked "Capture Desktop App"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -459,6 +460,28 @@ class ScreenshotPanel(QWidget):
             "color: rgba(255, 255, 255, 0.95); font-size: 15px; background: transparent; border: none;"
         )
         banner_layout.addWidget(self.instruction)
+
+        # "Capture Desktop App" button
+        desktop_btn = QPushButton("🖥  Capture Desktop App")
+        desktop_btn.setCursor(Qt.PointingHandCursor)
+        desktop_btn.setObjectName("desktopCaptureBtn")
+        desktop_btn.setStyleSheet("""
+            QPushButton#desktopCaptureBtn {
+                background: rgba(255, 255, 255, 0.18);
+                color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                border-radius: 7px;
+                padding: 5px 10px;
+                font-size: 12px;
+                font-weight: 600;
+                margin-top: 6px;
+            }
+            QPushButton#desktopCaptureBtn:hover {
+                background: rgba(255, 255, 255, 0.30);
+            }
+        """)
+        desktop_btn.clicked.connect(self.capture_desktop_requested.emit)
+        banner_layout.addWidget(desktop_btn)
 
         layout.addWidget(banner)
 

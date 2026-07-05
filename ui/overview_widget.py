@@ -82,11 +82,13 @@ class _ThumbnailCard(QFrame):
         self._dragging = False
         self._last_drag_pos: Optional[QPoint] = None
         self._press_pos:     Optional[QPoint] = None
+        self._zoom_factor   = 1.0
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(120, 90)
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("overviewCard")
+        self.setFocusPolicy(Qt.WheelFocus)
         self._apply_style(False)
 
         layout = QVBoxLayout(self)
@@ -103,7 +105,7 @@ class _ThumbnailCard(QFrame):
         layout.addWidget(self._thumb_label, 1)
 
         # Drag hint — absolute child, repositioned in resizeEvent
-        self._drag_hint = QLabel("⟳  Drag to rotate", self)
+        self._drag_hint = QLabel("⟳  Drag to rotate  ·  Scroll to zoom", self)
         self._drag_hint.setAlignment(Qt.AlignCenter)
         self._drag_hint.setStyleSheet("""
             QLabel {
@@ -114,6 +116,19 @@ class _ThumbnailCard(QFrame):
         """)
         self._drag_hint.adjustSize()
         self._drag_hint.hide()
+
+        # Zoom indicator — top-right corner of thumbnail, hidden when zoom=1
+        self._zoom_label = QLabel("", self)
+        self._zoom_label.setAlignment(Qt.AlignCenter)
+        self._zoom_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0,0,0,160);
+                color: #ffffff; font-size: 11px; font-weight: bold;
+                border-radius: 4px; padding: 2px 7px; border: none;
+            }
+        """)
+        self._zoom_label.adjustSize()
+        self._zoom_label.hide()
 
         # Info row (compact, fixed height)
         info_row = QHBoxLayout()
@@ -164,12 +179,31 @@ class _ThumbnailCard(QFrame):
         if w < 2 or h < 2:
             return
         if self._raw_pix and not self._raw_pix.isNull():
-            scaled = self._raw_pix.scaled(
-                w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+            zoom = self._zoom_factor
+            if zoom <= 1.0:
+                scaled = self._raw_pix.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            else:
+                # Scale to zoomed size then crop center to label dimensions
+                big = self._raw_pix.scaled(
+                    int(w * zoom), int(h * zoom),
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation,
+                )
+                cx = max(0, (big.width()  - w) // 2)
+                cy = max(0, (big.height() - h) // 2)
+                scaled = big.copy(cx, cy, min(w, big.width()), min(h, big.height()))
         else:
             scaled = _make_placeholder_pixmap(w, h)
         self._thumb_label.setPixmap(scaled)
+
+        # Zoom indicator
+        if hasattr(self, '_zoom_label'):
+            if self._zoom_factor > 1.01:
+                self._zoom_label.setText(f'{self._zoom_factor:.1f}×')
+                self._zoom_label.adjustSize()
+                self._zoom_label.show()
+                self._zoom_label.raise_()
+            else:
+                self._zoom_label.hide()
 
     def set_thumbnail(self, pix: Optional[QPixmap]):
         self._raw_pix = pix
@@ -193,11 +227,17 @@ class _ThumbnailCard(QFrame):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QTimer.singleShot(0, self._update_thumb)
-        # Reposition drag hint over thumbnail area
         if hasattr(self, '_drag_hint') and hasattr(self, '_thumb_label'):
             geo = self._thumb_label.geometry()
             hint_y = geo.bottom() - self._drag_hint.height() - 8
             self._drag_hint.move(18, max(geo.top() + 4, hint_y))
+        if hasattr(self, '_zoom_label') and hasattr(self, '_thumb_label'):
+            geo = self._thumb_label.geometry()
+            self._zoom_label.adjustSize()
+            self._zoom_label.move(
+                geo.right() - self._zoom_label.width() - 6,
+                geo.top() + 6,
+            )
 
     def enterEvent(self, event):
         self._apply_style(True)
@@ -208,6 +248,19 @@ class _ThumbnailCard(QFrame):
         self._apply_style(False)
         self._drag_hint.hide()
         super().leaveEvent(event)
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        factor = 1.15 if delta > 0 else (1.0 / 1.15)
+        self._zoom_factor = max(1.0, min(8.0, self._zoom_factor * factor))
+        self._update_thumb()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton and self._zoom_factor > 1.01:
+            self._zoom_factor = 1.0
+            self._update_thumb()
+        super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

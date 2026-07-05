@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QWidgetAction, QSlider,
 )
 from PyQt5.QtCore import Qt, QRect, QEvent, pyqtSignal, QPropertyAnimation, QEasingCurve, QSettings, QTimer
-from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage, QBrush
+from PyQt5.QtGui import QFont, QFontMetrics, QPixmap, QPainter, QColor, QImage, QBrush, QPen
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE, arrow_up_url as _arrow_up, arrow_down_url as _arrow_down
 from i18n import t, on_language_changed
 
@@ -162,15 +162,15 @@ class _PartsMenuRow(QWidget):
         super().mousePressEvent(event)
 
 
-# Toolbar chips: white background + black labels (selected tab uses dark style in styles.py)
+# Toolbar chips: white background + dark labels
 _TB_BG = "#ffffff"
-_TB_FG = "#000000"
-_TB_HOVER = "#F5F3FF"
-_TB_HOVER_BORDER = "#5B21B6"
-_TB_ACTIVE = "#c8c8c8"
+_TB_FG = "#1e2530"
+_TB_HOVER = "#e8f4f8"
+_TB_HOVER_BORDER = "#2596BE"
+_TB_ACTIVE = "#d0eaf4"
 _TB_BORDER = "#d0d0d0"
-_TB_ACTIVE_BORDER = "#a8a8a8"
-_TB_SEP = "#5B21B6"
+_TB_ACTIVE_BORDER = "#2596BE"
+_TB_SEP = "#2596BE"
 
 
 def _toolbar_label_font(size=10):
@@ -206,7 +206,9 @@ class _RecButton(QPushButton):
         self.setFixedSize(self._W, self._H)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         # Suppress default QPushButton paint
-        self.setStyleSheet('QPushButton { background: transparent; border: none; }')
+        self.setStyleSheet(
+            'QPushButton { background: transparent; border: none; }' + TOOLTIP_STYLE
+        )
 
         self._blink_timer = QTimer(self)
         self._blink_timer.timeout.connect(self._blink)
@@ -222,6 +224,11 @@ class _RecButton(QPushButton):
         p.setBrush(QBrush(bg))
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(0, 0, self._W, self._H, 7, 7)
+
+        # Red border
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(QColor('#e63946'), 2))
+        p.drawRoundedRect(1, 1, self._W - 2, self._H - 2, 6, 6)
 
         # Red dot
         dot_color = QColor('#e63946' if (self._blink_on or not self._active) else '#4a0a0a')
@@ -531,6 +538,7 @@ class ViewControlsToolbar(QWidget):
     toggle_draw = pyqtSignal()
     toggle_rotate = pyqtSignal()
     rotate_speed_changed = pyqtSignal(float)
+    rotate_axis_changed = pyqtSignal(str)   # 'h' or 'v'
     toggle_record = pyqtSignal()
     draw_color_changed = pyqtSignal(str)  # hex color
     draw_eraser_toggled = pyqtSignal(bool)
@@ -566,12 +574,8 @@ class ViewControlsToolbar(QWidget):
         self._draw_font_size_multiplier = 1.0
         self.stl_loaded = False
         
-        # Load saved state
         self.settings = QSettings("ECTOFORM", "Toolbar")
-        self.is_expanded = self.settings.value("toolbar_expanded", True, type=bool)
-        
         self.init_ui()
-        self._update_expanded_state(animate=False)
         on_language_changed(self.retranslate)
     
     def init_ui(self):
@@ -648,10 +652,10 @@ class ViewControlsToolbar(QWidget):
             """Vertical divider between toolbar groups."""
             line = QFrame()
             line.setFrameShape(QFrame.VLine)
-            line.setFixedWidth(1)
-            line.setFixedHeight(20)
+            line.setFixedWidth(6)
+            line.setFixedHeight(30)
             line.setStyleSheet(
-                f'background-color: {_TB_SEP}; border: none;'
+                f'background-color: {_TB_SEP}; border: none; border-radius: 2px;'
             )
             return line
 
@@ -669,9 +673,7 @@ class ViewControlsToolbar(QWidget):
         self.render_mode_btn.clicked.connect(self._show_render_mode_menu)
         content_layout.addWidget(self.render_mode_btn)
 
-        content_layout.addSpacing(2)
         content_layout.addWidget(_sep())
-        content_layout.addSpacing(2)
 
         # ── Group 2: Camera / navigation ─────────────────────────────────────
         self.reset_btn = ToolbarButton("↺", t("toolbar.reset"), "")
@@ -688,9 +690,7 @@ class ViewControlsToolbar(QWidget):
         self.view_btn.setEnabled(False)
         content_layout.addWidget(self.view_btn)
 
-        content_layout.addSpacing(2)
         content_layout.addWidget(_sep())
-        content_layout.addSpacing(2)
 
         # ── Group 3: Markup / measurement ────────────────────────────────────
         _ruler_label_px = 12 if sys.platform == 'win32' else 10
@@ -716,9 +716,7 @@ class ViewControlsToolbar(QWidget):
         content_layout.addWidget(self.draw_btn)
         self._eraser_active = False
 
-        content_layout.addSpacing(2)
         content_layout.addWidget(_sep())
-        content_layout.addSpacing(2)
 
         # ── Group 4: Capture / output ─────────────────────────────────────────
         self.screenshot_btn = ToolbarButton("📷", "", t("toolbar.screenshot_tooltip"))
@@ -730,7 +728,8 @@ class ViewControlsToolbar(QWidget):
         self.screenshot_btn._icon_label_font_px = 22
         self.screenshot_btn._icon_size = 24
         self.screenshot_btn._layout.setContentsMargins(8, 2, 8, 2)
-        self.screenshot_btn.setFixedSize(44, 28)
+        _scr_h = 32 if sys.platform == 'win32' else 28
+        self.screenshot_btn.setFixedSize(44, _scr_h)
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
         self.screenshot_btn.setEnabled(False)
         content_layout.addWidget(self.screenshot_btn)
@@ -785,6 +784,53 @@ class ViewControlsToolbar(QWidget):
         )
         _rs_lay.addWidget(self._rotate_speed_label)
 
+        # Divider before axis toggle
+        _axis_div = QFrame()
+        _axis_div.setFrameShape(QFrame.VLine)
+        _axis_div.setFixedWidth(1)
+        _axis_div.setFixedHeight(20)
+        _axis_div.setStyleSheet(f"background: {default_theme.border_standard}; border: none;")
+        _rs_lay.addWidget(_axis_div)
+
+        # H / V axis toggle buttons
+        _btn_active_ss = f"""
+            QPushButton {{
+                background: {default_theme.button_primary};
+                color: #ffffff; border: none;
+                border-radius: 4px;
+                font-size: 11px; font-weight: bold;
+                padding: 2px 7px;
+            }}
+        """
+        _btn_inactive_ss = f"""
+            QPushButton {{
+                background: {default_theme.border_standard};
+                color: {default_theme.text_primary}; border: none;
+                border-radius: 4px;
+                font-size: 11px; font-weight: bold;
+                padding: 2px 7px;
+            }}
+            QPushButton:hover {{ background: {default_theme.row_bg_hover}; }}
+        """
+        self._rotate_axis_h_btn = QPushButton("H")
+        self._rotate_axis_h_btn.setFixedHeight(20)
+        self._rotate_axis_h_btn.setToolTip("Horizontal rotation (turntable)")
+        self._rotate_axis_h_btn.setStyleSheet(_btn_active_ss)
+        self._rotate_axis_h_btn.setCursor(Qt.PointingHandCursor)
+        self._rotate_axis_h_btn.clicked.connect(lambda: self._on_rotate_axis_clicked('h'))
+        _rs_lay.addWidget(self._rotate_axis_h_btn)
+
+        self._rotate_axis_v_btn = QPushButton("V")
+        self._rotate_axis_v_btn.setFixedHeight(20)
+        self._rotate_axis_v_btn.setToolTip("Vertical rotation (wheel)")
+        self._rotate_axis_v_btn.setStyleSheet(_btn_inactive_ss)
+        self._rotate_axis_v_btn.setCursor(Qt.PointingHandCursor)
+        self._rotate_axis_v_btn.clicked.connect(lambda: self._on_rotate_axis_clicked('v'))
+        _rs_lay.addWidget(self._rotate_axis_v_btn)
+
+        self._rotate_axis_active_ss   = _btn_active_ss
+        self._rotate_axis_inactive_ss = _btn_inactive_ss
+
         content_layout.addWidget(self._rotate_speed_widget)
 
         self.record_btn = _RecButton(t("toolbar.record_tooltip"))
@@ -792,9 +838,7 @@ class ViewControlsToolbar(QWidget):
         self.record_btn.setEnabled(False)
         content_layout.addWidget(self.record_btn)
 
-        content_layout.addSpacing(2)
         content_layout.addWidget(_sep())
-        content_layout.addSpacing(2)
 
         # ── Group 5: Appearance ───────────────────────────────────────────────
         self.texture_btn = ToolbarButton("🎨", t("toolbar.texture"), t("toolbar.texture_tooltip"))
@@ -808,9 +852,7 @@ class ViewControlsToolbar(QWidget):
         self.parts_btn.setEnabled(False)
         self.parts_btn.setVisible(False)
 
-        content_layout.addSpacing(2)
         content_layout.addWidget(_sep())
-        content_layout.addSpacing(2)
 
         # ── Group 6: File / window ────────────────────────────────────────────
         self.convert_btn = ToolbarButton("🔄", t("toolbar.convert"), t("toolbar.convert_tooltip"))
@@ -834,62 +876,13 @@ class ViewControlsToolbar(QWidget):
         
         # Apply tooltip styling for black text
         self._apply_tooltip_style()
-        
-        # Collapse button (at the end) - outside scroll area
-        self.collapse_btn = ToolbarButton("▲", "", "")
-        self.collapse_btn.clicked.connect(self._toggle_expanded)
-        self.collapse_btn.setFixedWidth(36)
-        
+
         # Set toolbar_content into scroll area
         self.toolbar_scroll.setWidget(self.toolbar_content)
-        
-        # Build the expanded row: scroll area + collapse button
-        expanded_row = QHBoxLayout()
-        expanded_row.setContentsMargins(0, 0, 4, 0)
-        expanded_row.setSpacing(0)
-        expanded_row.addWidget(self.toolbar_scroll, 1)
-        expanded_row.addWidget(self.collapse_btn)
-        
-        self.expanded_widget = QWidget()
-        self.expanded_widget.setLayout(expanded_row)
-        container_layout.addWidget(self.expanded_widget)
-        
-        # Collapsed strip (only shown when collapsed)
-        self.collapsed_strip = QWidget()
-        self.collapsed_strip.setObjectName("collapsedStrip")
-        self.collapsed_strip.setFixedHeight(28)
-        strip_layout = QHBoxLayout(self.collapsed_strip)
-        strip_layout.setContentsMargins(12, 4, 12, 4)
-        strip_layout.setSpacing(0)
-        
-        strip_layout.addStretch()
-        
-        self.expand_btn = ToolbarButton("▼", "", "")
-        self.expand_btn.clicked.connect(self._toggle_expanded)
-        self.expand_btn.setFixedWidth(36)
-        self.expand_btn.setFixedHeight(22)
-        strip_layout.addWidget(self.expand_btn)
-        
-        strip_layout.addStretch()
-        
-        container_layout.addWidget(self.collapsed_strip)
-        
+
+        container_layout.addWidget(self.toolbar_scroll)
+
         main_layout.addWidget(self.container)
-    
-    def _toggle_expanded(self):
-        """Toggle the expanded/collapsed state."""
-        self.is_expanded = not self.is_expanded
-        self.settings.setValue("toolbar_expanded", self.is_expanded)
-        self._update_expanded_state(animate=True)
-    
-    def _update_expanded_state(self, animate=True):
-        """Update the UI based on expanded/collapsed state."""
-        if self.is_expanded:
-            self.expanded_widget.setVisible(True)
-            self.collapsed_strip.setVisible(False)
-        else:
-            self.expanded_widget.setVisible(False)
-            self.collapsed_strip.setVisible(True)
     
     def set_stl_loaded(self, loaded):
         """Enable/disable view controls based on STL loaded state."""
@@ -1236,11 +1229,22 @@ class ViewControlsToolbar(QWidget):
         self.rotate_btn.set_active(self.rotate_mode_enabled)
         self.rotate_btn.set_label("360°")
         self._rotate_speed_widget.setVisible(self.rotate_mode_enabled)
+        if not self.rotate_mode_enabled:
+            self._on_rotate_axis_clicked('h')
         self.toggle_rotate.emit()
 
     def _on_rotate_speed_slider_changed(self, value: int):
         self._rotate_speed_label.setText(f"{value}°/s")
         self.rotate_speed_changed.emit(float(value))
+
+    def _on_rotate_axis_clicked(self, axis: str):
+        self._rotate_axis_h_btn.setStyleSheet(
+            self._rotate_axis_active_ss if axis == 'h' else self._rotate_axis_inactive_ss
+        )
+        self._rotate_axis_v_btn.setStyleSheet(
+            self._rotate_axis_active_ss if axis == 'v' else self._rotate_axis_inactive_ss
+        )
+        self.rotate_axis_changed.emit(axis)
 
     def _on_record_clicked(self):
         """Handle record mode toggle — exits conflicting exclusive modes first."""

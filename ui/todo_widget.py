@@ -16,7 +16,7 @@ from PyQt5.QtGui import QColor, QPainter, QBrush, QPen, QPixmap, QIcon
 
 from ui.styles import default_theme, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
-from i18n import t
+from i18n import t, get_language
 
 _BG       = '#f4f6f9'
 _CARD     = '#ffffff'
@@ -247,9 +247,12 @@ class _CustomCalendar(QWidget):
     selectionChanged = pyqtSignal()
     clicked          = pyqtSignal(object)   # QDate
 
-    _MONTHS = ['January','February','March','April','May','June',
-               'July','August','September','October','November','December']
-    _DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+    _MONTHS_EN = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December']
+    _DAYS_EN   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+    _MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                  'Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+    _DAYS_FR   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -259,6 +262,12 @@ class _CustomCalendar(QWidget):
         self._year     = self._today.year()
         self._month    = self._today.month()
         self._cells: list = []
+        if get_language() == 'fr':
+            self._MONTHS = self._MONTHS_FR
+            self._DAYS   = self._DAYS_FR
+        else:
+            self._MONTHS = self._MONTHS_EN
+            self._DAYS   = self._DAYS_EN
         self._build()
 
     def _build(self):

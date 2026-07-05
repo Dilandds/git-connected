@@ -2465,14 +2465,39 @@ class STLViewerWidget(QWidget):
         except Exception:
             pass
 
-    def capture_thumbnail(self, width: int = 480, height: int = 320):
-        """Return a QPixmap thumbnail of the current view (for Overview tab)."""
+    def capture_thumbnail(self, width: int = 0, height: int = 0):
+        """Return a high-definition QPixmap of the current view (for Overview tab)."""
+        from PyQt5.QtGui import QImage
+        import numpy as np
+
+        # attempt 1: force an explicit large window_size so the capture is always
+        # high-resolution regardless of the widget's current on-screen size.
+        # window_size resizes VTK internally, renders, then restores — more reliable
+        # than scale= (tiled rendering) on macOS/Retina.
+        for ws in ([2560, 1920], [1920, 1280], None):
+            try:
+                if self.plotter is None:
+                    break
+                self.plotter.render()
+                arr = self.plotter.screenshot(return_img=True, window_size=ws)
+                if arr is not None and isinstance(arr, np.ndarray) and arr.ndim == 3:
+                    h, w, c = arr.shape
+                    fmt = QImage.Format_RGB888 if c == 3 else QImage.Format_RGBA8888
+                    qimg = QImage(arr.tobytes(), w, h, w * c, fmt)
+                    pix = QPixmap.fromImage(qimg)
+                    if not pix.isNull():
+                        return pix
+            except Exception as e:
+                logger.debug(f"capture_thumbnail window_size={ws}: {e}")
+                continue
+
+        # attempt 2: Qt widget grab — keep the raw HiDPI pixmap (devicePixelRatio intact)
+        # so QLabel displays it at full Retina resolution without manual downscaling.
         try:
-            from PyQt5.QtCore import Qt
             pix = self.grab()
             if pix.isNull():
                 return None
-            return pix.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            return pix
         except Exception as e:
-            logger.warning(f"capture_thumbnail: {e}")
+            logger.warning(f"capture_thumbnail grab: {e}")
             return None

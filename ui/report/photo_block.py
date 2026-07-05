@@ -30,8 +30,6 @@ _BLOCK_GAP  = 14
 _BLOCK_H = (
     _INNER_PAD      # top
     + _PHOTO_H      # photo
-    + 5             # gap
-    + _CAPTION_H    # "text here" line
     + 10            # gap
     + 18            # "Comments" label
     + 4             # gap
@@ -45,7 +43,7 @@ _SLOT_EMPTY = f"""
         background: {_INPUT_BG};
         border: 1.5px dashed {_BORDER};
         border-radius: 8px;
-        color: {_MUTED}; font-size: 13px;
+        color: {_MUTED}; font-size: 16px;
     }}
     QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; background: #eff6ff; }}
 """
@@ -176,23 +174,13 @@ class PhotoBlockWidget(QFrame):
         self._photo_btn.setFixedSize(_PHOTO_W, _PHOTO_H)
         self._photo_btn.setCursor(Qt.PointingHandCursor)
         self._photo_btn.setStyleSheet(_SLOT_EMPTY)
+        self._photo_btn.setText('📷\nAdd photo')
         self._photo_btn.clicked.connect(self._upload)
         if cell.image_path:
             pix = QPixmap(cell.image_path)
             if not pix.isNull():
                 self._apply_photo(pix)
         lay.addWidget(self._photo_btn)
-
-        lay.addSpacing(5)
-
-        # Caption
-        self._caption = QLineEdit()
-        self._caption.setFixedHeight(_CAPTION_H)
-        self._caption.setPlaceholderText('text here')
-        self._caption.setStyleSheet(_CAPTION_STYLE)
-        self._caption.setText(cell.caption)
-        self._caption.textChanged.connect(self._on_caption)
-        lay.addWidget(self._caption)
 
         lay.addSpacing(10)
 
@@ -242,10 +230,6 @@ class PhotoBlockWidget(QFrame):
         self._photo_btn.setText('')
         self._photo_btn.setStyleSheet(_SLOT_FILLED)
 
-    def _on_caption(self, text: str):
-        self._cell.caption = text
-        self.changed.emit()
-
     def _on_comment(self):
         self._block.comment = self._comment.toPlainText()
         self.changed.emit()
@@ -268,7 +252,6 @@ class PhotoBlockWidget(QFrame):
     def lock(self):
         self._locked = True
         self._photo_btn.setEnabled(False)
-        self._caption.setReadOnly(True)
         self._comment.setReadOnly(True)
         self._remove_btn.hide()
 

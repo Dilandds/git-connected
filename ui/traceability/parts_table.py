@@ -84,9 +84,9 @@ class _PartsTable(QWidget):
 
         # ── Bottom hint ───────────────────────────────────────────────────
         if self._flat:
-            hint_text = 'ⓘ  Click on a task to view details, add comments and track progress.'
+            hint_text = t('project.traceability.hint_tasks')
         else:
-            hint_text = 'ⓘ  Parts group related tasks. Click ＋ Add Part to create a new part group.'
+            hint_text = t('project.traceability.hint_parts')
         hint = QLabel(hint_text)
         hint.setStyleSheet(
             f'color: {_MUTED}; font-size: 11px; background: {_BG};'
@@ -97,7 +97,7 @@ class _PartsTable(QWidget):
         self._refresh_rows()
 
     def _make_add_row(self) -> QWidget:
-        label = 'Add Task' if self._flat else 'Add Part'
+        label = t('project.traceability.add_task') if self._flat else t('project.traceability.add_part')
         row = QWidget()
         row.setFixedHeight(48)
         row.setStyleSheet(f'background: {_BG}; border-top: 1px dashed {_BORDER};')
@@ -124,7 +124,7 @@ class _PartsTable(QWidget):
         lay.addWidget(add_lbl)
         lay.addStretch()
 
-        add_btn = QPushButton(f'＋  {label}')
+        add_btn = QPushButton(label)
         add_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {_ACCENT};
@@ -148,8 +148,8 @@ class _PartsTable(QWidget):
                 item.widget().setParent(None)
 
         if not self._sub.parts:
-            label = 'Add Task' if self._flat else 'Add Part'
-            empty = QLabel(f'No tasks yet. Click ＋ {label} to begin.')
+            empty_text = t('project.traceability.no_tasks_empty') if self._flat else t('project.traceability.no_parts_empty')
+            empty = QLabel(empty_text)
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
                 f'color: {_MUTED}; font-size: 13px;'

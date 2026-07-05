@@ -38,7 +38,7 @@ _ACCENT_H = default_theme.button_primary_hover
 
 # ── nav items — order defines sidebar display order ───────────────────────────
 _NAV_KEYS = [
-    'brief', 'assignment', 'timeline', 'validation', 'report', 'estimated_cost',
+    'brief', 'assignment', 'timeline', 'validation', 'quality_control', 'report', 'estimated_cost',
     'files', 'rd', 'prototype', 'version_comparison', 'traceability', 'todo', 'glossary',
 ]
 # Keep a fallback list for print label lookup; labels filled at runtime via t()
@@ -183,6 +183,9 @@ def _import_screen(key: str) -> Type[QWidget]:
     if key == 'validation':
         from ui.project_validation import ValidationWidget
         return ValidationWidget
+    if key == 'quality_control':
+        from ui.quality_control_widget import QualityControlWidget
+        return QualityControlWidget
     if key == 'report':
         from ui.report import ReportWidget
         return ReportWidget
@@ -580,6 +583,9 @@ class TheProjectWidget(QWidget):
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
         self._pending_restoration: dict[str, dict] = {}
+        # Cached viewer list so QC screen gets viewers even when first created after set_viewers
+        self._pending_viewers: list = []
+        self._pending_active_viewer = None
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
         self._setup_autosave()
@@ -760,6 +766,10 @@ class TheProjectWidget(QWidget):
             widget.tab_changed.connect(self._on_rd_tab_changed)
             # Set the callback so sidebar sub-items call switch_tab on the widget
             self._nav.set_rd_tab_switch_callback(widget.switch_tab)
+        if key == 'quality_control' and hasattr(widget, 'set_viewers') and self._pending_viewers:
+            # Replay the cached viewer list so the QC screen is fully wired
+            # even when the user first opens it after models are already loaded.
+            widget.set_viewers(self._pending_viewers, active_viewer=self._pending_active_viewer)
 
     # ── navigation ────────────────────────────────────────────────────────────
 
@@ -952,6 +962,21 @@ class TheProjectWidget(QWidget):
                 self._push_validation_costs()
             elif current_key == 'traceability':
                 self._sync_traceability_from_brief()
+
+    # ── viewer passthrough (for QC screen) ───────────────────────────────────
+
+    def set_viewer(self, viewer_widget):
+        """Pass the current tab's viewer to QC screen (legacy single-viewer path)."""
+        if 'quality_control' in self._screen_widgets and self._screen_widgets['quality_control']:
+            self._screen_widgets['quality_control'].set_viewer(viewer_widget)
+
+    def set_viewers(self, viewers: list, active_viewer=None):
+        """Pass all loaded (label, viewer_widget) pairs to the QC screen."""
+        # Always cache so the QC screen gets the list even if it's created lazily later
+        self._pending_viewers = viewers
+        self._pending_active_viewer = active_viewer
+        if 'quality_control' in self._screen_widgets and self._screen_widgets['quality_control']:
+            self._screen_widgets['quality_control'].set_viewers(viewers, active_viewer=active_viewer)
 
     # ── top bar ───────────────────────────────────────────────────────────────
 

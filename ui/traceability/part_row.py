@@ -522,7 +522,7 @@ class _PartGroupRow(QWidget):
 
         h_lay.addStretch()
 
-        add_task_btn = QPushButton('＋ Add Task')
+        add_task_btn = QPushButton(t('project.traceability.add_task'))
         add_task_btn.setStyleSheet(_BTN_SMALL)
         add_task_btn.setFixedHeight(26)
         add_task_btn.setCursor(Qt.PointingHandCursor)
@@ -581,7 +581,7 @@ class _PartGroupRow(QWidget):
         add_row.setFixedHeight(36)
         add_row.setStyleSheet(f'background: {_BG}; border-top: 1px dashed {_BORDER};')
         add_lay = QHBoxLayout(add_row); add_lay.setContentsMargins(24, 0, 12, 0); add_lay.setSpacing(8)
-        add_btn = QPushButton('＋  Add Task')
+        add_btn = QPushButton(t('project.traceability.add_task'))
         add_btn.setStyleSheet(f"""
             QPushButton {{ background: transparent; border: none; color: {_ACCENT};
                 font-size: 12px; font-weight: 600; padding: 0; text-align: left; }}

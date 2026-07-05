@@ -24,7 +24,7 @@ def get_open_file_name(parent, title: str, directory: str = "", filter: str = "A
 
 def get_save_file_name(parent, title: str, directory: str = "", filter: str = "All Files (*)"):
     return QFileDialog.getSaveFileName(parent, title, directory, filter)
-from PyQt5.QtCore import Qt, QEvent, QTimer
+from PyQt5.QtCore import Qt, QEvent, QTimer, QThread, pyqtSignal, QSize
 
 # Force PyInstaller to bundle pygfx and deps (imported lazily in viewer_widget_pygfx._init_pygfx)
 try:
@@ -128,6 +128,97 @@ class TabState:
     thumbnail: Any = None  # QPixmap thumbnail for the Overview tab
 
 
+# ── Background thread: runs screencapture -i and emits result ─────────────────
+
+class _ScreenshotThread(QThread):
+    captured  = pyqtSignal(str)   # path to the saved PNG
+    cancelled = pyqtSignal()
+
+    def __init__(self, path, parent=None):
+        super().__init__(parent)
+        self._path = path
+
+    def run(self):
+        import platform
+        if platform.system() == 'Windows':
+            self._run_windows()
+        else:
+            self._run_macos()
+
+    def _run_macos(self):
+        import subprocess, os
+        result = subprocess.run(
+            ['screencapture', '-i', self._path],
+            capture_output=True,
+        )
+        if result.returncode == 0 and os.path.exists(self._path):
+            self.captured.emit(self._path)
+        else:
+            self.cancelled.emit()
+
+    def _run_windows(self):
+        import os, time, ctypes
+        # Clear clipboard so we can detect a new image being placed
+        try:
+            ctypes.windll.user32.OpenClipboard(0)
+            ctypes.windll.user32.EmptyClipboard()
+            ctypes.windll.user32.CloseClipboard()
+        except Exception:
+            pass
+        # Open the built-in Windows Snip & Sketch overlay (Win 10 1809+)
+        os.startfile('ms-screenclip:')
+        # Poll for a new clipboard image (CF_DIB = 8), max 120 s
+        for _ in range(240):
+            time.sleep(0.5)
+            try:
+                ctypes.windll.user32.OpenClipboard(0)
+                has_image = bool(ctypes.windll.user32.IsClipboardFormatAvailable(8))
+                ctypes.windll.user32.CloseClipboard()
+            except Exception:
+                has_image = False
+            if has_image:
+                try:
+                    from PIL import ImageGrab
+                    img = ImageGrab.grabclipboard()
+                    if img is not None:
+                        img.save(self._path, 'PNG')
+                        self.captured.emit(self._path)
+                        return
+                except Exception:
+                    pass
+        self.cancelled.emit()
+
+
+# ── Tab bar that auto-sizes each tab to fit its text on any platform/DPI ─────
+
+class _EctoTabBar(QTabBar):
+    """QTabBar subclass whose tabSizeHint guarantees the full label is visible.
+
+    Qt's QSS min-width is a hard minimum that clips text when the content area
+    (min-width minus padding) is narrower than the text — especially on Windows
+    where font metrics produce wider glyphs.  Overriding tabSizeHint() forces
+    the size to be at least (text_width + padding + safety), so Qt never clips.
+    """
+
+    # Total horizontal padding (left+right) mirroring the QSS values:
+    #   :first  → padding-left:14 + padding-right:14 = 28
+    #   :last   → padding-left:12 + padding-right:12 = 24
+    #   middle  → padding-left:28 + padding-right:14 = 42  (+2 for 1px borders)
+    _PAD_FIRST  = 28
+    _PAD_LAST   = 24
+    _PAD_MIDDLE = 44
+    _SAFETY     = 12  # extra pixels so the last character is never shaved off
+
+    def tabSizeHint(self, index: int) -> QSize:
+        sz   = super().tabSizeHint(index)
+        n    = self.count()
+        pad  = (self._PAD_FIRST  if index == 0 else
+                self._PAD_LAST   if index == n - 1 else
+                self._PAD_MIDDLE)
+        needed = self.fontMetrics().horizontalAdvance(self.tabText(index)) + pad + self._SAFETY
+        return QSize(max(sz.width(), needed), sz.height())
+
+
 # ======================== Main Window ========================
 
 class STLViewerWindow(QMainWindow):
@@ -143,7 +234,11 @@ class STLViewerWindow(QMainWindow):
         # Tab management
         self.tabs: List[TabState] = []
         self.current_tab_index: int = -1
-        
+
+        # Desktop snip state
+        self._snip_thread  = None
+        self._snip_trigger = None   # floating "Snip" button shown while in screenshot mode
+
         self.init_ui()
         debug_print("STLViewerWindow: Initialization complete")
         logger.info("STLViewerWindow: Initialization complete")
@@ -198,8 +293,11 @@ class STLViewerWindow(QMainWindow):
         icon = get_app_window_icon()
         if not icon.isNull():
             self.setWindowIcon(icon)
-        # Open maximized (fills the screen, title bar and taskbar remain visible)
-        self.showMaximized()
+        # macOS: true fullscreen hides the Dock; Windows: maximized keeps taskbar
+        if sys.platform == 'darwin':
+            self.showFullScreen()
+        else:
+            self.showMaximized()
         
         logger.info("init_ui: Creating central widget...")
         central_widget = QWidget()
@@ -319,7 +417,7 @@ class STLViewerWindow(QMainWindow):
         self.right_layout.setSpacing(0)
         
         # ---- Tab Bar (left-aligned so "Untitled" starts at left edge) ----
-        self.tab_bar = QTabBar()
+        self.tab_bar = _EctoTabBar()
         self.tab_bar.setObjectName("ectoTabBar")
         self.tab_bar.setAttribute(Qt.WA_StyledBackground, True)
         self.tab_bar.setMinimumHeight(30)
@@ -383,6 +481,7 @@ class STLViewerWindow(QMainWindow):
         self.screenshot_panel = ScreenshotPanel()
         self.screenshot_panel.exit_screenshot_mode.connect(self._exit_screenshot_mode)
         self.screenshot_panel.save_to_report.connect(self._save_screenshot_to_report)
+        self.screenshot_panel.capture_desktop_requested.connect(self._on_capture_desktop)
         self.screenshot_stack.addWidget(self.screenshot_panel)
         
         # Shared texture panel (one per window, not per tab)
@@ -679,7 +778,15 @@ class STLViewerWindow(QMainWindow):
         self._update_mode_btn_styles()
 
         if mode == "3d":
+            # setCurrentIndex hides the project widget synchronously, which fires
+            # hideEvent on QC → release_viewer → viewer restored to viewer_stack.
+            # After this line the viewer is already back in viewer_stack.
             self._workspace_stack.setCurrentIndex(0)
+            # viewer_stack.currentWidget may have drifted to Overview while the
+            # viewer was reparented into the QC panel.  Restore it explicitly.
+            tab = self._current_tab
+            if tab and tab.viewer_widget:
+                self.viewer_stack.setCurrentWidget(tab.viewer_widget)
             self.setWindowTitle(f"ECTOFORM - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "ECTOFORM")
         elif mode == "technical":
             self._workspace_stack.setCurrentIndex(1)
@@ -688,6 +795,13 @@ class STLViewerWindow(QMainWindow):
             self._workspace_stack.setCurrentIndex(2)
             self.setWindowTitle("ECTOFORM - Drawing Scale")
         elif mode == "project":
+            # Push viewer refs BEFORE showing the project widget so that when
+            # showEvent fires on the QC panel (if it was last active), _viewer_ref
+            # is already correct and embed_viewer is not called mid-switch.
+            try:
+                self._push_viewers_to_project()
+            except Exception:
+                pass
             self._workspace_stack.setCurrentIndex(3)
             self.setWindowTitle("ECTOFORM - The Project")
         elif mode == "help":
@@ -1000,7 +1114,20 @@ class STLViewerWindow(QMainWindow):
         self.tab_bar.setCurrentIndex(tab_bar_index)
         
         return tab_index
-    
+
+    def _push_viewers_to_project(self):
+        """Send all loaded (label, viewer_widget) pairs to the project widget."""
+        if not hasattr(self, 'project_widget'):
+            return
+        viewers = [
+            (t.filename or f'Object {i + 1}', t.viewer_widget)
+            for i, t in enumerate(self.tabs)
+            if t.viewer_widget is not None
+        ]
+        active_vw = getattr(self, 'viewer_widget', None)
+        if hasattr(self.project_widget, 'set_viewers'):
+            self.project_widget.set_viewers(viewers, active_viewer=active_vw)
+
     def _on_tab_changed(self, index: int):
         """Handle tab bar selection change."""
         # If the "+" tab is clicked, create a new tab and upload
@@ -1144,6 +1271,13 @@ class STLViewerWindow(QMainWindow):
         self.ruler_toolbar.setVisible(tab.ruler_active)
         self.sidebar_panel.show()
 
+        # Keep QC panel thumbnail in sync when switching tabs while in project mode
+        if self._current_mode == "project":
+            try:
+                self._push_viewers_to_project()
+            except Exception:
+                pass
+
         logger.info(f"_on_tab_changed: Switched to tab {index} ({tab.filename or 'Untitled'})")
 
     # ======================== Overview Tab ========================
@@ -1241,6 +1375,12 @@ class STLViewerWindow(QMainWindow):
         vw = self.viewer_widget
         if vw and hasattr(vw, 'set_rotate_speed'):
             vw.set_rotate_speed(speed)
+
+    def _on_rotate_axis_changed(self, axis: str):
+        """Switch the rotation axis live."""
+        vw = self.viewer_widget
+        if vw and hasattr(vw, 'set_rotate_axis'):
+            vw.set_rotate_axis(axis)
 
     def _toggle_rotate_mode(self):
         """Start or stop the turntable rotation."""
@@ -1497,35 +1637,9 @@ class STLViewerWindow(QMainWindow):
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
     
     def _attach_tab_close_btn(self, tab_bar_index: int):
-        """Attach a styled × close button to a tab."""
-        btn = QPushButton("×")
-        btn.setFixedSize(16, 16)
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet("""
-            QPushButton {
-                color: #9aa3b0;
-                background: transparent;
-                border: none;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 0;
-                margin: 0;
-            }
-            QPushButton:hover {
-                color: #ffffff;
-                background: rgba(255, 255, 255, 0.15);
-                border-radius: 3px;
-            }
-            QPushButton:pressed {
-                color: #ffffff;
-                background: rgba(255, 255, 255, 0.25);
-                border-radius: 3px;
-            }
-        """)
-        btn.clicked.connect(lambda: self._on_tab_close_requested(
-            self.tab_bar.tabAt(btn.mapTo(self.tab_bar, btn.rect().center()))
-        ))
-        self.tab_bar.setTabButton(tab_bar_index, QTabBar.RightSide, btn)
+        """No close button on tabs."""
+        self.tab_bar.setTabButton(tab_bar_index, QTabBar.RightSide, None)
+        self.tab_bar.setTabButton(tab_bar_index, QTabBar.LeftSide, None)
 
     def _on_tab_close_requested(self, index: int):
         """Handle tab close button click."""
@@ -1611,7 +1725,13 @@ class STLViewerWindow(QMainWindow):
             self.tab_bar.setCurrentIndex(self.current_tab_index)
             self.tab_bar.blockSignals(False)
             self._on_tab_changed(self.current_tab_index)
-        
+
+        if self._current_mode == "project":
+            try:
+                self._push_viewers_to_project()
+            except Exception:
+                pass
+
         logger.info(f"_close_tab: Closed tab {index}")
     
     def _find_empty_tab(self) -> int:
@@ -1737,6 +1857,7 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.clear_model.connect(self._clear_current_model)
         self.toolbar.toggle_rotate.connect(self._toggle_rotate_mode)
         self.toolbar.rotate_speed_changed.connect(self._on_rotate_speed_changed)
+        self.toolbar.rotate_axis_changed.connect(self._on_rotate_axis_changed)
         self.toolbar.toggle_record.connect(self._toggle_record_mode)
         self.toolbar.open_converter.connect(self._open_converter_dialog)
     
@@ -1836,7 +1957,6 @@ class STLViewerWindow(QMainWindow):
             tab.sidebar_data = None
             tab.mesh = None
             tab.annotations_exported = False
-            # Update tab bar text
             self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption("Untitled"))
         
         logger.info("_clear_current_model: Model and all data cleared")
@@ -1941,11 +2061,8 @@ class STLViewerWindow(QMainWindow):
             tab.file_path = file_path
             tab.filename = filename
             tab.loaded_via_conversion = from_conversion
-            
-            
-            # Update tab bar text
             self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(filename))
-            
+
             self.setWindowTitle(f"ECTOFORM - {filename}")
             self.toolbar.set_loaded_filename(filename)
             self.toolbar.set_stl_loaded(True)
@@ -2638,14 +2755,75 @@ class STLViewerWindow(QMainWindow):
                     self.screenshot_panel.show()
                     if hasattr(vw, 'reframe_for_viewport'):
                         QTimer.singleShot(50, vw.reframe_for_viewport)
+                    self._show_snip_trigger()
                     logger.info("_toggle_screenshot_mode: Screenshot mode enabled")
                 else:
                     self.toolbar.reset_screenshot_state()
         else:
             self._exit_screenshot_mode()
     
+    def _show_snip_trigger(self):
+        from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
+        from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+        import sys
+        from pathlib import Path
+        if self._snip_trigger is None:
+            # Use the same logo PNG shown during 3D model loading
+            if getattr(sys, 'frozen', False):
+                _base = Path(sys._MEIPASS)
+            else:
+                _base = Path(__file__).resolve().parent
+            pix = QPixmap()
+            icon_path = _base / 'assets' / 'toolbar_icon.png'
+            if icon_path.exists():
+                pix = QPixmap(str(icon_path))
+            if pix.isNull():
+                # Fallback: draw camera emoji if asset not found
+                pix = QPixmap(22, 22)
+                pix.fill(QColor(0, 0, 0, 0))
+                p2 = QPainter(pix)
+                p2.setFont(QFont('Apple Color Emoji', 15))
+                p2.drawText(pix.rect(), Qt.AlignCenter, '📷')
+                p2.end()
+
+            tray = QSystemTrayIcon(QIcon(pix), self)
+            tray.setToolTip('ECTO · Screenshot mode — click to snip')
+
+            menu = QMenu()
+            snip_act = QAction('📷  Snip screenshot', self)
+            snip_act.triggered.connect(self._start_snip)
+            exit_act = QAction('✕  Exit screenshot mode', self)
+            exit_act.triggered.connect(self._exit_screenshot_mode_from_tray)
+            menu.addAction(snip_act)
+            menu.addSeparator()
+            menu.addAction(exit_act)
+            tray.setContextMenu(menu)
+
+            tray.activated.connect(self._on_tray_activated)
+            self._snip_trigger = tray
+
+        self._snip_trigger.show()
+
+    def _on_tray_activated(self, reason):
+        from PyQt5.QtWidgets import QSystemTrayIcon
+        if reason == QSystemTrayIcon.Trigger:   # left-click
+            self._start_snip()
+
+    def _exit_screenshot_mode_from_tray(self):
+        """Exit screenshot mode when triggered from the tray menu."""
+        self.toolbar.screenshot_mode_enabled = False
+        self.toolbar.reset_screenshot_state()
+        self._exit_screenshot_mode()
+
+    def _hide_snip_trigger(self):
+        if self._snip_trigger is not None:
+            self._snip_trigger.hide()
+            self._snip_trigger.deleteLater()
+            self._snip_trigger = None
+
     def _exit_screenshot_mode(self):
         """Exit screenshot mode."""
+        self._hide_snip_trigger()
         vw = self.viewer_widget
         if vw and hasattr(vw, 'disable_screenshot_mode'):
             vw.disable_screenshot_mode()
@@ -2668,6 +2846,63 @@ class STLViewerWindow(QMainWindow):
                 pass
         self.toolbar.reset_screenshot_state()
         logger.info("_exit_screenshot_mode: Screenshot mode disabled")
+
+    def _on_capture_desktop(self):
+        """Minimize ECTO so the user can navigate to the app they want to capture."""
+        self.showMinimized()
+
+    def _start_snip(self):
+        """Fire the actual screen capture — called from the tray icon."""
+        import tempfile, os, time as _time
+
+        if self._snip_thread and self._snip_thread.isRunning():
+            return   # already capturing
+
+        path = os.path.join(
+            tempfile.gettempdir(),
+            f'ectoform_snip_{int(_time.time() * 1000)}.png'
+        )
+
+        self._hide_snip_trigger()
+        self.showMinimized()
+
+        thread = _ScreenshotThread(path, parent=self)
+        thread.captured.connect(self._on_snip_done)
+        thread.cancelled.connect(self._on_snip_cancelled)
+        thread.finished.connect(thread.deleteLater)
+        self._snip_thread = thread
+        thread.start()
+
+    def _on_snip_done(self, path):
+        import os
+        from PyQt5.QtGui import QPixmap
+        pix = QPixmap(path)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        self._snip_thread = None
+        if sys.platform == 'darwin':
+            self.showFullScreen()
+        else:
+            self.showMaximized()
+        self.raise_()
+        self.activateWindow()
+        if self.toolbar.screenshot_mode_enabled:
+            self._show_snip_trigger()
+        if not pix.isNull():
+            self.screenshot_panel.add_screenshot(pix)
+
+    def _on_snip_cancelled(self):
+        self._snip_thread = None
+        if sys.platform == 'darwin':
+            self.showFullScreen()
+        else:
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if self.toolbar.screenshot_mode_enabled:
+            self._show_snip_trigger()
 
     def _save_screenshot_to_report(self, pixmap):
         """Send a screenshot pixmap to the first empty slot in the report photo section."""
@@ -3290,7 +3525,7 @@ class STLViewerWindow(QMainWindow):
                 tab.file_path = ecto_path
                 tab.filename = display_name
                 self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(display_name))
-            
+
             self.setWindowTitle(f"ECTOFORM - {display_name}")
             self.toolbar.set_loaded_filename(display_name)
             self.toolbar.set_stl_loaded(True)
@@ -3445,6 +3680,18 @@ class STLViewerWindow(QMainWindow):
                 event.ignore()
                 return
         
+        # Release the QC panel's embedded viewer back to viewer_stack BEFORE
+        # Qt destroys the widget hierarchy.  If the viewer is still reparented
+        # into the QC panel when aboutToQuit fires, rendercanvas tries to access
+        # the already-destroyed QRenderWidget and aborts the process.
+        try:
+            if hasattr(self, 'project_widget'):
+                qc = self.project_widget._screen_widgets.get('quality_control')
+                if qc and hasattr(qc, '_left_panel'):
+                    qc._left_panel.release_viewer()
+        except Exception:
+            pass
+
         # Cleanup all ecto temp directories
         for tab in self.tabs:
             if tab.ecto_temp_dir:

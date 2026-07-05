@@ -102,8 +102,8 @@ class ProjectBriefWidget(QWidget):
 
         # Row 1: Overview + Techniques
         row1 = QHBoxLayout(); row1.setSpacing(16)
-        row1.addWidget(self._s_overview, 2)
-        row1.addWidget(self._s_techniques, 3)
+        row1.addWidget(self._s_overview, 3)
+        row1.addWidget(self._s_techniques, 2)
         layout.addLayout(row1)
 
         # Row 2: Targets + Dates + Inspiration

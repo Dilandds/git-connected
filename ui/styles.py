@@ -657,7 +657,6 @@ def get_global_stylesheet(theme=None):
             border-radius: 4px;
             font-size: 11px;
         }}
-        /* ---- Tab Bar: glossy / dimensional (same palette as mode switcher + sidebar cards) ---- */
         QTabBar#ectoTabBar {{
             background: {theme.background};
             border: none;
@@ -667,71 +666,60 @@ def get_global_stylesheet(theme=None):
         }}
         QTabBar#ectoTabBar::tab {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 {theme.border_medium},
-                stop:0.18 {theme.card_background},
-                stop:1 {theme.background});
+                stop:0 #1e4d66,
+                stop:0.2 #162c3a,
+                stop:1 #0f1e28);
             color: {theme.text_white};
-            border-top: 1px solid {theme.border_light};
-            border-left: 1px solid {theme.border_light};
-            border-right: 1px solid {theme.border_standard};
+            border-top: 2px solid #2596BE;
+            border-left: 1px solid #1e4d66;
+            border-right: 1px solid #1e4d66;
             border-bottom: none;
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
-            padding-top: 5px;
-            padding-right: 14px;
+            padding-top: 4px;
+            padding-right: 16px;
             padding-bottom: 6px;
-            padding-left: 28px;
+            padding-left: 16px;
             margin-right: 2px;
             font-size: 12px;
             font-family: {FONTS['family']};
-            min-width: 120px;
+            min-width: 80px;
             min-height: 24px;
         }}
         QTabBar#ectoTabBar::tab:selected {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 {theme.weight_panel_hover},
-                stop:0.1 {theme.border_medium},
-                stop:0.32 {theme.weight_panel_bg},
-                stop:0.68 {theme.border_standard},
-                stop:1 {theme.button_default_bg});
-            color: {theme.text_white};
+                stop:0 #2596BE,
+                stop:0.18 #1a6080,
+                stop:0.45 #1a3a4e,
+                stop:1 #0f1e28);
+            color: #ffffff;
             font-weight: bold;
-            border-top: 1px solid {theme.border_medium};
-            border-left: 1px solid {theme.border_light};
-            border-right: 1px solid {theme.border_standard};
+            border-top: 3px solid #2596BE;
+            border-left: 1px solid #2596BE;
+            border-right: 1px solid #2596BE;
             border-bottom: none;
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
-            padding-top: 6px;
-            padding-right: 14px;
+            padding-top: 3px;
+            padding-right: 16px;
             padding-bottom: 6px;
-            padding-left: 30px;
+            padding-left: 16px;
             min-height: 24px;
         }}
         QTabBar#ectoTabBar::tab:hover:!selected {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 {theme.border_light},
-                stop:0.22 {theme.row_bg_hover},
-                stop:1 {theme.card_background});
+                stop:0 #235f80,
+                stop:0.2 #1a3a4e,
+                stop:1 #0f1e28);
             color: {theme.text_white};
-            border-top: 1px solid {theme.border_medium};
-            border-left: 1px solid {theme.border_light};
-            border-right: 1px solid {theme.border_standard};
+            border-top: 2px solid #2596BE;
+            border-left: 1px solid #2596BE;
+            border-right: 1px solid #2596BE;
             border-bottom: none;
-            padding-top: 5px;
-            padding-right: 14px;
+            padding-top: 4px;
+            padding-right: 16px;
             padding-bottom: 6px;
-            padding-left: 28px;
-        }}
-        QTabBar#ectoTabBar::tab:first {{
-            min-width: 140px;
-            padding-top: 5px;
-            padding-right: 14px;
-            padding-bottom: 6px;
-            padding-left: 14px;
-            font-size: 12px;
-            font-family: {FONTS['family']};
-            font-weight: normal;
+            padding-left: 16px;
         }}
         QTabBar#ectoTabBar::tab:last {{
             min-width: 32px;

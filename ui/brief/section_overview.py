@@ -11,7 +11,7 @@ from .shared import (
 )
 from i18n import t
 
-_IMG_W = 210
+_IMG_W = 290
 
 _IMG_BTN_STYLE = f"""
     QPushButton {{

@@ -357,6 +357,8 @@ class STLViewerWidget(QWidget):
         self._orbit_center = (0.0, 0.0, 0.0)
         self._orbit_direction = 1   # +1 = right, -1 = left
         self._orbit_speed = 15.0    # deg/sec
+        self._orbit_axis = 'h'      # 'h' = horizontal turntable, 'v' = vertical wheel
+        self._orbit_lateral = 0.0  # camera X offset from center (used in vertical mode)
 
         # Recording state
         self._record_timer = None
@@ -373,8 +375,8 @@ class STLViewerWidget(QWidget):
         # Cached offscreen renderer for thumbnail captures (reused to avoid per-call GPU alloc)
         self._thumb_renderer = None
         self._thumb_texture  = None
-        self._THUMB_W = 240
-        self._THUMB_H = 160
+        self._THUMB_W = 1920
+        self._THUMB_H = 1280
 
         # Parts pick mode state
         self.parts_pick_mode = False
@@ -2683,28 +2685,23 @@ class STLViewerWidget(QWidget):
         # Capture orbit parameters from current camera position
         cam_pos = self._camera.local.position
         try:
-            import numpy as np
-            bounds = self._mesh_obj.aabb  # (min_xyz, max_xyz)
-            center = ((bounds[0][0] + bounds[1][0]) / 2,
-                      (bounds[0][1] + bounds[1][1]) / 2,
-                      (bounds[0][2] + bounds[1][2]) / 2)
+            # Use PyVista mesh center — exact bounding-box centroid of the geometry,
+            # works correctly for every object regardless of origin placement.
+            c = self.current_mesh.center  # [cx, cy, cz]
+            center = (float(c[0]), float(c[1]), float(c[2]))
         except Exception:
             center = (0.0, 0.0, 0.0)
 
         self._orbit_center = center
         dx = cam_pos[0] - center[0]
+        dy = cam_pos[1] - center[1]
         dz = cam_pos[2] - center[2]
+        self._orbit_lateral = dx
         self._orbit_radius = max(math.sqrt(dx * dx + dz * dz), 0.1)
-        self._orbit_elevation = cam_pos[1] - center[1]
+        self._orbit_elevation = dy
         self._orbit_angle = math.degrees(math.atan2(dx, dz))
         self._orbit_direction = direction
         self._orbit_speed = speed_deg_per_sec
-
-        # Freeze interactive controller so mouse drags don't fight the timer
-        try:
-            self._controller.enabled = False
-        except Exception:
-            pass
 
         if self._rotate_timer is None:
             self._rotate_timer = QTimer(self)
@@ -2714,13 +2711,9 @@ class STLViewerWidget(QWidget):
         logger.info(f"start_auto_rotate: speed={speed_deg_per_sec}°/s dir={direction}")
 
     def stop_auto_rotate(self):
-        """Stop rotation and re-enable interactive controller."""
+        """Stop rotation."""
         if self._rotate_timer is not None:
             self._rotate_timer.stop()
-        try:
-            self._controller.enabled = True
-        except Exception:
-            pass
         logger.info("stop_auto_rotate")
 
     def set_rotate_speed(self, speed_deg_per_sec: float):
@@ -2731,17 +2724,53 @@ class STLViewerWidget(QWidget):
         """Change orbit direction (+1 right / -1 left) without restarting."""
         self._orbit_direction = direction
 
+    def set_rotate_axis(self, axis: str):
+        """Switch orbit axis live: 'h' = horizontal turntable, 'v' = vertical wheel."""
+        self._orbit_axis = axis
+
     def _rotate_tick(self):
-        """Called every 30 ms — advance camera azimuth by one step."""
+        """Called every 30 ms — advance camera by one step.
+
+        Re-derives orbit parameters from the actual camera position each frame so
+        that mouse drag and scroll wheel (zoom) interact seamlessly: the rotation
+        simply continues from wherever the user left the camera.
+        """
         if self._camera is None:
             return
-        dt = 0.030  # seconds per tick
+        dt = 0.030
+        cx, cy, cz = self._orbit_center
+
+        # Read actual camera position — picks up any mouse drag / zoom since last tick
+        try:
+            cam_pos = self._camera.local.position
+            px, py, pz = cam_pos[0], cam_pos[1], cam_pos[2]
+        except Exception:
+            px, py, pz = cx, cy + 1, cz
+
+        dx, dy, dz = px - cx, py - cy, pz - cz
+
+        if self._orbit_axis == 'v':
+            self._orbit_lateral = dx
+            self._orbit_radius = max(math.sqrt(dy * dy + dz * dz), 0.1)
+            self._orbit_angle   = math.degrees(math.atan2(dy, dz))
+        else:
+            self._orbit_radius    = max(math.sqrt(dx * dx + dz * dz), 0.1)
+            self._orbit_elevation = dy
+            self._orbit_angle     = math.degrees(math.atan2(dx, dz))
+
+        # Advance by one step
         self._orbit_angle += self._orbit_direction * self._orbit_speed * dt
         angle_rad = math.radians(self._orbit_angle)
-        cx, cy, cz = self._orbit_center
-        x = cx + self._orbit_radius * math.sin(angle_rad)
-        z = cz + self._orbit_radius * math.cos(angle_rad)
-        y = cy + self._orbit_elevation
+        r = self._orbit_radius
+
+        if self._orbit_axis == 'v':
+            x = cx + self._orbit_lateral
+            y = cy + r * math.sin(angle_rad)
+            z = cz + r * math.cos(angle_rad)
+        else:
+            x = cx + r * math.sin(angle_rad)
+            y = cy + self._orbit_elevation
+            z = cz + r * math.cos(angle_rad)
         try:
             self._camera.local.position = (x, y, z)
             self._camera.show_pos((cx, cy, cz))
