@@ -174,11 +174,21 @@ a = Analysis(
         'check_results',
         # VTK web modules (not needed)
         'vtkmodules.web', 'vtkmodules.qt.web',
+        # Unused VTK rendering sub-modules (pyvista only needs core mesh ops on Windows)
+        'vtkmodules.vtkRenderingOpenGL2',
+        'vtkmodules.vtkRenderingVolumeOpenGL2',
+        'vtkmodules.vtkChartsCore',
+        'vtkmodules.vtkViewsContext2D',
+        'vtkmodules.vtkInfovisLayout',
+        'vtkmodules.vtkRenderingLOD',
+        # Transitive packages not used in the desktop app
+        'matplotlib', 'matplotlib.pyplot', 'matplotlib.backends',
+        'trame', 'trame_client', 'trame_server', 'trame_vuetify', 'trame_common_utils',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=True,  # Faster imports - files extracted individually instead of from archive
+    noarchive=False,  # Use PYZ archive with zlib compression — reduces Python bytecode size significantly
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

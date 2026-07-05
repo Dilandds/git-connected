@@ -2764,26 +2764,52 @@ class STLViewerWindow(QMainWindow):
     
     def _show_snip_trigger(self):
         from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
-        from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-        import sys
+        from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QBrush
+        import sys, os
         from pathlib import Path
         if self._snip_trigger is None:
-            # Use the same logo PNG shown during 3D model loading
-            if getattr(sys, 'frozen', False):
-                _base = Path(sys._MEIPASS)
-            else:
-                _base = Path(__file__).resolve().parent
+            # Build a list of candidate paths — try frozen _MEIPASS first,
+            # then the source tree relative to this file, then cwd.
+            _frozen_base = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else None
+            _src_base    = Path(__file__).resolve().parent
+            _cwd_base    = Path(os.getcwd())
+
+            candidates = []
+            for base in filter(None, [_frozen_base, _src_base, _cwd_base]):
+                candidates.append(base / 'assets' / 'toolbar_icon.png')
+            # On Windows also accept the bundled .ico as a second-resort
+            if sys.platform == 'win32':
+                for base in filter(None, [_frozen_base, _src_base, _cwd_base]):
+                    candidates.append(base / 'assets' / 'icon.ico')
+
             pix = QPixmap()
-            icon_path = _base / 'assets' / 'toolbar_icon.png'
-            if icon_path.exists():
-                pix = QPixmap(str(icon_path))
+            for candidate in candidates:
+                if candidate.exists():
+                    pix = QPixmap(str(candidate))
+                    if not pix.isNull():
+                        break
+
+            # Scale to a crisp 32×32 for the Windows notification area
+            if not pix.isNull() and sys.platform == 'win32':
+                pix = pix.scaled(32, 32, Qt.KeepAspectRatio,
+                                 Qt.SmoothTransformation)
+
             if pix.isNull():
-                # Fallback: draw camera emoji if asset not found
-                pix = QPixmap(22, 22)
+                # Last-resort fallback: draw a solid ECTO-blue circle with "E"
+                sz = 32
+                pix = QPixmap(sz, sz)
                 pix.fill(QColor(0, 0, 0, 0))
                 p2 = QPainter(pix)
-                p2.setFont(QFont('Apple Color Emoji', 15))
-                p2.drawText(pix.rect(), Qt.AlignCenter, '📷')
+                p2.setRenderHint(QPainter.Antialiasing)
+                p2.setBrush(QBrush(QColor('#2596BE')))
+                p2.setPen(Qt.NoPen)
+                p2.drawEllipse(0, 0, sz, sz)
+                p2.setPen(QColor('white'))
+                f2 = QFont()
+                f2.setPointSize(14)
+                f2.setBold(True)
+                p2.setFont(f2)
+                p2.drawText(pix.rect(), Qt.AlignCenter, 'E')
                 p2.end()
 
             tray = QSystemTrayIcon(QIcon(pix), self)
