@@ -17,7 +17,20 @@ if sys.platform == 'win32':
 # os.environ['VTK_USE_OSMESA'] = '1'  # Force software rendering
 
 # Configure logging FIRST, before any other imports
-log_file = os.path.join(os.path.dirname(__file__), 'app_debug.log')
+# Dev: log next to the script. Production: log to the OS standard location.
+if getattr(sys, 'frozen', False):
+    # PyInstaller build — write to user-accessible log directory
+    if sys.platform == 'win32':
+        _log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'ECTOFORM' / 'logs'
+    elif sys.platform == 'darwin':
+        _log_dir = Path.home() / 'Library' / 'Logs' / 'ECTOFORM'
+    else:
+        _log_dir = Path.home() / '.local' / 'share' / 'ECTOFORM' / 'logs'
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = str(_log_dir / 'app.log')
+else:
+    log_file = os.path.join(os.path.dirname(__file__), 'app_debug.log')
+
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -229,11 +242,55 @@ def main():
             safe_flush(sys.stderr)
             logger.info("✓ Valid license found in cache")
         
-        splash.showMessage("Loading application...", 
-                          QtCore.AlignCenter | QtCore.AlignBottom, 
+        splash.showMessage("Loading application...",
+                          QtCore.AlignCenter | QtCore.AlignBottom,
                           QColor("#5294E2"))
         app.processEvents()
-        
+
+        # Step 2.6: Show activation dialog (first launch only, skipped in DEV_MODE)
+        try:
+            from config import DEV_MODE
+        except ImportError:
+            DEV_MODE = False
+
+        if not DEV_MODE:
+            from PyQt5.QtCore import QSettings
+            settings = QSettings("ECTOFORM", "ECTOFORM")
+            already_activated = settings.value("activated", False, type=bool)
+            if not already_activated:
+                print("Step 2.6: Showing activation dialog...", file=sys.stderr)
+                safe_flush(sys.stderr)
+                logger.info("Step 2.6: Showing activation dialog...")
+                splash.hide()
+                from ui.activation_dialog import ActivationDialog
+                activation_dialog = ActivationDialog()
+                if activation_dialog.exec() != QDialog.Accepted:
+                    logger.info("Activation cancelled, exiting application")
+                    return 0
+                settings.setValue("activated", True)
+                splash.show()
+                app.processEvents()
+                logger.info("✓ Activation complete")
+        else:
+            logger.info("Step 2.6: DEV_MODE — activation screen skipped")
+
+        # Step 2.7: Show login dialog (temporarily disabled)
+        # splash.hide()
+        # from ui.login_dialog import LoginDialog
+        # login_dialog = LoginDialog()
+        # if login_dialog.exec() != QDialog.Accepted:
+        #     logger.info("Login cancelled, exiting application")
+        #     return 0
+        # splash.show()
+        # splash.showMessage("Loading application...",
+        #                   QtCore.AlignCenter | QtCore.AlignBottom,
+        #                   QColor("#5294E2"))
+        # app.processEvents()
+        logger.info("Step 2.7: Login screen skipped (disabled)")
+
+        # Step 2.8: Folder picker (removed — new architecture uses File → Open)
+        logger.info("Step 2.8: Folder picker skipped (disabled)")
+
         print("Step 3: Creating main window...", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("Step 3: Creating main window...")

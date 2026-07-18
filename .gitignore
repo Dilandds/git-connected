@@ -1,3 +1,6 @@
+# Local config — contains API keys, never commit
+config.py
+
 # Logs
 logs
 *.log

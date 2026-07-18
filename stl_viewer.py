@@ -382,6 +382,10 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.addWidget(self._lang_btn)
 
         mode_bar_layout.addWidget(self._mode_help_btn)
+
+        # User account pill (avatar + name + dropdown)
+        mode_bar_layout.addWidget(self._build_user_account_widget())
+
         root_layout.addWidget(mode_bar)
         
         # ---- Workspace stack (3D vs Technical) ----
@@ -666,6 +670,12 @@ class STLViewerWindow(QMainWindow):
 
     def _build_user_account_widget(self) -> QWidget:
         """Builds the user account pill shown on the right of the mode bar."""
+        import session as _session
+        full_name = _session.get_full_name() or "User"
+        role = _session.get_role() or "member"
+        initials = "".join(p[0].upper() for p in full_name.split()[:2]) or "?"
+        display_name = full_name.split()[0] if full_name else "User"
+
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         layout = QHBoxLayout(container)
@@ -673,10 +683,10 @@ class STLViewerWindow(QMainWindow):
         layout.setSpacing(6)
 
         # Avatar circle — coloured initials badge
-        avatar = QLabel("A")
-        avatar.setFixedSize(24, 24)
-        avatar.setAlignment(Qt.AlignCenter)
-        avatar.setStyleSheet(f"""
+        self._user_avatar = QLabel(initials)
+        self._user_avatar.setFixedSize(24, 24)
+        self._user_avatar.setAlignment(Qt.AlignCenter)
+        self._user_avatar.setStyleSheet(f"""
             QLabel {{
                 background-color: {default_theme.button_primary};
                 color: white;
@@ -688,7 +698,7 @@ class STLViewerWindow(QMainWindow):
         """)
 
         # Name + dropdown button
-        self._user_btn = QPushButton("Admin  ▾")
+        self._user_btn = QPushButton(f"{display_name}  ▾")
         self._user_btn.setFlat(True)
         self._user_btn.setCursor(Qt.PointingHandCursor)
         self._user_btn.setStyleSheet(f"""
@@ -704,6 +714,8 @@ class STLViewerWindow(QMainWindow):
                 color: white;
             }}
         """)
+        self._user_btn.clicked.connect(self._show_user_menu)
+        self._user_role = role
 
         # Separator line before avatar
         sep = QFrame()
@@ -712,9 +724,72 @@ class STLViewerWindow(QMainWindow):
         sep.setStyleSheet(f"color: {default_theme.border_light}; background: {default_theme.border_light}; max-width: 1px; border: none;")
 
         layout.addWidget(sep)
-        layout.addWidget(avatar)
+        layout.addWidget(self._user_avatar)
         layout.addWidget(self._user_btn)
         return container
+
+    def _show_user_menu(self):
+        from PyQt5.QtWidgets import QMenu, QAction
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.background};
+                border: 1px solid {default_theme.border_light};
+                border-radius: 8px;
+                padding: 4px 0;
+                color: {default_theme.text_primary};
+                font-size: 13px;
+            }}
+            QMenu::item {{
+                padding: 8px 18px;
+            }}
+            QMenu::item:selected {{
+                background-color: {default_theme.button_primary};
+                color: white;
+                border-radius: 4px;
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background: {default_theme.border_light};
+                margin: 4px 8px;
+            }}
+        """)
+
+        if getattr(self, '_user_role', '') == 'admin':
+            manage_action = QAction("Manage Team", self)
+            manage_action.triggered.connect(self._open_user_management)
+            menu.addAction(manage_action)
+            menu.addSeparator()
+
+        sign_out_action = QAction("Sign Out", self)
+        sign_out_action.triggered.connect(self._on_sign_out)
+        menu.addAction(sign_out_action)
+
+        menu.exec_(self._user_btn.mapToGlobal(self._user_btn.rect().bottomLeft()))
+
+    def _open_user_management(self):
+        from ui.user_management_dialog import UserManagementDialog
+        dlg = UserManagementDialog(parent=self)
+        dlg.exec_()
+
+    def _on_sign_out(self):
+        from PyQt5.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Sign Out",
+            "Are you sure you want to sign out?\nThe application will close.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            try:
+                from supabase_client import get_client
+                get_client().auth.sign_out()
+            except Exception:
+                pass
+            import session as _session
+            _session.clear_user()
+            from PyQt5.QtWidgets import QApplication
+            QApplication.quit()
 
     # ======================== Mode Switching ========================
 
