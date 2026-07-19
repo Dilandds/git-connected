@@ -2,9 +2,9 @@
 Files & Versions screen — folder tree, versioned file list, search/filter,
 status management, bulk download, trash, and 3D viewer launch.
 """
+import base64
 import logging
 import os
-import zipfile
 import tempfile
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -110,10 +110,11 @@ _FOLDER_ITEM = f"""
 
 @dataclass
 class FileVersion:
-    version_str: str       # "v1.0", "v1.1", etc.
-    file_path:   str       # full path on disk
-    uploaded_at: str       # "dd/MM/yyyy HH:mm"
-    size_bytes:  int = 0
+    version_str:       str        # "v1.0", "v1.1", etc.
+    original_filename: str        # "ring.stl" — for extension and download name
+    uploaded_at:       str        # "dd/MM/yyyy HH:mm"
+    size_bytes:        int  = 0
+    file_data_b64:     str  = ''  # base64-encoded file content
 
 
 @dataclass
@@ -128,7 +129,7 @@ class ProjectFile:
     @property
     def extension(self) -> str:
         if self.versions:
-            return Path(self.versions[-1].file_path).suffix.lower()
+            return Path(self.versions[-1].original_filename).suffix.lower()
         return ""
 
     @property
@@ -310,16 +311,28 @@ class _FileRow(QFrame):
 
     def _download(self):
         lv = self._pf.latest_version
-        if not lv or not os.path.exists(lv.file_path):
+        if not lv or not lv.file_data_b64:
             show_message_dialog(self, t('project.files.file_not_found'),
-                                "The file could not be found on disk.")
+                                "No file data stored for this entry.")
             return
         dest, _ = QFileDialog.getSaveFileName(
-            self, t('project.files.dlg_save'), self._pf.name + self._pf.extension
+            self, t('project.files.dlg_save'), lv.original_filename
         )
         if dest:
-            import shutil
-            shutil.copy2(lv.file_path, dest)
+            with open(dest, 'wb') as f:
+                f.write(base64.b64decode(lv.file_data_b64))
+
+    def _extract_to_temp(self, lv: 'FileVersion') -> str:
+        """Write base64 file data to a temp file and return its path."""
+        suffix = Path(lv.original_filename).suffix
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                f.write(base64.b64decode(lv.file_data_b64))
+        except Exception:
+            os.unlink(tmp_path)
+            raise
+        return tmp_path
 
     def _show_menu(self):
         menu = QMenu(self)
@@ -338,9 +351,9 @@ class _FileRow(QFrame):
             ext = self._pf.extension
             if ext in _3D_EXTS:
                 lv = self._pf.latest_version
-                if lv:
+                if lv and lv.file_data_b64:
                     menu.addAction(t('project.files.open_viewer')).triggered.connect(
-                        lambda: self.open_viewer.emit(lv.file_path)
+                        lambda: self.open_viewer.emit(self._extract_to_temp(lv))
                     )
                     menu.addSeparator()
 
@@ -1031,13 +1044,20 @@ class FilesVersionsWidget(QWidget):
 
         for path in paths:
             size = os.path.getsize(path) if os.path.exists(path) else 0
+            with open(path, 'rb') as fh:
+                b64 = base64.b64encode(fh.read()).decode()
             name = Path(path).stem
             pf = ProjectFile(
                 id=self._next_file_id,
                 name=name,
                 folder_id=folder_id,
-                versions=[FileVersion(version_str="v1.0", file_path=path,
-                                      uploaded_at=now, size_bytes=size)]
+                versions=[FileVersion(
+                    version_str="v1.0",
+                    original_filename=Path(path).name,
+                    uploaded_at=now,
+                    size_bytes=size,
+                    file_data_b64=b64,
+                )]
             )
             self._next_file_id += 1
             self._files.append(pf)
@@ -1053,12 +1073,15 @@ class FilesVersionsWidget(QWidget):
         if not path:
             return
         size = os.path.getsize(path) if os.path.exists(path) else 0
+        with open(path, 'rb') as fh:
+            b64 = base64.b64encode(fh.read()).decode()
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         pf.versions.append(FileVersion(
             version_str=pf.next_version_str(),
-            file_path=path,
+            original_filename=Path(path).name,
             uploaded_at=now,
             size_bytes=size,
+            file_data_b64=b64,
         ))
         self._refresh()
         self.changed.emit()
@@ -1136,8 +1159,13 @@ class FilesVersionsWidget(QWidget):
 
     def get_data(self) -> dict:
         def _ver(v: FileVersion) -> dict:
-            return {"version_str": v.version_str, "file_path": v.file_path,
-                    "uploaded_at": v.uploaded_at, "size_bytes": v.size_bytes}
+            return {
+                "version_str":       v.version_str,
+                "original_filename": v.original_filename,
+                "uploaded_at":       v.uploaded_at,
+                "size_bytes":        v.size_bytes,
+                "file_data_b64":     v.file_data_b64,
+            }
         def _file(f: ProjectFile) -> dict:
             return {"id": f.id, "name": f.name, "folder_id": f.folder_id,
                     "status": f.status, "trashed": f.trashed,
@@ -1161,10 +1189,31 @@ class FilesVersionsWidget(QWidget):
         ]
         self._files = []
         for fd in data.get("files", []):
+            versions = []
+            for v in fd.get("versions", []):
+                # backward compat: old saves used file_path instead of file_data_b64
+                b64 = v.get("file_data_b64", "")
+                orig = v.get("original_filename", "")
+                if not orig:
+                    old_path = v.get("file_path", "")
+                    orig = Path(old_path).name if old_path else "unknown"
+                if not b64 and v.get("file_path") and os.path.exists(v["file_path"]):
+                    try:
+                        with open(v["file_path"], 'rb') as fh:
+                            b64 = base64.b64encode(fh.read()).decode()
+                    except Exception:
+                        pass
+                versions.append(FileVersion(
+                    version_str=v.get("version_str", "v1.0"),
+                    original_filename=orig,
+                    uploaded_at=v.get("uploaded_at", ""),
+                    size_bytes=v.get("size_bytes", 0),
+                    file_data_b64=b64,
+                ))
             pf = ProjectFile(
                 id=fd["id"], name=fd["name"], folder_id=fd["folder_id"],
                 status=fd.get("status", "In progress"), trashed=fd.get("trashed", False),
-                versions=[FileVersion(**v) for v in fd.get("versions", [])],
+                versions=versions,
             )
             self._files.append(pf)
         self._ensure_trash()
