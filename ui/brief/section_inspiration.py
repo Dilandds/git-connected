@@ -1,12 +1,26 @@
 """Section 5 — Inspiration / Idea / Direction card."""
+import base64
 from typing import List, Optional
 
 from PyQt5.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog,
     QApplication,
 )
-from PyQt5.QtCore import Qt, QSize, QPoint
+from PyQt5.QtCore import Qt, QSize, QPoint, QBuffer, QIODevice
 from PyQt5.QtGui import QPixmap, QIcon, QCursor
+
+
+def _pixmap_to_b64(pix: QPixmap) -> str:
+    buf = QBuffer()
+    buf.open(QIODevice.WriteOnly)
+    pix.save(buf, 'PNG')
+    return base64.b64encode(bytes(buf.data())).decode()
+
+
+def _b64_to_pixmap(b64: str) -> QPixmap:
+    pix = QPixmap()
+    pix.loadFromData(base64.b64decode(b64))
+    return pix
 
 from .shared import (
     _MUTED, _BORDER, _BORDER_L, _ACCENT, _ACCENT_H, _INPUT_BG,
@@ -107,7 +121,7 @@ class InspirationCard(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._photo_paths: List[str] = [''] * _NUM_PHOTOS
+        self._photo_b64s: List[str] = [''] * _NUM_PHOTOS
         self._photo_btns:  List[_PhotoBtn] = []
         self._edit_enabled = True
         self._preview = _HoverPreview()
@@ -163,7 +177,7 @@ class InspirationCard(QFrame):
         if path:
             pix = QPixmap(path)
             if not pix.isNull():
-                self._photo_paths[idx] = path
+                self._photo_b64s[idx] = _pixmap_to_b64(pix)
                 self._apply_photo(idx, pix)
 
     def _apply_photo(self, idx: int, pix: QPixmap):
@@ -188,16 +202,27 @@ class InspirationCard(QFrame):
     def get_data(self) -> dict:
         return {
             'inspiration': self._f_inspiration.toPlainText(),
-            'photo_paths': list(self._photo_paths),
+            'photo_b64s':  list(self._photo_b64s),
         }
 
     def set_data(self, data: dict):
         self._f_inspiration.setPlainText(data.get('inspiration', ''))
-        paths = data.get('photo_paths', [])
+        b64s = data.get('photo_b64s', [])
+        if not b64s:
+            # backward compat: old files stored file paths
+            old_paths = data.get('photo_paths', [])
+            for i in range(_NUM_PHOTOS):
+                path = old_paths[i] if i < len(old_paths) else ''
+                if path:
+                    pix = QPixmap(path)
+                    if not pix.isNull():
+                        self._photo_b64s[i] = _pixmap_to_b64(pix)
+                        self._apply_photo(i, pix)
+            return
         for i in range(_NUM_PHOTOS):
-            path = paths[i] if i < len(paths) else ''
-            self._photo_paths[i] = path
-            if path:
-                pix = QPixmap(path)
+            b64 = b64s[i] if i < len(b64s) else ''
+            self._photo_b64s[i] = b64
+            if b64:
+                pix = _b64_to_pixmap(b64)
                 if not pix.isNull():
                     self._apply_photo(i, pix)

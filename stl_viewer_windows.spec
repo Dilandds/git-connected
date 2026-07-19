@@ -53,6 +53,7 @@ splash_image_paths = [
     ('assets/logo.jpg', 'assets'),
     ('assets/Logo_Ectoform_2_copy-removebg-preview.png', 'assets'),
     ('assets/annotation_icon.png', 'assets'),
+    ('assets/toolbar_icon.png', 'assets'),
     ('assets/xyz_gizmo.png', 'assets'),
     ('assets/dropdown_arrow.png', 'assets'),
     ('assets/arrow_up.png', 'assets'),

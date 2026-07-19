@@ -1,10 +1,25 @@
 """Section 1 — Product Overview card."""
+import base64
+
 from PyQt5.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFileDialog, QSizePolicy, QTextEdit,
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QBuffer, QIODevice
 from PyQt5.QtGui import QPixmap, QIcon
+
+
+def _pixmap_to_b64(pix: QPixmap) -> str:
+    buf = QBuffer()
+    buf.open(QIODevice.WriteOnly)
+    pix.save(buf, 'PNG')
+    return base64.b64encode(bytes(buf.data())).decode()
+
+
+def _b64_to_pixmap(b64: str) -> QPixmap:
+    pix = QPixmap()
+    pix.loadFromData(base64.b64decode(b64))
+    return pix
 from .shared import (
     _MUTED, _INPUT_BG, _BORDER_L, _BORDER, _ACCENT, _TEXT,
     card, section_label, make_input, separator,
@@ -47,7 +62,7 @@ class ProductOverviewCard(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._image_path: str = ''
+        self._image_b64: str = ''
         c = card()
         layout = QVBoxLayout(c)
         layout.setContentsMargins(16, 14, 16, 16)
@@ -130,7 +145,7 @@ class ProductOverviewCard(QFrame):
         if path:
             pix = QPixmap(path)
             if not pix.isNull():
-                self._image_path = path
+                self._image_b64 = _pixmap_to_b64(pix)
                 self._apply_image(pix)
 
     def _apply_image(self, pix: QPixmap):
@@ -149,14 +164,26 @@ class ProductOverviewCard(QFrame):
         for attr in ('_f_product_name', '_f_reference', '_f_visual_links'):
             getattr(self, attr).setReadOnly(not enabled)
 
+    def set_image_from_path(self, path: str):
+        """Load image from disk, embed as base64. Used by sidebar auto-fill."""
+        pix = QPixmap(path)
+        if not pix.isNull():
+            self._image_b64 = _pixmap_to_b64(pix)
+            self._apply_image(pix)
+
+    def clear_image(self):
+        self._image_b64 = ''
+        self._img_btn.setIcon(QIcon())
+        self._img_btn.setText(t('project.brief.s1_add_image'))
+
     def get_data(self) -> dict:
         return {
             'product_name': self._f_product_name.text(),
             'reference':    self._f_reference.text(),
             'description':  self._f_description.toPlainText(),
-            'intended_use': '',   # removed field — kept in dict for backward compat
+            'intended_use': '',
             'visual_links': self._f_visual_links.text(),
-            'image_path':   self._image_path,
+            'image_b64':    self._image_b64,
         }
 
     def set_data(self, data: dict):
@@ -164,9 +191,14 @@ class ProductOverviewCard(QFrame):
         self._f_reference.setText(data.get('reference', ''))
         self._f_description.setPlainText(data.get('description', ''))
         self._f_visual_links.setText(data.get('visual_links', ''))
-        path = data.get('image_path', '')
-        if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._image_path = path
-                self._apply_image(pix)
+        b64 = data.get('image_b64', '')
+        if not b64:
+            # backward compat: old files stored a file path
+            old_path = data.get('image_path', '')
+            if old_path:
+                self.set_image_from_path(old_path)
+            return
+        pix = _b64_to_pixmap(b64)
+        if not pix.isNull():
+            self._image_b64 = b64
+            self._apply_image(pix)

@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap
 from ui.styles import make_font
 from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, BTN_PRIMARY, BTN_SECONDARY
 from i18n import t
@@ -201,16 +201,11 @@ class ProjectBriefWidget(QWidget):
             self._last_auto_number = ''
 
         photo = (info.get('photo_path') or '').strip()
-        current_photo = self._s_overview._image_path
-        if photo and photo != current_photo:
-            if not current_photo or current_photo == self._last_auto_photo:
-                pix = QPixmap(photo)
-                if not pix.isNull():
-                    self._s_overview._image_path = photo
-                    self._s_overview._apply_image(pix)
-                    self._last_auto_photo = photo
-        elif not photo and current_photo and current_photo == self._last_auto_photo:
-            self._s_overview._image_path = ''
-            self._s_overview._img_btn.setIcon(QIcon())
-            self._s_overview._img_btn.setText(t('project.brief.s1_add_image'))
+        has_image = bool(self._s_overview._image_b64)
+        if photo and photo != self._last_auto_photo:
+            if not has_image or self._last_auto_photo:
+                self._s_overview.set_image_from_path(photo)
+                self._last_auto_photo = photo
+        elif not photo and self._last_auto_photo:
+            self._s_overview.clear_image()
             self._last_auto_photo = ''

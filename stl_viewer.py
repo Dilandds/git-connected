@@ -2875,7 +2875,62 @@ class STLViewerWindow(QMainWindow):
 
     def _on_capture_desktop(self):
         """Minimize ECTO so the user can navigate to the app they want to capture."""
+        self._show_tray_icon_hint()
         self.showMinimized()
+
+    def _show_tray_icon_hint(self):
+        """Show a small on-screen card with the actual tray icon, so the user can
+        visually match it to what they'll see in the menu bar (OS notification
+        banners don't reliably show a custom icon, so we draw our own).
+
+        Uses a manual paintEvent instead of a stylesheet background — a top-level
+        frameless window with WA_TranslucentBackground doesn't reliably paint a
+        QSS background/border on macOS, but a QPainter-drawn rounded rect does."""
+        from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout
+        from PyQt5.QtGui import QPainter, QColor, QPen
+        from PyQt5.QtCore import Qt, QTimer
+
+        if self._snip_trigger is None:
+            return
+
+        class _TrayHintCard(QWidget):
+            def paintEvent(self, event):
+                p = QPainter(self)
+                p.setRenderHint(QPainter.Antialiasing)
+                p.setBrush(QColor(34, 38, 44, 245))
+                p.setPen(QPen(QColor(58, 64, 72), 1))
+                p.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 10, 10)
+
+        popup = _TrayHintCard(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        popup.setAttribute(Qt.WA_TranslucentBackground)
+
+        layout = QHBoxLayout(popup)
+        layout.setContentsMargins(14, 10, 18, 10)
+        layout.setSpacing(10)
+
+        icon_label = QLabel()
+        icon_label.setPixmap(self._snip_trigger.icon().pixmap(28, 28))
+        icon_label.setStyleSheet("background: transparent;")
+        layout.addWidget(icon_label)
+
+        location = "menu bar" if sys.platform == 'darwin' else "taskbar (system tray)"
+        text_label = QLabel(f"Look for this icon in the {location}, then click it to snip your screenshot")
+        text_label.setWordWrap(True)
+        text_label.setMaximumWidth(260)
+        text_label.setStyleSheet("color: #E0ECF4; font-size: 13px; background: transparent;")
+        layout.addWidget(text_label)
+
+        popup.adjustSize()
+
+        screen = QApplication.primaryScreen().availableGeometry()
+        x = screen.right() - popup.width() - 20
+        # macOS menu bar is top-right; Windows system tray is bottom-right.
+        y = screen.top() + 10 if sys.platform == 'darwin' else screen.bottom() - popup.height() - 10
+        popup.move(x, y)
+        popup.show()
+
+        self._tray_hint_popup = popup  # keep a reference alive until it closes
+        QTimer.singleShot(6000, popup.close)
 
     def _start_snip(self):
         """Fire the actual screen capture — called from the tray icon."""

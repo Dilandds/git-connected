@@ -5,9 +5,11 @@ Right panel: top bar (open/save + user account) + stacked content screens.
 
 Screens are loaded lazily — only instantiated on first navigation.
 """
+import getpass
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Type
 
@@ -577,6 +579,8 @@ class TheProjectWidget(QWidget):
         self._unsaved_changes = False
         self._current_screen_key: Optional[str] = None
         self._project_password_hash: Optional[str] = None  # SHA-256 hash; None = no protection
+        self._created_by: Optional[str] = None  # OS username who first created the file
+        self._created_at: Optional[str] = None  # ISO timestamp of first save
         self._component_syncing = False  # guard against brief↔traceability sync loops
         self._logged_in_user: Optional[str] = None
         # Lazy screen registry: key → widget instance (None until first visited)
@@ -1004,9 +1008,12 @@ class TheProjectWidget(QWidget):
     def _on_new_project(self):
         if self._unsaved_changes and not self._confirm_discard():
             return
+        self._release_lock()
         self._project_path = None
         self._unsaved_changes = False
         self._project_password_hash = None
+        self._created_by = None
+        self._created_at = None
         self._update_lock_btn()
         self._update_title()
 
@@ -1015,7 +1022,7 @@ class TheProjectWidget(QWidget):
             return
         path, _ = QFileDialog.getOpenFileName(
             self, 'Open Project', '',
-            'ECTOFORM Project (*.ectopjt);;All Files (*)'
+            'LYNS Project (*.lyns.pjt);;All Files (*)'
         )
         if not path:
             return
@@ -1028,13 +1035,13 @@ class TheProjectWidget(QWidget):
     def _on_save_project(self):
         if not self._project_path:
             path, _ = QFileDialog.getSaveFileName(
-                self, 'Save Project', 'project.ectopjt',
-                'ECTOFORM Project (*.ectopjt);;All Files (*)'
+                self, 'Save Project', 'project.lyns.pjt',
+                'LYNS Project (*.lyns.pjt);;All Files (*)'
             )
             if not path:
                 return
-            if not path.endswith('.ectopjt'):
-                path += '.ectopjt'
+            if not path.endswith('.lyns.pjt'):
+                path += '.lyns.pjt'
             self._project_path = path
         try:
             self._save_project(self._project_path)
@@ -1043,7 +1050,21 @@ class TheProjectWidget(QWidget):
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
 
     def _save_project(self, path: str):
-        data = {'version': '1.0', 'project_info': self._nav.get_info_data()}
+        now = datetime.now(timezone.utc).isoformat()
+        user = getpass.getuser()
+        if self._created_by is None:
+            self._created_by = user
+        if self._created_at is None:
+            self._created_at = now
+        data = {
+            'file_type': 'lyns.pjt',
+            'version': '1.0',
+            'created_by': self._created_by,
+            'created_at': self._created_at,
+            'last_saved_by': user,
+            'last_saved_at': now,
+            'project_info': self._nav.get_info_data(),
+        }
         if self._project_password_hash:
             data['password_hash'] = self._project_password_hash
         for key, _ in _NAV_ITEMS:
@@ -1053,9 +1074,30 @@ class TheProjectWidget(QWidget):
             json.dump(data, f, indent=2, ensure_ascii=False)
         self._unsaved_changes = False
         self._update_title()
-        logger.info(f'Project saved to {path}')
+        logger.info(f'Project saved to {path} by {user}')
 
     def _load_project(self, path: str):
+        # Check for an existing lock file (another user/instance has this open)
+        lock_path = path + '.lock'
+        if os.path.exists(lock_path):
+            try:
+                lock_info = json.loads(Path(lock_path).read_text(encoding='utf-8'))
+                locked_by = lock_info.get('locked_by', 'another user')
+                locked_at = lock_info.get('locked_at', '')
+            except Exception:
+                locked_by = 'another user'
+                locked_at = ''
+            msg = f'This project is currently open by "{locked_by}"'
+            if locked_at:
+                msg += f' (since {locked_at[:16].replace("T", " ")} UTC)'
+            msg += '.\n\nOpening it may cause conflicts. Continue anyway?'
+            reply = QMessageBox.warning(
+                self, 'File In Use', msg,
+                QMessageBox.Open | QMessageBox.Cancel, QMessageBox.Cancel
+            )
+            if reply != QMessageBox.Open:
+                return
+
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -1068,6 +1110,9 @@ class TheProjectWidget(QWidget):
             if dlg.exec_() != QDialog.Accepted:
                 return  # user cancelled — do not load
 
+        # Release lock on previously open file
+        self._release_lock()
+
         self._nav.set_info_data(data.get('project_info', {}))
         for key, _ in _NAV_ITEMS:
             screen_data = data.get(key)
@@ -1077,11 +1122,37 @@ class TheProjectWidget(QWidget):
             if hasattr(w, 'set_data'):
                 w.set_data(screen_data)
         self._project_path = path
-        self._project_password_hash = stored_hash  # keep hash in sync
+        self._project_password_hash = stored_hash
+        self._created_by = data.get('created_by')
+        self._created_at = data.get('created_at')
         self._unsaved_changes = False
         self._update_lock_btn()
         self._update_title()
+        self._acquire_lock(path)
         logger.info(f'Project loaded from {path}')
+
+    def _acquire_lock(self, path: str):
+        lock_path = path + '.lock'
+        try:
+            lock_data = {
+                'locked_by': getpass.getuser(),
+                'locked_at': datetime.now(timezone.utc).isoformat(),
+            }
+            Path(lock_path).write_text(
+                json.dumps(lock_data, indent=2), encoding='utf-8'
+            )
+        except Exception as e:
+            logger.warning(f'Could not write lock file: {e}')
+
+    def _release_lock(self):
+        if not self._project_path:
+            return
+        lock_path = self._project_path + '.lock'
+        try:
+            if os.path.exists(lock_path):
+                os.remove(lock_path)
+        except Exception as e:
+            logger.warning(f'Could not remove lock file: {e}')
 
     def _update_lock_btn(self):
         """Update the password button appearance to reflect the current lock state."""
@@ -1143,7 +1214,14 @@ class TheProjectWidget(QWidget):
 
     def _update_title(self):
         if self._project_path:
-            name = Path(self._project_path).stem
+            p = Path(self._project_path)
+            name = p.name
+            for ext in ('.lyns.pjt', '.lyns.review', '.ectopjt'):
+                if name.endswith(ext):
+                    name = name[: -len(ext)]
+                    break
+            else:
+                name = p.stem
             self._project_name_lbl.setText(f'📄  {name}')
             self._project_name_lbl.setStyleSheet(
                 f'color: {_TEXT}; font-size: 14px; background: transparent; border: none;'
@@ -1172,3 +1250,7 @@ class TheProjectWidget(QWidget):
 
     def mark_unsaved(self):
         self._unsaved_changes = True
+
+    def closeEvent(self, event):
+        self._release_lock()
+        super().closeEvent(event)
