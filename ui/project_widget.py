@@ -5,10 +5,12 @@ Right panel: top bar (open/save + user account) + stacked content screens.
 
 Screens are loaded lazily — only instantiated on first navigation.
 """
+import base64
 import getpass
 import json
 import logging
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Type
@@ -583,6 +585,7 @@ class TheProjectWidget(QWidget):
         self._created_at: Optional[str] = None  # ISO timestamp of first save
         self._component_syncing = False  # guard against brief↔traceability sync loops
         self._logged_in_user: Optional[str] = None
+        self._viewer_tabs: list = []  # TabState list injected from main window before save
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
@@ -982,6 +985,10 @@ class TheProjectWidget(QWidget):
         if 'quality_control' in self._screen_widgets and self._screen_widgets['quality_control']:
             self._screen_widgets['quality_control'].set_viewers(viewers, active_viewer=active_viewer)
 
+    def set_viewer_tabs(self, tabs: list) -> None:
+        """Store the full TabState list so _save_project can embed viewer bundles."""
+        self._viewer_tabs = list(tabs)
+
     # ── top bar ───────────────────────────────────────────────────────────────
 
     def set_user(self, username: str):
@@ -1040,8 +1047,12 @@ class TheProjectWidget(QWidget):
             )
             if not path:
                 return
-            if not path.endswith('.lyns.pjt'):
-                path += '.lyns.pjt'
+            # Strip any project-file extension the user may have typed before enforcing .lyns.pjt
+            for _sfx in ('.lyns.pjt', '.ectopjt', '.pjt'):
+                if path.lower().endswith(_sfx):
+                    path = path[:-len(_sfx)]
+                    break
+            path += '.lyns.pjt'
             self._project_path = path
         try:
             self._save_project(self._project_path)
@@ -1070,11 +1081,95 @@ class TheProjectWidget(QWidget):
         for key, _ in _NAV_ITEMS:
             w = self._screen_widgets.get(key)
             data[key] = w.get_data() if w and hasattr(w, 'get_data') else {}
+
+        # Bundle each viewer tab (model + annotations + drawings + texture) as base64
+        data['viewer_tabs'] = self._bundle_viewer_tabs()
+
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         self._unsaved_changes = False
         self._update_title()
         logger.info(f'Project saved to {path} by {user}')
+
+    def _bundle_viewer_tabs(self) -> list:
+        """For each viewer tab with a loaded mesh, create a .lyns bundle and return as base64 entries."""
+        from core.ecto_format import EctoFormat
+        result = []
+        for tab in self._viewer_tabs:
+            vw = getattr(tab, 'viewer_widget', None)
+            mesh = getattr(vw, 'current_mesh', None) if vw is not None else None
+            if mesh is None:
+                continue
+            annotations = []
+            ap = getattr(tab, 'annotation_panel', None)
+            if ap is not None and hasattr(ap, 'export_annotations'):
+                try:
+                    annotations = ap.export_annotations() or []
+                except Exception:
+                    annotations = []
+            drawings = []
+            if vw is not None and hasattr(vw, 'get_draw_strokes'):
+                try:
+                    drawings = vw.get_draw_strokes() or []
+                except Exception:
+                    pass
+            texture_data = None
+            if vw is not None and hasattr(vw, 'get_texture_data'):
+                try:
+                    texture_data = vw.get_texture_data()
+                except Exception:
+                    pass
+            tab_name = tab.filename or 'model.stl'
+            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+            os.close(fd)
+            try:
+                success, _, _ = EctoFormat.export(
+                    mesh=mesh,
+                    annotations=annotations,
+                    output_path=tmp_path,
+                    source_format='stl',
+                    original_filename=tab_name,
+                    drawings=drawings,
+                    texture_data=texture_data,
+                )
+                if success:
+                    bundle_bytes = Path(tmp_path).read_bytes()
+                    result.append({
+                        'tab_name': tab_name,
+                        'bundle_b64': base64.b64encode(bundle_bytes).decode(),
+                    })
+                else:
+                    logger.warning(f'_bundle_viewer_tabs: export failed for tab "{tab_name}"')
+            except Exception as e:
+                logger.warning(f'_bundle_viewer_tabs: could not bundle tab "{tab_name}": {e}')
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+        return result
+
+    def _restore_viewer_tabs(self, viewer_tabs: list) -> None:
+        """Decode base64 .lyns bundles and emit open_in_viewer for each."""
+        for entry in viewer_tabs:
+            b64 = entry.get('bundle_b64', '')
+            if not b64:
+                continue
+            tab_name = entry.get('tab_name', 'model.lyns')
+            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(b64))
+                self.open_in_viewer.emit(tmp_path)
+            except Exception as e:
+                logger.warning(f'_restore_viewer_tabs: could not restore "{tab_name}": {e}')
+            finally:
+                # Safe to delete — open_in_viewer is a direct connection and
+                # _load_ecto_file extracts the bundle to its own temp dir synchronously.
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
     def _load_project(self, path: str):
         # Check for an existing lock file (another user/instance has this open)
@@ -1121,6 +1216,10 @@ class TheProjectWidget(QWidget):
             w = self._ensure_screen(key)
             if hasattr(w, 'set_data'):
                 w.set_data(screen_data)
+
+        # Restore viewer tabs — decode each .lyns bundle to a temp file and open in viewer
+        self._restore_viewer_tabs(data.get('viewer_tabs', []))
+
         self._project_path = path
         self._project_password_hash = stored_hash
         self._created_by = data.get('created_by')

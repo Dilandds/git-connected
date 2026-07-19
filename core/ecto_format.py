@@ -40,7 +40,7 @@ class EctoFormat:
         Returns:
             True if the file is a valid .ecto bundle
         """
-        if not file_path.lower().endswith('.ecto'):
+        if not (file_path.lower().endswith('.ecto') or file_path.lower().endswith('.lyns')):
             return False
         
         if not os.path.exists(file_path):
@@ -92,9 +92,9 @@ class EctoFormat:
         
         creator_token = str(uuid.uuid4())
         
-        # Ensure output has .ecto extension
-        if not output_path.lower().endswith('.ecto'):
-            output_path += '.ecto'
+        # Ensure output has .lyns or .ecto extension
+        if not (output_path.lower().endswith('.lyns') or output_path.lower().endswith('.ecto')):
+            output_path += '.lyns'
         
         # Validate source format
         source_format = source_format.lower()

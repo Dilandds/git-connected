@@ -474,8 +474,11 @@ class SidebarPanel(QWidget):
         # Create Export with Annotations section
         self.export_annotations_group = self.create_export_annotations_section()
         layout.addWidget(self.export_annotations_group)
-        
-        
+
+        # Export as .lyns.review — disabled until LYNS Lite ships
+        # self.export_review_group = self.create_export_review_section()
+        # layout.addWidget(self.export_review_group)
+
         # Add stretch
         layout.addStretch()
         
@@ -1463,6 +1466,8 @@ class SidebarPanel(QWidget):
         """Update the PDF export button based on available data."""
         if hasattr(self, 'export_pdf_btn'):
             self.export_pdf_btn.setEnabled(self.has_stl_loaded)
+        if hasattr(self, 'export_review_btn'):
+            self.export_review_btn.setEnabled(self.has_stl_loaded)
     
     def export_pdf_report(self):
         """Generate and export 3D PDF with multiple views."""
@@ -1700,20 +1705,20 @@ class SidebarPanel(QWidget):
                 return
         
         # Open save dialog
-        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.ecto"
+        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.lyns"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export as ECTOFORM Bundle",
+            t("sidebar.export_as_ecto_bundle"),
             default_name,
-            "ECTOFORM Bundle (*.ecto);;All Files (*)"
+            "LYNS Bundle (*.lyns);;All Files (*)"
         )
-        
+
         if not file_path:
             return
-        
-        # Ensure .ecto extension
-        if not file_path.lower().endswith('.ecto'):
-            file_path += '.ecto'
+
+        # Ensure .lyns extension
+        if not file_path.lower().endswith('.lyns'):
+            file_path += '.lyns'
         
         try:
             from core.ecto_format import EctoFormat
@@ -1766,25 +1771,187 @@ class SidebarPanel(QWidget):
                 else:
                     msg += f"\n\n📦 Bundle contains: 3D Model only"
                 
-                msg += "\n\nRecipients can open this file in ECTOFORM."
-                
+                msg += "\n\nRecipients can open this file in LYNS."
+
                 QMessageBox.information(self, "Export Complete", msg)
             else:
                 QMessageBox.critical(
                     self,
                     "Export Error",
-                    f"Failed to create .ecto bundle:\n{result}"
+                    f"Failed to create .lyns bundle:\n{result}"
                 )
         except Exception as e:
-            logger.error(f"Error exporting as .ecto: {e}")
+            logger.error(f"Error exporting as .lyns: {e}")
             self.export_annotations_btn.setEnabled(True)
-            self.export_annotations_btn.setText("Export as .ecto")
+            self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
             QMessageBox.critical(
                 self,
                 "Export Error",
-                f"Failed to create .ecto bundle:\n{str(e)}"
+                f"Failed to create .lyns bundle:\n{str(e)}"
             )
     
+    def create_export_review_section(self):
+        """Create the Export as .lyns.review section."""
+        card = QFrame()
+        card.setObjectName("exportReviewCard")
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(10)
+
+        # Header row
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
+
+        title_lbl = QLabel(t("sidebar.export_review_title"))
+        title_lbl.setFont(make_font(size=14, bold=True))
+        title_lbl.setStyleSheet(
+            f"color: {default_theme.text_title}; background: transparent; border: none;"
+        )
+        icon_lbl = QLabel("📤")
+        icon_lbl.setStyleSheet(
+            "font-size: 16px; background: transparent; border: none; padding: 0px;"
+        )
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        help_badge = self._make_help_badge(t("sidebar.export_review_footer"))
+
+        header_layout.addWidget(title_lbl)
+        header_layout.addWidget(help_badge)
+        header_layout.addStretch()
+        header_layout.addWidget(icon_lbl)
+        card_layout.addLayout(header_layout)
+
+        # Description
+        desc_lbl = QLabel(t("sidebar.export_review_desc"))
+        desc_lbl.setFont(make_font(size=11))
+        desc_lbl.setStyleSheet(
+            f"color: {default_theme.text_secondary}; background: transparent; border: none;"
+        )
+        desc_lbl.setWordWrap(True)
+        card_layout.addWidget(desc_lbl)
+
+        # Export button
+        self.export_review_btn = QPushButton(t("sidebar.export_review_btn"))
+        self.export_review_btn.setObjectName("exportReviewBtn")
+        self.export_review_btn.setMinimumHeight(44)
+        self.export_review_btn.setEnabled(False)
+        self.export_review_btn.setStyleSheet(f"""
+            QPushButton#exportReviewBtn {{
+                background-color: {default_theme.button_primary};
+                color: {default_theme.text_white};
+                border: none;
+                border-radius: 8px;
+                padding: 10px 16px;
+                font-size: 13px;
+                font-weight: bold;
+            }}
+            QPushButton#exportReviewBtn:hover {{
+                background-color: {default_theme.button_primary_hover};
+            }}
+            QPushButton#exportReviewBtn:disabled {{
+                background-color: #171a1f;
+                color: {default_theme.text_secondary};
+                border: 1px solid #2a2e34;
+                border-radius: 8px;
+            }}
+        """)
+        self.export_review_btn.clicked.connect(self.export_as_lyns_review)
+        card_layout.addWidget(self.export_review_btn)
+
+        self._style_section_card(card)
+        return card
+
+    def export_as_lyns_review(self):
+        """Export the current model + annotations as a .lyns.review file for a supplier."""
+        if not self.has_stl_loaded:
+            QMessageBox.warning(self, "Export Error", t("sidebar.export_review_no_model"))
+            return
+
+        mesh = self._get_current_mesh()
+        if mesh is None:
+            QMessageBox.warning(self, "Export Error", t("sidebar.no_model_available"))
+            return
+
+        annotations = self._get_annotations()
+        drawings = self._get_drawings()
+        texture_data = self._get_texture_data()
+
+        default_name = f"{os.path.splitext(self.current_stl_filename)[0]}.lyns.review"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export as LYNS Supplier Review",
+            default_name,
+            "LYNS Review (*.lyns.review);;All Files (*)"
+        )
+        if not file_path:
+            return
+        if not file_path.endswith('.lyns.review'):
+            file_path += '.lyns.review'
+
+        try:
+            from core.ecto_format import EctoFormat
+            import getpass, json
+            from datetime import datetime, timezone
+
+            self.export_review_btn.setEnabled(False)
+            self.export_review_btn.setText(t("sidebar.exporting"))
+            QApplication.processEvents()
+
+            # Re-use EctoFormat.export to bundle the 3D data, then wrap in .lyns.review envelope
+            import tempfile, zipfile
+            with tempfile.NamedTemporaryFile(suffix='.lyns', delete=False) as tmp:
+                tmp_path = tmp.name
+
+            success, result, _ = EctoFormat.export(
+                mesh=mesh,
+                annotations=annotations,
+                output_path=tmp_path,
+                source_format='stl',
+                original_filename=self.current_stl_filename,
+                drawings=drawings,
+                texture_data=texture_data
+            )
+
+            if not success:
+                raise RuntimeError(result)
+
+            # Read the bundle bytes and embed in .lyns.review JSON envelope
+            with open(tmp_path, 'rb') as f:
+                import base64
+                bundle_b64 = base64.b64encode(f.read()).decode()
+            os.unlink(tmp_path)
+
+            review_data = {
+                "file_type": "lyns.review",
+                "version": "1.0",
+                "exported_by": getpass.getuser(),
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "original_filename": self.current_stl_filename,
+                "supplier_name": "",
+                "supplier_company": "",
+                "model_bundle_b64": bundle_b64,
+                "annotation_count": len(annotations),
+            }
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(review_data, f, indent=2, ensure_ascii=False)
+
+            self.export_review_btn.setEnabled(True)
+            self.export_review_btn.setText(t("sidebar.export_review_btn"))
+
+            QMessageBox.information(
+                self, "Export Complete",
+                f"Supplier review exported!\n\n{os.path.basename(file_path)}\n\n"
+                f"Send this file to your supplier.\nThey open it in LYNS Lite."
+            )
+
+        except Exception as e:
+            logger.error(f"Error exporting .lyns.review: {e}")
+            self.export_review_btn.setEnabled(True)
+            self.export_review_btn.setText(t("sidebar.export_review_btn"))
+            QMessageBox.critical(self, "Export Error", f"Failed to create .lyns.review:\n{str(e)}")
+
     def _get_annotations(self):
         """Get annotations from the annotation panel."""
         # Navigate up to find the main window and get annotations

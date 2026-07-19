@@ -66,7 +66,7 @@ class DropZoneOverlay(QWidget):
         """)
         
         # Helper text
-        self.helper_label = QLabel("STL, STEP, 3DM, OBJ, IGES, DXF & ECTO files")
+        self.helper_label = QLabel("STL, STEP, 3DM, OBJ, IGES, DXF & LYNS files")
         self.helper_label.setAlignment(Qt.AlignCenter)
         self.helper_label.setStyleSheet("""
             QLabel {
@@ -143,7 +143,7 @@ class DropZoneOverlay(QWidget):
                 # Validate file extension
                 file_ext = file_path.lower()
                 if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.ecto') or file_ext.endswith('.dxf')):
-                    self.error_occurred.emit("Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF, or .ECTO files only.")
+                    self.error_occurred.emit("Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF, or .LYNS files only.")
                     return
                 
                 event.acceptProposedAction()

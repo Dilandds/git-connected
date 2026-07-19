@@ -109,7 +109,7 @@ class LoadingOverlay(QWidget):
             painter.setFont(font)
             painter.setPen(QColor('#E0ECF4'))
             fm = QFontMetricsF(font)
-            text = 'ECTOFORM'
+            text = 'LYNS'
             tw = fm.horizontalAdvance(text)
             th = fm.height()
             logo_bottom = cy - 10

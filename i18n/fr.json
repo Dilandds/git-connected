@@ -7,9 +7,9 @@
     "help": "❓ Aide"
   },
   "sidebar": {
-    "title": "ECTOFORM",
+    "title": "LYNS",
     "upload_btn": "Importer un Fichier 3D",
-    "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .DXF / .ECTO",
+    "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .DXF / .LYNS",
     "upload_tooltip": "Importer ou déposer directement un fichier STL, STEP, 3DM, OBJ, IGES ou DXF ",
     "dimensions": "Dimensions",
     "length_x": "Longueur (X)",
@@ -37,24 +37,29 @@
     "original_weight": "Poids initial",
     "target_weight": "Poids cible",
     "export_scaled_stl": "Exporter STL Redimensionné",
-    "export_ecto_title": "Exporter en .ecto",
-    "export_ecto_desc": "Exporter un seul fichier .ecto avec le modèle, les annotations et les photos regroupés.\nSeul ECTOFORM peut ouvrir les fichiers .ecto.",
+    "export_ecto_title": "Exporter en .lyns",
+    "export_ecto_desc": "Exporter un seul fichier .lyns avec le modèle, les annotations et les photos regroupés.\nSeul LYNS peut ouvrir les fichiers .lyns.",
     "no_annotations": "Aucune annotation à exporter",
     "annotations_ready": "annotation(s) prête(s) à exporter",
-    "export_ecto_btn": "Exporter en .ecto",
-    "export_ecto_footer": "Le fichier contient : modèle + annotations + photos. Les destinataires l'ouvrent directement dans ECTOFORM.",
+    "export_ecto_btn": "Exporter en .lyns",
+    "export_ecto_footer": "Le fichier contient : modèle + annotations + photos. Les destinataires l'ouvrent directement dans LYNS.",
+    "export_review_title": "Exporter en .lyns.review",
+    "export_review_desc": "Exporter un fichier de révision fournisseur avec le modèle et les annotations. Le fournisseur l'ouvre dans LYNS Lite.",
+    "export_review_btn": "Exporter en .lyns.review",
+    "export_review_footer": "Le fournisseur ouvre ce fichier dans LYNS Lite. Sa réponse revient sous forme de fichier .lyns.feedback.",
+    "export_review_no_model": "Chargez d'abord un modèle 3D pour exporter une révision fournisseur.",
     "export_3d_pdf": "Exporter PDF 3D",
     "export_3d_pdf_desc": "Exporter un PDF 3D interactif pour Adobe Acrobat Reader.\nPivoter, déplacer et zoomer le modèle dans le PDF.",
     "export_3d_pdf_footer": "Nécessite Adobe Acrobat Reader pour le 3D interactif. Assurez-vous que VTK fournit vtkU3DExporter.",
     "exporting": "Exportation...",
     "save_scaled_stl": "Enregistrer le Fichier STL Redimensionné",
-    "export_as_ecto_bundle": "Exporter en tant que Paquet ECTOFORM",
+    "export_as_ecto_bundle": "Exporter en tant que Paquet LYNS",
     "export_complete": "Exportation Terminée",
     "export_error": "Erreur d'Exportation",
     "no_model_loaded": "Aucun modèle 3D chargé. Veuillez d'abord charger un modèle.",
     "no_model_available": "Aucun modèle 3D disponible pour l'exportation.",
     "no_annotations_drawings": "Pas d'annotations ni de dessins",
-    "no_annotations_drawings_msg": "Il n'y a pas d'annotations ni de dessins à inclure.\nVoulez-vous exporter le modèle en .ecto sans eux ?",
+    "no_annotations_drawings_msg": "Il n'y a pas d'annotations ni de dessins à inclure.\nVoulez-vous exporter le modèle en .lyns sans eux ?",
     "bundle_contains": "Le paquet contient :",
     "model_stl": "Modèle 3D (STL)",
     "annotation": "annotation",
@@ -65,8 +70,8 @@
     "drawing_strokes": "traits de dessin",
     "material_texture_preset": "Préréglage matériau/texture",
     "model_only": "Contenance : Modèle 3D uniquement",
-    "recipients_msg": "Les destinataires peuvent ouvrir ce fichier dans ECTOFORM.",
-    "failed_ecto": "Échec de la création du fichier .ecto :",
+    "recipients_msg": "Les destinataires peuvent ouvrir ce fichier dans LYNS.",
+    "failed_ecto": "Échec de la création du fichier .lyns :",
     "failed_3d_pdf": "Échec de l'exportation du PDF 3D interactif :",
     "detailed_logs": "Journaux détaillés :"
   },
@@ -256,7 +261,7 @@
   },
   "technical": {
     "title": "Fiche technique",
-    "upload_btn": "📄 Importer Image / PDF / .ecto",
+    "upload_btn": "📄 Importer Image / PDF / .lyns",
     "property": "PROPRIÉTÉ",
     "property_placeholder": "Ex. Entreprise",
     "object_title": "NOM DE L'OBJET",
@@ -268,7 +273,7 @@
     "comments": "COMMENTAIRES",
     "comments_placeholder": "Ajouter des notes, observations ou instructions…",
     "annotate": "📌 Annotations techniques",
-    "export_ecto": "📦 Exporter .ecto",
+    "export_ecto": "📦 Exporter .lyns",
     "export_pdf": "📄 Exporter Rapport PDF",
     "reset_workspace": "🔄 Réinitialiser l'Espace",
     "add_manufacturer_tooltip": "Ajouter un autre fabricant",
@@ -322,11 +327,11 @@
       },
       {
         "question": "Comment annoter un modèle ?",
-        "answer": "1. Cliquez sur le bouton Mode Annotation dans la barre d'outils.\n2. Cliquez sur le modèle 3D pour placer un marqueur d'annotation.\n3. Tapez votre note dans le panneau d'annotation qui apparaît à droite.\n\nLes annotations sont sauvegardées lors de l'exportation au format .ecto."
+        "answer": "1. Cliquez sur le bouton Mode Annotation dans la barre d'outils.\n2. Cliquez sur le modèle 3D pour placer un marqueur d'annotation.\n3. Tapez votre note dans le panneau d'annotation qui apparaît à droite.\n\nLes annotations sont sauvegardées lors de l'exportation au format .lyns."
       },
       {
         "question": "Comment utiliser l'Aperçu Technique ?",
-        "answer": "1. Passez à l'onglet Aperçu Technique dans la barre de mode.\n2. Importez une image ou un PDF.\n3. Utilisez l'outil d'annotation pour placer des flèches numérotées.\n4. Remplissez les métadonnées (titre, fabricant, dates) dans la barre latérale.\n5. Exportez en .ecto ou PDF."
+        "answer": "1. Passez à l'onglet Aperçu Technique dans la barre de mode.\n2. Importez une image ou un PDF.\n3. Utilisez l'outil d'annotation pour placer des flèches numérotées.\n4. Remplissez les métadonnées (titre, fabricant, dates) dans la barre latérale.\n5. Exportez en .lyns ou PDF."
       },
       {
         "question": "Comment calibrer l'Échelle de Dessin ?",
@@ -342,11 +347,11 @@
       },
       {
         "question": "Comment exporter mon travail ?",
-        "answer": "ECTOFORM offre plusieurs options d'exportation :\n\n• STL redimensionné — Exporter avec un facteur d'échelle personnalisé depuis la barre latérale.\n• .ecto — Regrouper le modèle, les annotations et les métadonnées dans un seul fichier.\n• PDF — Exporter l'Aperçu Technique en rapport PDF formaté.\n• Dessin à l'échelle — Exporter les dessins calibrés depuis le mode Échelle de Dessin.\n• Captures d'écran — Enregistrer les captures de la vue en images PNG."
+        "answer": "LYNS offre plusieurs options d'exportation :\n\n• STL redimensionné — Exporter avec un facteur d'échelle personnalisé depuis la barre latérale.\n• .lyns — Regrouper le modèle, les annotations et les métadonnées dans un seul fichier.\n• PDF — Exporter l'Aperçu Technique en rapport PDF formaté.\n• Dessin à l'échelle — Exporter les dessins calibrés depuis le mode Échelle de Dessin.\n• Captures d'écran — Enregistrer les captures de la vue en images PNG."
       },
       {
         "question": "Quels formats de fichiers sont supportés ?",
-        "answer": "Formats d'importation :\n  • STL (binaire & ASCII)\n  • STEP / STP (AP203, AP214)\n  • OBJ (avec matériaux MTL)\n  • IGES / IGS\n  • DXF (entités 3D)\n  • 3DM (Rhino)\n  • .ecto (paquet ECTOFORM)\n\nFormats d'exportation :\n  • STL (redimensionné)\n  • .ecto (paquet annoté)\n  • PDF (rapport technique)\n  • PNG (captures d'écran & dessins à l'échelle)"
+        "answer": "Formats d'importation :\n  • STL (binaire & ASCII)\n  • STEP / STP (AP203, AP214)\n  • OBJ (avec matériaux MTL)\n  • IGES / IGS\n  • DXF (entités 3D)\n  • 3DM (Rhino)\n  • .lyns (paquet LYNS)\n\nFormats d'exportation :\n  • STL (redimensionné)\n  • .lyns (paquet annoté)\n  • PDF (rapport technique)\n  • PNG (captures d'écran & dessins à l'échelle)"
       },
       {
         "question": "Comment utiliser les modèles multi-pièces ?",
@@ -355,7 +360,7 @@
     ]
   },
   "license": {
-    "title": "ECTOFORM",
+    "title": "LYNS",
     "instructions": "Veuillez entrer votre clé de licence pour activer l'application.\nVous pouvez obtenir une clé de licence auprès du fournisseur.",
     "key_label": "Clé de Licence :",
     "key_placeholder": "Entrez votre clé de licence (ex. STL-XXXX-XXXX-XXXX-XXXX)",
@@ -374,7 +379,7 @@
   "passcode": {
     "set_title": "Définir le code d'accès",
     "enter_title": "Entrer le code d'accès",
-    "set_hint": "Ce code d'accès sera requis pour modifier le fichier .ecto.\nTout le monde peut toujours visualiser le fichier sans code.\n\n⚠ Important : Ce code ne peut être réinitialisé que depuis\nl'application de cette machine. Gardez-le en sécurité.",
+    "set_hint": "Ce code d'accès sera requis pour modifier le fichier .lyns.\nTout le monde peut toujours visualiser le fichier sans code.\n\n⚠ Important : Ce code ne peut être réinitialisé que depuis\nl'application de cette machine. Gardez-le en sécurité.",
     "enter_hint": "Entrez le code d'accès pour déverrouiller l'édition.",
     "recovery_hint": "Code perdu ? Demandez au créateur du fichier de le réinitialiser depuis sa machine.",
     "passcode_label": "Code d'Accès :",
@@ -416,7 +421,7 @@
       "no_project": "Aucun projet ouvert",
       "not_logged_in": "Non connecté  ▾",
       "tip_new": "Créer un nouveau projet ",
-      "tip_open": "Ouvrir un fichier .ectopjt existant",
+      "tip_open": "Ouvrir un fichier .lyns.pjt existant",
       "tip_save": "Enregistrer le projet actuel",
       "tip_print": "Imprimer ou exporter la section en PDF",
       "tip_password": "Définir ou supprimer la protection par mot de passe",

@@ -282,7 +282,7 @@ class STLViewerWindow(QMainWindow):
         logger.info("init_ui: Starting UI initialization...")
         
         logger.info("init_ui: Setting window title and size...")
-        _title = "ECTOFORM — Education" if is_education() else "ECTOFORM"
+        _title = "LYNS — Education" if is_education() else "LYNS"
         self.setWindowTitle(_title)
         if sys.platform == 'win32':
             min_w, min_h = 900, 600
@@ -656,7 +656,7 @@ class STLViewerWindow(QMainWindow):
         
         # Restore saved language preference
         from PyQt5.QtCore import QSettings
-        saved_lang = QSettings("ECTOFORM", "App").value("language", "en", type=str)
+        saved_lang = QSettings("LYNS", "App").value("language", "en", type=str)
         if saved_lang != get_language():
             set_language(saved_lang)
         
@@ -787,13 +787,13 @@ class STLViewerWindow(QMainWindow):
             tab = self._current_tab
             if tab and tab.viewer_widget:
                 self.viewer_stack.setCurrentWidget(tab.viewer_widget)
-            self.setWindowTitle(f"ECTOFORM - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "ECTOFORM")
+            self.setWindowTitle(f"LYNS - {self._current_tab.filename}" if self._current_tab and self._current_tab.filename else "LYNS")
         elif mode == "technical":
             self._workspace_stack.setCurrentIndex(1)
-            self.setWindowTitle("ECTOFORM - Technical Overview")
+            self.setWindowTitle("LYNS - Technical Overview")
         elif mode == "scale":
             self._workspace_stack.setCurrentIndex(2)
-            self.setWindowTitle("ECTOFORM - Drawing Scale")
+            self.setWindowTitle("LYNS - Drawing Scale")
         elif mode == "project":
             # Push viewer refs BEFORE showing the project widget so that when
             # showEvent fires on the QC panel (if it was last active), _viewer_ref
@@ -803,10 +803,10 @@ class STLViewerWindow(QMainWindow):
             except Exception:
                 pass
             self._workspace_stack.setCurrentIndex(3)
-            self.setWindowTitle("ECTOFORM - The Project")
+            self.setWindowTitle("LYNS - The Project")
         elif mode == "help":
             self._workspace_stack.setCurrentIndex(4)
-            self.setWindowTitle("ECTOFORM - Help")
+            self.setWindowTitle("LYNS - Help")
 
         # When leaving the 3D workspace ensure any 3D-only overlays/modes are disabled
         if mode != "3d":
@@ -863,7 +863,7 @@ class STLViewerWindow(QMainWindow):
         """Toggle between English and French."""
         from PyQt5.QtCore import QSettings
         new_lang = "fr" if get_language() == "en" else "en"
-        QSettings("ECTOFORM", "App").setValue("language", new_lang)
+        QSettings("LYNS", "App").setValue("language", new_lang)
         set_language(new_lang)
     
     def _retranslate_ui(self):
@@ -876,14 +876,14 @@ class STLViewerWindow(QMainWindow):
         self._lang_btn.setText("FR" if get_language() == "en" else "EN")
     
     def _tech_upload_image(self):
-        """Handle upload request from technical sidebar — supports images, PDFs, and .ecto files."""
+        """Handle upload request from technical sidebar — supports images, PDFs, and .lyns files."""
         path, _ = get_open_file_name(
-            self, "Select Image, PDF, or .ecto File", "",
-            "Supported Files (*.png *.jpg *.jpeg *.bmp *.pdf *.ecto);;Images & PDFs (*.png *.jpg *.jpeg *.bmp *.pdf);;ECTO Files (*.ecto);;All Files (*)"
+            self, "Select Image, PDF, or .lyns File", "",
+            "Supported Files (*.png *.jpg *.jpeg *.bmp *.pdf *.lyns *.ecto);;Images & PDFs (*.png *.jpg *.jpeg *.bmp *.pdf);;LYNS Files (*.lyns *.ecto);;All Files (*)"
         )
         if not path:
             return
-        if path.lower().endswith('.ecto'):
+        if path.lower().endswith('.ecto') or path.lower().endswith('.lyns'):
             self._load_technical_ecto(path)
         else:
             self.technical_overview.load_image_from_path(path)
@@ -912,10 +912,10 @@ class STLViewerWindow(QMainWindow):
             passcode_hash = dlg.get_passcode_hash()
 
         # Pick save location
-        default_name = Path(doc_path).stem + '.ecto'
+        default_name = Path(doc_path).stem + '.lyns'
         save_path, _ = get_save_file_name(
-            self, "Export Technical Overview .ecto", default_name,
-            "ECTO Files (*.ecto);;All Files (*)"
+            self, "Export Technical Overview .lyns", default_name,
+            "LYNS Files (*.lyns);;All Files (*)"
         )
         if not save_path:
             return
@@ -1116,7 +1116,7 @@ class STLViewerWindow(QMainWindow):
         return tab_index
 
     def _push_viewers_to_project(self):
-        """Send all loaded (label, viewer_widget) pairs to the project widget."""
+        """Send all loaded (label, viewer_widget) pairs and tab states to the project widget."""
         if not hasattr(self, 'project_widget'):
             return
         viewers = [
@@ -1127,6 +1127,8 @@ class STLViewerWindow(QMainWindow):
         active_vw = getattr(self, 'viewer_widget', None)
         if hasattr(self.project_widget, 'set_viewers'):
             self.project_widget.set_viewers(viewers, active_viewer=active_vw)
+        if hasattr(self.project_widget, 'set_viewer_tabs'):
+            self.project_widget.set_viewer_tabs(self.tabs)
 
     def _on_tab_changed(self, index: int):
         """Handle tab bar selection change."""
@@ -1215,10 +1217,10 @@ class STLViewerWindow(QMainWindow):
         self.toolbar.set_stl_loaded(has_file)
         if has_file:
             self.toolbar.set_loaded_filename(tab.filename)
-            self.setWindowTitle(f"ECTOFORM - {tab.filename}")
+            self.setWindowTitle(f"LYNS - {tab.filename}")
         else:
             self.toolbar.set_loaded_filename(None)
-            self.setWindowTitle("ECTOFORM")
+            self.setWindowTitle("LYNS")
 
         # Restore ruler mode
         if tab.ruler_active:
@@ -1298,7 +1300,7 @@ class STLViewerWindow(QMainWindow):
 
         self.viewer_stack.setCurrentWidget(self.overview_widget)
         self.overview_widget.refresh(self.tabs)
-        self.setWindowTitle("ECTOFORM — Overview")
+        self.setWindowTitle("LYNS — Overview")
         logger.info("_show_overview: Overview tab activated")
 
     def _on_overview_tab_requested(self, tab_index: int):
@@ -1659,7 +1661,7 @@ class STLViewerWindow(QMainWindow):
                 self,
                 "Unsaved Annotations",
                 f"Tab '{tab.filename or 'Untitled'}' has {len(annotations)} annotation(s) that have not been exported.\n\n"
-                "Would you like to export them as .ecto before closing?\n\n"
+                "Would you like to export them as .lyns before closing?\n\n"
                 "• Click 'Yes' to export first\n"
                 "• Click 'No' to close without exporting\n"
                 "• Click 'Cancel' to go back",
@@ -1919,7 +1921,7 @@ class STLViewerWindow(QMainWindow):
         
         # Update toolbar state
         self.toolbar.set_stl_loaded(False)
-        self.setWindowTitle("ECTOFORM")
+        self.setWindowTitle("LYNS")
         self.toolbar.set_loaded_filename(None)
         
         # Clear all annotations from panel and viewer
@@ -1978,18 +1980,18 @@ class STLViewerWindow(QMainWindow):
         logger.info(f"_load_dropped_file: Loading dropped file: {file_path}")
         
         file_ext = file_path.lower()
-        if file_ext.endswith('.ecto'):
+        if file_ext.endswith('.ecto') or file_ext.endswith('.lyns'):
             self._load_ecto_file(file_path)
             return
-        
+
         if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
             show_warning_dialog(
                 self,
                 "Invalid File",
-                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
+                "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .lyns extension)."
             )
             return
-        
+
         # If current tab has a file, create a new tab; otherwise reuse empty tab
         tab = self._current_tab
         if tab and tab.file_path is not None:
@@ -2019,7 +2021,7 @@ class STLViewerWindow(QMainWindow):
         self._load_file_into_current_tab(output_path, from_conversion=True)
     
     def _open_file_from_project(self, file_path: str):
-        """Open a file from the Files & Versions screen in the 3D viewer."""
+        """Open a file from the Files & Versions screen (or a restored project tab) in the 3D viewer."""
         import os
         if not os.path.exists(file_path):
             from ui.modal_utils import show_message_dialog
@@ -2027,9 +2029,13 @@ class STLViewerWindow(QMainWindow):
                                 f"The file could not be found on disk:\n{file_path}")
             return
         self._switch_mode("3d")
-        if self._current_tab and self._current_tab.file_path is not None:
-            self._create_new_tab()
-        self._load_file_into_current_tab(file_path, from_conversion=False)
+        ext = file_path.lower()
+        if ext.endswith('.ecto') or ext.endswith('.lyns'):
+            self._load_ecto_file(file_path)
+        else:
+            if self._current_tab and self._current_tab.file_path is not None:
+                self._create_new_tab()
+            self._load_file_into_current_tab(file_path, from_conversion=False)
 
     def _load_file_into_current_tab(self, file_path: str, from_conversion: bool = False):
         """Load a 3D file into the current tab's viewer."""
@@ -2063,7 +2069,7 @@ class STLViewerWindow(QMainWindow):
             tab.loaded_via_conversion = from_conversion
             self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(filename))
 
-            self.setWindowTitle(f"ECTOFORM - {filename}")
+            self.setWindowTitle(f"LYNS - {filename}")
             self.toolbar.set_loaded_filename(filename)
             self.toolbar.set_stl_loaded(True)
             
@@ -3426,23 +3432,23 @@ class STLViewerWindow(QMainWindow):
             self,
             "Select 3D File",
             "",
-            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf *.ecto);;ECTOFORM Bundle (*.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;DXF Files (*.dxf);;All Files (*)"
+            "All Supported (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf *.lyns *.ecto);;LYNS Bundle (*.lyns *.ecto);;3D Files (*.stl *.step *.stp *.3dm *.obj *.iges *.igs *.dxf);;STL Files (*.stl);;STEP Files (*.step *.stp);;3DM Files (*.3dm);;OBJ Files (*.obj);;IGES Files (*.iges *.igs);;DXF Files (*.dxf);;All Files (*)"
         )
         
         if file_path:
             logger.info(f"upload_stl_file: File selected: {file_path}")
             
-            if file_path.lower().endswith('.ecto'):
+            if file_path.lower().endswith('.ecto') or file_path.lower().endswith('.lyns'):
                 self._load_ecto_file(file_path)
                 return
-            
+
             file_ext = file_path.lower()
             if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.dxf')):
                 logger.warning(f"upload_stl_file: Invalid file extension: {file_path}")
                 show_warning_dialog(
                     self,
                     "Invalid File",
-                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .ecto extension)."
+                    "Please select a valid 3D file (.stl, .step, .stp, .3dm, .obj, .iges, .igs, .dxf, or .lyns extension)."
                 )
                 return
             
@@ -3607,7 +3613,7 @@ class STLViewerWindow(QMainWindow):
                 tab.filename = display_name
                 self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(display_name))
 
-            self.setWindowTitle(f"ECTOFORM - {display_name}")
+            self.setWindowTitle(f"LYNS - {display_name}")
             self.toolbar.set_loaded_filename(display_name)
             self.toolbar.set_stl_loaded(True)
             
@@ -3720,7 +3726,7 @@ class STLViewerWindow(QMainWindow):
                                     "You can view this file but editing is locked.\n"
                                     "Enter the correct passcode to edit.")
 
-        self.setWindowTitle(f"ECTOFORM - {Path(ecto_path).name}")
+        self.setWindowTitle(f"LYNS - {Path(ecto_path).name}")
         # Store temp dir for cleanup
         self._tech_ecto_temp_dir = temp_dir
         logger.info(f"_load_technical_ecto: Loaded {ecto_path}")
@@ -3738,7 +3744,7 @@ class STLViewerWindow(QMainWindow):
                     self,
                     "Unsaved Annotations",
                     f"Tab '{tab_name}' has {len(annotations)} annotation(s) that have not been exported.\n\n"
-                    "Would you like to export them as .ecto before closing?\n\n"
+                    "Would you like to export them as .lyns before closing?\n\n"
                     "• Click 'Yes' to export first\n"
                     "• Click 'No' to close without exporting\n"
                     "• Click 'Cancel' to stay",
