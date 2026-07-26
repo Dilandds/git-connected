@@ -10,131 +10,18 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPixmap
 from ui.styles import default_theme, make_font
-from i18n import t, on_language_changed
+from i18n import t, on_language_changed, raw
 
 logger = logging.getLogger(__name__)
 
-# ── Help content data ──────────────────────────────────────────────
-# Each entry: { "question": str, "answer": str, "image": str|None }
-# image paths are relative to assets/ or absolute; None = no image.
 
-HELP_TOPICS = [
-    {
-        "question": "How do I load a 3D file?",
-        "answer": (
-            "Click the Upload button in the sidebar or drag-and-drop a file "
-            "onto the viewer area.\n\n"
-            "Supported formats: STL, STEP, OBJ, IGES, DXF, 3DM.\n\n"
-            "You can also open multiple files in separate tabs using the '+' button."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I measure dimensions?",
-        "answer": (
-            "1. Click the Ruler icon in the toolbar.\n"
-            "2. Click two points on the model to create a measurement.\n"
-            "3. The distance is shown in the current unit (mm by default).\n\n"
-            "You can change units from the sidebar dropdown."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I annotate a model?",
-        "answer": (
-            "1. Click the Annotation mode button in the toolbar.\n"
-            "2. Click on the 3D model to place an annotation marker.\n"
-            "3. Type your note in the annotation panel that appears on the right.\n\n"
-            "Annotations are saved when you export to .ecto format."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I use Technical Overview?",
-        "answer": (
-            "1. Switch to the Technical Overview tab in the mode bar.\n"
-            "2. Upload a document image or PDF.\n"
-            "3. Use the annotation tool to place numbered callout arrows.\n"
-            "4. Fill in metadata (title, manufacturer, dates) in the sidebar.\n"
-            "5. Export as .ecto or PDF."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I calibrate Drawing Scale?",
-        "answer": (
-            "1. Switch to the Drawing Scale tab.\n"
-            "2. Upload a technical drawing (PDF, JPG, or PNG).\n"
-            "3. Use the scroll wheel to resize the drawing proportionally.\n"
-            "4. Align the drawing's known dimension with the ruler frame.\n"
-            "5. Once calibrated, enable the Ruler Tool to take accurate measurements.\n\n"
-            "Use 'Add Reference' to place extra reference markers anywhere on the drawing."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I apply textures?",
-        "answer": (
-            "1. Click the Texture mode button in the toolbar.\n"
-            "2. Upload texture images in the texture panel.\n"
-            "3. Drag a texture from the panel and drop it onto a part of the 3D model.\n\n"
-            "The texture will be applied to the selected surface."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I take screenshots?",
-        "answer": (
-            "1. Click the Screenshot mode button in the toolbar.\n"
-            "2. Adjust the view as desired.\n"
-            "3. Use the screenshot panel controls to capture and save the image.\n\n"
-            "Screenshots can be saved as PNG files."
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I export my work?",
-        "answer": (
-            "ECTOFORM supports multiple export options:\n\n"
-            "• Scaled STL — Export with a custom scale factor from the sidebar.\n"
-            "• .ecto — Bundle the model, annotations, and metadata into a single file.\n"
-            "• PDF — Export Technical Overview as a formatted PDF report.\n"
-            "• Scaled Drawing — Export calibrated drawings from the Drawing Scale mode.\n"
-            "• Screenshots — Save viewport captures as PNG images."
-        ),
-        "image": None,
-    },
-    {
-        "question": "What file formats are supported?",
-        "answer": (
-            "Import formats:\n"
-            "  • STL (binary & ASCII)\n"
-            "  • STEP / STP (AP203, AP214)\n"
-            "  • OBJ (with MTL materials)\n"
-            "  • IGES / IGS\n"
-            "  • DXF (3D entities)\n"
-            "  • 3DM (Rhino)\n"
-            "  • .ecto (ECTOFORM bundle)\n\n"
-            "Export formats:\n"
-            "  • STL (scaled)\n"
-            "  • .ecto (annotated bundle)\n"
-            "  • PDF (technical report)\n"
-            "  • PNG (screenshots & scaled drawings)"
-        ),
-        "image": None,
-    },
-    {
-        "question": "How do I use multi-part models?",
-        "answer": (
-            "When a multi-part model is loaded (e.g., STEP or OBJ with groups):\n\n"
-            "1. Click the Parts mode button in the toolbar.\n"
-            "2. The parts panel lists all detected components.\n"
-            "3. Click a part to select/highlight it in the 3D view.\n"
-            "4. Toggle visibility of individual parts."
-        ),
-        "image": None,
-    },
-]
+def _load_help_topics() -> list:
+    """FAQ content lives in i18n/en.json + fr.json under "help.topics" so it
+    translates with the rest of the app. Falls back to an empty list (the
+    panel simply shows nothing) if the translation files are ever missing
+    the key, rather than crashing."""
+    topics = raw('help.topics')
+    return topics if isinstance(topics, list) else []
 
 
 # ── Question Card ──────────────────────────────────────────────────
@@ -184,6 +71,9 @@ class _QuestionCard(QPushButton):
     def set_selected(self, selected: bool):
         self.setChecked(selected)
         self._apply_style(selected)
+
+    def set_text(self, text: str):
+        self.setText(f"  {text}")
 
 
 # ── Answer Panel ───────────────────────────────────────────────────
@@ -256,7 +146,9 @@ class HelpWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._selected_index = 0
+        self._topics = _load_help_topics()
         self._init_ui()
+        on_language_changed(self._retranslate)
 
     def _init_ui(self):
         layout = QHBoxLayout(self)
@@ -276,15 +168,15 @@ class HelpWidget(QWidget):
         left_layout.setContentsMargins(12, 16, 12, 16)
         left_layout.setSpacing(6)
 
-        header = QLabel("❓ Help & FAQ")
-        header.setFont(make_font(size=14, bold=True))
-        header.setStyleSheet(f"color: {default_theme.text_title}; border: none;")
-        left_layout.addWidget(header)
+        self._header_lbl = QLabel(t('help.title'))
+        self._header_lbl.setFont(make_font(size=14, bold=True))
+        self._header_lbl.setStyleSheet(f"color: {default_theme.text_title}; border: none;")
+        left_layout.addWidget(self._header_lbl)
 
-        subtitle = QLabel("Click a question to see the answer")
-        subtitle.setFont(make_font(size=9))
-        subtitle.setStyleSheet(f"color: {default_theme.text_subtext}; border: none; margin-bottom: 8px;")
-        left_layout.addWidget(subtitle)
+        self._subtitle_lbl = QLabel(t('help.subtitle'))
+        self._subtitle_lbl.setFont(make_font(size=9))
+        self._subtitle_lbl.setStyleSheet(f"color: {default_theme.text_subtext}; border: none; margin-bottom: 8px;")
+        left_layout.addWidget(self._subtitle_lbl)
 
         # Scrollable question list
         scroll = QScrollArea()
@@ -297,8 +189,8 @@ class HelpWidget(QWidget):
         scroll_layout.setSpacing(4)
 
         self._question_cards: list[_QuestionCard] = []
-        for i, topic in enumerate(HELP_TOPICS):
-            card = _QuestionCard(topic["question"], i)
+        for i, topic in enumerate(self._topics):
+            card = _QuestionCard(topic.get("question", ""), i)
             card.clicked.connect(lambda checked, idx=i: self._on_question_clicked(idx))
             self._question_cards.append(card)
             scroll_layout.addWidget(card)
@@ -332,7 +224,7 @@ class HelpWidget(QWidget):
         layout.addWidget(right_frame, 1)
 
         # Select first question
-        if HELP_TOPICS:
+        if self._topics:
             self._select_question(0)
 
     def _on_question_clicked(self, index: int):
@@ -342,4 +234,19 @@ class HelpWidget(QWidget):
         self._selected_index = index
         for card in self._question_cards:
             card.set_selected(card.index == index)
-        self._answer_panel.show_topic(HELP_TOPICS[index])
+        if 0 <= index < len(self._topics):
+            self._answer_panel.show_topic(self._topics[index])
+
+    def _retranslate(self):
+        """Reload the FAQ content in the new language and refresh everything
+        currently on screen: header/subtitle, each question card's label,
+        and whichever answer is currently displayed."""
+        self._topics = _load_help_topics()
+        self._header_lbl.setText(t('help.title'))
+        self._subtitle_lbl.setText(t('help.subtitle'))
+        for card in self._question_cards:
+            if card.index < len(self._topics):
+                card.set_text(self._topics[card.index].get("question", ""))
+        if self._topics:
+            idx = self._selected_index if self._selected_index < len(self._topics) else 0
+            self._answer_panel.show_topic(self._topics[idx])

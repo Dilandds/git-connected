@@ -51,6 +51,23 @@ def t(key: str) -> str:
     return key
 
 
+def raw(key: str):
+    """Like t(), but returns the raw JSON value (list/dict/etc.) instead of
+    coercing to a string. Used for structured content such as the Help
+    panel's list of FAQ topics. Returns None if the key isn't found."""
+    if not _translations:
+        _load_translations()
+    data = _translations.get(_current_lang, {})
+    for part in key.split("."):
+        if isinstance(data, dict):
+            data = data.get(part)
+        else:
+            return None
+        if data is None:
+            return None
+    return data
+
+
 def get_language() -> str:
     return _current_lang
 
