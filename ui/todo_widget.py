@@ -537,6 +537,13 @@ class _TaskRow(QFrame):
 class _DayPanel(QWidget):
     changed = pyqtSignal()
 
+    _MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December']
+    _MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+                  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+    _WEEKDAYS_EN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    _WEEKDAYS_FR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tasks: Dict[str, TodoTask] = {}
@@ -595,7 +602,16 @@ class _DayPanel(QWidget):
         self._tasks = tasks
         try:
             dt = datetime.strptime(date_str, '%Y-%m-%d')
-            self._date_label.setText(dt.strftime('%A, %B %d'))
+            # strftime('%A, %B %d') always renders in English regardless of
+            # the app's language — build the header from our own translated
+            # weekday/month names instead.
+            if get_language() == 'fr':
+                weekdays, months = self._WEEKDAYS_FR, self._MONTHS_FR
+            else:
+                weekdays, months = self._WEEKDAYS_EN, self._MONTHS_EN
+            weekday_name = weekdays[dt.weekday()]
+            month_name = months[dt.month - 1]
+            self._date_label.setText(f'{weekday_name}, {month_name} {dt.day:02d}')
         except ValueError:
             self._date_label.setText(date_str)
         self._refresh()
