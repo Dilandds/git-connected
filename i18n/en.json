@@ -1,5 +1,6 @@
 {
   "mode_bar": {
+    "file": "📄 File",
     "viewer_3d": "🔲 3D Viewer",
     "technical": "📋 Technical Overview",
     "drawing_scale": "📐 Drawing Scale",
@@ -415,6 +416,7 @@
       "new": "＋ New Project",
       "open": "📂 Open Project",
       "save": "💾 Save Project",
+      "save_as": "💾 Save Project As",
       "print": "🖨  Print",
       "password": "🔓  Password",
       "protected": "🔒  Protected",
@@ -423,6 +425,7 @@
       "tip_new": "Create a new empty project",
       "tip_open": "Open an existing .lyns.pjt file",
       "tip_save": "Save the current project",
+      "tip_save_as": "Save the current project to a new file",
       "tip_print": "Print or export the current section as PDF",
       "tip_password": "Set or remove project password protection",
       "tip_protected": "Project is password-protected — click to change or remove",

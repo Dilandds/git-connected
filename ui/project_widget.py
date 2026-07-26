@@ -1016,6 +1016,29 @@ class TheProjectWidget(QWidget):
             logger.error(f'Failed to save project: {e}', exc_info=True)
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
 
+    def _on_save_project_as(self):
+        """Always prompt for a new file path and save there, regardless of
+        whether the project already has one (unlike _on_save_project, which
+        reuses the existing path once set)."""
+        default_name = os.path.basename(self._project_path) if self._project_path else 'project.lyns.pjt'
+        path, _ = QFileDialog.getSaveFileName(
+            self, t('project.topbar.save_as'), default_name,
+            'LYNS Project (*.lyns.pjt);;All Files (*)'
+        )
+        if not path:
+            return
+        for _sfx in ('.lyns.pjt', '.ectopjt', '.pjt'):
+            if path.lower().endswith(_sfx):
+                path = path[:-len(_sfx)]
+                break
+        path += '.lyns.pjt'
+        self._project_path = path
+        try:
+            self._save_project(self._project_path)
+        except Exception as e:
+            logger.error(f'Failed to save project as: {e}', exc_info=True)
+            QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
+
     def _save_project(self, path: str):
         now = datetime.now(timezone.utc).isoformat()
         user = getpass.getuser()

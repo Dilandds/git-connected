@@ -1,5 +1,6 @@
 {
   "mode_bar": {
+    "file": "📄 Fichier",
     "viewer_3d": "🔲 Visualiseur 3D",
     "technical": "📋 Fiche technique",
     "drawing_scale": "📐 Mode échelle 2D",
@@ -415,6 +416,7 @@
       "new": "＋ Nouveau projet",
       "open": "📂 Ouvrir projet",
       "save": "💾 Enregistrer Projet",
+      "save_as": "💾 Enregistrer sous...",
       "print": "🖨  Imprimer",
       "password": "🔓  Mot de passe",
       "protected": "🔒  Protégé",
@@ -423,6 +425,7 @@
       "tip_new": "Créer un nouveau projet ",
       "tip_open": "Ouvrir un fichier .lyns.pjt existant",
       "tip_save": "Enregistrer le projet actuel",
+      "tip_save_as": "Enregistrer le projet actuel sous un nouveau fichier",
       "tip_print": "Imprimer ou exporter la section en PDF",
       "tip_password": "Définir ou supprimer la protection par mot de passe",
       "tip_protected": "Projet protégé par mot de passe — cliquer pour modifier ou supprimer",

@@ -10,7 +10,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFileDialog,
     QSplitter, QFrame, QApplication, QStackedWidget, QTabBar,
-    QPushButton, QLabel
+    QPushButton, QLabel, QMenu
 )
 from ui.modal_utils import (
     show_message_dialog, show_warning_dialog, show_error_dialog,
@@ -333,6 +333,53 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.setContentsMargins(12, 4, 12, 4)
         mode_bar_layout.setSpacing(8)
         
+        # File menu button — quick access to New/Open/Save/Save As/Password
+        # without having to first switch into "The Project" workspace.
+        # Wired to ui.project_widget.ProjectWidget's existing file-operation
+        # methods via self.project_widget, which is created further below;
+        # the lambdas below only resolve that attribute at click time.
+        _mode_font_size = '14px' if sys.platform == 'win32' else '13px'
+        self._mode_file_btn = QPushButton(t("mode_bar.file"))
+        self._mode_file_btn.setFixedHeight(30)
+        self._mode_file_btn.setCursor(Qt.PointingHandCursor)
+        self._mode_file_btn.setAttribute(Qt.WA_StyledBackground, True)
+        self._mode_file_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {default_theme.button_primary};
+                color: #ffffff;
+                border: 1px solid {default_theme.button_primary};
+                border-radius: 6px;
+                padding: 5px 14px;
+                font-size: {_mode_font_size};
+                font-weight: normal;
+            }}
+            QPushButton:hover {{
+                background-color: #ffffff;
+                color: #000000;
+                border-color: #8090a8;
+                font-weight: bold;
+            }}
+            QPushButton::menu-indicator {{ subcontrol-position: right center; }}
+        """)
+        _file_menu = QMenu(self._mode_file_btn)
+        _file_menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {default_theme.card_background};
+                color: {default_theme.text_primary};
+                border: 1px solid {default_theme.border_standard};
+            }}
+            QMenu::item {{ padding: 6px 22px; }}
+            QMenu::item:selected {{ background-color: {default_theme.button_primary}; color: #ffffff; }}
+            QMenu::separator {{ height: 1px; background: {default_theme.border_standard}; margin: 4px 0; }}
+        """)
+        _file_menu.addAction(t('project.topbar.new'), lambda: self.project_widget._on_new_project())
+        _file_menu.addAction(t('project.topbar.open'), lambda: self.project_widget._on_open_project())
+        _file_menu.addAction(t('project.topbar.save'), lambda: self.project_widget._on_save_project())
+        _file_menu.addAction(t('project.topbar.save_as'), lambda: self.project_widget._on_save_project_as())
+        _file_menu.addSeparator()
+        _file_menu.addAction(t('project.topbar.password'), lambda: self.project_widget._on_password_btn())
+        self._mode_file_btn.setMenu(_file_menu)
+
         self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
         self._mode_tech_btn = QPushButton(t("mode_bar.technical"))
         self._mode_scale_btn = QPushButton(t("mode_bar.drawing_scale"))
@@ -353,6 +400,7 @@ class STLViewerWindow(QMainWindow):
         self._mode_project_btn.clicked.connect(lambda: self._switch_mode("project"))
         self._mode_help_btn.clicked.connect(lambda: self._switch_mode("help"))
 
+        mode_bar_layout.addWidget(self._mode_file_btn)
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
@@ -867,6 +915,15 @@ class STLViewerWindow(QMainWindow):
     
     def _retranslate_ui(self):
         """Update all mode bar texts when language changes."""
+        self._mode_file_btn.setText(t("mode_bar.file"))
+        _file_menu = self._mode_file_btn.menu()
+        if _file_menu is not None:
+            _actions = _file_menu.actions()
+            _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
+                       'project.topbar.save_as', None, 'project.topbar.password')
+            for _act, _key in zip(_actions, _labels):
+                if _key:
+                    _act.setText(t(_key))
         self._mode_3d_btn.setText(t("mode_bar.viewer_3d"))
         self._mode_tech_btn.setText(t("mode_bar.technical"))
         self._mode_scale_btn.setText(t("mode_bar.drawing_scale"))
