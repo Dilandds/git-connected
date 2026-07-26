@@ -742,17 +742,16 @@ class STLViewerWindow(QMainWindow):
         """
         inactive_style = f"""
             QPushButton {{
-                background-color: #ffffff;
-                color: #000000;
-                border: 1px solid #b0b8c8;
+                background-color: {default_theme.button_primary};
+                color: #ffffff;
+                border: 1px solid {default_theme.button_primary};
                 border-radius: 6px;
                 padding: 5px 14px;
                 font-size: {_mode_font_size};
                 font-weight: normal;
-                opacity: 0.85;
             }}
             QPushButton:hover {{
-                background-color: #f0f2f5;
+                background-color: #ffffff;
                 color: #000000;
                 border-color: #8090a8;
                 font-weight: bold;
