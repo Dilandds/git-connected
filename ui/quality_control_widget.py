@@ -760,6 +760,11 @@ class _ImageAnnotationView(QWidget):
         self._annotations: list = []       # [(dot_xf, dot_yf, badge_xf, badge_yf), ...]
         self._pending_dot: Optional[tuple] = None   # (x_frac, y_frac) after first click
         self._mouse_pos = None             # QPoint — live preview target
+        self._zoom = 1.0                   # 1.0 = fit to view, up to 4.0
+        self._pan = QPointF(0, 0)          # extra offset (px) applied when zoomed in
+        self._panning = False
+        self._pan_start = None
+        self._pan_start_offset = None
         self.setMinimumSize(100, 100)
         self.setCursor(Qt.CrossCursor)
         self.setMouseTracking(True)
@@ -768,10 +773,13 @@ class _ImageAnnotationView(QWidget):
         # Mission Control to switch the user to a different Space.
         self.setFocusPolicy(Qt.NoFocus)
         self.setStyleSheet('background: transparent;')
+        self.setToolTip('Scroll to zoom · middle-click drag to pan')
 
     def set_image(self, pixmap: Optional[QPixmap]):
         self._pixmap = pixmap
         self._pending_dot = None
+        self._zoom = 1.0
+        self._pan = QPointF(0, 0)
         self.update()
 
     def set_annotations(self, annotations: list):
@@ -779,7 +787,8 @@ class _ImageAnnotationView(QWidget):
         self._pending_dot = None
         self.update()
 
-    def _img_rect(self):
+    def _base_img_rect(self):
+        """Image rect fitted (unzoomed) to the current widget size."""
         from PyQt5.QtCore import QRect
         if self._pixmap is None or self._pixmap.isNull():
             return QRect()
@@ -789,12 +798,73 @@ class _ImageAnnotationView(QWidget):
         nw, nh = int(sw * scale), int(sh * scale)
         return QRect((ww - nw) // 2, (wh - nh) // 2, nw, nh)
 
+    def _img_rect(self):
+        """Current on-screen image rect, including zoom + pan."""
+        from PyQt5.QtCore import QRect
+        base = self._base_img_rect()
+        if base.isNull() or (self._zoom == 1.0 and self._pan.isNull()):
+            return base
+        cx = base.center().x() + self._pan.x()
+        cy = base.center().y() + self._pan.y()
+        nw = int(base.width()  * self._zoom)
+        nh = int(base.height() * self._zoom)
+        return QRect(int(cx - nw / 2), int(cy - nh / 2), nw, nh)
+
+    def wheelEvent(self, event):
+        """Scroll to zoom the inspection image, centered on the cursor."""
+        if self._pixmap is None or self._pixmap.isNull():
+            return
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+        old_rect = self._img_rect()
+        if old_rect.isNull() or old_rect.width() == 0 or old_rect.height() == 0:
+            return
+        cursor = event.pos()
+        fx = (cursor.x() - old_rect.x()) / old_rect.width()
+        fy = (cursor.y() - old_rect.y()) / old_rect.height()
+        factor = 1.15 if delta > 0 else (1 / 1.15)
+        new_zoom = max(1.0, min(4.0, self._zoom * factor))
+        if new_zoom == self._zoom:
+            return
+        self._zoom = new_zoom
+        if self._zoom <= 1.0001:
+            self._zoom = 1.0
+            self._pan = QPointF(0, 0)
+        else:
+            base = self._base_img_rect()
+            new_w = base.width()  * self._zoom
+            new_h = base.height() * self._zoom
+            new_cx = (cursor.x() - fx * new_w) + new_w / 2
+            new_cy = (cursor.y() - fy * new_h) + new_h / 2
+            self._pan = QPointF(new_cx - base.center().x(), new_cy - base.center().y())
+        self.update()
+
     def mouseMoveEvent(self, event):
+        if self._panning and self._pan_start is not None:
+            delta = event.pos() - self._pan_start
+            self._pan = QPointF(self._pan_start_offset.x() + delta.x(),
+                                 self._pan_start_offset.y() + delta.y())
+            self.update()
+            return
         self._mouse_pos = event.pos()
         if self._pending_dot is not None:
             self.update()
 
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MiddleButton and self._panning:
+            self._panning = False
+            self.setCursor(Qt.CrossCursor)
+
     def mousePressEvent(self, event):
+        if event.button() == Qt.MiddleButton:
+            # Pan when zoomed in — only useful once the image is larger than the view.
+            if self._zoom > 1.0:
+                self._panning = True
+                self._pan_start = event.pos()
+                self._pan_start_offset = QPointF(self._pan)
+                self.setCursor(Qt.ClosedHandCursor)
+            return
         if event.button() == Qt.RightButton:
             self._pending_dot = None
             # Defer repaint — synchronous update() inside a mouse press can
