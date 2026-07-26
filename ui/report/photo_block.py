@@ -24,7 +24,7 @@ _INNER_PAD  = 10
 _BLOCK_W    = 310
 _CAPTION_H  = 28
 _PHOTO_W    = _BLOCK_W - 2 * _INNER_PAD          # 290
-_PHOTO_H    = 260                                 # tall single image slot
+_PHOTO_H    = _PHOTO_W                            # true square photo slot
 _BLOCK_GAP  = 14
 
 _BLOCK_H = (
