@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 
 from ui.styles import default_theme
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ class RecordPanel(QWidget):
 
         self._build_ui()
         self._apply_state(self.IDLE)
+        on_language_changed(self.retranslate)
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -108,7 +110,7 @@ class RecordPanel(QWidget):
         self._banner_dot.setStyleSheet("color: #ffffff; font-size: 14px; background: transparent;")
         ban_lay.addWidget(self._banner_dot)
 
-        self._banner_title = QLabel("Record")
+        self._banner_title = QLabel(t("record.banner_idle"))
         self._banner_title.setStyleSheet(
             "color: #ffffff; font-size: 14px; font-weight: bold; background: transparent;"
         )
@@ -140,7 +142,7 @@ class RecordPanel(QWidget):
 
         # ── Status row (timer + frames) ───────────────────────────────────────
         status_row = QHBoxLayout()
-        self._status_label = QLabel("Ready to record")
+        self._status_label = QLabel(t("record.ready"))
         self._status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px; font-weight: bold;")
         status_row.addWidget(self._status_label)
         status_row.addStretch(1)
@@ -152,7 +154,7 @@ class RecordPanel(QWidget):
         blay.addWidget(_sep())
 
         # ── Settings (locked while recording) ────────────────────────────────
-        self._add_section_label(blay, "SETTINGS")
+        self._settings_lbl = self._add_section_label(blay, t("record.settings"))
 
         self._settings_widget = QWidget()
         sw_lay = QVBoxLayout(self._settings_widget)
@@ -160,16 +162,18 @@ class RecordPanel(QWidget):
         sw_lay.setSpacing(8)
 
         res_row = QHBoxLayout()
-        res_row.addWidget(self._muted("Resolution"))
+        self._res_label = self._muted(t("record.resolution"))
+        res_row.addWidget(self._res_label)
         self.res_combo = QComboBox()
-        self.res_combo.addItems(["Viewport", "720p", "1080p"])
+        self.res_combo.addItems([t("record.res_viewport"), "720p", "1080p"])
         self.res_combo.setCurrentIndex(0)
         self.res_combo.setStyleSheet(self._combo_style())
         res_row.addWidget(self.res_combo)
         sw_lay.addLayout(res_row)
 
         fps_row = QHBoxLayout()
-        fps_row.addWidget(self._muted("Frame rate"))
+        self._fps_label = self._muted(t("record.frame_rate"))
+        fps_row.addWidget(self._fps_label)
         self.fps_combo = QComboBox()
         self.fps_combo.addItems(["24 fps", "30 fps", "60 fps"])
         self.fps_combo.setCurrentIndex(1)
@@ -181,14 +185,14 @@ class RecordPanel(QWidget):
         blay.addWidget(_sep())
 
         # ── Auto-Rotate ───────────────────────────────────────────────────────
-        self._add_section_label(blay, "AUTO-ROTATE")
+        self._auto_rotate_lbl = self._add_section_label(blay, t("record.auto_rotate"))
 
-        self._rotate_cb = QCheckBox("Enable turntable rotation")
+        self._rotate_cb = QCheckBox(t("record.enable_turntable"))
         self._rotate_cb.setStyleSheet(f"color: {_TEXT}; font-size: 12px;")
         self._rotate_cb.toggled.connect(self.rotate_toggled)
         blay.addWidget(self._rotate_cb)
 
-        self._add_section_label(blay, "SPEED  (°/sec)")
+        self._speed_lbl = self._add_section_label(blay, t("record.speed_label"))
         self.speed_slider = QSlider(Qt.Horizontal)
         self.speed_slider.setMinimum(2)
         self.speed_slider.setMaximum(90)
@@ -200,20 +204,23 @@ class RecordPanel(QWidget):
         blay.addWidget(self.speed_slider)
 
         speed_hints = QHBoxLayout()
-        speed_hints.addWidget(self._muted("Slow"))
+        self._slow_lbl = self._muted(t("record.slow"))
+        speed_hints.addWidget(self._slow_lbl)
         speed_hints.addStretch(1)
         self._speed_val_label = QLabel("15°/sec")
         self._speed_val_label.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: bold;")
         speed_hints.addWidget(self._speed_val_label)
         speed_hints.addStretch(1)
-        speed_hints.addWidget(self._muted("Fast"))
+        self._fast_lbl = self._muted(t("record.fast"))
+        speed_hints.addWidget(self._fast_lbl)
         blay.addLayout(speed_hints)
 
         dir_row = QHBoxLayout()
-        dir_row.addWidget(self._muted("Direction"))
+        self._direction_lbl = self._muted(t("record.direction"))
+        dir_row.addWidget(self._direction_lbl)
         dir_row.addStretch(1)
-        self._dir_left_btn = QPushButton("← Left")
-        self._dir_right_btn = QPushButton("Right →")
+        self._dir_left_btn = QPushButton(t("record.dir_left"))
+        self._dir_right_btn = QPushButton(t("record.dir_right"))
         for b in (self._dir_left_btn, self._dir_right_btn):
             b.setFixedHeight(26)
             b.setCursor(Qt.PointingHandCursor)
@@ -237,7 +244,7 @@ class RecordPanel(QWidget):
         idle_lay = QVBoxLayout(idle_page)
         idle_lay.setContentsMargins(0, 0, 0, 0)
         idle_lay.setSpacing(0)
-        self._start_btn = QPushButton("▶  Start Recording")
+        self._start_btn = QPushButton(t("record.start_recording"))
         self._start_btn.setFixedHeight(38)
         self._start_btn.setCursor(Qt.PointingHandCursor)
         self._start_btn.setStyleSheet(f"""
@@ -257,7 +264,7 @@ class RecordPanel(QWidget):
         rec_lay = QVBoxLayout(rec_page)
         rec_lay.setContentsMargins(0, 0, 0, 0)
         rec_lay.setSpacing(0)
-        self._stop_btn = QPushButton("⏹  Stop")
+        self._stop_btn = QPushButton(t("record.stop"))
         self._stop_btn.setFixedHeight(38)
         self._stop_btn.setCursor(Qt.PointingHandCursor)
         self._stop_btn.setStyleSheet(f"""
@@ -277,7 +284,7 @@ class RecordPanel(QWidget):
         stopped_lay = QVBoxLayout(stopped_page)
         stopped_lay.setContentsMargins(0, 0, 0, 0)
         stopped_lay.setSpacing(8)
-        self._save_btn = QPushButton("💾  Save Video")
+        self._save_btn = QPushButton(t("record.save_video"))
         self._save_btn.setFixedHeight(38)
         self._save_btn.setCursor(Qt.PointingHandCursor)
         self._save_btn.setStyleSheet(f"""
@@ -291,7 +298,7 @@ class RecordPanel(QWidget):
         self._save_btn.clicked.connect(self.save_recording_clicked)
         stopped_lay.addWidget(self._save_btn)
 
-        self._discard_btn = QPushButton("Discard")
+        self._discard_btn = QPushButton(t("record.discard"))
         self._discard_btn.setFixedHeight(30)
         self._discard_btn.setCursor(Qt.PointingHandCursor)
         self._discard_btn.setStyleSheet(f"""
@@ -316,23 +323,51 @@ class RecordPanel(QWidget):
         self._action_stack.setCurrentIndex(state)
 
         if state == self.IDLE:
-            self._banner_title.setText("Record")
-            self._status_label.setText("Ready to record")
+            self._banner_title.setText(t("record.banner_idle"))
+            self._status_label.setText(t("record.ready"))
             self._status_label.setStyleSheet(f"color: {_MUTED}; font-size: 12px; font-weight: bold;")
             self._frames_label.setText("")
             self._settings_widget.setEnabled(True)
 
         elif state == self.RECORDING:
-            self._banner_title.setText("● Recording…")
+            self._banner_title.setText(t("record.banner_recording"))
             self._status_label.setStyleSheet(f"color: {_REC}; font-size: 12px; font-weight: bold;")
             self._settings_widget.setEnabled(False)   # lock settings during capture
 
         elif state == self.STOPPED:
-            self._banner_title.setText("Record — stopped")
+            self._banner_title.setText(t("record.banner_stopped"))
             self._status_label.setStyleSheet(
                 f"color: {_MUTED}; font-size: 12px; font-weight: bold;"
             )
             self._settings_widget.setEnabled(False)
+
+    def retranslate(self):
+        """Update all static labels for the current language."""
+        self._apply_state(self._state)   # refreshes banner title for current state
+        if self._state == self.IDLE:
+            self._status_label.setText(t("record.ready"))
+        self._settings_lbl.setText(t("record.settings"))
+        self._res_label.setText(t("record.resolution"))
+        self.res_combo.setItemText(0, t("record.res_viewport"))
+        self._fps_label.setText(t("record.frame_rate"))
+        self._auto_rotate_lbl.setText(t("record.auto_rotate"))
+        self._rotate_cb.setText(t("record.enable_turntable"))
+        self._speed_lbl.setText(t("record.speed_label"))
+        self._slow_lbl.setText(t("record.slow"))
+        self._fast_lbl.setText(t("record.fast"))
+        self._direction_lbl.setText(t("record.direction"))
+        self._dir_left_btn.setText(t("record.dir_left"))
+        self._dir_right_btn.setText(t("record.dir_right"))
+        self._start_btn.setText(t("record.start_recording"))
+        self._stop_btn.setText(t("record.stop"))
+        self._save_btn.setText(t("record.save_video"))
+        self._discard_btn.setText(t("record.discard"))
+        if self._state == self.STOPPED:
+            self._status_label.setText(
+                t("record.stopped_status").format(
+                    time=self._format_time(self._elapsed_sec), frames=self._frame_count
+                )
+            )
 
     def show_idle(self):
         """Reset to idle state (before any recording)."""
@@ -340,7 +375,7 @@ class RecordPanel(QWidget):
         self._elapsed_sec = 0
         self._frame_count = 0
         self._apply_state(self.IDLE)
-        self._status_label.setText("Ready to record")
+        self._status_label.setText(t("record.ready"))
         self._frames_label.setText("")
 
     def show_recording(self):
@@ -356,13 +391,15 @@ class RecordPanel(QWidget):
         self._clock.stop()
         self._apply_state(self.STOPPED)
         self._status_label.setText(
-            f"Stopped — {self._format_time(self._elapsed_sec)}  ·  {self._frame_count} frames"
+            t("record.stopped_status").format(
+                time=self._format_time(self._elapsed_sec), frames=self._frame_count
+            )
         )
         self._frames_label.setText("")
 
     def update_frame_count(self, count: int):
         self._frame_count = count
-        self._frames_label.setText(f"{count} frames")
+        self._frames_label.setText(t("record.frames_count").format(count=count))
 
     # ── Convenience accessors ─────────────────────────────────────────────────
 
@@ -415,12 +452,13 @@ class RecordPanel(QWidget):
         lbl.setStyleSheet(f"color: {_MUTED}; font-size: 11px;")
         return lbl
 
-    def _add_section_label(self, layout, text: str):
+    def _add_section_label(self, layout, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setStyleSheet(
             f"color: {_MUTED}; font-size: 10px; font-weight: bold; letter-spacing: 0.5px;"
         )
         layout.addWidget(lbl)
+        return lbl
 
     def _combo_style(self) -> str:
         return f"""

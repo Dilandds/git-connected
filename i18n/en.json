@@ -1153,5 +1153,29 @@
   },
   "overview": {
     "title": "Overview"
+  },
+  "record": {
+    "banner_idle": "Record",
+    "banner_recording": "● Recording…",
+    "banner_stopped": "Record — stopped",
+    "ready": "Ready to record",
+    "settings": "SETTINGS",
+    "resolution": "Resolution",
+    "res_viewport": "Viewport",
+    "frame_rate": "Frame rate",
+    "auto_rotate": "AUTO-ROTATE",
+    "enable_turntable": "Enable turntable rotation",
+    "speed_label": "SPEED  (°/sec)",
+    "slow": "Slow",
+    "fast": "Fast",
+    "direction": "Direction",
+    "dir_left": "← Left",
+    "dir_right": "Right →",
+    "start_recording": "▶  Start Recording",
+    "stop": "⏹  Stop",
+    "save_video": "💾  Save Video",
+    "discard": "Discard",
+    "stopped_status": "Stopped — {time}  ·  {frames} frames",
+    "frames_count": "{count} frames"
   }
 }
