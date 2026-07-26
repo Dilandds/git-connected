@@ -724,6 +724,7 @@
       "view_day": "Day",
       "view_week": "Week",
       "view_month": "Month",
+      "view_year": "Year",
       "dlg_add_operator": "Add Operator",
       "dlg_op_name_field": "OPERATOR / COMPANY NAME",
       "dlg_op_name_ph": "Operator or company name",

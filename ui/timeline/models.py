@@ -38,6 +38,7 @@ OP_LABEL_W  = 150   # frozen left column width
 DAY_W_DAY   = 38    # px per day in Day view
 DAY_W_WEEK  = 26    # px per day in Week view  (7 days × 26 = 182 px/week)
 DAY_W_MONTH = 11    # px per day in Month view (~30 days × 11 = 330 px/month)
+DAY_W_YEAR  = 3     # px per day in Year view  (~365 days × 3 = ~1095 px/year)
 
 
 # ── data models ───────────────────────────────────────────────────────────────

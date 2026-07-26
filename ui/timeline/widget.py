@@ -23,7 +23,7 @@ from .models import (
     Task, Operation, Operator,
     TASK_TYPES, DEFAULT_TYPE, URGENT_COLOR,
     ROW_H, OP_HEADER_H, HEADER_H, OP_LABEL_W,
-    DAY_W_DAY, DAY_W_WEEK, DAY_W_MONTH,
+    DAY_W_DAY, DAY_W_WEEK, DAY_W_MONTH, DAY_W_YEAR,
     BG, CARD, BORDER, TEXT, MUTED, ACCENT, SIDEBAR,
     today, sample_data,
 )
@@ -145,9 +145,9 @@ class GanttCanvas(QWidget):
     # ── sizing ────────────────────────────────────────────────────────────────
 
     def _day_w(self) -> int:
-        return {'Day': DAY_W_DAY, 'Week': DAY_W_WEEK, 'Month': DAY_W_MONTH}.get(
-            self._view_mode, DAY_W_DAY
-        )
+        return {
+            'Day': DAY_W_DAY, 'Week': DAY_W_WEEK, 'Month': DAY_W_MONTH, 'Year': DAY_W_YEAR,
+        }.get(self._view_mode, DAY_W_DAY)
 
     def _visible_operators(self) -> List[Operator]:
         if self._current_op_idx == -1:
@@ -161,7 +161,7 @@ class GanttCanvas(QWidget):
                    for op in self._visible_operators())
 
     def _total_days(self) -> int:
-        return 90
+        return 400 if self._view_mode == 'Year' else 90
 
     def _recalc_size(self):
         w = OP_LABEL_W + self._total_days() * self._day_w()
@@ -686,7 +686,7 @@ class TimelineWidget(QWidget):
         layout.addSpacing(8)
 
         self._view_btns: dict[str, QPushButton] = {}
-        for mode in ('Day', 'Week', 'Month'):
+        for mode in ('Day', 'Week', 'Month', 'Year'):
             btn = QPushButton(t(f'project.timeline.view_{mode.lower()}')); btn.setFixedHeight(24); btn.setMinimumWidth(54)
             btn.setStyleSheet(_BTN_VIEW_ACTIVE if mode == self._view_mode else _BTN_VIEW_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
@@ -784,6 +784,8 @@ class TimelineWidget(QWidget):
 
     def _snap_start_date(self, date: QDate, mode: str) -> QDate:
         """Snap start date so month/week boundaries always land on clean column edges."""
+        if mode == 'Year':
+            return QDate(date.year(), 1, 1)
         if mode == 'Month':
             return QDate(date.year(), date.month(), 1)
         if mode == 'Week':
