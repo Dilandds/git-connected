@@ -25,6 +25,14 @@ class _AddOperatorDialog(FormModal):
         super().__init__(parent, title or t('project.timeline.dlg_add_operator'), theme=FormModal.LIGHT, min_width=380)
         self.f_name = self.add_field(t('project.timeline.dlg_op_name_field'), QLineEdit(initial_name))
         self.f_name.setPlaceholderText(t('project.timeline.dlg_op_name_ph'))
+        self.f_name.setStyleSheet("""
+            QLineEdit {
+                background-color: #f5f6f8; color: #111827;
+                border: 1px solid #d1d5db; border-radius: 4px;
+                padding: 4px 8px; font-size: 16px;
+            }
+            QLineEdit:focus { border-color: #2563eb; }
+        """)
         self.finish()
         self.f_name.returnPressed.connect(self.ok_btn.click)
         self.f_name.setFocus()
