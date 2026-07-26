@@ -878,7 +878,7 @@ class STLViewerWindow(QMainWindow):
     def _tech_upload_image(self):
         """Handle upload request from technical sidebar — supports images, PDFs, and .lyns files."""
         path, _ = get_open_file_name(
-            self, "Select Image, PDF, or .lyns File", "",
+            self, "Select Image, PDF, or .lyns file", "",
             "Supported Files (*.png *.jpg *.jpeg *.bmp *.pdf *.lyns *.ecto);;Images & PDFs (*.png *.jpg *.jpeg *.bmp *.pdf);;LYNS Files (*.lyns *.ecto);;All Files (*)"
         )
         if not path:
