@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from PyQt5.QtCore import QDate
 from ui.styles import default_theme
+from i18n import t
 
 # ── palette (light content area) ─────────────────────────────────────────────
 BG      = '#f8f9fa'
@@ -91,28 +92,29 @@ def today() -> QDate:
 
 def sample_data() -> List[Operator]:
     """Default demo operators shown on first launch."""
-    t = today()
-    op1 = Operator(1, 'Operator 1', [
+    t_date = today()
+    _operator_label = t('project.timeline.dlg_operator')
+    op1 = Operator(1, f'{_operator_label} 1', [
         Operation(1, 'Operation 1', [
-            Task(1, 'Initial concept',    t.addDays(-10), t.addDays(-7),  'Modification'),
-            Task(2, '3D Modification',    t.addDays(-4),  t.addDays(1),   'Modification'),
-            Task(3, 'Check and update',   t.addDays(3),   t.addDays(6),   'Validation'),
+            Task(1, 'Initial concept',    t_date.addDays(-10), t_date.addDays(-7),  'Modification'),
+            Task(2, '3D Modification',    t_date.addDays(-4),  t_date.addDays(1),   'Modification'),
+            Task(3, 'Check and update',   t_date.addDays(3),   t_date.addDays(6),   'Validation'),
         ]),
         Operation(2, 'Operation 2', [
-            Task(4, 'Factory production', t.addDays(-6),  t.addDays(-2),  'Manufacturing'),
-            Task(5, 'Quality check',      t.addDays(0),   t.addDays(4),   'Quality Control'),
+            Task(4, 'Factory production', t_date.addDays(-6),  t_date.addDays(-2),  'Manufacturing'),
+            Task(5, 'Quality check',      t_date.addDays(0),   t_date.addDays(4),   'Quality Control'),
         ]),
         Operation(3, 'Operation 3', [
-            Task(6, 'URGENT DELIVERY',    t.addDays(2),   t.addDays(5),   'Delivery', is_urgent=True),
+            Task(6, 'URGENT DELIVERY',    t_date.addDays(2),   t_date.addDays(5),   'Delivery', is_urgent=True),
         ]),
     ])
-    op2 = Operator(2, 'Operator 2', [
+    op2 = Operator(2, f'{_operator_label} 2', [
         Operation(4, 'Operation 1', [
-            Task(7, 'Design review',      t.addDays(-8),  t.addDays(-3),  'Validation'),
-            Task(8, 'Prototype build',    t.addDays(1),   t.addDays(8),   'Manufacturing'),
+            Task(7, 'Design review',      t_date.addDays(-8),  t_date.addDays(-3),  'Validation'),
+            Task(8, 'Prototype build',    t_date.addDays(1),   t_date.addDays(8),   'Manufacturing'),
         ]),
         Operation(5, 'Operation 2', [
-            Task(9, 'Supplier sourcing',  t.addDays(-2),  t.addDays(6),   'Manufacturing'),
+            Task(9, 'Supplier sourcing',  t_date.addDays(-2),  t_date.addDays(6),   'Manufacturing'),
         ]),
     ])
     return [op1, op2]
