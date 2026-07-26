@@ -57,6 +57,10 @@ _STATUS_COLORS = {
 # ── Layout constants ──────────────────────────────────────────────────────────
 _CARD_W, _CARD_H = 148, 88
 _CARD_R   = 8
+# Connection-dot radius. Made bigger so it's a comfortable click target now
+# that clicking it directly (rather than a separate "Line" tool button) is
+# how a line/arrow gets started.
+_DOT_R = 9
 _A4_W_PORTRAIT,  _A4_H_PORTRAIT  = 560, 793
 _A4_W_LANDSCAPE, _A4_H_LANDSCAPE = 793, 560
 _CANVAS_W_P, _CANVAS_H_P = 1300, 980    # portrait canvas
@@ -335,11 +339,12 @@ class AssignmentCanvas(QWidget):
             card.status,
         )
 
-        # Connection dot on the edge facing the image
+        # Connection dot on the edge facing the image — click it directly to
+        # start/finish a line (no separate "Line" tool needed).
         cp = card.connection_point(img_rect)
         p.setBrush(QBrush(QColor(card.color)))
-        p.setPen(Qt.NoPen)
-        p.drawEllipse(cp, 5, 5)
+        p.setPen(QPen(QColor('#ffffff'), 1.5))
+        p.drawEllipse(cp, _DOT_R, _DOT_R)
 
     def _paint_arrow(
         self, p: QPainter, start: QPointF, end: QPointF,
@@ -390,10 +395,51 @@ class AssignmentCanvas(QWidget):
                 return card
         return None
 
+    def _dot_at(self, pos: QPointF) -> Optional[AreaCard]:
+        """Return the card whose connection dot contains pos, if any. A
+        generous hit radius (a bit larger than the drawn dot) makes the dot
+        easy to click precisely now that it's the only way to start a line."""
+        img = self._img_rect()
+        hit_r = _DOT_R + 4
+        for card in reversed(self._cards):
+            cp = card.connection_point(img)
+            dx, dy = pos.x() - cp.x(), pos.y() - cp.y()
+            if dx * dx + dy * dy <= hit_r * hit_r:
+                return card
+        return None
+
     # ── Mouse events ──────────────────────────────────────────────────────────
 
     def mousePressEvent(self, e):
         pos = QPointF(e.pos())
+
+        # Clicking a card's connection dot starts a line; clicking again
+        # (either on the image, or on another card's dot) finishes it. This
+        # replaces the old dedicated "Line" toolbar button/mode.
+        dot_card = self._dot_at(pos)
+        if self._line_card is not None:
+            img = self._img_rect()
+            if img.contains(pos):
+                self._push_undo()
+                rx = max(0.0, min(1.0, (pos.x() - img.x()) / img.width()))
+                ry = max(0.0, min(1.0, (pos.y() - img.y()) / img.height()))
+                self._line_card.arrows.append({'rx': rx, 'ry': ry})
+                self._line_card = None
+                self._line_pos = None
+                self.changed.emit()
+            elif dot_card is not None:
+                self._line_card = dot_card
+                self._line_pos = pos
+            else:
+                self._line_card = None
+                self._line_pos = None
+            self.update()
+            return
+        if dot_card is not None:
+            self._line_card = dot_card
+            self._line_pos = pos
+            self.update()
+            return
 
         if self._tool == 'select':
             card = self._card_at(pos)
@@ -403,32 +449,6 @@ class AssignmentCanvas(QWidget):
                 self._drag_offset = pos - QPointF(card.x, card.y)
             else:
                 self._drag_id = None
-            self.update()
-
-        elif self._tool == 'line':
-            img = self._img_rect()
-            if self._line_card is None:
-                card = self._card_at(pos)
-                if card:
-                    self._line_card = card
-                    self._line_pos = pos
-            else:
-                if img.contains(pos):
-                    self._push_undo()
-                    rx = max(0.0, min(1.0, (pos.x() - img.x()) / img.width()))
-                    ry = max(0.0, min(1.0, (pos.y() - img.y()) / img.height()))
-                    self._line_card.arrows.append({'rx': rx, 'ry': ry})
-                    self._line_card = None
-                    self._line_pos = None
-                    self.changed.emit()
-                else:
-                    card = self._card_at(pos)
-                    if card:
-                        self._line_card = card
-                        self._line_pos = pos
-                    else:
-                        self._line_card = None
-                        self._line_pos = None
             self.update()
 
         elif self._tool == 'delete':
@@ -456,7 +476,7 @@ class AssignmentCanvas(QWidget):
                 card.y = pos.y() - self._drag_offset.y()
                 self.update()
 
-        elif self._line_card and self._tool == 'line':
+        elif self._line_card is not None:
             self._line_pos = pos
             self.update()
 
@@ -743,7 +763,12 @@ class AssignmentWidget(QWidget):
         self._canvas.changed.connect(self.changed)
 
         root.addWidget(self._build_header())
-        root.addWidget(self._build_toolbar())
+
+        body = QWidget()
+        body_row = QHBoxLayout(body)
+        body_row.setContentsMargins(0, 0, 0, 0)
+        body_row.setSpacing(0)
+        body_row.addWidget(self._build_toolbar())
 
         self._scroll = QScrollArea()
         self._scroll.setWidget(self._canvas)
@@ -752,7 +777,9 @@ class AssignmentWidget(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll.setAlignment(Qt.AlignCenter)
-        root.addWidget(self._scroll, 1)
+        body_row.addWidget(self._scroll, 1)
+
+        root.addWidget(body, 1)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -788,12 +815,17 @@ class AssignmentWidget(QWidget):
         return h
 
     def _build_toolbar(self) -> QWidget:
+        """Vertical tool column, stacked under the Import button, so the
+        drawing/photo area gets the full remaining width instead of losing a
+        horizontal strip to the toolbar. The dedicated "Line" tool button is
+        gone — clicking directly on a card's (now larger) connection dot
+        starts/finishes a line, see AssignmentCanvas._dot_at."""
         bar = QWidget()
-        bar.setFixedHeight(46)
-        bar.setStyleSheet(f'background: {_CANVAS}; border-bottom: 1px solid {_BORDER};')
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(6)
+        bar.setFixedWidth(150)
+        bar.setStyleSheet(f'background: {_CANVAS}; border-right: 1px solid {_BORDER};')
+        col = QVBoxLayout(bar)
+        col.setContentsMargins(10, 12, 10, 12)
+        col.setSpacing(8)
 
         imp_btn = QPushButton('⬆  ' + t('assignment.import_btn'))
         imp_btn.setStyleSheet(_BTN_PRIMARY)
@@ -801,9 +833,9 @@ class AssignmentWidget(QWidget):
         imp_btn.setCursor(Qt.PointingHandCursor)
         imp_btn.setToolTip(t('assignment.import_tooltip'))
         imp_btn.clicked.connect(self._on_import)
-        row.addWidget(imp_btn)
+        col.addWidget(imp_btn)
 
-        row.addWidget(self._vsep())
+        col.addWidget(self._hsep())
 
         add_btn = QPushButton('+ ' + t('assignment.add_area'))
         add_btn.setStyleSheet(_BTN)
@@ -811,33 +843,21 @@ class AssignmentWidget(QWidget):
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setToolTip(t('assignment.add_area_tooltip'))
         add_btn.clicked.connect(lambda: self._canvas.add_card())
-        row.addWidget(add_btn)
-
-        line_btn = QPushButton(t('assignment.line'))
-        line_btn.setCheckable(True)
-        line_btn.setStyleSheet(_BTN)
-        line_btn.setFixedHeight(30)
-        line_btn.setCursor(Qt.PointingHandCursor)
-        line_btn.setToolTip(t('assignment.line_tooltip'))
-        line_btn.clicked.connect(lambda: self._toggle_tool('line'))
-        self._tool_btns['line'] = line_btn
-        row.addWidget(line_btn)
-
-        row.addWidget(self._vsep())
+        col.addWidget(add_btn)
 
         undo_btn = QPushButton('↩ ' + t('assignment.undo'))
         undo_btn.setStyleSheet(_BTN)
         undo_btn.setFixedHeight(30)
         undo_btn.setCursor(Qt.PointingHandCursor)
         undo_btn.clicked.connect(self._canvas.undo)
-        row.addWidget(undo_btn)
+        col.addWidget(undo_btn)
 
         redo_btn = QPushButton('↪ ' + t('assignment.redo'))
         redo_btn.setStyleSheet(_BTN)
         redo_btn.setFixedHeight(30)
         redo_btn.setCursor(Qt.PointingHandCursor)
         redo_btn.clicked.connect(self._canvas.redo)
-        row.addWidget(redo_btn)
+        col.addWidget(redo_btn)
 
         del_btn = QPushButton('🗑 ' + t('assignment.delete'))
         del_btn.setStyleSheet(_BTN)
@@ -845,13 +865,13 @@ class AssignmentWidget(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setToolTip(t('assignment.delete_tooltip'))
         del_btn.clicked.connect(self._canvas.delete_selected)
-        row.addWidget(del_btn)
+        col.addWidget(del_btn)
 
-        row.addWidget(self._vsep())
+        col.addWidget(self._hsep())
 
         clr_lbl = QLabel('Color:')
         clr_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent;')
-        row.addWidget(clr_lbl)
+        col.addWidget(clr_lbl)
 
         self._color_btn = QPushButton('🎨  Pick color')
         self._color_btn.setFixedHeight(30)
@@ -866,9 +886,9 @@ class AssignmentWidget(QWidget):
         self._color_btn.setCursor(Qt.PointingHandCursor)
         self._color_btn.setToolTip('Pick a color for the selected card')
         self._color_btn.clicked.connect(self._on_color_btn_clicked)
-        row.addWidget(self._color_btn)
+        col.addWidget(self._color_btn)
 
-        row.addWidget(self._vsep())
+        col.addWidget(self._hsep())
 
         self._orient_btn = QPushButton('⇄  Landscape')
         self._orient_btn.setStyleSheet(_BTN)
@@ -876,9 +896,9 @@ class AssignmentWidget(QWidget):
         self._orient_btn.setCursor(Qt.PointingHandCursor)
         self._orient_btn.setToolTip('Toggle between A4 portrait and landscape')
         self._orient_btn.clicked.connect(self._toggle_orientation)
-        row.addWidget(self._orient_btn)
+        col.addWidget(self._orient_btn)
 
-        row.addStretch()
+        col.addStretch()
         return bar
 
     def _build_style_bar(self) -> QWidget:
@@ -929,6 +949,15 @@ class AssignmentWidget(QWidget):
         s.setFixedHeight(20)
         s.setStyleSheet(
             f'color: {_BORDER}; background: {_BORDER}; max-width: 1px; border: none;'
+        )
+        return s
+
+    def _hsep(self) -> QFrame:
+        s = QFrame()
+        s.setFrameShape(QFrame.HLine)
+        s.setFixedHeight(1)
+        s.setStyleSheet(
+            f'color: {_BORDER}; background: {_BORDER}; max-height: 1px; border: none;'
         )
         return s
 
