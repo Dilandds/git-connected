@@ -719,6 +719,7 @@
       "deadline_label": "ÉCHÉANCE",
       "remove_task": "Supprimer l'événement",
       "remove_operator": "Supprimer l'opérateur",
+      "remove_operator_body": "Supprimer l'opérateur « {name} » ainsi que toutes ses opérations et événements ?\n\nCette action est irréversible.",
       "select_operator": "Sélectionner un opérateur",
       "no_op_selected": "Aucune opération sélectionnée",
       "view_day": "Jour",

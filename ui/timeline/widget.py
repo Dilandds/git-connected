@@ -961,7 +961,7 @@ class TimelineWidget(QWidget):
         op = self._operators[idx]
         if not ask_yes_no_dialog(
             self, t('project.timeline.remove_operator'),
-            f"Remove operator '{op.name}' and all its operations and tasks?\n\nThis cannot be undone."
+            t('project.timeline.remove_operator_body').format(name=op.name)
         ):
             return
         self._operators.pop(idx)
