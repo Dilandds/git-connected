@@ -221,7 +221,7 @@ class CostPartner:
 @dataclass
 class CostTrade:
     id:       int
-    name:     str = "Trade"
+    name:     str = "Activity"
     partners: List[CostPartner] = field(default_factory=list)
 
     @property
@@ -235,7 +235,7 @@ class CostTrade:
 def _default_trade(tid: int) -> CostTrade:
     p = CostPartner(id=1, name="Partner 1",
                     tasks=[CostTask() for _ in range(DEFAULT_ROWS)])
-    return CostTrade(id=tid, name=f"Trade {tid}", partners=[p])
+    return CostTrade(id=tid, name=f"{t('project.cost.default_trade_name')} {tid}", partners=[p])
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -1293,7 +1293,7 @@ class EstimatedCostWidget(QWidget):
             close = QPushButton("×")
             close.setFixedSize(22, 28)
             close.setCursor(Qt.PointingHandCursor)
-            close.setToolTip(f"Remove {trade.name}")
+            close.setToolTip(f"{t('project.cost.remove_trade_tooltip')} {trade.name}")
             close.setStyleSheet(_CLOSE_TAB_ACTIVE if is_active else _CLOSE_TAB_INACTIVE)
             close.clicked.connect(lambda _, idx=i: self._remove_trade(idx))
 
@@ -1329,7 +1329,8 @@ class EstimatedCostWidget(QWidget):
             return
         trade = self._trades[idx]
         new_name, ok = ask_text_input_dialog(
-            self, "Rename Trade", "TRADE NAME", default_text=trade.name
+            self, t('project.cost.rename_trade_title'), t('project.cost.trade_name_label'),
+            default_text=trade.name
         )
         if ok and new_name:
             trade.name = new_name
@@ -1340,7 +1341,7 @@ class EstimatedCostWidget(QWidget):
         new_idx = len(self._trades)
         trade = _default_trade(self._next_available_id())
         new_name, ok = ask_text_input_dialog(
-            self, "New Trade", "TRADE NAME",
+            self, t('project.cost.new_trade_title'), t('project.cost.trade_name_label'),
             default_text=trade.name, light=True
         )
         if not ok:
@@ -1361,8 +1362,8 @@ class EstimatedCostWidget(QWidget):
         if idx < 0 or idx >= len(self._trades):
             return
         if not ask_yes_no_dialog(
-            self, "Remove Trade",
-            f"Remove trade '{self._trades[idx].name}' and all its partners?\n\nThis cannot be undone."
+            self, t('project.cost.remove_trade_title'),
+            t('project.cost.remove_trade_confirm').format(name=self._trades[idx].name)
         ):
             return
         self._trades.pop(idx)
@@ -1443,7 +1444,7 @@ class EstimatedCostWidget(QWidget):
                     tasks=tasks,
                 )
                 partners.append(p)
-            trades.append(CostTrade(id=td["id"], name=td.get("name", "Trade"),
+            trades.append(CostTrade(id=td["id"], name=td.get("name", "Activity"),
                                      partners=partners))
         if trades:
             self._trades = trades

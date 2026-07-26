@@ -834,7 +834,14 @@
       "protected_msg": "This section is password-protected.",
       "add_partner": "＋ Add partner",
       "project_ctx": "Project:",
-      "company_ctx": "Company:"
+      "company_ctx": "Company:",
+      "default_trade_name": "Activity",
+      "trade_name_label": "ACTIVITY NAME",
+      "new_trade_title": "New Activity",
+      "rename_trade_title": "Rename Activity",
+      "remove_trade_title": "Remove Activity",
+      "remove_trade_tooltip": "Remove",
+      "remove_trade_confirm": "Remove activity '{name}' and all its partners?\n\nThis cannot be undone."
     },
     "files": {
       "title": "Files and versions",

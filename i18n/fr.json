@@ -834,7 +834,14 @@
       "protected_msg": "Cette section est protégée par mot de passe.",
       "add_partner": "＋ Ajouter un partenaire",
       "project_ctx": "Projet :",
-      "company_ctx": "Entreprise :"
+      "company_ctx": "Entreprise :",
+      "default_trade_name": "Activité",
+      "trade_name_label": "NOM DE L'ACTIVITÉ",
+      "new_trade_title": "Nouvelle activité",
+      "rename_trade_title": "Renommer l'activité",
+      "remove_trade_title": "Supprimer l'activité",
+      "remove_trade_tooltip": "Supprimer",
+      "remove_trade_confirm": "Supprimer l'activité « {name} » et tous ses partenaires ?\n\nCette action est irréversible."
     },
     "files": {
       "title": "Fichiers et versions",
