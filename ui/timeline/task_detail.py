@@ -98,7 +98,7 @@ class TaskDetailPanel(QWidget):
 
         lay.addWidget(self._build_info_section())
         lay.addWidget(self._hline())
-        lay.addWidget(self._build_photo_meta_section())    # photo ← left | details → right
+        lay.addWidget(self._build_photo_meta_section())    # PM / contributor details
         lay.addWidget(self._hline())
         lay.addWidget(self._build_comment_components_section())  # comments | components
         lay.addWidget(self._hline())
@@ -198,56 +198,12 @@ class TaskDetailPanel(QWidget):
         return w
 
     def _build_photo_meta_section(self) -> QWidget:
-        """Photo on the left, project manager fields on the right."""
+        """Project manager fields (photo removed — redundant with the project photo)."""
         w = QWidget(); w.setStyleSheet(f'background: {CARD}; border: none;')
-        row = QHBoxLayout(w)
+        row = QVBoxLayout(w)
         row.setContentsMargins(12, 8, 12, 8)
-        row.setSpacing(8)
-
-        # ── Left: photo ───────────────────────────────────────────────────
-        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
-        left_w.setFixedWidth(_COL)
-        left = QVBoxLayout(left_w)
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(3)
-
-        self._photo_frame = QLabel()
-        self._photo_frame.setFixedSize(_COL, _PHOTO_H)
-        self._photo_frame.setAlignment(Qt.AlignCenter)
-        self._photo_frame.setCursor(Qt.PointingHandCursor)
-        self._photo_frame.setStyleSheet(f"""
-            QLabel {{
-                background: #f1f5f9;
-                border: 2px dashed {BORDER};
-                border-radius: 8px;
-                color: {MUTED};
-                font-size: 12px;
-            }}
-        """)
-        self._photo_frame.setText(t('project.timeline.detail_add_photo'))
-        self._photo_frame.mousePressEvent = lambda _: self._pick_photo()
-        left.addWidget(self._photo_frame)
-
-        self._remove_photo_btn = QPushButton(t('project.timeline.detail_remove_photo'))
-        self._remove_photo_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; border: none;
-                color: {MUTED}; font-size: 10px; padding: 0;
-            }}
-            QPushButton:hover {{ color: #ef4444; }}
-        """)
-        self._remove_photo_btn.setCursor(Qt.PointingHandCursor)
-        self._remove_photo_btn.clicked.connect(self._remove_photo)
-        self._remove_photo_btn.hide()
-        left.addWidget(self._remove_photo_btn, 0, Qt.AlignRight)
-        left.addStretch()
-
-        # ── Right: details fields ─────────────────────────────────────────
-        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
-        right = QVBoxLayout(right_w)
-        right.setContentsMargins(0, 0, 0, 0)
-        right.setSpacing(3)
-        right.addWidget(self._section_label(t('project.timeline.detail_details')))
+        row.setSpacing(3)
+        row.addWidget(self._section_label(t('project.timeline.detail_details')))
 
         def _stacked_field(label_text: str) -> QLineEdit:
             lbl = self._muted_label(label_text)
@@ -256,18 +212,13 @@ class TaskDetailPanel(QWidget):
             inp.setFixedHeight(22)
             inp.setStyleSheet(_FIELD_STYLE)
             inp.setEnabled(False)
-            right.addWidget(lbl)
-            right.addWidget(inp)
+            row.addWidget(lbl)
+            row.addWidget(inp)
             return inp
 
         self._f_pm      = _stacked_field(t('project.timeline.detail_pm'))
         self._f_tm      = _stacked_field(t('project.timeline.detail_tm'))
         self._f_contrib = _stacked_field(t('project.timeline.detail_contrib'))
-        right.addStretch()
-
-        row.addWidget(left_w)
-        row.addWidget(self._vline())
-        row.addWidget(right_w)
         return w
 
     def _build_comment_components_section(self) -> QWidget:
@@ -474,46 +425,6 @@ class TaskDetailPanel(QWidget):
 
         return w
 
-    # ── photo helpers ─────────────────────────────────────────────────────────
-
-    def _pick_photo(self):
-        if not self._current_task:
-            return
-        path, _ = QFileDialog.getOpenFileName(
-            self, t('project.timeline.detail_photo_title'), '',
-            'Images (*.png *.jpg *.jpeg *.webp *.bmp)'
-        )
-        if path:
-            self._current_task.photo_path = path
-            self._show_photo(path)
-
-    def _remove_photo(self):
-        if self._current_task:
-            self._current_task.photo_path = ''
-        self._photo_frame.setText(t('project.timeline.detail_add_photo'))
-        self._photo_frame.setStyleSheet(f"""
-            QLabel {{
-                background: #f1f5f9;
-                border: 2px dashed {BORDER};
-                border-radius: 8px;
-                color: {MUTED};
-                font-size: 12px;
-            }}
-        """)
-        self._remove_photo_btn.hide()
-
-    def _show_photo(self, path: str):
-        pix = QPixmap(path)
-        if pix.isNull():
-            return
-        scaled = pix.scaled(_COL, _PHOTO_H, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
-        x = (scaled.width()  - _COL)    // 2
-        y = (scaled.height() - _PHOTO_H) // 2
-        cropped = scaled.copy(max(x, 0), max(y, 0), _COL, _PHOTO_H)
-        self._photo_frame.setPixmap(cropped)
-        self._photo_frame.setStyleSheet('border-radius: 8px; border: none;')
-        self._remove_photo_btn.show()
-
     # ── priority / extra helpers ──────────────────────────────────────────────
 
     def _set_priority(self, level: str):
@@ -585,12 +496,6 @@ class TaskDetailPanel(QWidget):
         self._delete_btn.setEnabled(True)
         self._save_btn.setEnabled(True)
 
-        # Photo
-        if task.photo_path:
-            self._show_photo(task.photo_path)
-        else:
-            self._remove_photo()
-
         # Comments
         self._comment_box.setPlainText('\n'.join(task.comments))
 
@@ -657,7 +562,6 @@ class TaskDetailPanel(QWidget):
             f.clear()
             f.setEnabled(False)
             f.blockSignals(False)
-        self._remove_photo()
         self._components_box.clear()
         self._components_box.setEnabled(False)
         for btn in self._priority_btns.values():
