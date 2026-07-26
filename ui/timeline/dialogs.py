@@ -111,6 +111,17 @@ class TaskFormDialog(FormModal):
         self.f_start = self.add_hfield(t('project.timeline.dlg_start'), EctoDateEdit(task.start if task else today()))
         self.f_end   = self.add_hfield(t('project.timeline.dlg_end'),   EctoDateEdit(task.end   if task else today().addDays(3)))
 
+        # Make it impossible to leave the end date earlier than the start date —
+        # nudge whichever field is now out of order back in line.
+        def _on_start_changed(date):
+            if self.f_end.date() < date:
+                self.f_end.setDate(date)
+        def _on_end_changed(date):
+            if date < self.f_start.date():
+                self.f_end.setDate(self.f_start.date())
+        self.f_start.dateChanged.connect(_on_start_changed)
+        self.f_end.dateChanged.connect(_on_end_changed)
+
         self.f_status = self.add_hfield(t('project.timeline.dlg_status'), QComboBox())
         self.f_status.addItems([
             t('project.timeline.dlg_status_progress'),
