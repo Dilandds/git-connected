@@ -659,7 +659,7 @@ class TheProjectWidget(QWidget):
 
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
-        bar.setFixedHeight(42)
+        bar.setFixedHeight(34)
         bar.setStyleSheet(f"""
             QWidget {{
                 background-color: {_SIDEBAR};
@@ -670,23 +670,31 @@ class TheProjectWidget(QWidget):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(8)
 
+        # New Project / Open Project / Save Project / Password are now available from
+        # the always-visible File menu button in the main mode bar (stl_viewer.py),
+        # so the duplicate buttons here are hidden rather than deleted — this keeps
+        # _update_lock_btn()/_retranslate_topbar()/etc. working unchanged since they
+        # still reference these widgets, while freeing up this bar visually.
         self._new_btn = QPushButton(t('project.topbar.new'))
         self._new_btn.setStyleSheet(_BTN_TOOLBAR); self._new_btn.setFixedHeight(28)
         self._new_btn.setCursor(Qt.PointingHandCursor)
         self._new_btn.setToolTip(t('project.topbar.tip_new'))
         self._new_btn.clicked.connect(self._on_new_project)
+        self._new_btn.hide()
 
         self._open_btn = QPushButton(t('project.topbar.open'))
         self._open_btn.setStyleSheet(_BTN_TOOLBAR); self._open_btn.setFixedHeight(28)
         self._open_btn.setCursor(Qt.PointingHandCursor)
         self._open_btn.setToolTip(t('project.topbar.tip_open'))
         self._open_btn.clicked.connect(self._on_open_project)
+        self._open_btn.hide()
 
         self._save_btn = QPushButton(t('project.topbar.save'))
         self._save_btn.setStyleSheet(_BTN_SAVE); self._save_btn.setFixedHeight(28)
         self._save_btn.setCursor(Qt.PointingHandCursor)
         self._save_btn.setToolTip(t('project.topbar.tip_save'))
         self._save_btn.clicked.connect(self._on_save_project)
+        self._save_btn.hide()
 
         self._print_btn = QPushButton(t('project.topbar.print'))
         self._print_btn.setStyleSheet(_BTN_TOOLBAR); self._print_btn.setFixedHeight(28)
@@ -699,11 +707,8 @@ class TheProjectWidget(QWidget):
         self._lock_btn.setCursor(Qt.PointingHandCursor)
         self._lock_btn.setToolTip(t('project.topbar.tip_password'))
         self._lock_btn.clicked.connect(self._on_password_btn)
+        self._lock_btn.hide()
 
-        layout.addWidget(self._new_btn)
-        layout.addWidget(self._open_btn)
-        layout.addWidget(self._save_btn)
-        layout.addWidget(self._lock_btn)
         layout.addWidget(self._print_btn)
 
         self._project_name_lbl = QLabel(t('project.topbar.no_project'))
