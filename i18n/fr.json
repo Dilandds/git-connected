@@ -7,7 +7,7 @@
     "help": "❓ Aide"
   },
   "sidebar": {
-    "title": "LYNS",
+    "title": "LYNS 360",
     "upload_btn": "Importer un Fichier 3D",
     "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .DXF / .LYNS",
     "upload_tooltip": "Importer ou déposer directement un fichier STL, STEP, 3DM, OBJ, IGES ou DXF ",
