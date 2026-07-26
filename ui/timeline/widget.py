@@ -981,7 +981,7 @@ class TimelineWidget(QWidget):
             from ui.modal_utils import show_message_dialog
             show_message_dialog(
                 self, t('project.timeline.select_operator'),
-                'Please select an operator tab first.\n\nOperations and tasks belong to a specific operator.'
+                t('project.timeline.select_operator_body')
             )
             return False
         return True
@@ -1033,8 +1033,7 @@ class TimelineWidget(QWidget):
                 from ui.modal_utils import show_message_dialog
                 show_message_dialog(
                     self, t('project.timeline.no_op_selected'),
-                    'The selected operator has no operations yet.\n\n'
-                    'Add at least one operation to the operator first, then add a task.'
+                    t('project.timeline.no_op_selected_body')
                 )
                 return
             d = dlg.get_task_data()
