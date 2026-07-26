@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from ui.styles import make_font
-from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, BTN_PRIMARY, BTN_SECONDARY
+from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, _ACCENT, BTN_PRIMARY, BTN_SECONDARY
 from i18n import t
 from .section_overview    import ProductOverviewCard
 from .section_techniques  import TechniquesCard
@@ -81,8 +81,8 @@ class ProjectBriefWidget(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet(f"""
             QScrollArea {{ background-color: {_BG}; border: none; }}
-            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
-            QScrollBar::handle:vertical {{ background: {_BORDER_L}; border-radius: 3px; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 12px; border-radius: 6px; }}
+            QScrollBar::handle:vertical {{ background: {_ACCENT}; border-radius: 6px; min-height: 30px; }}
         """)
 
         body = QWidget()

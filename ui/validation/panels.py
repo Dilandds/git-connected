@@ -144,8 +144,8 @@ class PreparationPanel(QScrollArea):
         self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet(f"""
             QScrollArea {{ background: {_BG}; border: none; }}
-            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
-            QScrollBar::handle:vertical {{ background: {_BORDER}; border-radius: 3px; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 12px; border-radius: 6px; }}
+            QScrollBar::handle:vertical {{ background: {_ACCENT}; border-radius: 6px; min-height: 30px; }}
         """)
         self._body = QWidget()
         self._body.setStyleSheet(f"background: {_BG};")
@@ -562,8 +562,8 @@ class ReportPanel(QScrollArea):
         self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet(f"""
             QScrollArea {{ background: {_BG}; border: none; }}
-            QScrollBar:vertical {{ background: {_BG}; width: 6px; border-radius: 3px; }}
-            QScrollBar::handle:vertical {{ background: {_BORDER}; border-radius: 3px; }}
+            QScrollBar:vertical {{ background: {_BG}; width: 12px; border-radius: 6px; }}
+            QScrollBar::handle:vertical {{ background: {_ACCENT}; border-radius: 6px; min-height: 30px; }}
         """)
         body = QWidget()
         body.setStyleSheet(f"background: {_BG};")
