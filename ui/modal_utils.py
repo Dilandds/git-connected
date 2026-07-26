@@ -135,7 +135,7 @@ def _build_light_stylesheet() -> str:
             background-color: #f5f6f8;
             color: #111827;
             border: 1px solid #d1d5db;
-            border-radius: 4px; padding: 4px 8px; font-size: 11px;
+            border-radius: 4px; padding: 4px 8px; font-size: 13px;
         }}
         QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus,
         QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QDateEdit:focus {{
@@ -202,7 +202,7 @@ class BaseModal(QDialog):
         """ALL-CAPS muted field label."""
         l = QLabel(text.upper())
         l.setStyleSheet(
-            f'color: {self._muted}; font-size: 9px; font-weight: bold; '
+            f'color: {self._muted}; font-size: 11px; font-weight: bold; '
             f'background: transparent; border: none;'
         )
         return l
