@@ -453,6 +453,9 @@
     "msg": {
       "unsaved_title": "Unsaved Changes",
       "unsaved_body": "You have unsaved changes. Discard them?",
+      "unsaved_discard": "Discard",
+      "save_success_title": "Project Saved",
+      "save_success_body": "Project saved successfully.",
       "nothing_to_print": "Nothing to print",
       "open_section": "Please open a section first, then click Print.",
       "open_failed": "Open Failed",

@@ -453,6 +453,9 @@
     "msg": {
       "unsaved_title": "Modifications non enregistrées",
       "unsaved_body": "Vous avez des modifications non enregistrées. Les ignorer ?",
+      "unsaved_discard": "Ignorer",
+      "save_success_title": "Projet enregistré",
+      "save_success_body": "Projet enregistré avec succès.",
       "nothing_to_print": "Rien à imprimer",
       "open_section": "Veuillez d'abord ouvrir une section, puis cliquer sur Imprimer.",
       "open_failed": "Échec de l'ouverture",

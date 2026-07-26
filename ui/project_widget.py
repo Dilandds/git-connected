@@ -1022,6 +1022,9 @@ class TheProjectWidget(QWidget):
         except Exception as e:
             logger.error(f'Failed to save project: {e}', exc_info=True)
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
+        else:
+            from ui.modal_utils import show_message_dialog
+            show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
 
     def _on_save_project_as(self):
         """Always prompt for a new file path and save there, regardless of
@@ -1045,6 +1048,9 @@ class TheProjectWidget(QWidget):
         except Exception as e:
             logger.error(f'Failed to save project as: {e}', exc_info=True)
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
+        else:
+            from ui.modal_utils import show_message_dialog
+            show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
 
     def _save_project(self, path: str):
         now = datetime.now(timezone.utc).isoformat()
@@ -1291,11 +1297,24 @@ class TheProjectWidget(QWidget):
                     self.mark_unsaved()
 
     def _confirm_discard(self) -> bool:
-        reply = QMessageBox.question(
+        # Uses the app's own light-themed modal (white background, dark text)
+        # with translated button labels, instead of QMessageBox.question —
+        # Qt's native standard-button labels ("Discard"/"Cancel") don't pick
+        # up the app's French translation since no Qt translation file is
+        # loaded for them.
+        from ui.modal_utils import MessageModal, BaseModal
+        dlg = MessageModal(
             self, t('project.msg.unsaved_title'), t('project.msg.unsaved_body'),
-            QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Cancel
+            theme=BaseModal.LIGHT,
+            primary_text=t('project.msg.unsaved_discard'),
+            secondary_text=t('common.cancel'),
         )
-        return reply == QMessageBox.Discard
+        result = {'discard': False}
+        dlg.primary_btn.clicked.connect(lambda: (result.update(discard=True), dlg.accept()))
+        if dlg.secondary_btn:
+            dlg.secondary_btn.clicked.connect(lambda: (result.update(discard=False), dlg.reject()))
+        dlg.exec_()
+        return result['discard']
 
     def _update_title(self):
         if self._project_path:
