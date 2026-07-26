@@ -499,6 +499,13 @@ class GanttCanvas(QWidget):
                 if self._hovered_operation is not None:
                     self._hovered_operation = None
                     self.update()
+                # Word is cutted — reveal the full name on hover when it
+                # doesn't fit the bar (mirrors the marquee-on-hover cards
+                # used in Traceability).
+                day_w = self._day_w()
+                bar_w = max(task.start.daysTo(task.end) * day_w, day_w)
+                fm = QFontMetrics(make_font(size=11, bold=task.is_urgent))
+                self.setToolTip(task.name if fm.horizontalAdvance(task.name) > bar_w - 10 else '')
             elif event.pos().x() < OP_LABEL_W:
                 hovered = None
                 for y_top, y_bot, _op, oper in self._operation_hit_rects:
@@ -509,11 +516,17 @@ class GanttCanvas(QWidget):
                     self._hovered_operation = hovered
                     self.update()
                 self.setCursor(Qt.PointingHandCursor if hovered else Qt.ArrowCursor)
+                if hovered is not None:
+                    fm = QFontMetrics(make_font(size=11))
+                    self.setToolTip(hovered.name if fm.horizontalAdvance(hovered.name) > OP_LABEL_W - 32 else '')
+                else:
+                    self.setToolTip('')
             else:
                 if self._hovered_operation is not None:
                     self._hovered_operation = None
                     self.update()
                 self.setCursor(Qt.ArrowCursor)
+                self.setToolTip('')
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._dragging_task:
