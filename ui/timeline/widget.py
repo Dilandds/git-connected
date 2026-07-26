@@ -686,14 +686,14 @@ class TimelineWidget(QWidget):
         layout.addStretch()
 
         prev = QPushButton('◀'); prev.setFixedSize(32, 28); prev.setStyleSheet(_BTN_SMALL)
-        prev.setCursor(Qt.PointingHandCursor); prev.clicked.connect(lambda: self._shift_date(-14))
+        prev.setCursor(Qt.PointingHandCursor); prev.clicked.connect(lambda: self._shift_date(-1))
 
         self._date_lbl = QLabel()
         self._date_lbl.setStyleSheet(f'color: {TEXT}; font-size: 12px; font-weight: bold; background: transparent; border: none;')
         self._update_date_label()
 
         nxt = QPushButton('▶'); nxt.setFixedSize(32, 28); nxt.setStyleSheet(_BTN_SMALL)
-        nxt.setCursor(Qt.PointingHandCursor); nxt.clicked.connect(lambda: self._shift_date(14))
+        nxt.setCursor(Qt.PointingHandCursor); nxt.clicked.connect(lambda: self._shift_date(1))
 
         layout.addWidget(prev); layout.addWidget(self._date_lbl); layout.addWidget(nxt)
         layout.addSpacing(8)
@@ -790,11 +790,20 @@ class TimelineWidget(QWidget):
 
     # ── controls ──────────────────────────────────────────────────────────────
 
-    def _shift_date(self, days: int):
-        self._canvas._start_date = self._canvas._start_date.addDays(days)
-        self._canvas._start_date = self._snap_start_date(
-            self._canvas._start_date, self._view_mode
-        )
+    def _shift_date(self, direction: int):
+        """direction is -1 (back) or +1 (forward). Steps by a whole calendar
+        unit matching the current view so Month/Year navigation always
+        actually crosses into the next period — a fixed 14-day step landed
+        back on the same month after snapping to day 1, which made the
+        forward button appear broken while back still worked."""
+        d = self._canvas._start_date
+        if self._view_mode == 'Year':
+            d = d.addYears(direction)
+        elif self._view_mode == 'Month':
+            d = d.addMonths(direction)
+        else:
+            d = d.addDays(direction * 14)
+        self._canvas._start_date = self._snap_start_date(d, self._view_mode)
         self._update_date_label(); self._canvas.update()
 
     def _snap_start_date(self, date: QDate, mode: str) -> QDate:
