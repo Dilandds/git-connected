@@ -726,6 +726,8 @@
       "view_month": "Mois",
       "view_year": "Année",
       "dlg_add_operator": "Ajouter un opérateur",
+      "dlg_rename_operator": "Renommer l'opérateur",
+      "dlg_rename_operator_tip": "Double-cliquez pour renommer",
       "dlg_op_name_field": "NOM OPÉRATEUR / ENTREPRISE",
       "dlg_op_name_ph": "Nom de l'opérateur ou de l'entreprise",
       "dlg_add_operation": "Ajouter une opération",

@@ -21,13 +21,15 @@ from i18n import t
 # ── Add Operator ──────────────────────────────────────────────────────────────
 
 class _AddOperatorDialog(FormModal):
-    def __init__(self, parent=None):
-        super().__init__(parent, t('project.timeline.dlg_add_operator'), theme=FormModal.LIGHT, min_width=380)
-        self.f_name = self.add_field(t('project.timeline.dlg_op_name_field'), QLineEdit())
+    def __init__(self, parent=None, initial_name: str = '', title: Optional[str] = None):
+        super().__init__(parent, title or t('project.timeline.dlg_add_operator'), theme=FormModal.LIGHT, min_width=380)
+        self.f_name = self.add_field(t('project.timeline.dlg_op_name_field'), QLineEdit(initial_name))
         self.f_name.setPlaceholderText(t('project.timeline.dlg_op_name_ph'))
         self.finish()
         self.f_name.returnPressed.connect(self.ok_btn.click)
         self.f_name.setFocus()
+        if initial_name:
+            self.f_name.selectAll()
 
     @property
     def name(self) -> str:

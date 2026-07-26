@@ -766,7 +766,9 @@ class TimelineWidget(QWidget):
             btn = QPushButton(op.name); btn.setFixedHeight(28)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_TAB_ACTIVE_L if is_active else _TAB_INACTIVE_L)
+            btn.setToolTip(t('project.timeline.dlg_rename_operator_tip'))
             btn.clicked.connect(lambda _, idx=i: self._switch_tab(idx))
+            btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_operator(idx)
 
             close_btn = QPushButton('×'); close_btn.setFixedHeight(28); close_btn.setFixedWidth(22)
             close_btn.setCursor(Qt.PointingHandCursor)
@@ -938,6 +940,18 @@ class TimelineWidget(QWidget):
             op = Operator(self._next_op_id, dlg.name)
             self._next_op_id += 1
             self._operators.append(op)
+            self._canvas.set_operators(self._operators)
+            self._refresh_tabs(); self.changed.emit()
+
+    def _rename_operator(self, idx: int):
+        """Double-click an operator's tab to modify its name."""
+        if idx < 0 or idx >= len(self._operators):
+            return
+        op = self._operators[idx]
+        dlg = _AddOperatorDialog(self, initial_name=op.name,
+                                  title=t('project.timeline.dlg_rename_operator'))
+        if dlg.exec_() == QDialog.Accepted and dlg.name:
+            op.name = dlg.name
             self._canvas.set_operators(self._operators)
             self._refresh_tabs(); self.changed.emit()
 
