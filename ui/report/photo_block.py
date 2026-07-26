@@ -58,18 +58,18 @@ _SLOT_FILLED = f"""
 _CAPTION_STYLE = f"""
     QLineEdit {{
         background: {_INPUT_BG}; border: 1px solid {_BORDER};
-        border-radius: 6px; color: #374151; font-size: 12px; padding: 2px 8px;
+        border-radius: 6px; color: #374151; font-size: 13px; padding: 2px 8px;
     }}
     QLineEdit:focus {{ border-color: {_ACCENT}; background: #ffffff; }}
 """
 _COMMENT_STYLE = f"""
     QTextEdit {{
         background: {_INPUT_BG}; border: 1px solid {_BORDER};
-        border-radius: 6px; color: #374151; font-size: 12px; padding: 4px 8px;
+        border-radius: 6px; color: #374151; font-size: 13px; padding: 4px 8px;
     }}
     QTextEdit:focus {{ border-color: {_ACCENT}; background: #ffffff; }}
 """
-_LBL_STYLE = f"color: {_MUTED}; font-size: 11px; font-weight: 600; background: transparent; border: none;"
+_LBL_STYLE = f"color: {_MUTED}; font-size: 13px; font-weight: 600; background: transparent; border: none;"
 _REMOVE_STYLE = f"""
     QPushButton {{
         background: #ef4444; color: #ffffff;

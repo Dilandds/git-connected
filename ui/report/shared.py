@@ -149,7 +149,7 @@ def _card(parent=None) -> QFrame:
     return f
 
 
-def _lbl(text: str, muted=True, bold=False, size=10) -> QLabel:
+def _lbl(text: str, muted=True, bold=False, size=13) -> QLabel:
     l = QLabel(text)
     l.setStyleSheet(
         f"color: {'#6b7280' if muted else _TEXT}; font-size: {size}px; "
