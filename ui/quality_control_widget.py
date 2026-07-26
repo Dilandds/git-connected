@@ -1002,8 +1002,33 @@ class _DeleteBtn(QPushButton):
         p.end()
 
 
+class _InspHoverPreview(QLabel):
+    """Floating enlarged preview shown while hovering an inspection thumbnail."""
+
+    _SIZE = 240
+
+    def __init__(self, pixmap: QPixmap):
+        super().__init__(None, Qt.ToolTip | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        scaled = pixmap.scaled(self._SIZE, self._SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.setPixmap(scaled)
+        self.setStyleSheet(
+            f'background: {_SURFACE}; border: 2px solid {_ACCENT}; border-radius: 10px; padding: 4px;'
+        )
+        self.setFixedSize(scaled.size().width() + 12, scaled.size().height() + 12)
+
+    def show_near(self, global_pos):
+        # Offset so the preview appears above-right of the cursor without covering the thumbnail.
+        self.move(global_pos.x() + 16, global_pos.y() - self.height() - 16)
+        self.show()
+        self.raise_()
+
+
 class _InspThumbCard(QFrame):
-    """Single inspection image thumbnail with an × delete button and click-to-view."""
+    """Single inspection image thumbnail with an × delete button and click-to-view.
+
+    On hover, an enlarged floating preview of the image is shown next to the cursor.
+    """
     delete_requested = pyqtSignal()
     image_clicked    = pyqtSignal()
 
@@ -1014,6 +1039,9 @@ class _InspThumbCard(QFrame):
         super().__init__(parent)
         self.setFixedSize(84, 84)
         self.setStyleSheet(self._IDLE_SS)
+        self.setMouseTracking(True)
+        self._pixmap = pixmap
+        self._hover_preview: Optional[_InspHoverPreview] = None
 
         img = QLabel(self)
         img.setGeometry(2, 2, 80, 80)
@@ -1023,6 +1051,9 @@ class _InspThumbCard(QFrame):
         img.setStyleSheet('border: none; background: transparent;')
         img.setCursor(Qt.PointingHandCursor)
         img.mousePressEvent = lambda e: self.image_clicked.emit()
+        img.setMouseTracking(True)
+        img.enterEvent = self._on_hover_enter
+        img.leaveEvent = self._on_hover_leave
 
         del_btn = _DeleteBtn(self)
         del_btn.move(64, -2)
@@ -1031,6 +1062,20 @@ class _InspThumbCard(QFrame):
 
     def set_active(self, active: bool):
         self.setStyleSheet(self._ACTIVE_SS if active else self._IDLE_SS)
+
+    def _on_hover_enter(self, event):
+        if self._hover_preview is None:
+            self._hover_preview = _InspHoverPreview(self._pixmap)
+        self._hover_preview.show_near(self.mapToGlobal(self.rect().topRight()))
+
+    def _on_hover_leave(self, event):
+        if self._hover_preview is not None:
+            self._hover_preview.hide()
+
+    def leaveEvent(self, event):
+        if self._hover_preview is not None:
+            self._hover_preview.hide()
+        super().leaveEvent(event)
 
 
 # ── _QCLeftPanel ──────────────────────────────────────────────────────────────
