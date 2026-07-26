@@ -643,7 +643,25 @@ class TimelineWidget(QWidget):
         self._legend_area_layout.setSpacing(6)
         self._legend_btns: dict[str, QPushButton] = {}
         self._rebuild_legend_area()
-        layout.addWidget(self._legend_area)
+
+        # Wrap in a horizontally-scrollable strip so a long legend (many task
+        # types) never pushes the date/view controls off the bar — it scrolls
+        # in its own lane between the legend label and the Gantt operations.
+        legend_scroll = QScrollArea()
+        legend_scroll.setWidget(self._legend_area)
+        legend_scroll.setWidgetResizable(True)
+        legend_scroll.setFrameShape(QFrame.NoFrame)
+        legend_scroll.setFixedHeight(30)
+        legend_scroll.setMaximumWidth(320)
+        legend_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        legend_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        legend_scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:horizontal {{ background: {BG}; height: 10px; border-radius: 5px; }}
+            QScrollBar::handle:horizontal {{ background: {ACCENT}; border-radius: 5px; min-width: 30px; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
+        """)
+        layout.addWidget(legend_scroll)
 
         layout.addStretch()
 
