@@ -57,6 +57,382 @@ from ui.styles import get_global_stylesheet
 from ui.modal_utils import show_message_dialog
 
 
+def _parse_screenshot_mode_args(argv):
+    """Return (enabled: bool, outdir: str) parsed from sys.argv."""
+    enabled = "--screenshot-mode" in argv
+    outdir = "screenshots"
+    if "--screenshot-outdir" in argv:
+        idx = argv.index("--screenshot-outdir")
+        if idx + 1 < len(argv):
+            outdir = argv[idx + 1]
+    return enabled, outdir
+
+
+def _pump_events(app, ms=400, step=50):
+    """Process the Qt event loop for `ms` milliseconds so async paints
+    (e.g. the pygfx canvas's deferred QTimer.singleShot(100, ...) init in
+    viewer_widget_pygfx.py) have a chance to complete before .grab()."""
+    import time
+    elapsed = 0
+    while elapsed < ms:
+        app.processEvents()
+        time.sleep(step / 1000.0)
+        elapsed += step
+    app.processEvents()
+
+
+def run_screenshot_mode(app, window, outdir):
+    """Walk SCREENSHOT_TARGETS, grab() each state, save as PNG, then return.
+    Each target is isolated in its own try/except so one failure doesn't
+    abort the remaining captures."""
+    os.makedirs(outdir, exist_ok=True)
+
+    def _capture(name):
+        _pump_events(app)
+        pixmap = window.grab()
+        path = os.path.join(outdir, f"{name}.png")
+        ok = pixmap.save(path)
+        logger.info(f"screenshot-mode: saved {path} ({'ok' if ok else 'FAILED'})")
+
+    def _load_sample_model(win):
+        """Load the bundled sample STL into the current tab so the 3D
+        viewport has real rendered geometry instead of the empty
+        drag-and-drop state. Idempotent — safe to call more than once."""
+        sample_stl = Path(__file__).parent / "test.stl"
+        if sample_stl.exists():
+            win._load_file_into_current_tab(str(sample_stl))
+            _pump_events(app)
+
+    def _view_3d_with_model(win):
+        win._switch_mode("3d")
+        _load_sample_model(win)
+
+    # A maximized capture window (e.g. 1920x1050) is wide/tall enough that the
+    # toolbar and sidebar don't overflow, so there'd be nothing to scroll to.
+    # Shrink to a common laptop-ish size for the two "scrolled" targets below
+    # to reliably reproduce the overflow, then restore it for every target
+    # after (_restore_window_size, wired into 02_technical_overview).
+    _original_size = window.size()
+    _SMALL_SIZE = (1280, 800)
+
+    def _toolbar_scrolled(win):
+        # The top toolbar overflows and scrolls horizontally
+        # (ui/toolbar.py's self.toolbar_scroll, a QScrollArea) — scroll it
+        # all the way right so icons past the fold (Fullscreen, folder,
+        # refresh, etc.) are visible too.
+        win._switch_mode("3d")
+        _load_sample_model(win)
+        win.resize(*_SMALL_SIZE)
+        _pump_events(app)
+        hbar = win.toolbar.toolbar_scroll.horizontalScrollBar()
+        hbar.setValue(hbar.maximum())
+
+    def _sidebar_scrolled(win):
+        # The left sidebar (Dimensions/Weight/Surface Area/Export) is inside
+        # a QScrollArea (ui/sidebar_panel.py, objectName "sidebarScrollArea")
+        # taller than the viewport — scroll it to the bottom so the Export
+        # section is visible too.
+        from PyQt5.QtWidgets import QScrollArea
+        win._switch_mode("3d")
+        _load_sample_model(win)
+        win.resize(*_SMALL_SIZE)
+        _pump_events(app)
+        scroll = win.sidebar_panel.findChild(QScrollArea, "sidebarScrollArea")
+        if scroll is not None:
+            vbar = scroll.verticalScrollBar()
+            vbar.setValue(vbar.maximum())
+
+    def _restore_window_size(win):
+        win.resize(_original_size)
+        _pump_events(app)
+
+    def _enable_screenshot_panel(win):
+        # The screenshot side panel only lives inside the 3D Viewer workspace —
+        # switch there first or the toggle has nothing visible to attach to.
+        win._switch_mode("3d")
+        # enable_screenshot_mode() (viewer_widget_pygfx.py) requires a loaded
+        # model and silently no-ops on an empty viewport — load the bundled
+        # sample STL first so the panel actually has something to show.
+        _load_sample_model(win)
+        win.toolbar.screenshot_mode_enabled = True
+        win._toggle_screenshot_mode()
+
+    # "The Project" mode has its own sidebar with 14 sub-screens (ui/project_widget.py's
+    # TheProjectWidget). Capture each one individually via project_widget._nav.select(key) —
+    # confirmed to work against a fresh/blank project with no login gate or data requirement.
+    PROJECT_SECTIONS = [
+        "brief", "assignment", "timeline", "validation", "quality_control", "report",
+        "estimated_cost", "files", "rd", "prototype", "version_comparison",
+        "traceability", "todo", "glossary",
+    ]
+
+    def _project_section(key):
+        def _go(win):
+            win._switch_mode("project")
+            win.project_widget._nav.select(key)
+        return _go
+
+    def _rd_sub_tab(idx):
+        def _go(win):
+            win._switch_mode("project")
+            win.project_widget._nav.select("rd")
+            win.project_widget._screen_widgets["rd"].switch_tab(idx)
+        return _go
+
+    def _seed_project_data(win):
+        """Populate each Project sidebar section with representative sample
+        data via each widget's own set_data(dict) API (the same schema used
+        for save/load), so screenshots show real content instead of blank
+        forms. Each section is isolated in its own try/except — a schema
+        mismatch in one section just leaves it blank, same as before,
+        rather than aborting the whole run."""
+        assets = Path(__file__).parent / "assets"
+        img_blue = str(assets / "color_blue.jpg")
+        img_green = str(assets / "color_green.jpg")
+        metal = str(assets / "brushed_metal.jpg")
+
+        pw = win.project_widget
+        win._switch_mode("project")
+
+        def _seed(key, fn):
+            try:
+                pw._nav.select(key)  # lazily instantiates the section widget
+                _pump_events(app, ms=100)
+                widget = pw._screen_widgets.get(key)
+                if widget is not None:
+                    fn(widget)
+                    _pump_events(app, ms=100)
+            except Exception as e:
+                logger.warning(f"screenshot-mode: seed '{key}' failed: {e}")
+
+        _seed("brief", lambda w: w.update_project_info({
+            "title": "LYNS Sample Ring", "number": "LYNS-2026-001",
+            "photo_path": img_blue,
+        }) if hasattr(w, "update_project_info") else None)
+
+        # AreaCard.x/.y are absolute pixel coordinates on the canvas (not
+        # fractions) — A4 portrait area is 560x793, card size is 148x88
+        # (ui/assignment_widget.py _A4_W_PORTRAIT/_CARD_W constants).
+        _seed("assignment", lambda w: w.set_data({
+            "cards": [
+                {"id": "c1", "title": "Body", "supplier": "Acme Casting", "status": "In progress",
+                 "number": 1, "x": 150, "y": 180, "color": "#3b82f6", "arrows": []},
+                {"id": "c2", "title": "Setting", "supplier": "Precision Stones", "status": "Done",
+                 "number": 2, "x": 260, "y": 420, "color": "#22c55e", "arrows": []},
+            ],
+            "image_name": "test.stl", "image_path": "",
+            "orientation": "portrait", "font_family": "Arial", "font_size": 10,
+        }))
+
+        def _seed_timeline(w):
+            # sample_data() returns real Operator/Operation/Task dataclass
+            # instances (the widget's own demo-data generator); set_data()
+            # expects plain dicts (the get_data()/save-load schema) — convert
+            # using the exact same shape TimelineWidget.get_data() produces.
+            from ui.timeline.models import sample_data
+            def _task_d(t):
+                return {
+                    'id': t.id, 'name': t.name,
+                    'start': t.start.toString('yyyy-MM-dd'),
+                    'end': t.end.toString('yyyy-MM-dd'),
+                    'task_type': t.task_type, 'is_urgent': t.is_urgent,
+                    'status': t.status, 'comments': t.comments,
+                    'project_manager': t.project_manager,
+                    'technical_manager': t.technical_manager,
+                    'contributors': t.contributors,
+                }
+            def _op_d(o):
+                return {'id': o.id, 'name': o.name, 'tasks': [_task_d(t) for t in o.tasks]}
+            def _operator_d(op):
+                return {'id': op.id, 'name': op.name, 'operations': [_op_d(o) for o in op.operations]}
+            w.set_data({'operators': [_operator_d(op) for op in sample_data()]})
+        _seed("timeline", _seed_timeline)
+
+        _seed("validation", lambda w: w.set_data({
+            "sessions": [{
+                "id": 1, "date": "2026-07-20",
+                "stakeholders": [{"id": 1, "name": "Client Co.", "role": "Client"}],
+                "modifications": [], "action_plan": [],
+                "ceo_feedback": "Looks great, proceed.",
+                "risks": "None identified.",
+            }],
+        }))
+
+        def _seed_report(w):
+            # _default_report() returns a real Report dataclass instance, not
+            # the dict shape set_data() parses — assign directly and replicate
+            # set_data()'s own post-assignment refresh calls.
+            # NOTE: the Project sidebar's "report" section imports ReportWidget
+            # from the ui/report package (ui/project_widget.py:194), not the
+            # separate legacy ui/report_widget.py module — its Report dataclass
+            # is structurally different (has project_photo_path etc.).
+            from ui.report.models import _default_report
+            w._reports = [_default_report(1)]
+            w._rebuild_all()
+            w._switch_report(0)
+        _seed("report", _seed_report)
+
+        _seed("quality_control", lambda w: w.set_data({
+            "inspection_date": "2026-07-20", "inspected_by": "QC Team",
+            "comments": "All checks passed within tolerance.",
+            "inspection_images": [], "image_annotations": [], "logo_data": "",
+            "designation": "LYNS Ring Batch 1", "reference_number": "QC-2026-001",
+            "manufacturer": "Acme Casting", "inspection_due_date": "2026-08-01",
+            "overall_status": "approved", "waived_by": "",
+            "control_points": [
+                {"id": 1, "name": "Diameter", "status": "ok", "comment": "Within spec",
+                 "annotation_id": None, "color": "#22c55e"},
+                {"id": 2, "name": "Surface finish", "status": "ok", "comment": "Smooth",
+                 "annotation_id": None, "color": "#22c55e"},
+                {"id": 3, "name": "Weight", "status": "to_check", "comment": "",
+                 "annotation_id": None, "color": "#f59e0b"},
+            ],
+        }))
+
+        _seed("estimated_cost", lambda w: w.set_data({
+            "currency": "EUR",
+            "trades": [{"id": 1, "name": "Casting", "partners": [
+                {"id": 1, "name": "Acme Casting", "activity": "Casting",
+                 "start_date": "2026-07-01", "delivery_date": "2026-07-10",
+                 "is_best": True, "tax_rate": 20.0, "tasks": [
+                     {"component": "Body", "task": "Cast", "hours": 4.0, "hourly_rate": 35.0},
+                 ]},
+            ]}],
+        }))
+
+        def _seed_files(w):
+            import base64
+            sample_path = Path(__file__).parent / "test.stl"
+            if not sample_path.exists():
+                return
+            data_b64 = base64.b64encode(sample_path.read_bytes()).decode("ascii")
+            w.set_data({
+                "next_folder_id": 1, "next_file_id": 2, "folders": [],
+                "files": [{
+                    "id": 1, "name": "test.stl", "folder_id": None,
+                    "status": "In progress", "trashed": False,
+                    "versions": [{
+                        "version_str": "v1.0", "original_filename": "test.stl",
+                        "uploaded_at": "20/07/2026 10:00",
+                        "size_bytes": sample_path.stat().st_size,
+                        "file_data_b64": data_b64,
+                    }],
+                }],
+            })
+        _seed("files", _seed_files)
+
+        _seed("rd", lambda w: w.set_data({"components": [{
+            "id": "c1", "name": "Body", "supplier": "Acme", "color": "#3b82f6",
+            "brief": {"objective": "Durable finish", "constraints": "Budget-friendly",
+                      "budget_min": 5.0, "budget_max": 20.0, "quantity": 100,
+                      "quantity_unit": "pcs", "notes": []},
+            "proposals": [
+                {"id": "p1", "name": "Blue anodized", "category": "Metal", "treatment": "Anodizing",
+                 "origin": "EU", "supplier": "Acme", "status": "selected",
+                 "image_path": img_blue, "notes": "Preferred"},
+                {"id": "p2", "name": "Green anodized", "category": "Metal", "treatment": "Anodizing",
+                 "origin": "EU", "supplier": "Acme", "status": "in_evaluation",
+                 "image_path": img_green, "notes": ""},
+            ],
+            "technique_proposals": [
+                {"id": "t1", "name": "CNC Machining", "process_type": "Subtractive",
+                 "equipment": "5-axis CNC", "parameters": "1000 RPM", "lead_time": "3 days",
+                 "complexity": "Medium", "supplier": "Acme", "notes": "",
+                 "status": "selected", "image_path": metal},
+            ],
+        }]}))
+
+        _seed("prototype", lambda w: w.set_data({
+            "versions": [
+                {"id": "v1", "version_number": 1, "date": "2026-07-01", "status": "in_progress",
+                 "comments": "First iteration", "image_paths": [img_blue], "file_paths": []},
+                {"id": "v2", "version_number": 2, "date": "2026-07-15", "status": "approved",
+                 "comments": "Final adjustments made", "image_paths": [img_green], "file_paths": []},
+            ],
+            "next_number": 3,
+        }))
+
+        _seed("version_comparison", lambda w: w.set_data({
+            "next_id": 3,
+            "cards": [
+                {"id": 1, "star_number": 1, "photo_paths": [img_blue], "version": "v1.0",
+                 "positive_points": "Good fit", "negative_points": "Finish too dull",
+                 "comments": "", "cost": "120"},
+                {"id": 2, "star_number": 2, "photo_paths": [img_green], "version": "v2.0",
+                 "positive_points": "Improved finish", "negative_points": "",
+                 "comments": "Client favorite", "cost": "135"},
+            ],
+        }))
+
+        _seed("traceability", lambda w: w.set_data({
+            "version": 3,
+            # TraceComponent.id must be an int — the widget does
+            # max(c.id for c in components) + 1 arithmetic on it internally
+            # (ui/traceability/widget.py's update_components_from_brief).
+            "components": [{"id": 1, "name": "Body", "image_path": img_blue, "is_main": True,
+                             "stages": []}],
+        }))
+
+        _seed("todo", lambda w: w.set_data({"tasks": [
+            {"id": "t1", "title": "Confirm supplier quote", "date": "2026-07-26", "time": "10:00",
+             "reminder": 30, "done": False, "notes": "", "priority": "high"},
+            {"id": "t2", "title": "Review QC report", "date": "2026-07-28", "time": "",
+             "reminder": 0, "done": True, "notes": "Completed early", "priority": "medium"},
+        ]}))
+
+        _seed("glossary", lambda w: w.set_data({"next_id": 3, "terms": [
+            {"id": 1, "term": "Casting", "definition": "Process of pouring molten metal into a mold."},
+            {"id": 2, "term": "Anodizing", "definition": "Electrochemical process that increases corrosion resistance."},
+        ]}))
+
+    SCREENSHOT_TARGETS = {
+        "01_3d_viewer":            lambda win: win._switch_mode("3d"),
+        "01b_3d_viewer_with_model": _view_3d_with_model,
+        "01c_3d_viewer_toolbar_scrolled": _toolbar_scrolled,
+        "01d_3d_viewer_sidebar_scrolled": _sidebar_scrolled,
+        "02_technical_overview": lambda win: (_restore_window_size(win), win._switch_mode("technical")),
+        "03_drawing_scale":      lambda win: win._switch_mode("scale"),
+        "05_help":               lambda win: win._switch_mode("help"),
+        "06_screenshot_panel":   _enable_screenshot_panel,
+    }
+    # Insert one target per Project sidebar section: 04_project_<key>.
+    # "rd" is captured here first, in its fresh/default tab state — the two
+    # explicit sub-tab targets below run afterward and deliberately force
+    # each state (RdWidget's internal tab selection persists across
+    # _nav.select() calls, so forcing them first would leak into this one).
+    for _key in PROJECT_SECTIONS:
+        SCREENSHOT_TARGETS[f"04_project_{_key}"] = _project_section(_key)
+    SCREENSHOT_TARGETS["04_project_rd_0_textures"] = _rd_sub_tab(0)
+    SCREENSHOT_TARGETS["04_project_rd_1_techniques"] = _rd_sub_tab(1)
+
+    print("screenshot-mode: seeding Project sections with sample data...", file=sys.stderr)
+    safe_flush(sys.stderr)
+    try:
+        _seed_project_data(window)
+    except Exception as e:
+        print(f"screenshot-mode: seeding failed (non-fatal): {e}", file=sys.stderr)
+        safe_flush(sys.stderr)
+        logger.error("screenshot-mode: seeding failed", exc_info=True)
+
+    print(f"screenshot-mode: capturing {len(SCREENSHOT_TARGETS)} UI states to '{outdir}'...",
+          file=sys.stderr)
+    safe_flush(sys.stderr)
+    logger.info(f"screenshot-mode: capturing {len(SCREENSHOT_TARGETS)} targets to {outdir}")
+
+    for name, action in SCREENSHOT_TARGETS.items():
+        try:
+            action(window)
+            _capture(name)
+        except Exception as e:
+            print(f"screenshot-mode: target '{name}' FAILED: {e}", file=sys.stderr)
+            safe_flush(sys.stderr)
+            logger.error(f"screenshot-mode: target '{name}' failed", exc_info=True)
+
+    print(f"✓ screenshot-mode complete — output in '{outdir}'", file=sys.stderr)
+    safe_flush(sys.stderr)
+    logger.info("screenshot-mode: complete")
+
+
 def main():
     """Initialize and run the ECTOFORM application."""
     print("=" * 50, file=sys.stderr)
@@ -268,7 +644,14 @@ def main():
         
         # Give QtInteractor time to initialize (it will be triggered by showEvent)
         app.processEvents()
-        
+
+        # --- Hidden screenshot-mode: capture UI states and exit (no event loop) ---
+        screenshot_mode, screenshot_outdir = _parse_screenshot_mode_args(sys.argv)
+        if screenshot_mode:
+            splash.close()
+            run_screenshot_mode(app, window, screenshot_outdir)
+            return 0
+
         # Finish splash screen
         splash.finish(window)
         

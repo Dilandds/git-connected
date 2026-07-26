@@ -2815,6 +2815,7 @@ class STLViewerWindow(QMainWindow):
                     self.right_panel_stack.setCurrentWidget(self.screenshot_stack)
                     self.right_panel_stack.show()
                     self.screenshot_panel.show()
+                    self._restore_right_panel_width()
                     if hasattr(vw, 'reframe_for_viewport'):
                         QTimer.singleShot(50, vw.reframe_for_viewport)
                     self._show_snip_trigger()
