@@ -6,11 +6,12 @@ from typing import Optional
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QFrame, QLineEdit, QTextEdit, QScrollArea, QFileDialog, QSizePolicy,
-    QCheckBox, QDateEdit,
+    QCheckBox,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QPixmap
 from ui.styles import default_theme
+from ui.date_picker import EctoDateEdit
 from .models import Task, CARD, BORDER, TEXT, MUTED, ACCENT
 from i18n import t
 
@@ -362,22 +363,11 @@ class TaskDetailPanel(QWidget):
         ext_row.setSpacing(4)
         ext_row.setContentsMargins(0, 0, 0, 0)
 
-        self._delay_ext_edit = QDateEdit()
-        self._delay_ext_edit.setCalendarPopup(True)
+        # Use the app's own calendar widget (EctoDateEdit) — the stock QDateEdit
+        # popup wasn't letting users actually pick the extended date reliably.
+        self._delay_ext_edit = EctoDateEdit(QDate.currentDate())
         self._delay_ext_edit.setFixedHeight(24)
-        self._delay_ext_edit.setDisplayFormat('d MMM yyyy')
         self._delay_ext_edit.setEnabled(False)
-        self._delay_ext_edit.setStyleSheet(f"""
-            QDateEdit {{
-                background: #f5f6f8; color: {TEXT};
-                border: 1px solid {BORDER}; border-radius: 4px;
-                padding: 1px 4px; font-size: 11px;
-            }}
-            QDateEdit:focus {{ border-color: {ACCENT}; }}
-            QDateEdit:disabled {{ background: #f1f3f5; color: #9ca3af; }}
-            QDateEdit::drop-down {{ border: none; width: 16px; }}
-            QDateEdit QAbstractItemView {{ color: {TEXT}; background: white; }}
-        """)
         self._delay_ext_edit.dateChanged.connect(self._on_delay_ext_date_changed)
 
         self._delay_ext_clear = QPushButton('✕')
@@ -530,7 +520,6 @@ class TaskDetailPanel(QWidget):
         # Delay extension
         self._delay_ext_edit.blockSignals(True)
         self._delay_ext_cb.blockSignals(True)
-        self._delay_ext_edit.setMinimumDate(task.end.addDays(1))
         if task.delay_end and task.delay_end > task.end:
             self._delay_ext_cb.setChecked(True)
             self._delay_ext_edit.setDate(task.delay_end)
@@ -610,6 +599,9 @@ class TaskDetailPanel(QWidget):
 
     def _on_delay_ext_date_changed(self, date: QDate):
         if self._current_task and self._delay_ext_cb.isChecked():
+            if date <= self._current_task.end:
+                date = self._current_task.end.addDays(1)
+                self._delay_ext_edit.setDate(date)
             self._current_task.delay_end = date
             self.task_changed.emit()
 
