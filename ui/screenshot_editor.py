@@ -133,10 +133,10 @@ class _EditorCanvas(QWidget):
         self._offset = QPoint(0, 0)
         self._tool = TOOL_NONE
         self._color = '#000000'
-        self._line_width = 20
-        # Increase default font size so text remains readable when screenshots are scaled down
-        self._line_width = 28
-        self._font_size = 50
+        # Smaller default — the arrow/line was rendering oversized (esp. on Windows)
+        self._line_width = 16
+        # Default text size when editing a screenshot
+        self._font_size = 25
 
         # Annotation layers (stored in image coords)
         self._lines = []       # list of (QPointF start, QPointF end, color, width)
