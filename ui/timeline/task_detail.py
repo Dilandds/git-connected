@@ -236,9 +236,7 @@ class TaskDetailPanel(QWidget):
         self._comment_box.setPlaceholderText(t('project.timeline.detail_comment_ph'))
         self._comment_box.setFixedHeight(90)
         self._comment_box.setStyleSheet(_TEXTAREA_STYLE)
-        self._comment_box.textChanged.connect(
-            lambda: self._save_btn.setEnabled(self._current_task is not None)
-        )
+        self._comment_box.textChanged.connect(self._on_comment_changed)
         col.addWidget(self._comment_box)
 
         # ── Components Impacted (full width) ──────────────────────────────
@@ -251,26 +249,6 @@ class TaskDetailPanel(QWidget):
         self._components_box.setEnabled(False)
         self._components_box.textChanged.connect(self._on_components_changed)
         col.addWidget(self._components_box)
-
-        # ── Save button (aligned right, below components) ─────────────────
-        self._save_btn = QPushButton(t('project.timeline.detail_save'))
-        self._save_btn.setFixedHeight(26)
-        self._save_btn.setEnabled(False)
-        self._save_btn.setCursor(Qt.PointingHandCursor)
-        self._save_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {ACCENT}; color: white; border: none;
-                border-radius: 4px; font-size: 11px; font-weight: bold;
-                padding: 0 12px;
-            }}
-            QPushButton:hover {{ background-color: {default_theme.button_primary_hover}; }}
-            QPushButton:disabled {{ background-color: #e5e7eb; color: #9ca3af; }}
-        """)
-        self._save_btn.clicked.connect(self._save_comment)
-        save_row = QHBoxLayout(); save_row.setContentsMargins(0, 0, 0, 0)
-        save_row.addStretch()
-        save_row.addWidget(self._save_btn)
-        col.addLayout(save_row)
 
         return w
 
@@ -484,10 +462,11 @@ class TaskDetailPanel(QWidget):
         self._lbl_duration.setText(f"{t('project.timeline.label_duration')} {days} {day_word}")
         self._edit_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
-        self._save_btn.setEnabled(True)
 
-        # Comments
+        # Comments — persist live as you type, no save step needed
+        self._comment_box.blockSignals(True)
         self._comment_box.setPlainText('\n'.join(task.comments))
+        self._comment_box.blockSignals(False)
 
         # PM fields
         if not task.project_manager and self._global_pm:
@@ -541,7 +520,6 @@ class TaskDetailPanel(QWidget):
         self._current_task = None
         self._edit_btn.setEnabled(False)
         self._delete_btn.setEnabled(False)
-        self._save_btn.setEnabled(False)
         self._lbl_task.setText(t('project.timeline.detail_click_task'))
         for lbl in (self._lbl_dates, self._lbl_type, self._lbl_duration):
             lbl.setText('')
@@ -567,14 +545,14 @@ class TaskDetailPanel(QWidget):
         self._delay_ext_edit.setEnabled(False)
         self._delay_ext_clear.setEnabled(False)
 
-    def _save_comment(self):
+    def _on_comment_changed(self):
+        """Comments persist as you type — no explicit save step, same as the
+        other project fields."""
         if not self._current_task:
             return
         self._current_task.comments = [
             c for c in self._comment_box.toPlainText().split('\n') if c.strip()
         ]
-        self._save_btn.setText('✔')
-        QTimer.singleShot(1000, lambda: self._save_btn.setText(t('project.timeline.detail_save')))
 
     # ── delay extension slots ─────────────────────────────────────────────────
 
