@@ -1104,7 +1104,7 @@ class _QCLeftPanel(QWidget):
 
     def _build_ui(self):
         self.setStyleSheet(f'background: {_BG};')
-        self.setFixedWidth(440)
+        self.setFixedWidth(560)   # widened — bigger 3D inspection view of the photo
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -1279,110 +1279,25 @@ class _QCLeftPanel(QWidget):
     # ── Toolbar builders ──────────────────────────────────────────────────────
 
     def _build_left_toolbar(self) -> QWidget:
-        """Vertical tool strip: Select, Pan, Zoom+, Zoom−, Fit."""
+        """Vertical tool strip — intentionally empty; the Select/Pan/Zoom/Fit
+        buttons were removed as clutter (mouse drag/scroll already does this
+        directly on the 3D viewport). Kept as a zero-width spacer so the
+        layout math elsewhere in this class doesn't need to change."""
         w = QWidget()
-        w.setFixedWidth(36)
+        w.setFixedWidth(0)
         w.setStyleSheet('background: transparent;')
-        l = QVBoxLayout(w)
-        l.setContentsMargins(0, 0, 0, 0)
-        l.setSpacing(4)
-
-        def _tb(icon_name: str, tip: str, checkable: bool = False) -> QPushButton:
-            btn = QPushButton()
-            btn.setFixedSize(36, 36)
-            btn.setToolTip(tip)
-            btn.setCheckable(checkable)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setIcon(_make_tb_icon(icon_name))
-            btn.setIconSize(QSize(18, 18))
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: {_SURFACE};
-                    border: 1px solid {_BORDER}; border-radius: 6px;
-                }}
-                QPushButton:hover {{
-                    background: {_BG}; border-color: {_BORDER_DARK};
-                }}
-                QPushButton:checked {{
-                    background: #eff6ff; border-color: #2596BE;
-                }}
-            """ + _TOOLTIP_SS)
-            return btn
-
-        self._select_btn = _tb('select', 'Select', checkable=True)
-        self._select_btn.setChecked(True)
-        self._pan_btn = _tb('pan', 'Pan', checkable=True)
-        self._select_btn.toggled.connect(
-            lambda on: self._pan_btn.setChecked(False) if on else None)
-        self._pan_btn.toggled.connect(
-            lambda on: self._select_btn.setChecked(False) if on else None)
-
-        zoom_in  = _tb('zoom_in',  'Zoom In')
-        zoom_out = _tb('zoom_out', 'Zoom Out')
-        fit_btn  = _tb('fit',      'Fit to View')
-
-        zoom_in.clicked.connect(lambda: self._do_zoom(1.2))
-        zoom_out.clicked.connect(lambda: self._do_zoom(0.8))
-        fit_btn.clicked.connect(self._fit_to_view)
-
-        for btn in (self._select_btn, self._pan_btn, zoom_in, zoom_out, fit_btn):
-            l.addWidget(btn)
-        l.addStretch()
         return w
 
     def _build_bottom_toolbar(self) -> QWidget:
-        """Horizontal view strip: 3D + 4 standard snaps + capture + fullscreen."""
+        """Horizontal view strip — trimmed down to just capture + fullscreen.
+        The 3D/Front/Right/Back/Top view-snap buttons were removed as
+        clutter; clicking an already-active inspection-image thumbnail now
+        returns to the 3D view instead (see _toggle_image)."""
         w = QWidget()
         w.setStyleSheet('background: transparent;')
         l = QHBoxLayout(w)
         l.setContentsMargins(0, 0, 0, 0)
         l.setSpacing(3)
-
-        def _vb(label: str, tip: str, checkable: bool = False) -> QPushButton:
-            btn = QPushButton(label)
-            btn.setFixedHeight(26)
-            btn.setToolTip(tip)
-            btn.setCheckable(checkable)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: {_SURFACE}; color: {_MUTED};
-                    border: 1px solid {_BORDER}; border-radius: 5px;
-                    font-size: 11px; font-weight: 500;
-                    padding: 0 7px; min-width: 28px;
-                }}
-                QPushButton:hover {{
-                    background: {_BG}; color: {_TEXT}; border-color: {_BORDER_DARK};
-                }}
-                QPushButton:checked {{
-                    background: #eff6ff; color: #2596BE;
-                    border-color: #2596BE; font-weight: 700;
-                }}
-            """ + _TOOLTIP_SS)
-            return btn
-
-        self._btn_3d = _vb('3D', 'Return to 3D model view', checkable=True)
-        self._btn_3d.setChecked(True)
-
-        btn_front = _vb('Front', 'Front view')
-        btn_right = _vb('Right', 'Right view')
-        btn_back  = _vb('Back',  'Back view')
-        btn_top   = _vb('Top',   'Top view')
-
-        def _snap_3d(view_dir, up):
-            self._show_3d()
-            self._snap_view(view_dir, up)
-
-        self._btn_3d.clicked.connect(self._show_3d)
-        btn_front.clicked.connect(lambda: _snap_3d((0, -1, 0), (0, 0, 1)))
-        btn_right.clicked.connect(lambda: _snap_3d((1,  0, 0), (0, 0, 1)))
-        btn_back.clicked.connect( lambda: _snap_3d((0,  1, 0), (0, 0, 1)))
-        btn_top.clicked.connect(  lambda: _snap_3d((0,  0, 1), (0, 1, 0)))
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.VLine)
-        sep.setFixedWidth(1)
-        sep.setStyleSheet(f'background: {_BORDER}; border: none; max-height: 18px;')
 
         snap_btn = QPushButton()
         snap_btn.setFixedHeight(26)
@@ -1396,7 +1311,7 @@ class _QCLeftPanel(QWidget):
                 background: {_SURFACE}; border: 1px solid {_BORDER}; border-radius: 5px;
             }}
             QPushButton:hover {{ background: {_BG}; border-color: {_BORDER_DARK}; }}
-        """)
+        """ + _TOOLTIP_SS)
         snap_btn.clicked.connect(self._capture_current_view)
 
         self._fullscreen_btn = QPushButton()
@@ -1413,12 +1328,11 @@ class _QCLeftPanel(QWidget):
             }}
             QPushButton:hover {{ background: {_BG}; border-color: {_BORDER_DARK}; }}
             QPushButton:checked {{ background: #eff6ff; border-color: #2596BE; }}
-        """)
+        """ + _TOOLTIP_SS)
         self._fullscreen_btn.clicked.connect(
             lambda: self.fullscreen_requested.emit(self._fullscreen_btn.isChecked()))
 
-        for item in (self._btn_3d, btn_front, btn_right, btn_back, btn_top,
-                     sep, snap_btn, self._fullscreen_btn):
+        for item in (snap_btn, self._fullscreen_btn):
             l.addWidget(item)
         l.addStretch()
         return w
@@ -1483,6 +1397,14 @@ class _QCLeftPanel(QWidget):
                 border-radius: 10px; font-size: 10px; font-weight: 700;
                 padding: 3px 10px; border: none;
             """)
+
+    def _toggle_image(self, idx: int):
+        """Clicking the already-active thumbnail returns to the 3D view —
+        the only way back now that the standalone "3D" button is gone."""
+        if self._active_img_idx == idx:
+            self._show_3d()
+        else:
+            self._show_image(idx)
 
     def _show_image(self, idx: int):
         """Switch viewer area to display inspection image at idx for annotation."""
@@ -1583,7 +1505,7 @@ class _QCLeftPanel(QWidget):
         """Insert a thumbnail card before the trailing stretch."""
         card = _InspThumbCard(pix)
         card.delete_requested.connect(lambda i=idx: self._delete_inspection_image(i))
-        card.image_clicked.connect(lambda i=idx: self._show_image(i))
+        card.image_clicked.connect(lambda i=idx: self._toggle_image(i))
         self._thumb_cards.insert(idx, card)
         self._insp_layout.insertWidget(idx, card)
 
