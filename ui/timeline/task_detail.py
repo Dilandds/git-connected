@@ -153,9 +153,8 @@ class TaskDetailPanel(QWidget):
 
         self._lbl_dates    = QLabel('')
         self._lbl_type     = QLabel('')
-        self._lbl_status   = QLabel('')
         self._lbl_duration = QLabel('')
-        for lbl in (self._lbl_dates, self._lbl_type, self._lbl_status, self._lbl_duration):
+        for lbl in (self._lbl_dates, self._lbl_type, self._lbl_duration):
             lbl.setWordWrap(True)
             lbl.setStyleSheet(f'color: {MUTED}; font-size: 12px; background: transparent; border: none;')
             col.addWidget(lbl)
@@ -579,7 +578,6 @@ class TaskDetailPanel(QWidget):
             f"{t('project.timeline.label_type')} {task.task_type}"
             + (f"  {t('project.timeline.label_urgent')}" if task.is_urgent else '')
         )
-        self._lbl_status.setText(f"{t('project.timeline.label_status')} {task.status}")
         days = task.start.daysTo(task.end)
         day_word = t('project.timeline.day_plural') if days != 1 else t('project.timeline.day_singular')
         self._lbl_duration.setText(f"{t('project.timeline.label_duration')} {days} {day_word}")
@@ -651,7 +649,7 @@ class TaskDetailPanel(QWidget):
         self._delete_btn.setEnabled(False)
         self._save_btn.setEnabled(False)
         self._lbl_task.setText(t('project.timeline.detail_click_task'))
-        for lbl in (self._lbl_dates, self._lbl_type, self._lbl_status, self._lbl_duration):
+        for lbl in (self._lbl_dates, self._lbl_type, self._lbl_duration):
             lbl.setText('')
         self._comment_box.clear()
         for f in (self._f_pm, self._f_tm, self._f_contrib):
