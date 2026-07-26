@@ -262,7 +262,7 @@ def _card(parent=None) -> QFrame:
     return f
 
 
-def _lbl(text: str, muted=True, bold=False, size=10) -> QLabel:
+def _lbl(text: str, muted=True, bold=False, size=12) -> QLabel:
     l = QLabel(text)
     col = _MUTED if muted else _TEXT
     fw  = "bold" if bold else "normal"
@@ -372,8 +372,8 @@ class PartnerPanel(QScrollArea):
         # Project context strip (auto-filled from project info sidebar)
         ctx_row = QHBoxLayout()
         ctx_row.setSpacing(16)
-        self._ctx_project = _lbl("Project: —", muted=True, size=10)
-        self._ctx_company = _lbl("Company: —", muted=True, size=10)
+        self._ctx_project = _lbl("Project: —", muted=True, size=12)
+        self._ctx_company = _lbl("Company: —", muted=True, size=12)
         ctx_row.addWidget(self._ctx_project)
         ctx_row.addWidget(self._ctx_company)
         ctx_row.addStretch()
