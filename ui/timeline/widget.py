@@ -614,6 +614,13 @@ class TimelineWidget(QWidget):
         add_op.setStyleSheet(_BTN_SMALL); add_op.setFixedHeight(28)
         add_op.setCursor(Qt.PointingHandCursor); add_op.clicked.connect(self._add_operator)
         layout.addWidget(add_op)
+
+        # Balance the title on the left so the Add Operation/Event/Operator
+        # group sits centered in the bar rather than pinned to the right.
+        layout.addStretch()
+        spacer = QWidget(); spacer.setStyleSheet('background: transparent; border: none;')
+        spacer.setFixedWidth(col.sizeHint().width())
+        layout.addWidget(spacer)
         return top
 
     def _build_tabs_bar(self) -> QWidget:
