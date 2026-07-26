@@ -29,6 +29,7 @@ class HeaderSection(QWidget):
         self._logo_fn  = logo_fn
         self._set_logo = set_logo_fn
         self._last_auto_pm = ''
+        self._last_auto_photo = ''
         self.setStyleSheet(f"background: {_BG};")
         self._build()
 
@@ -506,6 +507,21 @@ class HeaderSection(QWidget):
             self._f_pm.setText('')
             self._report.project_manager = ''
             self._last_auto_pm = ''
+
+        # Copy the sidebar's main project photo into the report header photo,
+        # same auto-fill-unless-manually-changed pattern as the fields above.
+        photo = (info.get('photo_path') or '').strip()
+        current_photo = self._report.project_photo_path or ''
+        if photo:
+            if not current_photo or current_photo == self._last_auto_photo:
+                pix = QPixmap(photo)
+                if not pix.isNull():
+                    self._report.project_photo_path = photo
+                    self._apply_project_photo(pix)
+                    self._last_auto_photo = photo
+        elif current_photo and current_photo == self._last_auto_photo:
+            self._clear_project_photo()
+            self._last_auto_photo = ''
 
     def lock(self):
         self._logo_btn.setEnabled(False)

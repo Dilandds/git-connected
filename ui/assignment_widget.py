@@ -752,6 +752,7 @@ class AssignmentWidget(QWidget):
         self._scroll: Optional[QScrollArea] = None
         self._orient_btn: Optional[QPushButton] = None
         self._color_btn: Optional[QPushButton] = None
+        self._last_auto_photo: str = ''
         self._build_ui()
 
     def _build_ui(self):
@@ -998,6 +999,20 @@ class AssignmentWidget(QWidget):
             self._canvas.import_image(path)
 
     # ── Project widget API ────────────────────────────────────────────────────
+
+    def update_project_info(self, info: dict):
+        """Copy the sidebar's main project photo into the assignment canvas
+        as its background image, unless the user has already imported a
+        different image of their own. Mirrors the auto-fill-unless-manually-
+        changed pattern used by the Brief/Report/Traceability screens."""
+        photo = (info.get('photo_path') or '').strip()
+        current = self._canvas._image_path or ''
+        if photo and photo != current and current == self._last_auto_photo:
+            self._canvas.import_image(photo)
+            self._last_auto_photo = photo
+        elif photo and not current:
+            self._canvas.import_image(photo)
+            self._last_auto_photo = photo
 
     def get_data(self) -> dict:
         return self._canvas.get_data()

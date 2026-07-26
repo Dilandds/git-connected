@@ -812,6 +812,8 @@ class TheProjectWidget(QWidget):
             w.update_project_info(info)
         if w := self._screen_widgets.get('traceability'):
             w.update_project_info(info)
+        if w := self._screen_widgets.get('assignment'):
+            w.update_project_info(info)
 
     def _push_validation_costs(self):
         ec = self._screen_widgets.get('estimated_cost')
