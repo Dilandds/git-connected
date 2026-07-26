@@ -863,10 +863,15 @@ class ViewControlsToolbar(QWidget):
         self.fullscreen_btn.clicked.connect(self._on_fullscreen_clicked)
         content_layout.addWidget(self.fullscreen_btn)
 
+        # Folder/load icon removed from the visible toolbar — loading a 3D
+        # file is already available from the sidebar's Upload button, and
+        # this was redundant clutter. The button object is kept (but never
+        # added to the layout) so set_loaded_filename() and other internal
+        # bookkeeping below don't need special-casing.
         self.load_btn = ToolbarButton("📂", "", "Load or replace 3D file (STL/STEP/3DM/OBJ/IGES)")
         self.load_btn.clicked.connect(self._on_load_clicked)
         self.load_btn.setFixedWidth(44)
-        content_layout.addWidget(self.load_btn)
+        self.load_btn.hide()
 
         self.reset_model_btn = ToolbarButton("↻", "", "Clear current model from view")
         self.reset_model_btn.clicked.connect(self._on_reset_model_clicked)
