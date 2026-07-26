@@ -592,7 +592,6 @@ class TheProjectWidget(QWidget):
         self._created_by: Optional[str] = None  # OS username who first created the file
         self._created_at: Optional[str] = None  # ISO timestamp of first save
         self._component_syncing = False  # guard against brief↔traceability sync loops
-        self._logged_in_user: Optional[str] = None
         self._viewer_tabs: list = []  # TabState list injected from main window before save
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
@@ -714,36 +713,6 @@ class TheProjectWidget(QWidget):
         layout.addSpacing(6)
         layout.addWidget(self._project_name_lbl)
         layout.addStretch()
-
-        vsep = QFrame()
-        vsep.setFrameShape(QFrame.VLine); vsep.setFixedHeight(18)
-        vsep.setStyleSheet(
-            f'color: {default_theme.border_light}; background: {default_theme.border_light}; '
-            f'max-width: 1px; border: none;'
-        )
-        layout.addWidget(vsep)
-
-        self._avatar = QLabel('?')
-        self._avatar.setFixedSize(24, 24)
-        self._avatar.setAlignment(Qt.AlignCenter)
-        self._avatar.setStyleSheet(f"""
-            QLabel {{
-                background-color: {_MUTED}; color: white; border-radius: 12px;
-                font-size: 15px; font-weight: bold; border: none;
-            }}
-        """)
-        self._user_btn = QPushButton(t('project.topbar.not_logged_in'))
-        self._user_btn.setFlat(True)
-        self._user_btn.setCursor(Qt.PointingHandCursor)
-        self._user_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {_MUTED}; border: none;
-                font-size: 15px; font-weight: bold; padding: 0 2px;
-            }}
-            QPushButton:hover {{ color: white; }}
-        """)
-        layout.addWidget(self._avatar)
-        layout.addWidget(self._user_btn)
 
         return bar
 
@@ -934,8 +903,6 @@ class TheProjectWidget(QWidget):
         self._update_lock_btn()
         if not self._project_path:
             self._project_name_lbl.setText(t('project.topbar.no_project'))
-        if not self._logged_in_user:
-            self._user_btn.setText(t('project.topbar.not_logged_in'))
 
     def _on_language_changed(self):
         """Retranslate the shell UI and reload all content screens with preserved data."""
@@ -998,25 +965,6 @@ class TheProjectWidget(QWidget):
         self._viewer_tabs = list(tabs)
 
     # ── top bar ───────────────────────────────────────────────────────────────
-
-    def set_user(self, username: str):
-        self._logged_in_user = username or None
-        letter = username[0].upper() if username else '?'
-        self._avatar.setText(letter)
-        self._avatar.setStyleSheet(f"""
-            QLabel {{
-                background-color: {_ACCENT}; color: white; border-radius: 12px;
-                font-size: 13px; font-weight: bold; border: none;
-            }}
-        """)
-        self._user_btn.setText(f'{username}  ▾')
-        self._user_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {_TEXT}; border: none;
-                font-size: 15px; font-weight: bold; padding: 0 2px;
-            }}
-            QPushButton:hover {{ color: white; }}
-        """)
 
     # ── project file operations ───────────────────────────────────────────────
 
