@@ -363,6 +363,9 @@ class ProjectNavPanel(QWidget):
             layout.addWidget(btn)
 
             if key == 'rd':
+                # Double-click the R&D button to close the sub-nav list again.
+                btn.mouseDoubleClickEvent = lambda _e: self._close_rd_subnav()
+
                 # ── R&D sub-navigation ────────────────────────────────────────
                 sub = QWidget()
                 sub.setVisible(False)
@@ -435,6 +438,11 @@ class ProjectNavPanel(QWidget):
         self.set_rd_active_tab(tab_idx)
         if self._on_rd_tab_switch:
             self._on_rd_tab_switch(tab_idx)
+
+    def _close_rd_subnav(self):
+        """Double-click on the R&D nav button closes its sub-nav list."""
+        if self._rd_subnav is not None:
+            self._rd_subnav.setVisible(False)
 
     def show_rd_subnav(self, visible: bool):
         if self._rd_subnav is not None:
