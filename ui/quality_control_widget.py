@@ -337,6 +337,13 @@ class _ControlPointCard(QWidget):
         logger.debug('[QC Card] __init__ PRE-build  id=%d', cp.id)
         self._build_ui()
         logger.debug('[QC Card] __init__ POST-build  id=%d', cp.id)
+        # The comment field should be visible without an extra click — but
+        # showing the QTextEdit synchronously here (still inside whatever
+        # click handler created this card) risks the same macOS Mission
+        # Control Space-switch bug the collapsed-by-default workaround above
+        # exists to avoid. Deferring the reveal to the next event-loop tick
+        # keeps that protection while still auto-expanding.
+        QTimer.singleShot(0, self._reveal_comment)
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -391,19 +398,6 @@ class _ControlPointCard(QWidget):
         self._status_btn.clicked.connect(self._show_status_menu)
         self._refresh_status_btn()
         header_l.addWidget(self._status_btn)
-
-        self._chevron_btn = QPushButton('▲' if self._expanded else '▼')
-        self._chevron_btn.setFixedSize(26, 26)
-        self._chevron_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {_MUTED};
-                border: none; font-size: 10px;
-            }}
-            QPushButton:hover {{ color: {_TEXT}; }}
-        """)
-        self._chevron_btn.setCursor(Qt.PointingHandCursor)
-        self._chevron_btn.clicked.connect(self._toggle_expand)
-        header_l.addWidget(self._chevron_btn)
 
         del_btn = QPushButton('×')
         del_btn.setFixedSize(26, 26)
@@ -508,10 +502,10 @@ class _ControlPointCard(QWidget):
             self._refresh_status_btn()
             self.changed.emit()
 
-    def _toggle_expand(self):
-        self._expanded = not self._expanded
-        self._comment_edit.setVisible(self._expanded)
-        self._chevron_btn.setText('▲' if self._expanded else '▼')
+    def _reveal_comment(self):
+        """Show the comment field automatically — no arrow/click needed."""
+        self._expanded = True
+        self._comment_edit.setVisible(True)
 
     def _on_name_changed(self, text: str):
         self._cp.name = text
