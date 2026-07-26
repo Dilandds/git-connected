@@ -265,10 +265,10 @@ class ProjectNavPanel(QWidget):
         nav_scroll.setStyleSheet(f"""
             QScrollArea {{ background: transparent; border: none; }}
             QScrollBar:vertical {{
-                background: transparent; width: 4px; border: none;
+                background: transparent; width: 9px; border: none;
             }}
             QScrollBar::handle:vertical {{
-                background: {_BORDER}; border-radius: 2px; min-height: 20px;
+                background: #14171b; border-radius: 4px; min-height: 24px;
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
