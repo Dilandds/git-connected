@@ -16,10 +16,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF, QTimer
 from PyQt5.QtGui import (
     QPainter, QColor, QPen, QBrush, QPainterPath,
-    QFont, QPixmap,
+    QFont, QPixmap, QFontMetrics,
 )
 
-from ui.styles import default_theme, TOOLTIP_STYLE
+from ui.styles import default_theme, TOOLTIP_STYLE, make_font
 from ui.modal_utils import FormModal
 from i18n import t
 
@@ -189,6 +189,17 @@ class AssignmentCanvas(QWidget):
         self._undo_stack: list = []
         self._redo_stack: list = []
 
+    def _font(self, size: int, bold: bool = False) -> QFont:
+        """Build a QFont for canvas text — falls back to the app's standard
+        cross-platform family (make_font) when no explicit family was chosen,
+        instead of an empty-string QFont whose fallback rendered inconsistently
+        on Windows."""
+        if self._font_family:
+            f = QFont(self._font_family, size)
+            f.setBold(bold)
+            return f
+        return make_font(size=size, bold=bold)
+
     # ── A4 frame geometry ─────────────────────────────────────────────────────
 
     def _img_rect(self) -> QRectF:
@@ -224,12 +235,12 @@ class AssignmentCanvas(QWidget):
             p.drawPixmap(img_rect.toRect(), self._image)
         else:
             p.setPen(QColor(_MUTED))
-            p.setFont(QFont(self._font_family, 13))
+            p.setFont(self._font(13))
             p.drawText(img_rect, Qt.AlignCenter, t('assignment.drop_hint'))
 
         # File label above frame
         p.setPen(QColor(_MUTED))
-        p.setFont(QFont(self._font_family, 9))
+        p.setFont(self._font(9))
         if self._image_name:
             p.drawText(
                 QRectF(img_rect.x() + 4, img_rect.y() - 22, 320, 18),
@@ -284,7 +295,7 @@ class AssignmentCanvas(QWidget):
         p.setPen(Qt.NoPen)
         p.drawEllipse(badge)
         p.setPen(QColor('#ffffff'))
-        p.setFont(QFont(self._font_family, 9, QFont.Bold))
+        p.setFont(self._font(9, bold=True))
         p.drawText(badge, Qt.AlignCenter, str(card.number))
 
         # Arrow count badge (show if >1 arrow)
@@ -294,12 +305,12 @@ class AssignmentCanvas(QWidget):
             p.setPen(Qt.NoPen)
             p.drawRoundedRect(ab, 7, 7)
             p.setPen(QColor('#ffffff'))
-            p.setFont(QFont(self._font_family, 7, QFont.Bold))
+            p.setFont(self._font(7, bold=True))
             p.drawText(ab, Qt.AlignCenter, str(len(card.arrows)))
 
         # Title
         p.setPen(QColor(_TEXT))
-        p.setFont(QFont(self._font_family, self._font_size, QFont.Bold))
+        p.setFont(self._font(self._font_size, bold=True))
         p.drawText(
             QRectF(r.x() + 38, r.y() + 8, r.width() - 46, 24),
             Qt.AlignLeft | Qt.AlignVCenter,
@@ -308,7 +319,7 @@ class AssignmentCanvas(QWidget):
 
         # Supplier / task
         p.setPen(QColor(_MUTED))
-        p.setFont(QFont(self._font_family, max(self._font_size - 1, 7)))
+        p.setFont(self._font(max(self._font_size - 1, 7)))
         p.drawText(
             QRectF(r.x() + 9, r.y() + 37, r.width() - 18, 18),
             Qt.AlignLeft | Qt.AlignVCenter,
@@ -317,7 +328,7 @@ class AssignmentCanvas(QWidget):
 
         # Status
         p.setPen(QColor(_STATUS_COLORS.get(card.status, _MUTED)))
-        p.setFont(QFont(self._font_family, max(self._font_size - 1, 7), QFont.Bold))
+        p.setFont(self._font(max(self._font_size - 1, 7), bold=True))
         p.drawText(
             QRectF(r.x() + 9, r.y() + 57, r.width() - 18, 18),
             Qt.AlignLeft | Qt.AlignVCenter,
@@ -345,7 +356,7 @@ class AssignmentCanvas(QWidget):
         path = QPainterPath(start)
         path.cubicTo(ctrl1, ctrl2, end)
 
-        pen = QPen(c, 1.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        pen = QPen(c, 2.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
         p.drawPath(path)
@@ -448,6 +459,29 @@ class AssignmentCanvas(QWidget):
         elif self._line_card and self._tool == 'line':
             self._line_pos = pos
             self.update()
+
+        else:
+            # Cannot see the entire sentence in the panel — show the full text
+            # on hover when any card field is longer than the card itself.
+            card = self._card_at(pos)
+            self.setToolTip(self._overflow_tooltip(card) if card else '')
+
+    def _overflow_tooltip(self, card: AreaCard) -> str:
+        """Return the full title/supplier/status text if any of it would be
+        clipped at the card's current width, else ''."""
+        r = card.rect()
+        avail_title = r.width() - 46
+        avail_body  = r.width() - 18
+        lines = []
+        fm_title = QFontMetrics(self._font(self._font_size, bold=True))
+        if card.title and fm_title.horizontalAdvance(card.title) > avail_title:
+            lines.append(card.title)
+        fm_body = QFontMetrics(self._font(max(self._font_size - 1, 7)))
+        if card.supplier and fm_body.horizontalAdvance(card.supplier) > avail_body:
+            lines.append(card.supplier)
+        if card.status and fm_body.horizontalAdvance(card.status) > avail_body:
+            lines.append(card.status)
+        return '\n'.join(lines)
 
     def mouseReleaseEvent(self, e):
         if self._drag_id and self._tool == 'select':
