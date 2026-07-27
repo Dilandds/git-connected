@@ -55,7 +55,7 @@ _STATUS_COLORS = {
 }
 
 # ── Layout constants ──────────────────────────────────────────────────────────
-_CARD_W, _CARD_H = 148, 88
+_CARD_W, _CARD_H = 190, 112   # client asked for bigger area cards (was 148x88)
 _CARD_R   = 8
 # Connection-dot radius. Made bigger so it's a comfortable click target now
 # that clicking it directly (rather than a separate "Line" tool button) is
