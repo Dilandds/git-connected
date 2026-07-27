@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QComboBox, QDialog, QScrollArea, QSizePolicy, QSplitter,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap, QIcon, QFontMetrics
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 from i18n import t, on_language_changed
@@ -220,6 +220,40 @@ def _import_screen(key: str) -> Type[QWidget]:
     raise KeyError(f'Unknown screen key: {key}')
 
 
+# ── Self-eliding nav button ───────────────────────────────────────────────────
+
+class _NavButton(QPushButton):
+    """QPushButton that elides its own label ("…") to fit the current width
+    instead of hard-clipping mid-word — needed because these buttons use
+    QSizePolicy.Ignored (so a long translation can't widen the sidebar), and
+    plain QPushButton doesn't auto-elide text that no longer fits."""
+
+    def __init__(self, text: str = '', h_padding: int = 14, parent=None):
+        super().__init__(parent)
+        self._full_text = text
+        self._h_padding = h_padding
+        super().setText(text)
+
+    def setText(self, text: str):
+        self._full_text = text
+        self._reelide()
+
+    def fullText(self) -> str:
+        return self._full_text
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reelide()
+
+    def _reelide(self):
+        avail = self.width() - 2 * self._h_padding
+        if avail <= 0:
+            super().setText(self._full_text)
+            return
+        fm = QFontMetrics(self.font())
+        super().setText(fm.elidedText(self._full_text, Qt.ElideRight, avail))
+
+
 # ── ProjectNavPanel ───────────────────────────────────────────────────────────
 
 class ProjectNavPanel(QWidget):
@@ -229,7 +263,7 @@ class ProjectNavPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(160)
+        self.setMinimumWidth(230)
         self.setStyleSheet(f'background-color: {_SIDEBAR};')
         self._buttons: dict[str, QPushButton] = {}
         self._on_navigate = None
@@ -268,7 +302,10 @@ class ProjectNavPanel(QWidget):
                 background: transparent; width: 9px; border: none;
             }}
             QScrollBar::handle:vertical {{
-                background: #14171b; border-radius: 4px; min-height: 24px;
+                background: #6BC4E8; border-radius: 4px; min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {_ACCENT};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
@@ -353,11 +390,18 @@ class ProjectNavPanel(QWidget):
         self._on_rd_tab_switch = None  # set by TheProjectWidget
 
         for key, _label in _NAV_ITEMS:
-            btn = QPushButton(t(f'project.nav.{key}').replace('&', '&&'))
+            label = t(f'project.nav.{key}').replace('&', '&&')
+            btn = _NavButton(label, h_padding=14)
             btn.setStyleSheet(_NAV_INACTIVE)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setMinimumHeight(40)
             btn.setCheckable(True)
+            # Ignored: a translated label (e.g. French "ESTIMATION DES COÛTS")
+            # must never widen this button's sizeHint enough to pull the
+            # sidebar itself wider — text just elides instead, full label
+            # still available via tooltip.
+            btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            btn.setToolTip(label)
             btn.clicked.connect(lambda _, k=key: self._navigate(k))
             self._buttons[key] = btn
             layout.addWidget(btn)
@@ -373,11 +417,14 @@ class ProjectNavPanel(QWidget):
                 sub_lay.setContentsMargins(18, 2, 4, 4)
                 sub_lay.setSpacing(1)
                 for tab_key, tab_idx in _RD_SUB_TABS:
-                    sb = QPushButton(t(tab_key))
+                    sub_label = t(tab_key)
+                    sb = _NavButton(sub_label, h_padding=12)
                     sb.setCursor(Qt.PointingHandCursor)
                     sb.setMinimumHeight(36)
                     sb.setCheckable(True)
                     sb.setStyleSheet(_NAV_SUBNAV_INACTIVE)
+                    sb.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+                    sb.setToolTip(sub_label)
                     sb.clicked.connect(
                         lambda _, i=tab_idx: self._on_rd_sub_clicked(i)
                     )
@@ -515,10 +562,14 @@ class ProjectNavPanel(QWidget):
         self._f_start_date.setPlaceholderText(t('project.sidebar.start_date'))
         self._f_due_date.setPlaceholderText(t('project.sidebar.due_date'))
         for key, btn in self._buttons.items():
-            btn.setText(t(f'project.nav.{key}').replace('&', '&&'))
+            label = t(f'project.nav.{key}').replace('&', '&&')
+            btn.setText(label)
+            btn.setToolTip(label)
         _rd_tab_keys = ['rd.tab_textures', 'rd.tab_techniques']
         for i, sb in enumerate(self._rd_sub_btns):
-            sb.setText(t(_rd_tab_keys[i]))
+            sub_label = t(_rd_tab_keys[i])
+            sb.setText(sub_label)
+            sb.setToolTip(sub_label)
         self._populate_status_combo()
 
 
@@ -630,6 +681,9 @@ class TheProjectWidget(QWidget):
         self._nav.set_navigate_callback(self._on_navigate)
         self._nav.info_changed.connect(self.mark_unsaved)
         self._nav.info_changed.connect(self._on_project_info_changed)
+        # Fixed width — prevents any screen change or translation from nudging
+        # the splitter and shrinking the sidebar.
+        self._nav.setFixedWidth(300)
         self._splitter.addWidget(self._nav)
 
         right_panel = QWidget()
@@ -644,7 +698,6 @@ class TheProjectWidget(QWidget):
         right_layout.addWidget(self._stack, 1)
 
         self._splitter.addWidget(right_panel)
-        self._splitter.setSizes([240, 9999])
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
 
@@ -751,6 +804,13 @@ class TheProjectWidget(QWidget):
             widget.changed.connect(self._sync_traceability_from_brief)
         if key == 'traceability' and hasattr(widget, 'changed'):
             widget.changed.connect(self._sync_brief_from_traceability)
+        if key == 'traceability' and hasattr(widget, 'update_project_info'):
+            # The sidebar's main photo only reaches an already-open screen via
+            # _on_project_info_changed — a freshly (lazily) created Traceability
+            # screen never got that first push, so its photo + main product
+            # thumbnail stayed blank until some unrelated info field changed.
+            # Seed it once with the current info right at construction time.
+            widget.update_project_info(self._nav.get_info_data())
         if key == 'rd' and hasattr(widget, 'tab_changed'):
             widget.tab_changed.connect(self._on_rd_tab_changed)
             # Set the callback so sidebar sub-items call switch_tab on the widget
