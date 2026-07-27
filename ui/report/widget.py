@@ -66,7 +66,7 @@ class ReportWidget(QWidget):
         title.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         subtitle = QLabel(t("project.report.subtitle"))
         subtitle.setStyleSheet(
-            f"color: {_MUTED}; font-size: 13px; background: transparent; border: none;"
+            f"color: {_MUTED}; font-size: 14px; background: transparent; border: none;"
         )
         t_col = QVBoxLayout()
         t_col.setSpacing(1)
