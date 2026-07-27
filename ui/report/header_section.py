@@ -3,9 +3,9 @@ from typing import Callable, List, Optional
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QFileDialog, QDateEdit, QSizePolicy,
+    QFrame, QFileDialog, QDateEdit, QSizePolicy, QLineEdit,
 )
-from PyQt5.QtCore import Qt, QDate, QSize, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QSize, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
 
 from .models import Report, AttendeeColumn, CompanyRow
@@ -15,6 +15,63 @@ from .shared import (
     _card, _field, _VerticalLabel,
 )
 from i18n import t
+
+
+class _MarqueeLineEdit(QLineEdit):
+    """A QLineEdit that auto-scrolls its own text on hover when the text is
+    wider than the field — the attendee columns are fixed-width, so a long
+    role/name otherwise just gets clipped. Hovering (without needing to
+    click into the field) scrolls the cursor back and forth across the
+    text, which drags Qt's own auto-scroll-to-cursor behaviour along with
+    it and reveals the full value. Editing still works exactly as before —
+    the marquee stops the moment the field gets focus."""
+
+    def __init__(self, placeholder: str = "", h: int = 38, parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText(placeholder)
+        self.setStyleSheet(_INPUT)
+        self.setFixedHeight(h)
+        self._marquee_timer = QTimer(self)
+        self._marquee_timer.setInterval(150)
+        self._marquee_timer.timeout.connect(self._marquee_step)
+        self._marquee_pos = 0
+        self._marquee_forward = True
+
+    def _text_overflows(self) -> bool:
+        fm = self.fontMetrics()
+        return fm.width(self.text()) > (self.width() - 10)
+
+    def enterEvent(self, event):
+        if not self.hasFocus() and self.text() and self._text_overflows():
+            self._marquee_pos = 0
+            self._marquee_forward = True
+            self._marquee_timer.start()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._marquee_timer.stop()
+        self.setCursorPosition(0)
+        super().leaveEvent(event)
+
+    def focusInEvent(self, event):
+        # Editing takes priority — don't fight the user's own cursor.
+        self._marquee_timer.stop()
+        super().focusInEvent(event)
+
+    def _marquee_step(self):
+        text_len = len(self.text())
+        if text_len == 0:
+            self._marquee_timer.stop()
+            return
+        if self._marquee_forward:
+            self._marquee_pos += 1
+            if self._marquee_pos >= text_len:
+                self._marquee_forward = False
+        else:
+            self._marquee_pos -= 1
+            if self._marquee_pos <= 0:
+                self._marquee_forward = True
+        self.setCursorPosition(self._marquee_pos)
 
 
 class HeaderSection(QWidget):
@@ -401,14 +458,14 @@ class HeaderSection(QWidget):
         del_row.addWidget(del_btn)
         col_l.addLayout(del_row)
 
-        hdr_inp = _field(t("project.report.header_col_ph"))
+        hdr_inp = _MarqueeLineEdit(t("project.report.header_col_ph"))
         hdr_inp.setText(att.header)
         hdr_inp.setFixedWidth(140)
         hdr_inp.setStyleSheet(_INPUT + "QLineEdit { font-weight: bold; }")
         hdr_inp.textChanged.connect(
             lambda v, a=att: setattr(a, 'header', v) or self.changed.emit()
         )
-        name_inp = _field(t("project.report.header_name_ph"))
+        name_inp = _MarqueeLineEdit(t("project.report.header_name_ph"))
         name_inp.setText(att.name)
         name_inp.setFixedWidth(140)
         name_inp.textChanged.connect(
