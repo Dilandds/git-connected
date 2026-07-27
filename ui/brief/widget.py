@@ -5,13 +5,13 @@ All data and edit-mode logic is delegated to the individual section cards.
 import logging
 from datetime import date
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFrame, QScrollArea,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from ui.styles import make_font
-from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, _ACCENT, BTN_PRIMARY, BTN_SECONDARY
+from .shared import _BG, _BORDER, _BORDER_L, _TEXT, _MUTED, _ACCENT
 from i18n import t
 from .section_overview    import ProductOverviewCard
 from .section_techniques  import TechniquesCard
@@ -31,13 +31,16 @@ class ProjectBriefWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._edit_mode = False
+        # Sections are always editable now — the old Edit/Save Brief toggle
+        # was removed since Save Project / Save Project As already persists
+        # brief data, making a second in-page save gate redundant.
+        self._edit_mode = True
         self._last_auto_title = ''
         self._last_auto_number = ''
         self._last_auto_photo = ''
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
-        self._set_edit_mode(False)
+        self._set_edit_mode(True)
 
     # ── construction ──────────────────────────────────────────────────────────
 
@@ -66,13 +69,6 @@ class ProjectBriefWidget(QWidget):
         title_col.addWidget(subtitle)
         layout.addLayout(title_col)
         layout.addStretch()
-
-        self._edit_btn = QPushButton(t('project.brief.edit_btn'))
-        self._edit_btn.setStyleSheet(BTN_SECONDARY)
-        self._edit_btn.setFixedHeight(32)
-        self._edit_btn.setCursor(Qt.PointingHandCursor)
-        self._edit_btn.clicked.connect(self._toggle_edit)
-        layout.addWidget(self._edit_btn)
         return bar
 
     def _build_scroll_body(self) -> QScrollArea:
@@ -144,15 +140,8 @@ class ProjectBriefWidget(QWidget):
 
     # ── edit mode ─────────────────────────────────────────────────────────────
 
-    def _toggle_edit(self):
-        self._set_edit_mode(not self._edit_mode)
-        if not self._edit_mode:
-            self.changed.emit()
-
     def _set_edit_mode(self, enabled: bool):
         self._edit_mode = enabled
-        self._edit_btn.setText(t('project.brief.save_btn') if enabled else t('project.brief.edit_btn'))
-        self._edit_btn.setStyleSheet(BTN_PRIMARY if enabled else BTN_SECONDARY)
         for section in self._all_sections():
             section.set_edit_mode(enabled)
 
