@@ -35,6 +35,57 @@ def _menu_diamond_px() -> int:
         return 11
 
 
+def _render_glyph_pixmap(text: str, box_px: int, font_px: int, color: str = None) -> QPixmap:
+    """Render a single glyph/emoji into a box_px x box_px pixmap with its
+    actual ink centered, rather than trusting the font's line metrics.
+
+    QLabel's own Qt.AlignCenter centers text using the font's ascent/descent
+    box. That's fine for Latin text, but color emoji fonts (Segoe UI Emoji
+    on Windows especially) pad extra space above the glyph to match Latin
+    line-height, so a tightly-sized label renders the icon low with a gap
+    above it — exactly the "camera icon not centered" symptom. Measuring
+    the glyph's tight ink bounds and centering *that* instead sidesteps the
+    font's misleading line box.
+    """
+    dpr = 2
+    if QApplication.instance():
+        try:
+            dpr = int(QApplication.instance().devicePixelRatio()) or 2
+        except Exception:
+            dpr = 2
+    px = box_px * dpr
+    font = QFont()
+    font.setPixelSize(font_px * dpr)
+    fm = QFontMetrics(font)
+    ink = fm.tightBoundingRect(text)
+
+    pm = QPixmap(px, px)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setRenderHint(QPainter.TextAntialiasing)
+    painter.setFont(font)
+    if color:
+        painter.setPen(QColor(color))
+    if ink.isEmpty():
+        # Some color-emoji glyphs don't report ink extents via
+        # tightBoundingRect on every platform/Qt build — fall back to
+        # plain line-metrics centering rather than mis-placing the glyph.
+        painter.drawText(QRect(0, 0, px, px), Qt.AlignCenter, text)
+    else:
+        # tightBoundingRect is baseline-relative (top()/bottom() measured
+        # from the baseline, negative = above it) — solve for the baseline
+        # position that puts the ink rect's own center at the pixmap's
+        # center.
+        baseline_x = (px - (ink.left() + ink.right())) / 2
+        baseline_y = (px - (ink.top() + ink.bottom())) / 2
+        painter.drawText(int(round(baseline_x)), int(round(baseline_y)), text)
+    painter.end()
+
+    pm.setDevicePixelRatio(dpr)
+    return pm
+
+
 def _parts_menu_pixmap_fallback(size: int) -> QPixmap:
     """Draw a 2x2 grid of black squares — Windows-safe, integer-only."""
     try:
@@ -728,8 +779,13 @@ class ViewControlsToolbar(QWidget):
         # taller 32px button made the offset more noticeable.
         self.screenshot_btn._layout.removeWidget(self.screenshot_btn.text_label)
         self.screenshot_btn.icon_label.setFixedSize(24, 24)
-        self.screenshot_btn.icon_label.setStyleSheet(
-            f"color: {_TB_FG}; font-size: 22px; background: transparent;"
+        self.screenshot_btn.icon_label.setStyleSheet("background: transparent;")
+        # Render the camera glyph to a pixmap with its ink centered instead
+        # of letting the QLabel center it by font line metrics — Segoe UI
+        # Emoji's ascent padding on Windows made setText()-based centering
+        # render the icon low with a visible gap above it.
+        self.screenshot_btn.icon_label.setPixmap(
+            _render_glyph_pixmap("📷", 24, 22, _TB_FG)
         )
         self.screenshot_btn._icon_label_font_px = 22
         self.screenshot_btn._icon_size = 24
