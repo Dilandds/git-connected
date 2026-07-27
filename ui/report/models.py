@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import List
 
+from i18n import t
+
 
 @dataclass
 class PhotoCell:
@@ -80,8 +82,14 @@ def _default_report(rid: int) -> Report:
     r.company_extras = []
     r.partner_extras = []
     r.attendees = [
-        AttendeeColumn(h, "") for h in
-        ["Production", "Studio", "Marketing", "Partners 1", "Other", "Other"]
+        AttendeeColumn(h, "") for h in [
+            t("project.report.attendee_default_production"),
+            t("project.report.attendee_default_studio"),
+            t("project.report.attendee_default_marketing"),
+            t("project.report.attendee_default_partner1"),
+            t("project.report.attendee_default_other"),
+            t("project.report.attendee_default_other"),
+        ]
     ]
     page = ReportPage(id=1)
     page.photo_blocks = [PhotoBlock()]

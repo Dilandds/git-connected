@@ -982,7 +982,12 @@
       "page_components": "Components and photos for modification",
       "page_add_photo_row": "+ Add photo row",
       "page_comments": "Comments",
-      "page_comments_ph": "Comments..."
+      "page_comments_ph": "Comments...",
+      "attendee_default_production": "Production",
+      "attendee_default_studio": "Studio",
+      "attendee_default_marketing": "Marketing",
+      "attendee_default_partner1": "Partner 1",
+      "attendee_default_other": "Other"
     }
   },
   "todo": {

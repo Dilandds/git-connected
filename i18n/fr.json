@@ -982,7 +982,12 @@
       "page_components": "Composants et photos pour modification",
       "page_add_photo_row": "+ Ajouter une ligne photo",
       "page_comments": "Commentaires",
-      "page_comments_ph": "Commentaires..."
+      "page_comments_ph": "Commentaires...",
+      "attendee_default_production": "Production",
+      "attendee_default_studio": "Studio",
+      "attendee_default_marketing": "Marketing",
+      "attendee_default_partner1": "Partenaire 1",
+      "attendee_default_other": "Autre"
     }
   },
   "todo": {
