@@ -879,15 +879,6 @@ class ReportEditor(QWidget):
         self._add_page_btn.setCursor(Qt.PointingHandCursor)
         self._add_page_btn.clicked.connect(self._add_page)
 
-        self._lock_btn = QPushButton("🔒  Lock Report")
-        self._lock_btn.setStyleSheet(_BTN_LOCK)
-        self._lock_btn.setFixedHeight(26)
-        self._lock_btn.setCursor(Qt.PointingHandCursor)
-        self._lock_btn.clicked.connect(self._lock_report)
-        if self._report.locked:
-            self._lock_btn.setEnabled(False)
-            self._lock_btn.setText("🔒  Locked")
-
         self._page_layout.addStretch()
         root.addWidget(self._page_bar)
 
@@ -895,7 +886,7 @@ class ReportEditor(QWidget):
         root.addWidget(self._stack, 1)
 
     def _refresh_page_tabs(self):
-        _permanent = (self._add_page_btn, self._lock_btn)
+        _permanent = (self._add_page_btn,)
         while self._page_layout.count():
             item = self._page_layout.takeAt(0)
             w = item.widget()
@@ -934,7 +925,6 @@ class ReportEditor(QWidget):
 
         self._page_layout.addWidget(self._add_page_btn)
         self._page_layout.addStretch()
-        self._page_layout.addWidget(self._lock_btn)
 
     def _rebuild_pages(self):
         while self._stack.count():
@@ -991,25 +981,6 @@ class ReportEditor(QWidget):
         self._switch_page(new_idx)
         self.changed.emit()
 
-    def _lock_report(self):
-        dlg = StyledModalDialog(
-            self, "Lock this report?",
-            "This will permanently lock the report and cannot be undone.\nAre you sure?",
-            primary_text="Yes, Lock",
-            secondary_text="Cancel",
-        )
-        dlg.primary_btn.clicked.connect(dlg.accept)
-        dlg.secondary_btn.clicked.connect(dlg.reject)
-        if dlg.exec_() != dlg.Accepted:
-            return
-        self._report.locked = True
-        self._lock_btn.setEnabled(False)
-        self._lock_btn.setText("🔒  Locked")
-        self._add_page_btn.setEnabled(False)
-        for pw in self._page_widgets:
-            pw.lock()
-        self._refresh_page_tabs()
-        self.changed.emit()
 
     def update_project_info(self, info: dict):
         for pw in self._page_widgets:
