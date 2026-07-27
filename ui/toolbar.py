@@ -721,13 +721,20 @@ class ViewControlsToolbar(QWidget):
         # ── Group 4: Capture / output ─────────────────────────────────────────
         self.screenshot_btn = ToolbarButton("📷", "", t("toolbar.screenshot_tooltip"))
         self.screenshot_btn.text_label.hide()
+        # Pull the hidden label out of the layout entirely (not just hide())
+        # and center the remaining icon with zero margins — leaving the old
+        # asymmetric (8, 2, 8, 2) margins let leftover label spacing nudge
+        # the camera icon off-center, most visibly on Windows where the
+        # taller 32px button made the offset more noticeable.
+        self.screenshot_btn._layout.removeWidget(self.screenshot_btn.text_label)
         self.screenshot_btn.icon_label.setFixedSize(24, 24)
         self.screenshot_btn.icon_label.setStyleSheet(
             f"color: {_TB_FG}; font-size: 22px; background: transparent;"
         )
         self.screenshot_btn._icon_label_font_px = 22
         self.screenshot_btn._icon_size = 24
-        self.screenshot_btn._layout.setContentsMargins(8, 2, 8, 2)
+        self.screenshot_btn._layout.setContentsMargins(0, 0, 0, 0)
+        self.screenshot_btn._layout.setAlignment(Qt.AlignCenter)
         _scr_h = 32 if sys.platform == 'win32' else 28
         self.screenshot_btn.setFixedSize(44, _scr_h)
         self.screenshot_btn.clicked.connect(self._on_screenshot_clicked)
