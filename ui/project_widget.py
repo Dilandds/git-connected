@@ -1140,7 +1140,18 @@ class TheProjectWidget(QWidget):
             data['password_hash'] = self._project_password_hash
         for key, _ in _NAV_ITEMS:
             w = self._screen_widgets.get(key)
-            data[key] = w.get_data() if w and hasattr(w, 'get_data') else {}
+            if w is not None and hasattr(w, 'get_data'):
+                data[key] = w.get_data()
+            elif key in self._pending_restoration:
+                # A language switch tore this screen down and it hasn't been
+                # reopened since, so there's no live widget to ask — but its
+                # last-known data is still waiting here for lazy restoration.
+                # Falling through to {} would silently wipe it from the save
+                # file, which was the root cause of saved projects coming
+                # back with some tabs' data missing.
+                data[key] = self._pending_restoration[key]
+            else:
+                data[key] = {}
 
         # Bundle each viewer tab (model + annotations + drawings + texture) as base64
         data['viewer_tabs'] = self._bundle_viewer_tabs()
