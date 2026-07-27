@@ -11,10 +11,10 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea,
     QSizePolicy, QAbstractScrollArea, QDialog,
 )
-from PyQt5.QtCore import Qt, QDate, QRect, QRectF, QPoint, QSize, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QRect, QRectF, QPoint, QSize, QMimeData, pyqtSignal
 from PyQt5.QtGui import (
     QPainter, QColor, QPen, QBrush, QFont, QFontMetrics,
-    QPainterPath, QCursor,
+    QPainterPath, QCursor, QDrag,
 )
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import ask_yes_no_dialog
@@ -552,6 +552,69 @@ class GanttCanvas(QWidget):
 
 # ── Main Timeline Widget ──────────────────────────────────────────────────────
 
+class _DraggableOperatorTab(QWidget):
+    """Container widget for a single operator tab (name button + close
+    button) that can be dragged onto another operator tab to reorder them.
+    Reordering itself is delegated back to the owning TimelineWidget via the
+    on_reorder(source_index, target_index) callback — this widget only
+    knows its own current index and how to start/accept a drag."""
+
+    _MIME_TYPE = 'application/x-ectoform-operator-tab-index'
+    _DRAG_THRESHOLD = 10
+
+    def __init__(self, index: int, on_reorder, parent=None):
+        super().__init__(parent)
+        self._index = index
+        self._on_reorder = on_reorder
+        self._drag_start_pos: Optional[QPoint] = None
+        self.setStyleSheet('background: transparent;')
+        self.setAcceptDrops(True)
+
+    def set_index(self, index: int):
+        self._index = index
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._drag_start_pos is not None and event.buttons() & Qt.LeftButton
+                and (event.pos() - self._drag_start_pos).manhattanLength() >= self._DRAG_THRESHOLD):
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setData(self._MIME_TYPE, str(self._index).encode('ascii'))
+            drag.setMimeData(mime)
+            self._drag_start_pos = None
+            drag.exec_(Qt.MoveAction)
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(self._MIME_TYPE):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(self._MIME_TYPE):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        mime = event.mimeData()
+        if not mime.hasFormat(self._MIME_TYPE):
+            return
+        try:
+            source_idx = int(bytes(mime.data(self._MIME_TYPE)).decode('ascii'))
+        except (TypeError, ValueError):
+            return
+        if source_idx != self._index and self._on_reorder is not None:
+            self._on_reorder(source_idx, self._index)
+        event.acceptProposedAction()
+
+
 class TimelineWidget(QWidget):
     """Full Timeline screen."""
 
@@ -760,7 +823,7 @@ class TimelineWidget(QWidget):
 
         for i, op in enumerate(self._operators):
             is_active = (i == self._current_tab)
-            container = QWidget(); container.setStyleSheet('background: transparent;')
+            container = _DraggableOperatorTab(i, self._reorder_operators)
             ch = QHBoxLayout(container); ch.setContentsMargins(0, 0, 0, 0); ch.setSpacing(0)
 
             btn = QPushButton(op.name); btn.setFixedHeight(28)
@@ -787,6 +850,32 @@ class TimelineWidget(QWidget):
         self._canvas.set_current_operator(idx)
         self._refresh_tabs()
         self._detail.clear()
+
+    def _reorder_operators(self, source_idx: int, target_idx: int):
+        """Move the operator tab at source_idx to target_idx (drag-and-drop
+        reordering of the operator tabs) and refresh the tab bar + Gantt
+        canvas to match the new order."""
+        if not (0 <= source_idx < len(self._operators)):
+            return
+        if not (0 <= target_idx < len(self._operators)):
+            return
+
+        op = self._operators.pop(source_idx)
+        self._operators.insert(target_idx, op)
+
+        # Keep the active tab pointing at the same operator it was before
+        # the drag, since its index may have shifted as a result.
+        if self._current_tab == source_idx:
+            self._current_tab = target_idx
+        elif source_idx < self._current_tab <= target_idx:
+            self._current_tab -= 1
+        elif target_idx <= self._current_tab < source_idx:
+            self._current_tab += 1
+
+        self._canvas.set_operators(self._operators)
+        self._canvas.set_current_operator(self._current_tab)
+        self._refresh_tabs()
+        self.changed.emit()
 
     # ── controls ──────────────────────────────────────────────────────────────
 
