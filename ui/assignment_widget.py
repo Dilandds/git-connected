@@ -67,6 +67,10 @@ _CANVAS_W_P, _CANVAS_H_P = 1300, 980    # portrait canvas
 _CANVAS_W_L, _CANVAS_H_L = 1550, 760   # landscape canvas
 _IMG_GAP  = 72       # horizontal gap between card and A4 frame
 
+_ZOOM_MIN  = 0.5
+_ZOOM_MAX  = 2.5
+_ZOOM_STEP = 0.1
+
 # ── Styles ────────────────────────────────────────────────────────────────────
 _BTN = f"""
     QPushButton {{
@@ -161,15 +165,27 @@ class AssignmentCanvas(QWidget):
     """The interactive paint surface — A4 frame + area cards + bezier arrows."""
 
     changed = pyqtSignal()
+    # Emitted when the user clicks the empty (no-image-yet) canvas — the
+    # parent AssignmentWidget wires this to the same file picker as the
+    # "Import" toolbar button so the whole workspace acts as an upload target.
+    upload_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self._orientation: str = 'portrait'
         self._a4_w: int = _A4_W_PORTRAIT
         self._a4_h: int = _A4_H_PORTRAIT
         self._font_family: str = ''
         self._font_size: int = 10
-        self.setFixedSize(_CANVAS_W_P, _CANVAS_H_P)
+        # Base (unzoomed) canvas size in logical units — the widget's actual
+        # pixel size is base * zoom (see _apply_zoom_size). paintEvent draws
+        # everything in base-space and applies a single QPainter.scale(), so
+        # cards/arrows/image all zoom together and stay in registration.
+        self._base_w: int = _CANVAS_W_P
+        self._base_h: int = _CANVAS_H_P
+        self._zoom: float = 1.0
+        self._apply_zoom_size()
         self.setMouseTracking(True)
         self.setCursor(Qt.ArrowCursor)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -193,6 +209,14 @@ class AssignmentCanvas(QWidget):
         self._undo_stack: list = []
         self._redo_stack: list = []
 
+        # Marquee — scrolls a hovered card's title/supplier/status text left
+        # when it's too long to fit, mirroring the hover marquee used for
+        # long names in Traceability and the Timeline Operations column.
+        self._marquee_card: Optional[AreaCard] = None
+        self._marquee_offsets: dict = {'title': 0, 'supplier': 0, 'status': 0}
+        self._marquee_timer = QTimer(self)
+        self._marquee_timer.timeout.connect(self._marquee_step)
+
     def _font(self, size: int, bold: bool = False) -> QFont:
         """Build a QFont for canvas text — falls back to the app's standard
         cross-platform family (make_font) when no explicit family was chosen,
@@ -207,9 +231,33 @@ class AssignmentCanvas(QWidget):
     # ── A4 frame geometry ─────────────────────────────────────────────────────
 
     def _img_rect(self) -> QRectF:
-        x = (self.width() - self._a4_w) / 2
-        y = (self.height() - self._a4_h) / 2
+        x = (self._base_w - self._a4_w) / 2
+        y = (self._base_h - self._a4_h) / 2
         return QRectF(x, y, self._a4_w, self._a4_h)
+
+    # ── Zoom ──────────────────────────────────────────────────────────────────
+
+    def _apply_zoom_size(self):
+        """Resize the widget to base-size * zoom. The surrounding QScrollArea
+        (setWidgetResizable(False)) then shows scrollbars as needed — the
+        same mechanism already used for portrait vs. landscape sizing."""
+        self.setFixedSize(round(self._base_w * self._zoom), round(self._base_h * self._zoom))
+        self.update()
+
+    def set_zoom(self, value: float):
+        value = max(_ZOOM_MIN, min(_ZOOM_MAX, value))
+        if value == self._zoom:
+            return
+        self._zoom = value
+        self._apply_zoom_size()
+
+    def wheelEvent(self, e):
+        """Plain scroll zooms the whole canvas (photo + cards + arrows scale
+        together so arrows stay pinned to the right spot on the photo) —
+        same "scroll to zoom" gesture used by the Quality Control image
+        annotation view, so panning happens via the scrollbars instead."""
+        self.set_zoom(self._zoom + (_ZOOM_STEP if e.angleDelta().y() > 0 else -_ZOOM_STEP))
+        e.accept()
 
     # ── Paint ─────────────────────────────────────────────────────────────────
 
@@ -218,7 +266,11 @@ class AssignmentCanvas(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
 
+        # Everything below is drawn in base-space (unzoomed logical units);
+        # this single scale is what makes the image, cards and arrows zoom
+        # together and stay in registration with each other.
         p.fillRect(self.rect(), QColor(_BG))
+        p.scale(self._zoom, self._zoom)
 
         img_rect = self._img_rect()
 
@@ -314,30 +366,24 @@ class AssignmentCanvas(QWidget):
 
         # Title
         p.setPen(QColor(_TEXT))
-        p.setFont(self._font(self._font_size, bold=True))
-        p.drawText(
-            QRectF(r.x() + 38, r.y() + 8, r.width() - 46, 24),
-            Qt.AlignLeft | Qt.AlignVCenter,
-            card.title or '—',
-        )
+        title_font = self._font(self._font_size, bold=True)
+        p.setFont(title_font)
+        title_rect = QRectF(r.x() + 38, r.y() + 8, r.width() - 46, 24)
+        self._draw_marquee_field(p, card, 'title', card.title or '—', title_font, title_rect)
 
         # Supplier / task
         p.setPen(QColor(_MUTED))
-        p.setFont(self._font(max(self._font_size - 1, 7)))
-        p.drawText(
-            QRectF(r.x() + 9, r.y() + 37, r.width() - 18, 18),
-            Qt.AlignLeft | Qt.AlignVCenter,
-            card.supplier,
-        )
+        supplier_font = self._font(max(self._font_size - 1, 7))
+        p.setFont(supplier_font)
+        supplier_rect = QRectF(r.x() + 9, r.y() + 37, r.width() - 18, 18)
+        self._draw_marquee_field(p, card, 'supplier', card.supplier, supplier_font, supplier_rect)
 
         # Status
         p.setPen(QColor(_STATUS_COLORS.get(card.status, _MUTED)))
-        p.setFont(self._font(max(self._font_size - 1, 7), bold=True))
-        p.drawText(
-            QRectF(r.x() + 9, r.y() + 57, r.width() - 18, 18),
-            Qt.AlignLeft | Qt.AlignVCenter,
-            card.status,
-        )
+        status_font = self._font(max(self._font_size - 1, 7), bold=True)
+        p.setFont(status_font)
+        status_rect = QRectF(r.x() + 9, r.y() + 57, r.width() - 18, 18)
+        self._draw_marquee_field(p, card, 'status', card.status, status_font, status_rect)
 
         # Connection dot on the edge facing the image — click it directly to
         # start/finish a line (no separate "Line" tool needed).
@@ -345,6 +391,70 @@ class AssignmentCanvas(QWidget):
         p.setBrush(QBrush(QColor(card.color)))
         p.setPen(QPen(QColor('#ffffff'), 1.5))
         p.drawEllipse(cp, _DOT_R, _DOT_R)
+
+    # ── Card-text marquee (hover-to-scroll long title/supplier/status) ─────────
+
+    def _draw_marquee_field(self, p: QPainter, card: AreaCard, field: str,
+                             text: str, font: QFont, rect: QRectF):
+        """Draw one card text field, clipped to `rect`, scrolling it left if
+        it's the currently-hovered card's field and the text overflows."""
+        avail_w = rect.width()
+        dx = 0
+        if card is self._marquee_card:
+            overflow = QFontMetrics(font).horizontalAdvance(text) - avail_w
+            if overflow > 0:
+                dx = -self._marquee_offsets.get(field, 0)
+        p.save()
+        p.setClipRect(rect)
+        p.drawText(rect.translated(dx, 0), Qt.AlignLeft | Qt.AlignVCenter, text)
+        p.restore()
+
+    def _set_marquee_hover(self, card: Optional[AreaCard]):
+        """Update which card is being marquee-scrolled, starting immediately
+        the moment the cursor lands on a card with any overflowing field."""
+        if card is self._marquee_card:
+            return
+        self._marquee_card = card
+        self._marquee_offsets = {'title': 0, 'supplier': 0, 'status': 0}
+        if card is not None and self._card_has_overflow(card):
+            self._marquee_timer.start(25)
+        else:
+            self._marquee_timer.stop()
+        self.update()
+
+    def _card_has_overflow(self, card: AreaCard) -> bool:
+        r = card.rect()
+        fields = [
+            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 46),
+            ('supplier', card.supplier, self._font(max(self._font_size - 1, 7)), r.width() - 18),
+            ('status', card.status, self._font(max(self._font_size - 1, 7), bold=True), r.width() - 18),
+        ]
+        return any(QFontMetrics(f).horizontalAdvance(txt) > w for _, txt, f, w in fields)
+
+    def _marquee_step(self):
+        card = self._marquee_card
+        if card is None:
+            self._marquee_timer.stop()
+            return
+        r = card.rect()
+        fields = [
+            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 46),
+            ('supplier', card.supplier, self._font(max(self._font_size - 1, 7)), r.width() - 18),
+            ('status', card.status, self._font(max(self._font_size - 1, 7), bold=True), r.width() - 18),
+        ]
+        any_overflow = False
+        for key, txt, f, avail_w in fields:
+            overflow = QFontMetrics(f).horizontalAdvance(txt) - avail_w
+            if overflow <= 0:
+                continue
+            any_overflow = True
+            off = self._marquee_offsets.get(key, 0) + 1
+            if off > overflow + 16:
+                off = 0
+            self._marquee_offsets[key] = off
+        if not any_overflow:
+            self._marquee_timer.stop()
+        self.update()
 
     def _paint_arrow(
         self, p: QPainter, start: QPointF, end: QPointF,
@@ -410,8 +520,54 @@ class AssignmentCanvas(QWidget):
 
     # ── Mouse events ──────────────────────────────────────────────────────────
 
+    # ── Drag & drop / click-to-upload ───────────────────────────────────────
+    _IMPORTABLE_EXTS = ('.jpg', '.jpeg', '.png', '.bmp', '.webp', '.gif', '.heic', '.heif', '.pdf')
+
+    def _dropped_path(self, event) -> Optional[str]:
+        """Return the local file path from a drag event's mime data if it's
+        a single file with an importable extension, else None."""
+        md = event.mimeData()
+        if not md.hasUrls():
+            return None
+        urls = md.urls()
+        if len(urls) != 1:
+            return None
+        path = urls[0].toLocalFile()
+        if not path:
+            return None
+        if os.path.splitext(path)[1].lower() in self._IMPORTABLE_EXTS:
+            return path
+        return None
+
+    def dragEnterEvent(self, event):
+        if self._dropped_path(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._dropped_path(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        path = self._dropped_path(event)
+        if path:
+            event.acceptProposedAction()
+            self.import_image(path)
+        else:
+            event.ignore()
+
     def mousePressEvent(self, e):
-        pos = QPointF(e.pos())
+        pos = QPointF(e.pos()) / self._zoom
+
+        # Empty canvas (no photo imported yet) — clicking anywhere on the A4
+        # frame opens the same file picker as the "Import" button, mirroring
+        # the drag-and-drop target below so the whole workspace is clickable.
+        if self._image is None and self._tool == 'select' and self._img_rect().contains(pos):
+            self.upload_requested.emit()
+            return
 
         # Clicking a card's connection dot starts a line; clicking again
         # (either on the image, or on another card's dot) finishes it. This
@@ -462,12 +618,12 @@ class AssignmentCanvas(QWidget):
 
     def mouseDoubleClickEvent(self, e):
         if self._tool == 'select':
-            card = self._card_at(QPointF(e.pos()))
+            card = self._card_at(QPointF(e.pos()) / self._zoom)
             if card:
                 self._open_edit_dialog(card)
 
     def mouseMoveEvent(self, e):
-        pos = QPointF(e.pos())
+        pos = QPointF(e.pos()) / self._zoom
 
         if self._drag_id and self._tool == 'select':
             card = self._find_card(self._drag_id)
@@ -481,10 +637,17 @@ class AssignmentCanvas(QWidget):
             self.update()
 
         else:
-            # Cannot see the entire sentence in the panel — show the full text
-            # on hover when any card field is longer than the card itself.
+            # Cannot see the entire sentence in the panel — scroll the text
+            # left on hover (marquee) when any card field is longer than the
+            # card itself, same effect as Traceability/Timeline.
             card = self._card_at(pos)
             self.setToolTip(self._overflow_tooltip(card) if card else '')
+            self._set_marquee_hover(card)
+
+    def leaveEvent(self, e):
+        super().leaveEvent(e)
+        self._set_marquee_hover(None)
+        self.setToolTip('')
 
     def _overflow_tooltip(self, card: AreaCard) -> str:
         """Return the full title/supplier/status text if any of it would be
@@ -649,13 +812,13 @@ class AssignmentCanvas(QWidget):
             self._orientation = 'landscape'
             self._a4_w = _A4_W_LANDSCAPE
             self._a4_h = _A4_H_LANDSCAPE
-            self.setFixedSize(_CANVAS_W_L, _CANVAS_H_L)
+            self._base_w, self._base_h = _CANVAS_W_L, _CANVAS_H_L
         else:
             self._orientation = 'portrait'
             self._a4_w = _A4_W_PORTRAIT
             self._a4_h = _A4_H_PORTRAIT
-            self.setFixedSize(_CANVAS_W_P, _CANVAS_H_P)
-        self.update()
+            self._base_w, self._base_h = _CANVAS_W_P, _CANVAS_H_P
+        self._apply_zoom_size()
 
     def undo(self):
         if self._undo_stack:
@@ -730,10 +893,11 @@ class AssignmentCanvas(QWidget):
             self._orientation = orientation
             if orientation == 'landscape':
                 self._a4_w, self._a4_h = _A4_W_LANDSCAPE, _A4_H_LANDSCAPE
-                self.setFixedSize(_CANVAS_W_L, _CANVAS_H_L)
+                self._base_w, self._base_h = _CANVAS_W_L, _CANVAS_H_L
             else:
                 self._a4_w, self._a4_h = _A4_W_PORTRAIT, _A4_H_PORTRAIT
-                self.setFixedSize(_CANVAS_W_P, _CANVAS_H_P)
+                self._base_w, self._base_h = _CANVAS_W_P, _CANVAS_H_P
+            self._apply_zoom_size()
 
         if self._image_path:
             self._load_pixmap(self._image_path)
@@ -762,6 +926,7 @@ class AssignmentWidget(QWidget):
 
         self._canvas = AssignmentCanvas()
         self._canvas.changed.connect(self.changed)
+        self._canvas.upload_requested.connect(self._on_import)
 
         root.addWidget(self._build_header())
 
