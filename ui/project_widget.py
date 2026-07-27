@@ -996,8 +996,16 @@ class TheProjectWidget(QWidget):
         self._nav.retranslate()
         self._retranslate_topbar()
 
-        # 5. Keep saved data available for lazy restoration
-        self._pending_restoration = {k: v for k, v in saved.items() if v}
+        # 5. Keep saved data available for lazy restoration. MERGE into any
+        # restoration still pending from an earlier language switch instead
+        # of replacing it outright — only the widgets alive *this* round show
+        # up in `saved` (destroyed/not-yet-reopened tabs are None and get
+        # skipped above), so a plain assignment here would silently drop the
+        # still-unclaimed data for any tab the user hadn't revisited yet.
+        # That was the root cause of "switching language wipes other tabs'
+        # data" — a second toggle before reopening every tab discarded
+        # whatever was still waiting to be restored.
+        self._pending_restoration.update({k: v for k, v in saved.items() if v})
 
         # 6. Restore project info (placeholders are now updated)
         self._nav.set_info_data(project_info)
