@@ -673,11 +673,10 @@ class TimelineWidget(QWidget):
         col = QVBoxLayout(); col.setSpacing(1); col.addWidget(title); col.addWidget(sub)
         layout.addLayout(col); layout.addStretch()
 
-        for label, slot in ((t('project.timeline.add_operation'), self._add_operation),
-                             (t('project.timeline.add_event'),     self._add_task)):
-            btn = QPushButton(label); btn.setStyleSheet(_BTN_SMALL); btn.setFixedHeight(28)
-            btn.setCursor(Qt.PointingHandCursor); btn.clicked.connect(slot)
-            layout.addWidget(btn)
+        add_op = QPushButton(t('project.timeline.add_operator'))
+        add_op.setStyleSheet(_BTN_SMALL); add_op.setFixedHeight(28)
+        add_op.setCursor(Qt.PointingHandCursor); add_op.clicked.connect(self._add_operator)
+        layout.addWidget(add_op)
 
         layout.addSpacing(8)
         sep = QFrame(); sep.setFrameShape(QFrame.VLine)
@@ -686,10 +685,12 @@ class TimelineWidget(QWidget):
         layout.addWidget(sep)
         layout.addSpacing(8)
 
-        add_op = QPushButton(t('project.timeline.add_operator'))
-        add_op.setStyleSheet(_BTN_SMALL); add_op.setFixedHeight(28)
-        add_op.setCursor(Qt.PointingHandCursor); add_op.clicked.connect(self._add_operator)
-        layout.addWidget(add_op)
+        # Order: Add operator / Add operation / Add event
+        for label, slot in ((t('project.timeline.add_operation'), self._add_operation),
+                             (t('project.timeline.add_event'),     self._add_task)):
+            btn = QPushButton(label); btn.setStyleSheet(_BTN_SMALL); btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor); btn.clicked.connect(slot)
+            layout.addWidget(btn)
 
         # Balance the title on the left so the Add Operation/Event/Operator
         # group sits centered in the bar rather than pinned to the right.
