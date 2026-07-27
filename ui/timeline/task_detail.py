@@ -51,10 +51,9 @@ _PRIORITY_COLORS = {
     'Critical': ('#dc2626', '#fee2e2'),
 }
 
-_PANEL_W = 360
+_PANEL_W = 180
 _PHOTO_H = 160                              # photo height (half-width column)
-_COL     = (_PANEL_W - 24 - 8) // 2        # each column ≈ 164 px
-_PROG_W  = _COL - 12                        # usable width for progress bar fill
+_PROG_W  = _PANEL_W - 24                    # usable width for progress bar fill (12px col margins each side)
 
 
 class TaskDetailPanel(QWidget):
@@ -115,12 +114,6 @@ class TaskDetailPanel(QWidget):
         sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-height: 1px; border: none;')
         return sep
 
-    def _vline(self) -> QFrame:
-        sep = QFrame()
-        sep.setFrameShape(QFrame.VLine)
-        sep.setStyleSheet(f'color: {BORDER}; background: {BORDER}; max-width: 1px; border: none;')
-        return sep
-
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text.upper())
         lbl.setStyleSheet(
@@ -162,7 +155,7 @@ class TaskDetailPanel(QWidget):
 
         col.addSpacing(4)
 
-        btn_row = QHBoxLayout(); btn_row.setSpacing(6); btn_row.setContentsMargins(0, 0, 0, 0)
+        btn_row = QVBoxLayout(); btn_row.setSpacing(6); btn_row.setContentsMargins(0, 0, 0, 0)
 
         self._edit_btn = QPushButton(t('project.timeline.detail_edit'))
         self._edit_btn.setFixedHeight(28)
@@ -259,11 +252,13 @@ class TaskDetailPanel(QWidget):
         col.setContentsMargins(12, 8, 12, 10)
         col.setSpacing(6)
 
-        # ── Priority (full width) ─────────────────────────────────────────
+        # ── Priority (2×2 grid — 4-across no longer fits the halved panel width) ──
         col.addWidget(self._section_label(t('project.timeline.detail_priority')))
-        priority_row = QHBoxLayout(); priority_row.setSpacing(4); priority_row.setContentsMargins(0, 0, 0, 0)
+        priority_grid = QVBoxLayout(); priority_grid.setSpacing(4); priority_grid.setContentsMargins(0, 0, 0, 0)
+        priority_row1 = QHBoxLayout(); priority_row1.setSpacing(4); priority_row1.setContentsMargins(0, 0, 0, 0)
+        priority_row2 = QHBoxLayout(); priority_row2.setSpacing(4); priority_row2.setContentsMargins(0, 0, 0, 0)
         self._priority_btns: dict[str, QPushButton] = {}
-        for level in ('Low', 'Normal', 'High', 'Critical'):
+        for i, level in enumerate(('Low', 'Normal', 'High', 'Critical')):
             fg, bg = _PRIORITY_COLORS[level]
             btn = QPushButton(t(f'project.timeline.priority_{level.lower()}'))
             btn.setFixedHeight(24)
@@ -285,22 +280,15 @@ class TaskDetailPanel(QWidget):
             """)
             btn.clicked.connect(lambda _, l=level: self._set_priority(l))
             self._priority_btns[level] = btn
-            priority_row.addWidget(btn)
-        col.addLayout(priority_row)
+            (priority_row1 if i < 2 else priority_row2).addWidget(btn)
+        priority_grid.addLayout(priority_row1)
+        priority_grid.addLayout(priority_row2)
+        col.addLayout(priority_grid)
 
         col.addWidget(self._hline())
 
-        # ── Status (left) | Progress (right) ─────────────────────────────
-        bottom_row = QHBoxLayout(); bottom_row.setSpacing(8); bottom_row.setContentsMargins(0, 0, 0, 0)
-
-        # Left: execution status + delay
-        left_w = QWidget(); left_w.setStyleSheet(f'background: {CARD}; border: none;')
-        left_w.setFixedWidth(_COL)
-        left = QVBoxLayout(left_w)
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(3)
-
-        left.addWidget(self._section_label(t('project.timeline.detail_exec_status')))
+        # ── Execution status + delay (full width, single column) ──────────
+        col.addWidget(self._section_label(t('project.timeline.detail_exec_status')))
         status_row = QHBoxLayout(); status_row.setSpacing(6); status_row.setContentsMargins(0, 0, 0, 0)
         self._exec_status_dot = QLabel('●')
         self._exec_status_dot.setStyleSheet('font-size: 9px; background: transparent; border: none;')
@@ -309,7 +297,7 @@ class TaskDetailPanel(QWidget):
         status_row.addWidget(self._exec_status_dot)
         status_row.addWidget(self._exec_status_lbl)
         status_row.addStretch()
-        left.addLayout(status_row)
+        col.addLayout(status_row)
 
         delay_row = QHBoxLayout(); delay_row.setSpacing(4); delay_row.setContentsMargins(0, 0, 0, 0)
         delay_prefix = QLabel(t('project.timeline.detail_delay'))
@@ -319,10 +307,10 @@ class TaskDetailPanel(QWidget):
         delay_row.addWidget(delay_prefix)
         delay_row.addWidget(self._delay_lbl)
         delay_row.addStretch()
-        left.addLayout(delay_row)
+        col.addLayout(delay_row)
 
         # ── Delay extension ───────────────────────────────────────────────
-        left.addWidget(self._hline())
+        col.addWidget(self._hline())
 
         self._delay_ext_cb = QCheckBox(t('project.timeline.detail_delay_ext_check'))
         self._delay_ext_cb.setStyleSheet(f"""
@@ -335,7 +323,7 @@ class TaskDetailPanel(QWidget):
         """)
         self._delay_ext_cb.setEnabled(False)
         self._delay_ext_cb.toggled.connect(self._on_delay_ext_toggled)
-        left.addWidget(self._delay_ext_cb)
+        col.addWidget(self._delay_ext_cb)
 
         ext_row = QHBoxLayout()
         ext_row.setSpacing(4)
@@ -362,19 +350,14 @@ class TaskDetailPanel(QWidget):
 
         ext_row.addWidget(self._delay_ext_edit, 1)
         ext_row.addWidget(self._delay_ext_clear)
-        left.addLayout(ext_row)
-        left.addStretch()
+        col.addLayout(ext_row)
 
-        # Right: progress
-        right_w = QWidget(); right_w.setStyleSheet(f'background: {CARD}; border: none;')
-        right = QVBoxLayout(right_w)
-        right.setContentsMargins(0, 0, 0, 0)
-        right.setSpacing(3)
-
-        right.addWidget(self._section_label(t('project.timeline.detail_progress')))
+        # ── Progress (full width, stacked below status instead of beside it) ──
+        col.addWidget(self._hline())
+        col.addWidget(self._section_label(t('project.timeline.detail_progress')))
         self._progress_pct_lbl = QLabel('0 %')
         self._progress_pct_lbl.setStyleSheet(f'color: {TEXT}; font-size: 13px; font-weight: 700; background: transparent; border: none;')
-        right.addWidget(self._progress_pct_lbl)
+        col.addWidget(self._progress_pct_lbl)
 
         self._progress_bar_bg = QFrame()
         self._progress_bar_bg.setFixedHeight(8)
@@ -383,13 +366,7 @@ class TaskDetailPanel(QWidget):
         self._progress_bar_fill.setFixedHeight(8)
         self._progress_bar_fill.setStyleSheet(f'background: {ACCENT}; border-radius: 4px; border: none;')
         self._progress_bar_fill.setFixedWidth(0)
-        right.addWidget(self._progress_bar_bg)
-        right.addStretch()
-
-        bottom_row.addWidget(left_w)
-        bottom_row.addWidget(self._vline())
-        bottom_row.addWidget(right_w)
-        col.addLayout(bottom_row)
+        col.addWidget(self._progress_bar_bg)
 
         return w
 

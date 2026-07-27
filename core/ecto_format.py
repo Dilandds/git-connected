@@ -73,9 +73,10 @@ class EctoFormat:
     def export(mesh, annotations: List[dict], output_path: str,
                source_format: str = 'stl', original_filename: str = None,
                drawings: Optional[List[dict]] = None,
-               texture_data: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[str]]:
+               texture_data: Optional[Dict[str, Any]] = None,
+               reader_mode: bool = True) -> Tuple[bool, str, Optional[str]]:
         """Create an .ecto bundle containing the model, annotations, images, and drawings.
-        
+
         Args:
             mesh: PyVista mesh object to export
             annotations: List of annotation dictionaries
@@ -83,7 +84,11 @@ class EctoFormat:
             source_format: Format to save the model as ('stl' or 'obj')
             original_filename: Original filename for metadata
             drawings: Optional list of draw strokes [{points: [[x,y,z],...], color: '#RRGGBB'}]
-            
+            reader_mode: Whether the bundle should reopen view-only. True (default)
+                for genuine share/export-to-reader flows. Pass False for bundles
+                used purely as internal storage for the *same* editable session
+                (e.g. project-file save/reload) — those should stay editable.
+
         Returns:
             tuple: (success: bool, message_or_path: str, creator_token: str|None)
         """
@@ -150,10 +155,10 @@ class EctoFormat:
                 ann_copy['image_paths'] = new_image_paths
                 processed_annotations.append(ann_copy)
             
-            # 3. Create annotations.json with reader_mode=True
+            # 3. Create annotations.json with the requested reader_mode
             annotations_data = {
                 'version': '1.0',
-                'reader_mode': True,  # Always true for shared files
+                'reader_mode': reader_mode,
                 'annotations': processed_annotations
             }
             annotations_path = os.path.join(temp_dir, 'annotations.json')
@@ -212,7 +217,7 @@ class EctoFormat:
                 'model_file': model_filename,
                 'model_format': source_format,
                 'original_filename': original_filename or 'unknown',
-                'reader_mode': True,
+                'reader_mode': reader_mode,
                 'creator_token': creator_token,
                 'annotation_count': len(processed_annotations),
                 'has_images': has_images,

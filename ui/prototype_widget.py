@@ -177,8 +177,13 @@ class _ThumbPhoto(QFrame):
         lay.setAlignment(Qt.AlignCenter)
         lay.setSpacing(4)
 
-        # Remove button (top-right corner overlay)
-        self._remove_btn = QPushButton('×')
+        # Remove button (top-right corner overlay) — must be parented to self,
+        # otherwise it's a parentless top-level widget: .move()/.show() then
+        # position and pop an independent floating OS window at absolute
+        # screen coordinates instead of overlaying this thumbnail, visually
+        # landing on top of (and obscuring) whatever's underneath — including
+        # a just-uploaded photo, which then looks like it got deleted.
+        self._remove_btn = QPushButton('×', self)
         self._remove_btn.setFixedSize(18, 18)
         self._remove_btn.setCursor(Qt.PointingHandCursor)
         self._remove_btn.hide()

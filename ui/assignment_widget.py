@@ -12,6 +12,7 @@ from typing import List, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QFileDialog, QComboBox, QLineEdit, QDialog,
+    QStackedWidget,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF, QTimer
 from PyQt5.QtGui import (
@@ -66,6 +67,11 @@ _A4_W_LANDSCAPE, _A4_H_LANDSCAPE = 793, 560
 _CANVAS_W_P, _CANVAS_H_P = 1300, 980    # portrait canvas
 _CANVAS_W_L, _CANVAS_H_L = 1550, 760   # landscape canvas
 _IMG_GAP  = 72       # horizontal gap between card and A4 frame
+# Margins reserved around the frame for the area cards, used when the frame
+# is sized to an imported image's own aspect ratio (see _fit_frame_to_image)
+# rather than one of the two fixed A4 presets above.
+_FRAME_SIDE_MARGIN = 370
+_FRAME_VERT_MARGIN = 93
 
 _ZOOM_MIN  = 0.5
 _ZOOM_MAX  = 2.5
@@ -165,10 +171,11 @@ class AssignmentCanvas(QWidget):
     """The interactive paint surface — A4 frame + area cards + bezier arrows."""
 
     changed = pyqtSignal()
-    # Emitted when the user clicks the empty (no-image-yet) canvas — the
-    # parent AssignmentWidget wires this to the same file picker as the
-    # "Import" toolbar button so the whole workspace acts as an upload target.
     upload_requested = pyqtSignal()
+    remove_image_clicked = pyqtSignal()
+    # Emitted whenever orientation is changed (auto or manual) so the parent
+    # widget can update its orientation button label.
+    orientation_changed = pyqtSignal(str)   # 'portrait' | 'landscape'
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -177,7 +184,7 @@ class AssignmentCanvas(QWidget):
         self._a4_w: int = _A4_W_PORTRAIT
         self._a4_h: int = _A4_H_PORTRAIT
         self._font_family: str = ''
-        self._font_size: int = 10
+        self._font_size: int = 13
         # Base (unzoomed) canvas size in logical units — the widget's actual
         # pixel size is base * zoom (see _apply_zoom_size). paintEvent draws
         # everything in base-space and applies a single QPainter.scale(), so
@@ -193,6 +200,7 @@ class AssignmentCanvas(QWidget):
         self._image: Optional[QPixmap] = None
         self._image_name: str = ''
         self._image_path: str = ''
+        self._x_btn_rect: Optional[QRectF] = None   # canvas-space hit rect for × button
         self._cards: List[AreaCard] = []
         self._tool: str = 'select'
         self._selected_id: Optional[str] = None
@@ -289,7 +297,17 @@ class AssignmentCanvas(QWidget):
         # Image or drop hint
         if self._image:
             p.drawPixmap(img_rect.toRect(), self._image)
+            # × remove button — top-right corner of the image
+            _xr = QRectF(img_rect.right() - 28, img_rect.y() + 6, 22, 22)
+            self._x_btn_rect = _xr
+            p.setBrush(QBrush(QColor(0, 0, 0, 140)))
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(_xr)
+            p.setPen(QPen(QColor('#ffffff'), 1.8))
+            p.setFont(self._font(11, bold=True))
+            p.drawText(_xr, Qt.AlignCenter, '×')
         else:
+            self._x_btn_rect = None
             p.setPen(QColor(_MUTED))
             p.setFont(self._font(13))
             p.drawText(img_rect, Qt.AlignCenter, t('assignment.drop_hint'))
@@ -346,43 +364,43 @@ class AssignmentCanvas(QWidget):
         p.drawPath(path)
 
         # Number badge
-        badge = QRectF(r.x() + 9, r.y() + 9, 22, 22)
+        badge = QRectF(r.x() + 9, r.y() + 9, 26, 26)
         p.setBrush(QBrush(QColor(card.color)))
         p.setPen(Qt.NoPen)
         p.drawEllipse(badge)
         p.setPen(QColor('#ffffff'))
-        p.setFont(self._font(9, bold=True))
+        p.setFont(self._font(11, bold=True))
         p.drawText(badge, Qt.AlignCenter, str(card.number))
 
         # Arrow count badge (show if >1 arrow)
         if len(card.arrows) > 1:
-            ab = QRectF(r.right() - 18, r.y() + 4, 14, 14)
+            ab = QRectF(r.right() - 20, r.y() + 4, 16, 16)
             p.setBrush(QBrush(QColor('#6b7280')))
             p.setPen(Qt.NoPen)
-            p.drawRoundedRect(ab, 7, 7)
+            p.drawRoundedRect(ab, 8, 8)
             p.setPen(QColor('#ffffff'))
-            p.setFont(self._font(7, bold=True))
+            p.setFont(self._font(9, bold=True))
             p.drawText(ab, Qt.AlignCenter, str(len(card.arrows)))
 
         # Title
         p.setPen(QColor(_TEXT))
         title_font = self._font(self._font_size, bold=True)
         p.setFont(title_font)
-        title_rect = QRectF(r.x() + 38, r.y() + 8, r.width() - 46, 24)
+        title_rect = QRectF(r.x() + 42, r.y() + 9, r.width() - 52, 26)
         self._draw_marquee_field(p, card, 'title', card.title or '—', title_font, title_rect)
 
         # Supplier / task
         p.setPen(QColor(_MUTED))
-        supplier_font = self._font(max(self._font_size - 1, 7))
+        supplier_font = self._font(max(self._font_size - 2, 9))
         p.setFont(supplier_font)
-        supplier_rect = QRectF(r.x() + 9, r.y() + 37, r.width() - 18, 18)
+        supplier_rect = QRectF(r.x() + 9, r.y() + 42, r.width() - 18, 22)
         self._draw_marquee_field(p, card, 'supplier', card.supplier, supplier_font, supplier_rect)
 
         # Status
         p.setPen(QColor(_STATUS_COLORS.get(card.status, _MUTED)))
-        status_font = self._font(max(self._font_size - 1, 7), bold=True)
+        status_font = self._font(max(self._font_size - 2, 9), bold=True)
         p.setFont(status_font)
-        status_rect = QRectF(r.x() + 9, r.y() + 57, r.width() - 18, 18)
+        status_rect = QRectF(r.x() + 9, r.y() + 66, r.width() - 18, 22)
         self._draw_marquee_field(p, card, 'status', card.status, status_font, status_rect)
 
         # Connection dot on the edge facing the image — click it directly to
@@ -425,9 +443,9 @@ class AssignmentCanvas(QWidget):
     def _card_has_overflow(self, card: AreaCard) -> bool:
         r = card.rect()
         fields = [
-            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 46),
-            ('supplier', card.supplier, self._font(max(self._font_size - 1, 7)), r.width() - 18),
-            ('status', card.status, self._font(max(self._font_size - 1, 7), bold=True), r.width() - 18),
+            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 52),
+            ('supplier', card.supplier, self._font(max(self._font_size - 2, 9)), r.width() - 18),
+            ('status', card.status, self._font(max(self._font_size - 2, 9), bold=True), r.width() - 18),
         ]
         return any(QFontMetrics(f).horizontalAdvance(txt) > w for _, txt, f, w in fields)
 
@@ -438,9 +456,9 @@ class AssignmentCanvas(QWidget):
             return
         r = card.rect()
         fields = [
-            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 46),
-            ('supplier', card.supplier, self._font(max(self._font_size - 1, 7)), r.width() - 18),
-            ('status', card.status, self._font(max(self._font_size - 1, 7), bold=True), r.width() - 18),
+            ('title', card.title or '—', self._font(self._font_size, bold=True), r.width() - 52),
+            ('supplier', card.supplier, self._font(max(self._font_size - 2, 9)), r.width() - 18),
+            ('status', card.status, self._font(max(self._font_size - 2, 9), bold=True), r.width() - 18),
         ]
         any_overflow = False
         for key, txt, f, avail_w in fields:
@@ -562,10 +580,20 @@ class AssignmentCanvas(QWidget):
     def mousePressEvent(self, e):
         pos = QPointF(e.pos()) / self._zoom
 
+        # × button on the loaded image — remove the image
+        if (self._x_btn_rect is not None
+                and self._x_btn_rect.contains(pos)
+                and e.button() == Qt.LeftButton):
+            self.remove_image_clicked.emit()
+            return
+
         # Empty canvas (no photo imported yet) — clicking anywhere on the A4
         # frame opens the same file picker as the "Import" button, mirroring
         # the drag-and-drop target below so the whole workspace is clickable.
-        if self._image is None and self._tool == 'select' and self._img_rect().contains(pos):
+        # Only when there's no card there — otherwise a card dragged onto the
+        # frame area could never be selected (or deleted) again.
+        if (self._image is None and self._tool == 'select'
+                and self._img_rect().contains(pos) and self._card_at(pos) is None):
             self.upload_requested.emit()
             return
 
@@ -653,13 +681,13 @@ class AssignmentCanvas(QWidget):
         """Return the full title/supplier/status text if any of it would be
         clipped at the card's current width, else ''."""
         r = card.rect()
-        avail_title = r.width() - 46
+        avail_title = r.width() - 52
         avail_body  = r.width() - 18
         lines = []
         fm_title = QFontMetrics(self._font(self._font_size, bold=True))
         if card.title and fm_title.horizontalAdvance(card.title) > avail_title:
             lines.append(card.title)
-        fm_body = QFontMetrics(self._font(max(self._font_size - 1, 7)))
+        fm_body = QFontMetrics(self._font(max(self._font_size - 2, 9)))
         if card.supplier and fm_body.horizontalAdvance(card.supplier) > avail_body:
             lines.append(card.supplier)
         if card.status and fm_body.horizontalAdvance(card.status) > avail_body:
@@ -742,8 +770,32 @@ class AssignmentCanvas(QWidget):
             self._image = pix
             self._image_name = os.path.basename(path)
             self._image_path = path
+            # Size the frame to the image's own aspect ratio so the full
+            # image is shown without being stretched to fit a fixed A4 box
+            self._fit_frame_to_image(pix)
             return True
         return False
+
+    def _fit_frame_to_image(self, pix: QPixmap):
+        """Resize the A4 frame to match the imported image's own aspect
+        ratio (capped to the largest extent either A4 preset ever used, so
+        the frame stays a similar on-screen size), instead of stretching
+        the image to fill a fixed-ratio frame and distorting it."""
+        img_w, img_h = pix.width(), pix.height()
+        if img_w <= 0 or img_h <= 0:
+            return
+        scale = min(_A4_W_LANDSCAPE / img_w, _A4_H_PORTRAIT / img_h)
+        frame_w = max(1, round(img_w * scale))
+        frame_h = max(1, round(img_h * scale))
+        self._a4_w, self._a4_h = frame_w, frame_h
+        self._base_w = frame_w + 2 * _FRAME_SIDE_MARGIN
+        self._base_h = frame_h + 2 * _FRAME_VERT_MARGIN
+        orientation = 'landscape' if frame_w >= frame_h else 'portrait'
+        changed = orientation != self._orientation
+        self._orientation = orientation
+        self._apply_zoom_size()
+        if changed:
+            self.orientation_changed.emit(orientation)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -759,6 +811,19 @@ class AssignmentCanvas(QWidget):
         self._push_undo()
         if self._load_pixmap(path):
             self.changed.emit()
+        self.update()
+
+    def remove_image(self):
+        """Clear the imported product image. Cards/arrows are kept (arrow
+        positions are fractions of the A4 frame, not the image itself, so
+        they stay valid — the frame just shows the drop hint again)."""
+        if self._image is None:
+            return
+        self._push_undo()
+        self._image = None
+        self._image_name = ''
+        self._image_path = ''
+        self.changed.emit()
         self.update()
 
     def add_card(self):
@@ -807,18 +872,26 @@ class AssignmentCanvas(QWidget):
         self._font_size = size
         self.update()
 
-    def toggle_orientation(self):
-        if self._orientation == 'portrait':
-            self._orientation = 'landscape'
-            self._a4_w = _A4_W_LANDSCAPE
-            self._a4_h = _A4_H_LANDSCAPE
+    def _set_orientation(self, orientation: str):
+        if orientation == self._orientation:
+            return
+        self._orientation = orientation
+        if orientation == 'landscape':
+            self._a4_w, self._a4_h = _A4_W_LANDSCAPE, _A4_H_LANDSCAPE
             self._base_w, self._base_h = _CANVAS_W_L, _CANVAS_H_L
         else:
-            self._orientation = 'portrait'
-            self._a4_w = _A4_W_PORTRAIT
-            self._a4_h = _A4_H_PORTRAIT
+            self._a4_w, self._a4_h = _A4_W_PORTRAIT, _A4_H_PORTRAIT
             self._base_w, self._base_h = _CANVAS_W_P, _CANVAS_H_P
         self._apply_zoom_size()
+        self.orientation_changed.emit(orientation)
+
+    def toggle_orientation(self):
+        if self._image is not None:
+            # Frame is locked to the imported image's own aspect ratio —
+            # nothing to toggle without stretching the image again.
+            return
+        target = 'landscape' if self._orientation == 'portrait' else 'portrait'
+        self._set_orientation(target)
 
     def undo(self):
         if self._undo_stack:
@@ -845,6 +918,11 @@ class AssignmentCanvas(QWidget):
     def _restore(self, state: dict):
         self._cards = [AreaCard(**d) for d in state['cards']]
         self._image_name = state.get('image_name', '')
+        self._image_path = state.get('image_path', '')
+        if self._image_path:
+            self._load_pixmap(self._image_path)
+        else:
+            self._image = None
         self._selected_id = None
 
     def _push_undo(self):
@@ -885,7 +963,7 @@ class AssignmentCanvas(QWidget):
         self._image_name = data.get('image_name', '')
         self._image_path = data.get('image_path', '')
         self._font_family = data.get('font_family', '')
-        self._font_size = data.get('font_size', 10)
+        self._font_size = data.get('font_size', 13)
 
         # Restore orientation
         orientation = data.get('orientation', 'portrait')
@@ -905,6 +983,32 @@ class AssignmentCanvas(QWidget):
 
 
 # ── Top-level widget ──────────────────────────────────────────────────────────
+_TAB_ACTIVE = f"""
+    QPushButton {{
+        background: {_ACCENT}; color: white;
+        border: none; border-radius: 5px;
+        font-size: 12px; font-weight: bold; padding: 0 14px;
+    }}
+"""
+_TAB_INACTIVE = f"""
+    QPushButton {{
+        background: #f3f4f6; color: {_MUTED};
+        border: 1px solid {_BORDER}; border-radius: 5px;
+        font-size: 12px; padding: 0 14px;
+    }}
+    QPushButton:hover {{ background: #e5e7eb; color: {_TEXT}; border-color: {_ACCENT}; }}
+"""
+_TAB_CLOSE = f"""
+    QPushButton {{
+        background: transparent; color: {_MUTED};
+        border: none; border-radius: 3px;
+        font-size: 13px; font-weight: bold;
+        padding: 0; margin: 0;
+    }}
+    QPushButton:hover {{ color: #ef4444; background: #fee2e2; }}
+"""
+
+
 class AssignmentWidget(QWidget):
     """The Project — Assignment screen."""
 
@@ -913,22 +1017,59 @@ class AssignmentWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tool_btns: dict = {}
-        self._scroll: Optional[QScrollArea] = None
         self._orient_btn: Optional[QPushButton] = None
         self._color_btn: Optional[QPushButton] = None
         self._last_auto_photo: str = ''
+        self._removed_photo: str = ''
+
+        # Multi-tab state
+        self._canvases: List[AssignmentCanvas] = []
+        self._scrolls: List[QScrollArea] = []
+        self._current_tab: int = 0
+        self._tab_bar_layout: Optional[QHBoxLayout] = None
+        self._stack: Optional[QStackedWidget] = None
+
         self._build_ui()
+
+    @property
+    def _canvas(self) -> AssignmentCanvas:
+        return self._canvases[self._current_tab]
+
+    @property
+    def _scroll(self) -> QScrollArea:
+        return self._scrolls[self._current_tab]
+
+    def _make_canvas(self) -> AssignmentCanvas:
+        canvas = AssignmentCanvas()
+        canvas.changed.connect(self.changed)
+        canvas.upload_requested.connect(self._on_import)
+        canvas.remove_image_clicked.connect(self._on_remove_image)
+        canvas.orientation_changed.connect(self._on_canvas_orientation_changed)
+        return canvas
+
+    def _make_scroll(self, canvas: AssignmentCanvas) -> QScrollArea:
+        sc = QScrollArea()
+        sc.setWidget(canvas)
+        sc.setWidgetResizable(False)
+        sc.setStyleSheet(f'background: {_BG}; border: none;')
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        sc.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        sc.setAlignment(Qt.AlignCenter)
+        return sc
 
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._canvas = AssignmentCanvas()
-        self._canvas.changed.connect(self.changed)
-        self._canvas.upload_requested.connect(self._on_import)
+        # Create first canvas
+        first_canvas = self._make_canvas()
+        self._canvases.append(first_canvas)
+        first_scroll = self._make_scroll(first_canvas)
+        self._scrolls.append(first_scroll)
 
         root.addWidget(self._build_header())
+        root.addWidget(self._build_tab_bar())
 
         body = QWidget()
         body_row = QHBoxLayout(body)
@@ -936,14 +1077,9 @@ class AssignmentWidget(QWidget):
         body_row.setSpacing(0)
         body_row.addWidget(self._build_toolbar())
 
-        self._scroll = QScrollArea()
-        self._scroll.setWidget(self._canvas)
-        self._scroll.setWidgetResizable(False)
-        self._scroll.setStyleSheet(f'background: {_BG}; border: none;')
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._scroll.setAlignment(Qt.AlignCenter)
-        body_row.addWidget(self._scroll, 1)
+        self._stack = QStackedWidget()
+        self._stack.addWidget(first_scroll)
+        body_row.addWidget(self._stack, 1)
 
         root.addWidget(body, 1)
 
@@ -952,12 +1088,97 @@ class AssignmentWidget(QWidget):
         QTimer.singleShot(0, self._center_scroll)
 
     def _center_scroll(self):
-        if self._scroll is None:
-            return
-        hb = self._scroll.horizontalScrollBar()
-        vb = self._scroll.verticalScrollBar()
+        sc = self._scroll
+        hb = sc.horizontalScrollBar()
+        vb = sc.verticalScrollBar()
         hb.setValue((hb.minimum() + hb.maximum()) // 2)
         vb.setValue((vb.minimum() + vb.maximum()) // 2)
+
+    # ── Tab bar ───────────────────────────────────────────────────────────────
+
+    def _build_tab_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedHeight(38)
+        bar.setStyleSheet(
+            f'background: {_CANVAS}; border-bottom: 1px solid {_BORDER};'
+        )
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(10, 5, 10, 5)
+        row.setSpacing(6)
+        self._tab_bar_layout = row
+        self._refresh_tab_bar()
+        return bar
+
+    def _refresh_tab_bar(self):
+        if self._tab_bar_layout is None:
+            return
+        # Clear all widgets from layout
+        while self._tab_bar_layout.count():
+            item = self._tab_bar_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        n = len(self._canvases)
+        for i in range(n):
+            is_active = (i == self._current_tab)
+            container = QWidget()
+            container.setStyleSheet('background: transparent;')
+            ch = QHBoxLayout(container)
+            ch.setContentsMargins(0, 0, 0, 0)
+            ch.setSpacing(0)
+
+            tab_btn = QPushButton(f'Plan {i + 1}')
+            tab_btn.setFixedHeight(26)
+            tab_btn.setCursor(Qt.PointingHandCursor)
+            tab_btn.setStyleSheet(_TAB_ACTIVE if is_active else _TAB_INACTIVE)
+            tab_btn.clicked.connect(lambda _, idx=i: self._switch_tab(idx))
+            ch.addWidget(tab_btn)
+
+            if n > 1:
+                close_btn = QPushButton('×')
+                close_btn.setFixedSize(20, 26)
+                close_btn.setCursor(Qt.PointingHandCursor)
+                close_btn.setStyleSheet(_TAB_CLOSE)
+                close_btn.clicked.connect(lambda _, idx=i: self._close_tab(idx))
+                ch.addWidget(close_btn)
+
+            self._tab_bar_layout.addWidget(container)
+
+        add_btn = QPushButton('+ Plan')
+        add_btn.setFixedHeight(26)
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setStyleSheet(_TAB_INACTIVE)
+        add_btn.clicked.connect(self._add_tab)
+        self._tab_bar_layout.addWidget(add_btn)
+        self._tab_bar_layout.addStretch()
+
+    def _add_tab(self):
+        canvas = self._make_canvas()
+        scroll = self._make_scroll(canvas)
+        self._canvases.append(canvas)
+        self._scrolls.append(scroll)
+        self._stack.addWidget(scroll)
+        self._switch_tab(len(self._canvases) - 1)
+
+    def _close_tab(self, idx: int):
+        if len(self._canvases) <= 1:
+            return
+        canvas = self._canvases.pop(idx)
+        scroll = self._scrolls.pop(idx)
+        self._stack.removeWidget(scroll)
+        canvas.deleteLater()
+        scroll.deleteLater()
+        new_idx = min(self._current_tab, len(self._canvases) - 1)
+        self._current_tab = -1
+        self._switch_tab(new_idx)
+        self.changed.emit()
+
+    def _switch_tab(self, idx: int):
+        self._current_tab = idx
+        self._stack.setCurrentWidget(self._scrolls[idx])
+        self._refresh_tab_bar()
+        QTimer.singleShot(50, self._center_scroll)
 
     def _build_header(self) -> QWidget:
         h = QWidget()
@@ -1025,7 +1246,7 @@ class AssignmentWidget(QWidget):
         redo_btn.clicked.connect(self._canvas.redo)
         col.addWidget(redo_btn)
 
-        del_btn = QPushButton('🗑 ' + t('assignment.delete'))
+        del_btn = QPushButton('🗑 Delete Card')
         del_btn.setStyleSheet(_BTN)
         del_btn.setFixedHeight(30)
         del_btn.setCursor(Qt.PointingHandCursor)
@@ -1137,13 +1358,13 @@ class AssignmentWidget(QWidget):
             for k, btn in self._tool_btns.items():
                 btn.setChecked(k == tool)
 
+    def _on_canvas_orientation_changed(self, orientation: str):
+        if self._orient_btn is not None:
+            self._orient_btn.setText('⇅  Portrait' if orientation == 'landscape' else '⇄  Landscape')
+        QTimer.singleShot(50, self._center_scroll)
+
     def _toggle_orientation(self):
         self._canvas.toggle_orientation()
-        if self._canvas._orientation == 'landscape':
-            self._orient_btn.setText('⇅  Portrait')
-        else:
-            self._orient_btn.setText('⇄  Landscape')
-        QTimer.singleShot(50, self._center_scroll)
 
     def _on_color_btn_clicked(self):
         from ui.draw_color_picker import DrawColorPicker
@@ -1161,17 +1382,18 @@ class AssignmentWidget(QWidget):
             'Images (*.jpg *.jpeg *.png *.heic *.heif *.pdf)',
         )
         if path:
+            self._removed_photo = ''
             self._canvas.import_image(path)
 
     # ── Project widget API ────────────────────────────────────────────────────
 
     def update_project_info(self, info: dict):
-        """Copy the sidebar's main project photo into the assignment canvas
-        as its background image, unless the user has already imported a
-        different image of their own. Mirrors the auto-fill-unless-manually-
-        changed pattern used by the Brief/Report/Traceability screens."""
+        """Copy the sidebar's main project photo into the active canvas as its
+        background image, unless the user has already imported a different one."""
         photo = (info.get('photo_path') or '').strip()
         current = self._canvas._image_path or ''
+        if photo == self._removed_photo:
+            return
         if photo and photo != current and current == self._last_auto_photo:
             self._canvas.import_image(photo)
             self._last_auto_photo = photo
@@ -1179,12 +1401,50 @@ class AssignmentWidget(QWidget):
             self._canvas.import_image(photo)
             self._last_auto_photo = photo
 
+    def _on_remove_image(self):
+        """Remove the image and remember its path so auto-fill doesn't restore it."""
+        self._removed_photo = self._canvas._image_path or ''
+        self._canvas.remove_image()
+
     def get_data(self) -> dict:
-        return self._canvas.get_data()
+        tabs = [c.get_data() for c in self._canvases]
+        return {'tabs': tabs, 'current_tab': self._current_tab}
 
     def set_data(self, data: dict):
-        self._canvas.set_data(data)
-        orientation = data.get('orientation', 'portrait')
+        if 'tabs' not in data:
+            # Legacy single-canvas save — wrap it
+            tabs_data = [data]
+            current_tab = 0
+        else:
+            tabs_data = data.get('tabs', [{}])
+            current_tab = data.get('current_tab', 0)
+
+        # Build the correct number of canvases
+        needed = len(tabs_data)
+        # Add canvases if we need more than the initial one
+        while len(self._canvases) < needed:
+            canvas = self._make_canvas()
+            scroll = self._make_scroll(canvas)
+            self._canvases.append(canvas)
+            self._scrolls.append(scroll)
+            self._stack.addWidget(scroll)
+        # Remove extras if saved data has fewer tabs than current state
+        while len(self._canvases) > needed:
+            canvas = self._canvases.pop()
+            scroll = self._scrolls.pop()
+            self._stack.removeWidget(scroll)
+            canvas.deleteLater()
+            scroll.deleteLater()
+
+        for i, td in enumerate(tabs_data):
+            self._canvases[i].set_data(td)
+
+        self._current_tab = max(0, min(current_tab, len(self._canvases) - 1))
+        self._stack.setCurrentWidget(self._scrolls[self._current_tab])
+        self._refresh_tab_bar()
+
+        # Sync orient button label to the active canvas
+        orientation = self._canvas._orientation
         if self._orient_btn is not None:
             self._orient_btn.setText('⇅  Portrait' if orientation == 'landscape' else '⇄  Landscape')
         QTimer.singleShot(100, self._center_scroll)

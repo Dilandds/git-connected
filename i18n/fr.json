@@ -836,14 +836,10 @@
       "col_delivery": "Date de livraison",
       "overview_tab": "Vue d'ensemble",
       "overview_title": "Vue d'ensemble — Meilleur partenaire par corps de métier",
-      "set_password": "🔒 Définir mot de passe",
       "overview_note": "Généré automatiquement depuis la sélection du meilleur partenaire — lecture seule",
       "col_trade": "Corps de métier",
       "col_best_partner": "Meilleur Partenaire",
       "grand_total": "Total général :",
-      "change_password": "🔒 Changer le mot de passe",
-      "enter_password": "🔓 Entrer le mot de passe",
-      "protected_msg": "Cette section est protégée par mot de passe.",
       "add_partner": "＋ Ajouter un partenaire",
       "project_ctx": "Projet :",
       "company_ctx": "Entreprise :",
@@ -1133,6 +1129,8 @@
     "import_btn": "Importer un fichier",
     "import_title": "Importer une image du produit",
     "import_tooltip": "Importer une image du produit (JPEG, PNG, HEIC/iPhone, PDF)",
+    "remove_image_btn": "Supprimer l'image",
+    "remove_image_tooltip": "Supprimer l'image du produit importée (les cartes sont conservées)",
     "add_area": "Ajouter une carte",
     "add_area_tooltip": "Ajouter une carte d'assignation à gauche ou à droite de l'image",
     "line": "Ligne",
@@ -1148,6 +1146,74 @@
     "card_supplier": "Fournisseur / Tâche",
     "card_supplier_ph": "ex. Fournisseur A",
     "card_status": "Statut"
+  },
+  "quality_control": {
+    "control_points_title": "Points de contrôle",
+    "card": {
+      "color_tooltip": "Cliquer pour changer la couleur",
+      "name_placeholder": "Nom du point de contrôle...",
+      "comment_placeholder": "Entrez vos commentaires..."
+    },
+    "status": {
+      "compliant": "Conforme",
+      "to_check": "À vérifier",
+      "non_compliant": "Non conforme"
+    },
+    "instructions": {
+      "title": "Comment ajouter des points de contrôle",
+      "step1_title": "Capturer une image",
+      "step1_body": "Appuyez sur le bouton 📷 appareil photo dans la barre d'outils du visualiseur — ou glissez-déposez une image dans la zone ci-dessous.",
+      "step2_title": "Passer en mode Image",
+      "step2_body": "Cliquez sur une vignette dans la bande Images d'inspection. Le visualiseur passe du modèle 3D à la vue image.",
+      "step3_title": "Placer un repère sur l'image",
+      "step3_body": "Cliquez une fois sur le point d'inspection (ancrage), puis cliquez à nouveau à l'endroit où l'étiquette numérotée doit apparaître. Un repère numéroté est placé et un point de contrôle est ajouté ici automatiquement.",
+      "note": "ℹ️  Pour revenir au modèle 3D, appuyez sur le bouton ■ 3D dans la barre d'outils du visualiseur."
+    },
+    "annotation": {
+      "tooltip": "Défiler pour zoomer · glisser avec le clic molette pour déplacer",
+      "placeholder": "Cliquez sur une image ci-dessous pour l'annoter"
+    },
+    "drop_zone": {
+      "line1": "Glissez-déposez des images ici",
+      "line2": "ou cliquez pour parcourir",
+      "dialog_title": "Sélectionner des images"
+    },
+    "left_panel": {
+      "title": "Inspection 3D",
+      "hint": "Sélectionnez une zone pour voir les détails d'inspection",
+      "mode_3d": "Modèle 3D",
+      "mode_image": "Vue image",
+      "no_model": "Aucun modèle chargé",
+      "inspection_images": "Images d'inspection",
+      "inspected_by_placeholder": "Nom de l'inspecteur...",
+      "comments_placeholder": "Entrez vos commentaires...",
+      "inspection_date_label": "Date d'inspection",
+      "inspected_by_label": "Inspecté par",
+      "comments_label": "Commentaires",
+      "snap_tooltip": "Capturer la vue actuelle dans la bande de vignettes",
+      "fullscreen_tooltip": "Basculer le visualiseur en plein écran"
+    },
+    "logo": {
+      "drop_text": "Glissez-déposez votre logo ici\nou cliquez pour parcourir",
+      "dialog_title": "Sélectionner un logo"
+    },
+    "company_panel": {
+      "title": "Informations entreprise / pièce",
+      "designation_label": "Désignation",
+      "designation_placeholder": "Entrez la désignation...",
+      "reference_label": "Numéro de référence",
+      "reference_placeholder": "Entrez le numéro de référence...",
+      "manufacturer_label": "Fabriqué par",
+      "manufacturer_placeholder": "Entrez le nom du fabricant...",
+      "due_date_label": "Date d'échéance d'inspection",
+      "due_date_placeholder": "Sélectionnez une date...",
+      "overall_status_title": "Statut global",
+      "status_in_progress": "En cours",
+      "status_approved": "Approuvé",
+      "status_rejected": "Rejeté",
+      "waived_by_label": "Dérogé par",
+      "waived_by_placeholder": "Entrez le nom..."
+    }
   },
   "common": {
     "save": "Enregistrer",

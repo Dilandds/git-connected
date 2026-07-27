@@ -458,14 +458,25 @@ class STLViewerWidget(QWidget):
         if hasattr(self, '_loading_overlay'):
             self._loading_overlay.setGeometry(self.rect())
 
-    def _init_pygfx(self):
+    def force_init(self):
+        """Initialize the WebGPU renderer immediately even if the widget is not yet visible.
+
+        Called from project/QC mode when a new tab is loaded in the background viewer
+        stack (which is hidden) and load_stl() would otherwise time out waiting for
+        showEvent to fire.
+        """
+        if self._initialized:
+            return
+        self._init_pygfx(force=True)
+
+    def _init_pygfx(self, force=False):
         if self._initialized:
             return
         try:
             from PyQt5.QtWidgets import QApplication
             QApplication.processEvents()
 
-            if not self.isVisible() or not self.window().isVisible():
+            if not force and (not self.isVisible() or not self.window().isVisible()):
                 from PyQt5.QtCore import QTimer
                 QTimer.singleShot(200, self._init_pygfx)
                 return
@@ -3102,7 +3113,7 @@ class STLViewerWidget(QWidget):
 
         return result
 
-
+    def restore_draw_strokes(self, strokes):
         """Restore strokes from .ecto import. Each stroke: {'points': [[x,y,z],...], 'color': '#RRGGBB'}."""
         import pygfx as gfx
         for stroke in self._draw_strokes:

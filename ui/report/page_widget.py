@@ -81,23 +81,6 @@ class PageWidget(QScrollArea):
         pl.addWidget(self._flow)
         self._root.addWidget(photos_card)
 
-        # Comments
-        co_card = _card()
-        co = QVBoxLayout(co_card)
-        co.setContentsMargins(14, 10, 14, 10)
-        co.setSpacing(6)
-        co.addWidget(_lbl(t("project.report.page_comments"), muted=False, bold=True, size=15))
-        co.addWidget(_sep())
-        self._comments = QTextEdit()
-        self._comments.setPlaceholderText(t("project.report.page_comments_ph"))
-        self._comments.setMinimumHeight(70)
-        self._comments.setStyleSheet(_INPUT)
-        self._comments.setPlainText(page.comments)
-        self._comments.textChanged.connect(
-            lambda: setattr(self._page, 'comments', self._comments.toPlainText()) or self.changed.emit()
-        )
-        co.addWidget(self._comments)
-        self._root.addWidget(co_card)
         self._root.addStretch()
         self.setWidget(body)
 
@@ -122,7 +105,6 @@ class PageWidget(QScrollArea):
     def lock(self):
         self._locked = True
         self._followup.setReadOnly(True)
-        self._comments.setReadOnly(True)
         self._flow.lock()
         if self._header:
             self._header.lock()

@@ -20,15 +20,14 @@ SIDEBAR = '#1c2029'
 
 # ── task type registry ────────────────────────────────────────────────────────
 TASK_TYPES = {
-    'Manufacturing':   '#3b82f6',
-    'Modification':    '#8b5cf6',
-    'Validation':      '#10b981',
-    'Quality Control': '#f59e0b',
-    'Delivery':        '#06b6d4',
-    'Holidays':        '#6b7280',
-    'Issue':           '#ef4444',
+    'Développement':  '#3b82f6',
+    'Production':     '#10b981',
+    'Modification':   '#8b5cf6',
+    'Livraison':      '#06b6d4',
+    'Résolution':     '#f59e0b',
+    'Indisponible':   '#6b7280',
 }
-DEFAULT_TYPE = 'Manufacturing'
+DEFAULT_TYPE = 'Développement'
 URGENT_COLOR = '#ef4444'
 
 # ── Gantt layout constants ────────────────────────────────────────────────────
@@ -96,25 +95,25 @@ def sample_data() -> List[Operator]:
     _operator_label = t('project.timeline.dlg_operator')
     op1 = Operator(1, f'{_operator_label} 1', [
         Operation(1, 'Operation 1', [
-            Task(1, 'Initial concept',    t_date.addDays(-10), t_date.addDays(-7),  'Modification'),
+            Task(1, 'Initial concept',    t_date.addDays(-10), t_date.addDays(-7),  'Développement'),
             Task(2, '3D Modification',    t_date.addDays(-4),  t_date.addDays(1),   'Modification'),
-            Task(3, 'Check and update',   t_date.addDays(3),   t_date.addDays(6),   'Validation'),
+            Task(3, 'Check and update',   t_date.addDays(3),   t_date.addDays(6),   'Résolution'),
         ]),
         Operation(2, 'Operation 2', [
-            Task(4, 'Factory production', t_date.addDays(-6),  t_date.addDays(-2),  'Manufacturing'),
-            Task(5, 'Quality check',      t_date.addDays(0),   t_date.addDays(4),   'Quality Control'),
+            Task(4, 'Factory production', t_date.addDays(-6),  t_date.addDays(-2),  'Production'),
+            Task(5, 'Quality check',      t_date.addDays(0),   t_date.addDays(4),   'Production'),
         ]),
         Operation(3, 'Operation 3', [
-            Task(6, 'URGENT DELIVERY',    t_date.addDays(2),   t_date.addDays(5),   'Delivery', is_urgent=True),
+            Task(6, 'URGENT DELIVERY',    t_date.addDays(2),   t_date.addDays(5),   'Livraison', is_urgent=True),
         ]),
     ])
     op2 = Operator(2, f'{_operator_label} 2', [
         Operation(4, 'Operation 1', [
-            Task(7, 'Design review',      t_date.addDays(-8),  t_date.addDays(-3),  'Validation'),
-            Task(8, 'Prototype build',    t_date.addDays(1),   t_date.addDays(8),   'Manufacturing'),
+            Task(7, 'Design review',      t_date.addDays(-8),  t_date.addDays(-3),  'Résolution'),
+            Task(8, 'Prototype build',    t_date.addDays(1),   t_date.addDays(8),   'Développement'),
         ]),
         Operation(5, 'Operation 2', [
-            Task(9, 'Supplier sourcing',  t_date.addDays(-2),  t_date.addDays(6),   'Manufacturing'),
+            Task(9, 'Supplier sourcing',  t_date.addDays(-2),  t_date.addDays(6),   'Production'),
         ]),
     ])
     return [op1, op2]

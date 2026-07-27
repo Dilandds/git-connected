@@ -20,14 +20,18 @@ logger = logging.getLogger(__name__)
 
 
 class _FontSizeWidget(QWidget):
-    """Font size control: QLineEdit + visible ▲/▼ buttons. Avoids QSpinBox QSS/suffix quirks."""
+    """Numeric stepper control: QLineEdit + visible ▲/▼ buttons. Avoids QSpinBox
+    QSS/suffix quirks. Despite the name, also reused for the line/arrow width
+    control (different range + suffix) to avoid duplicating this widget."""
     valueChanged = pyqtSignal(int)
-    _MIN, _MAX = 10, 500
 
-    def __init__(self, initial: int = 50, parent=None):
+    def __init__(self, initial: int = 25, min_val: int = 10, max_val: int = 500,
+                 suffix: str = "pt", parent=None):
         super().__init__(parent)
         self._value = initial
-        # 46 (number) + 18 (pt) + 18 (buttons) = 82 px total
+        self._min = min_val
+        self._max = max_val
+        # 46 (number) + 18 (suffix) + 18 (buttons) = 82 px total
         self.setFixedSize(82, 26)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -37,7 +41,7 @@ class _FontSizeWidget(QWidget):
         self._edit = QLineEdit(str(initial))
         self._edit.setFixedSize(46, 26)
         self._edit.setAlignment(Qt.AlignCenter)
-        self._edit.setValidator(QIntValidator(self._MIN, self._MAX))
+        self._edit.setValidator(QIntValidator(self._min, self._max))
         self._edit.setStyleSheet(f"""
             QLineEdit {{
                 background: {default_theme.row_bg_standard}; color: {default_theme.text_primary};
@@ -45,7 +49,7 @@ class _FontSizeWidget(QWidget):
                 border-radius: 5px 0 0 5px; font-size: 11px; padding: 1px 4px;
             }}
             QLineEdit:focus {{ border-color: {default_theme.button_primary}; }}
-        """)
+        """ + TOOLTIP_STYLE)
         self._edit.editingFinished.connect(self._commit)
         _orig_focus = self._edit.focusInEvent
         def _focus_in(ev, _orig=_orig_focus):
@@ -54,17 +58,17 @@ class _FontSizeWidget(QWidget):
         self._edit.focusInEvent = _focus_in
         lay.addWidget(self._edit)
 
-        pt = QLabel("pt")
-        pt.setFixedSize(18, 26)
-        pt.setAlignment(Qt.AlignCenter)
-        pt.setStyleSheet(f"""
+        suffix_lbl = QLabel(suffix)
+        suffix_lbl.setFixedSize(18, 26)
+        suffix_lbl.setAlignment(Qt.AlignCenter)
+        suffix_lbl.setStyleSheet(f"""
             QLabel {{
                 background: {default_theme.row_bg_standard}; color: {default_theme.text_subtext};
                 border: 1px solid {default_theme.border_standard}; border-left: none; border-right: none;
                 font-size: 10px;
             }}
-        """)
-        lay.addWidget(pt)
+        """ + TOOLTIP_STYLE)
+        lay.addWidget(suffix_lbl)
 
         _bs = f"""
             QPushButton {{
@@ -73,39 +77,48 @@ class _FontSizeWidget(QWidget):
             }}
             QPushButton:hover {{ background: {default_theme.row_bg_hover}; }}
             QPushButton:pressed {{ background: {default_theme.button_primary}; color: white; }}
-        """
+        """ + TOOLTIP_STYLE
         btn_col = QVBoxLayout()
         btn_col.setContentsMargins(0, 0, 0, 0)
         btn_col.setSpacing(0)
 
-        up = QPushButton("▲")
-        up.setFixedSize(18, 13)
-        up.setCursor(Qt.PointingHandCursor)
-        up.setStyleSheet(_bs + "QPushButton { border-radius: 0 5px 0 0; border-bottom: none; }")
-        up.clicked.connect(lambda: self._step(1))
-        btn_col.addWidget(up)
+        self._up_btn = QPushButton("▲")
+        self._up_btn.setFixedSize(18, 13)
+        self._up_btn.setCursor(Qt.PointingHandCursor)
+        self._up_btn.setStyleSheet(_bs + "QPushButton { border-radius: 0 5px 0 0; border-bottom: none; }")
+        self._up_btn.clicked.connect(lambda: self._step(1))
+        btn_col.addWidget(self._up_btn)
 
-        dn = QPushButton("▼")
-        dn.setFixedSize(18, 13)
-        dn.setCursor(Qt.PointingHandCursor)
-        dn.setStyleSheet(_bs + "QPushButton { border-radius: 0 0 5px 0; }")
-        dn.clicked.connect(lambda: self._step(-1))
-        btn_col.addWidget(dn)
+        self._dn_btn = QPushButton("▼")
+        self._dn_btn.setFixedSize(18, 13)
+        self._dn_btn.setCursor(Qt.PointingHandCursor)
+        self._dn_btn.setStyleSheet(_bs + "QPushButton { border-radius: 0 0 5px 0; }")
+        self._dn_btn.clicked.connect(lambda: self._step(-1))
+        btn_col.addWidget(self._dn_btn)
 
+        self._suffix_lbl = suffix_lbl
         lay.addLayout(btn_col)
+
+    def setToolTip(self, text: str):
+        """Propagate to every child too — they fully tile this widget's area,
+        so a tooltip set only on the container itself would never actually
+        be reachable by the cursor."""
+        super().setToolTip(text)
+        for w in (self._edit, self._suffix_lbl, self._up_btn, self._dn_btn):
+            w.setToolTip(text)
 
     def _commit(self):
         try:
             v = int(self._edit.text())
         except ValueError:
             v = self._value
-        self._set(max(self._MIN, min(self._MAX, v)))
+        self._set(max(self._min, min(self._max, v)))
 
     def _step(self, d: int):
         self._set(self._value + d)
 
     def _set(self, v: int):
-        self._value = max(self._MIN, min(self._MAX, v))
+        self._value = max(self._min, min(self._max, v))
         self._edit.setText(str(self._value))
         self.valueChanged.emit(self._value)
 
@@ -122,6 +135,9 @@ TOOL_LINE = 'line'
 TOOL_TEXT = 'text'
 TOOL_ARROW = 'arrow'
 
+# Smaller default — the arrow/line was rendering oversized (esp. on Windows)
+_DEFAULT_LINE_WIDTH = 16
+
 
 class _EditorCanvas(QWidget):
     """Canvas widget that renders the screenshot with drawn annotations on top."""
@@ -133,8 +149,7 @@ class _EditorCanvas(QWidget):
         self._offset = QPoint(0, 0)
         self._tool = TOOL_NONE
         self._color = '#000000'
-        # Smaller default — the arrow/line was rendering oversized (esp. on Windows)
-        self._line_width = 16
+        self._line_width = _DEFAULT_LINE_WIDTH
         # Default text size when editing a screenshot
         self._font_size = 25
 
@@ -466,6 +481,16 @@ class ScreenshotEditorDialog(QDialog):
         self._arrow_btn.clicked.connect(lambda: self._set_tool(TOOL_ARROW))
         toolbar.addWidget(self._arrow_btn)
 
+        # Line/arrow width spinner — visible at all times, only affects the
+        # line & arrow tools (mirrors the font size spinner further along).
+        # Canvas isn't built yet at this point, so use the same shared
+        # default constant the canvas itself initializes from.
+        self._width_spin = _FontSizeWidget(initial=_DEFAULT_LINE_WIDTH,
+                                            min_val=2, max_val=100, suffix="px")
+        self._width_spin.setToolTip("Line/arrow width")
+        self._width_spin.valueChanged.connect(self._on_line_width_changed)
+        toolbar.addWidget(self._width_spin)
+
         self._text_btn = QPushButton(t("screenshot_editor.text"))
         self._text_btn.setToolTip(t("screenshot_editor.hint_text"))
         self._text_btn.setCursor(Qt.PointingHandCursor)
@@ -474,7 +499,7 @@ class ScreenshotEditorDialog(QDialog):
         toolbar.addWidget(self._text_btn)
 
         # Font size spinner — visible at all times, only affects text tool
-        self._font_spin = _FontSizeWidget(initial=50)
+        self._font_spin = _FontSizeWidget(initial=25)
         self._font_spin.setToolTip("Text font size")
         self._font_spin.valueChanged.connect(self._on_font_size_changed)
         toolbar.addWidget(self._font_spin)
@@ -542,6 +567,7 @@ class ScreenshotEditorDialog(QDialog):
         self._canvas = _EditorCanvas(self._original, self)
         self._canvas.setMinimumSize(400, 300)
         self._canvas.set_font_size(self._font_spin.value())  # sync initial value
+        self._canvas.set_line_width(self._width_spin.value())  # sync initial value
         layout.addWidget(self._canvas, 1)
 
         # Bottom buttons
@@ -621,6 +647,10 @@ class ScreenshotEditorDialog(QDialog):
     def _on_font_size_changed(self, size: int):
         if hasattr(self, '_canvas'):
             self._canvas.set_font_size(size)
+
+    def _on_line_width_changed(self, width: int):
+        if hasattr(self, '_canvas'):
+            self._canvas.set_line_width(width)
 
     def _show_color_picker(self):
         picker = DrawColorPicker(self)

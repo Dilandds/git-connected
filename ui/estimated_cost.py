@@ -5,7 +5,7 @@ Structure:
   EstimatedCostWidget
   └── Trade tabs  (Trade 1, Trade 2 … + Add trade)
       └── TradeWidget  (sub-tabs per trade)
-          ├── Overview tab   – global best-partner summary, password-protected
+          ├── Overview tab   – global best-partner summary (read only)
           ├── Comparison tab – read-only all-partners table for this trade
           └── Partner tabs   (Partner 1, Partner 2 … + Add partner)
               └── PartnerPanel
@@ -25,10 +25,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtGui import QColor, QFont
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE, arrow_up_url as _arrow_up, arrow_down_url as _arrow_down
-from ui.modal_utils import (
-    ask_yes_no_dialog, ask_password_dialog,
-    show_warning_dialog, show_message_dialog, ask_text_input_dialog,
-)
+from ui.modal_utils import ask_yes_no_dialog, ask_text_input_dialog
 from i18n import t
 _ARROW_URL = _get_arrow()
 
@@ -788,8 +785,6 @@ class OverviewPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._password: str = ""
-        self._unlocked: bool = True
         self.setStyleSheet(f"background: {_BG};")
         self._root = QVBoxLayout(self)
         self._root.setContentsMargins(16, 14, 16, 14)
@@ -804,18 +799,6 @@ class OverviewPanel(QWidget):
         hdr.setStyleSheet(f"color: {_TEXT}; background: transparent; border: none;")
         hdr_row.addWidget(hdr)
         hdr_row.addStretch()
-        self._lock_btn = QPushButton(t('project.cost.set_password'))
-        self._lock_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: #f1f3f5; color: {_MUTED};
-                border: 1px solid {_BORDER}; border-radius: 4px;
-                font-size: 14px; padding: 3px 10px;
-            }}
-            QPushButton:hover {{ color: {_TEXT}; border-color: {_ACCENT}; }}
-        """)
-        self._lock_btn.setCursor(Qt.PointingHandCursor)
-        self._lock_btn.clicked.connect(self._manage_password)
-        hdr_row.addWidget(self._lock_btn)
         self._root.addLayout(hdr_row)
 
         sub = _lbl(t('project.cost.overview_note'), muted=True)
@@ -849,34 +832,6 @@ class OverviewPanel(QWidget):
         self._root.addLayout(total_row)
         self._root.addStretch()
 
-        # Lock overlay
-        self._overlay = QWidget(self)
-        self._overlay.setStyleSheet(f"background: rgba(248,249,250,0.96);")
-        self._overlay.setVisible(False)
-        overlay_l = QVBoxLayout(self._overlay)
-        overlay_l.setAlignment(Qt.AlignCenter)
-        lock_icon = QLabel("🔒")
-        lock_icon.setAlignment(Qt.AlignCenter)
-        lock_icon.setStyleSheet("font-size: 40px; background: transparent; border: none;")
-        lock_msg = QLabel(t('project.cost.protected_msg'))
-        lock_msg.setAlignment(Qt.AlignCenter)
-        lock_msg.setStyleSheet(f"color: {_TEXT}; font-size: 16px; background: transparent; border: none;")
-        unlock_btn = QPushButton(t('project.cost.enter_password'))
-        unlock_btn.setStyleSheet(_BTN_PRIMARY)
-        unlock_btn.setFixedWidth(180)
-        unlock_btn.setFixedHeight(34)
-        unlock_btn.setCursor(Qt.PointingHandCursor)
-        unlock_btn.clicked.connect(self._try_unlock)
-        overlay_l.addWidget(lock_icon)
-        overlay_l.addSpacing(10)
-        overlay_l.addWidget(lock_msg)
-        overlay_l.addSpacing(12)
-        overlay_l.addWidget(unlock_btn, alignment=Qt.AlignCenter)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._overlay.setGeometry(self.rect())
-
     def refresh(self, trades: List[CostTrade], currency: str):
         sym = _CURRENCY_SYMBOLS.get(currency, currency + " ")
         self._table.setRowCount(0)
@@ -899,43 +854,6 @@ class OverviewPanel(QWidget):
                 if item:
                     item.setBackground(QColor("#f0fdf4"))
         self._grand_total_lbl.setText(f"{t('project.cost.grand_total')} {sym}{grand_total:,.2f}")
-
-    def show_and_lock_if_needed(self):
-        if self._password and not self._unlocked:
-            self._overlay.setVisible(True)
-        else:
-            self._overlay.setVisible(False)
-
-    def _try_unlock(self):
-        pwd, ok = ask_password_dialog(self, "Password Required", "Enter password to view Overview")
-        if ok and pwd == self._password:
-            self._unlocked = True
-            self._overlay.setVisible(False)
-        elif ok:
-            show_warning_dialog(self, "Incorrect Password", "The password you entered is incorrect.")
-
-    def _manage_password(self):
-        if self._password:
-            current, ok = ask_password_dialog(
-                self, "Confirm Password", "Enter current password to change or clear it"
-            )
-            if not ok:
-                return
-            if current != self._password:
-                show_warning_dialog(self, "Incorrect Password", "Current password is incorrect.")
-                return
-        new_pwd, ok = ask_password_dialog(
-            self, "Set Password",
-            "Enter new password (leave empty to remove password protection)"
-        )
-        if ok:
-            self._password = new_pwd.strip()
-            self._unlocked = not bool(self._password)
-            self._lock_btn.setText(t('project.cost.change_password') if self._password else t('project.cost.set_password'))
-            if self._password:
-                show_message_dialog(self, "Password Set", "Overview is now password-protected.")
-            else:
-                self._overlay.setVisible(False)
 
 
 # ── TradeWidget ───────────────────────────────────────────────────────────────
@@ -1041,7 +959,6 @@ class TradeWidget(QWidget):
         self._current_sub = idx
         if idx == 0:
             self._overview_panel.refresh(self._all_trades(), self._currency_fn())
-            self._overview_panel.show_and_lock_if_needed()
             self._stack.setCurrentIndex(0)
         elif idx == 1:
             self._comparison_panel.refresh(self._trade, self._currency_fn())

@@ -66,6 +66,15 @@ _TABLE_STYLE = f"""
     QTableWidget::item:selected {{
         background-color: #dbeafe; color: {_TEXT};
     }}
+    /* The in-place cell editor Qt creates on double-click is a bare QLineEdit
+       with no rule of its own above, so it falls back to the OS palette — on
+       macOS Dark Mode that's white text, invisible against the white cell it
+       sits on. Pin its colors explicitly. */
+    QTableWidget QLineEdit {{
+        background-color: {_CARD}; color: {_TEXT};
+        border: 1px solid {_ACCENT}; border-radius: 2px;
+        padding: 2px 4px;
+    }}
     QHeaderView::section {{
         background-color: #f1f3f5; color: {_MUTED};
         border: none; border-bottom: 1px solid {_BORDER};

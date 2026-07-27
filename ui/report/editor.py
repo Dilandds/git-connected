@@ -10,12 +10,11 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from .models import Report, ReportPage, PhotoRow
 from .shared import (
     _BG, _BORDER,
-    _BTN_SMALL, _BTN_LOCK,
+    _BTN_SMALL,
     _TAB_ACTIVE, _TAB_INACTIVE, _TAB_ACTIVE_L, _TAB_INACTIVE_L,
     _CLOSE_ACTIVE, _CLOSE_INACTIVE,
 )
 from .page_widget import PageWidget
-from ui.modal_utils import MessageModal
 from i18n import t
 
 
@@ -56,15 +55,6 @@ class ReportEditor(QWidget):
         self._add_page_btn.setCursor(Qt.PointingHandCursor)
         self._add_page_btn.clicked.connect(self._add_page)
 
-        self._lock_btn = QPushButton(t("project.report.lock"))
-        self._lock_btn.setStyleSheet(_BTN_LOCK)
-        self._lock_btn.setFixedHeight(26)
-        self._lock_btn.setCursor(Qt.PointingHandCursor)
-        self._lock_btn.clicked.connect(self._lock_report)
-        if self._report.locked:
-            self._lock_btn.setEnabled(False)
-            self._lock_btn.setText(t("project.report.locked"))
-
         self._page_layout.addStretch()
         root.addWidget(self._page_bar)
 
@@ -72,7 +62,7 @@ class ReportEditor(QWidget):
         root.addWidget(self._stack, 1)
 
     def _refresh_page_tabs(self):
-        _permanent = (self._add_page_btn, self._lock_btn)
+        _permanent = (self._add_page_btn,)
         while self._page_layout.count():
             item = self._page_layout.takeAt(0)
             w = item.widget()
@@ -111,7 +101,6 @@ class ReportEditor(QWidget):
 
         self._page_layout.addWidget(self._add_page_btn)
         self._page_layout.addStretch()
-        self._page_layout.addWidget(self._lock_btn)
 
     def _rebuild_pages(self):
         while self._stack.count():
@@ -166,26 +155,6 @@ class ReportEditor(QWidget):
         new_idx = min(self._current_page, len(self._report.pages) - 1)
         self._current_page = -1
         self._switch_page(new_idx)
-        self.changed.emit()
-
-    def _lock_report(self):
-        dlg = MessageModal(
-            self, "Lock this report?",
-            "This will permanently lock the report and cannot be undone.\nAre you sure?",
-            primary_text="Yes, Lock",
-            secondary_text="Cancel",
-        )
-        dlg.primary_btn.clicked.connect(dlg.accept)
-        dlg.secondary_btn.clicked.connect(dlg.reject)
-        if dlg.exec_() != dlg.Accepted:
-            return
-        self._report.locked = True
-        self._lock_btn.setEnabled(False)
-        self._lock_btn.setText(t("project.report.locked"))
-        self._add_page_btn.setEnabled(False)
-        for pw in self._page_widgets:
-            pw.lock()
-        self._refresh_page_tabs()
         self.changed.emit()
 
     def add_screenshot_to_report(self, pixmap) -> bool:

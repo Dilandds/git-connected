@@ -15,7 +15,7 @@ from ui.components import (
     DimensionRow, SurfaceAreaRow, WeightRow, WeightDensityInputRow,
     Separator, ScaleResultRow, ReportCheckbox, confirm_dialog,
 )
-from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url, TOOLTIP_STYLE
+from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
 from i18n import t, on_language_changed
 from core.edition import is_education
 
@@ -330,34 +330,6 @@ class SidebarPanel(QWidget):
         card.setAttribute(Qt.WA_StyledBackground, True)
         self._add_card_shadow(card)
 
-    def _make_help_badge(self, tooltip_text: str) -> QLabel:
-        """Create a small circular '?' badge that shows `tooltip_text` on hover.
-
-        Used in section headers in place of always-visible disclaimer footers.
-        """
-        badge = QLabel("?")
-        badge.setFixedSize(18, 18)
-        badge.setAlignment(Qt.AlignCenter)
-        badge.setCursor(Qt.WhatsThisCursor)
-        badge.setToolTip(tooltip_text)
-        # Slightly delay-free, multi-line tooltip via rich text
-        badge.setStyleSheet(
-            "QLabel {"
-            "  background-color: rgba(255,255,255,0.18);"
-            "  color: #ffffff;"
-            "  border: 1px solid rgba(255,255,255,0.35);"
-            "  border-radius: 9px;"
-            "  font-size: 15px;"
-            "  font-weight: 700;"
-            "}"
-            "QLabel:hover {"
-            "  background-color: rgba(255,255,255,0.32);"
-            "  border-color: rgba(255,255,255,0.6);"
-            "}"
-            + TOOLTIP_STYLE
-        )
-        return badge
-
     def init_ui(self):
         """Initialize the sidebar UI."""
         # Create scroll area
@@ -435,8 +407,7 @@ class SidebarPanel(QWidget):
         self.upload_btn.setMinimumHeight(50)
         self.upload_btn.setObjectName("uploadBtn")
         self.upload_btn.setCursor(Qt.PointingHandCursor)
-        self.upload_btn.setStyleSheet(get_button_style("uploadBtn") + TOOLTIP_STYLE)
-        self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
+        self.upload_btn.setStyleSheet(get_button_style("uploadBtn"))
         self.upload_btn.setAttribute(Qt.WA_StyledBackground, True)
         # Strong black drop shadow (visible below the pill; layout margin reserves space in stylesheet)
         self._add_card_shadow(self.upload_btn, blur_radius=34, y_offset=9, alpha=210)
@@ -607,9 +578,6 @@ class SidebarPanel(QWidget):
         hdr.addWidget(wave_icon)
         hdr.addWidget(self.surface_title_label)
         hdr.addStretch()
-        hdr.addWidget(self._make_help_badge(
-            "Sum of all triangle areas in the mesh. Useful for surface treatment cost estimates."
-        ))
         card_layout.addLayout(hdr)
 
         # ── Two-column inner card ──
@@ -1601,8 +1569,6 @@ class SidebarPanel(QWidget):
         icon_label.setAlignment(Qt.AlignCenter)
         
         header_layout.addWidget(self.export_ecto_title_label)
-        self.export_ecto_help_badge = self._make_help_badge(t("sidebar.export_ecto_footer"))
-        header_layout.addWidget(self.export_ecto_help_badge)
         header_layout.addStretch()
         header_layout.addWidget(icon_label)
         card_layout.addLayout(header_layout)
@@ -1814,10 +1780,7 @@ class SidebarPanel(QWidget):
             "font-size: 16px; background: transparent; border: none; padding: 0px;"
         )
         icon_lbl.setAlignment(Qt.AlignCenter)
-        help_badge = self._make_help_badge(t("sidebar.export_review_footer"))
-
         header_layout.addWidget(title_lbl)
-        header_layout.addWidget(help_badge)
         header_layout.addStretch()
         header_layout.addWidget(icon_lbl)
         card_layout.addLayout(header_layout)

@@ -32,7 +32,7 @@ class _MarqueeLineEdit(QLineEdit):
         self.setStyleSheet(_INPUT)
         self.setFixedHeight(h)
         self._marquee_timer = QTimer(self)
-        self._marquee_timer.setInterval(150)
+        self._marquee_timer.setInterval(25)
         self._marquee_timer.timeout.connect(self._marquee_step)
         self._marquee_pos = 0
         self._marquee_forward = True
@@ -87,6 +87,8 @@ class HeaderSection(QWidget):
         self._set_logo = set_logo_fn
         self._last_auto_pm = ''
         self._last_auto_photo = ''
+        self._project_photo_pix: Optional[QPixmap] = None
+        self._project_photo_scaled_for = QSize()
         self.setStyleSheet(f"background: {_BG};")
         self._build()
 
@@ -138,6 +140,22 @@ class HeaderSection(QWidget):
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
         self._project_photo_btn.clicked.connect(self._upload_project_photo)
+        # Freeze the button's layout footprint to its placeholder-state hint
+        # (fixed width + a fixed vertical stretch weight is what actually
+        # decides its final height, sizeHint just needs to not fight that).
+        # Without this, setIconSize() below feeds back into QPushButton's own
+        # sizeHint() (icon size is part of it), which invalidates the parent
+        # layout and resizes the button again -> _rescale_project_photo runs
+        # again with an even bigger size -> bigger icon -> bigger hint ...
+        # an unbounded growth loop each time the icon is (re)applied.
+        self._project_photo_natural_hint = self._project_photo_btn.sizeHint()
+        self._project_photo_btn.sizeHint = lambda: self._project_photo_natural_hint
+        self._project_photo_btn.minimumSizeHint = lambda: self._project_photo_natural_hint
+        # The photo can be auto-filled (from the sidebar's main project photo)
+        # right at construction time, before this button has ever been shown
+        # or laid out — its .size() is meaningless then, so re-scale once the
+        # real size becomes known via the first genuine layout resize.
+        self._project_photo_btn.resizeEvent = self._on_project_photo_btn_resize
 
         self._photo_clear_btn = QPushButton("×")
         self._photo_clear_btn.setFixedSize(18, 18)
@@ -528,17 +546,34 @@ class HeaderSection(QWidget):
                 self.changed.emit()
 
     def _apply_project_photo(self, pix: QPixmap):
+        self._project_photo_pix = pix
+        self._project_photo_scaled_for = QSize()  # force a rescale below
+        self._photo_clear_btn.setVisible(True)
+        self._rescale_project_photo()
+
+    def _rescale_project_photo(self):
+        if self._project_photo_pix is None:
+            return
         btn_size = self._project_photo_btn.size()
-        # Fallback size before the widget has been shown/laid out
         if btn_size.width() < 10 or btn_size.height() < 10:
-            btn_size = QSize(110, 120)
-        scaled = pix.scaled(btn_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            # Not laid out yet — _on_project_photo_btn_resize will call back
+            # in once the button gets its real size.
+            return
+        if btn_size == self._project_photo_scaled_for:
+            return  # already scaled for this exact size — nothing to do
+        scaled = self._project_photo_pix.scaled(btn_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self._project_photo_btn.setIcon(QIcon(scaled))
         self._project_photo_btn.setIconSize(btn_size)
         self._project_photo_btn.setText("")
-        self._photo_clear_btn.setVisible(True)
+        self._project_photo_scaled_for = btn_size
+
+    def _on_project_photo_btn_resize(self, event):
+        QPushButton.resizeEvent(self._project_photo_btn, event)
+        self._rescale_project_photo()
 
     def _clear_project_photo(self):
+        self._project_photo_pix = None
+        self._project_photo_scaled_for = QSize()
         self._report.project_photo_path = ""
         self._project_photo_btn.setIcon(QIcon())
         self._project_photo_btn.setIconSize(QSize(0, 0))

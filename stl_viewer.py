@@ -677,6 +677,10 @@ class STLViewerWindow(QMainWindow):
         # ==== The Project Workspace ====
         self.project_widget = TheProjectWidget()
         self.project_widget.open_in_viewer.connect(self._open_file_from_project)
+        self.project_widget.restore_viewer_tab.connect(self._restore_viewer_tab_from_project)
+        self.project_widget.clear_viewer_tabs.connect(self._clear_all_viewer_tabs)
+        self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
+        self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
         self._workspace_stack.addWidget(self.project_widget)
 
         # ==== Help Workspace ====
@@ -1164,21 +1168,29 @@ class STLViewerWindow(QMainWindow):
         tab_bar_index = self.tab_bar.insertTab(self._overview_tab_index, _ecto_tab_caption(display_name))
         self._overview_tab_index += 1  # overview tab shifts right
         self._plus_tab_index += 1      # "+" tab also shifts right
-        self._attach_tab_close_btn(tab_bar_index)
-        
+        # File tabs keep the native close (×) button — setTabsClosable(True)
+        # attaches one automatically; only Overview/"+" have theirs removed.
+
         # Switch to the new tab
         self.tab_bar.setCurrentIndex(tab_bar_index)
         
         return tab_index
+
+    def _on_qc_model_remove(self, viewer_widget):
+        """Close the tab whose viewer_widget was removed from the QC model strip."""
+        for i, tab in enumerate(self.tabs):
+            if tab.viewer_widget is viewer_widget:
+                self._close_tab(i)
+                return
 
     def _push_viewers_to_project(self):
         """Send all loaded (label, viewer_widget) pairs and tab states to the project widget."""
         if not hasattr(self, 'project_widget'):
             return
         viewers = [
-            (t.filename or f'Object {i + 1}', t.viewer_widget)
-            for i, t in enumerate(self.tabs)
-            if t.viewer_widget is not None
+            (t.filename, t.viewer_widget)
+            for t in self.tabs
+            if t.viewer_widget is not None and t.filename is not None
         ]
         active_vw = getattr(self, 'viewer_widget', None)
         if hasattr(self.project_widget, 'set_viewers'):
@@ -1693,11 +1705,6 @@ class STLViewerWindow(QMainWindow):
         tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
         tab.texture_mode_active = getattr(self.toolbar, 'texture_mode_enabled', False)
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
-    
-    def _attach_tab_close_btn(self, tab_bar_index: int):
-        """No close button on tabs."""
-        self.tab_bar.setTabButton(tab_bar_index, QTabBar.RightSide, None)
-        self.tab_bar.setTabButton(tab_bar_index, QTabBar.LeftSide, None)
 
     def _on_tab_close_requested(self, index: int):
         """Handle tab close button click."""
@@ -2077,7 +2084,7 @@ class STLViewerWindow(QMainWindow):
         self._load_file_into_current_tab(output_path, from_conversion=True)
     
     def _open_file_from_project(self, file_path: str):
-        """Open a file from the Files & Versions screen (or a restored project tab) in the 3D viewer."""
+        """Open a file from the Files & Versions screen in the 3D viewer."""
         import os
         if not os.path.exists(file_path):
             from ui.modal_utils import show_message_dialog
@@ -2093,14 +2100,56 @@ class STLViewerWindow(QMainWindow):
                 self._create_new_tab()
             self._load_file_into_current_tab(file_path, from_conversion=False)
 
+    def _restore_viewer_tab_from_project(self, tmp_path: str, original_name: str):
+        """Open a viewer tab restored from a saved project's .lyns bundle.
+
+        The bundle is written to a randomly-named temp file, so unlike
+        _open_file_from_project we can't derive a sensible tab name from the
+        path itself — it would show up as e.g. "tmpvl4chzig.ecto" instead of
+        the model's real name (e.g. "test.stl"). Pass the original name through
+        explicitly instead.
+        """
+        import os
+        if not os.path.exists(tmp_path):
+            return
+        self._switch_mode("3d")
+        self._load_ecto_file(tmp_path, display_name_override=original_name)
+
+    def _clear_all_viewer_tabs(self):
+        """Close every currently open viewer tab.
+
+        Called right before a project's saved tabs are restored — otherwise
+        whatever was already open in this session (e.g. models added via
+        Quality Control) stays open alongside the restored ones, so opening
+        a 2-tab project on top of 2 already-open tabs ends up showing 4.
+        _close_tab auto-creates a fresh blank tab once the list empties out;
+        that's the desired end state (ready to receive the first restored tab).
+        """
+        while len(self.tabs) > 1:
+            self._close_tab(0)
+        if self.tabs and self.tabs[0].file_path is not None:
+            self._close_tab(0)
+
     def _load_file_into_current_tab(self, file_path: str, from_conversion: bool = False):
         """Load a 3D file into the current tab's viewer."""
         tab = self._current_tab
         if tab is None or tab.viewer_widget is None:
             return
-        
+
+        if self._current_mode == 'project' and hasattr(self, 'project_widget'):
+            self.project_widget.show_qc_loading()
+
+        # In project mode the viewer stack is hidden, so showEvent never fires on a newly
+        # created tab's viewer.  Force-init it so load_stl() doesn't spend 5 s timing out.
+        if not getattr(tab.viewer_widget, '_initialized', True):
+            if hasattr(tab.viewer_widget, 'force_init'):
+                tab.viewer_widget.force_init()
+
         success = tab.viewer_widget.load_stl(file_path)
-        
+
+        if self._current_mode == 'project' and hasattr(self, 'project_widget'):
+            self.project_widget.hide_qc_loading()
+
         if not success:
             file_ext = file_path.lower()
             if file_ext.endswith('.step') or file_ext.endswith('.stp'):
@@ -2157,6 +2206,12 @@ class STLViewerWindow(QMainWindow):
 
             # Capture thumbnail after model renders (slight delay so GPU has time)
             QTimer.singleShot(800, lambda idx=self.current_tab_index: self._capture_thumbnail_for(idx))
+
+            # Keep QC model selector strip in sync after any file load
+            try:
+                self._push_viewers_to_project()
+            except Exception:
+                pass
 
     def _show_drop_error(self, error_msg):
         """Show an error message from drag-and-drop."""
@@ -3612,8 +3667,13 @@ class STLViewerWindow(QMainWindow):
         logger.info("save_current_annotations: Annotations will be saved on export")
         return True
     
-    def _load_ecto_file(self, ecto_path: str):
-        """Load an .ecto bundle file."""
+    def _load_ecto_file(self, ecto_path: str, display_name_override: Optional[str] = None):
+        """Load an .ecto bundle file.
+
+        display_name_override — when the bundle was written to a temp path
+        (project-tab restore), use this instead of deriving a name from
+        ecto_path, whose stem is a meaningless random temp filename.
+        """
         logger.info(f"_load_ecto_file: Loading .ecto file: {ecto_path}")
         
         try:
@@ -3663,8 +3723,11 @@ class STLViewerWindow(QMainWindow):
                     tab.ecto_temp_dir = None
                 return
             
-            filename = Path(ecto_path).stem
-            display_name = f"{filename}.ecto"
+            if display_name_override:
+                display_name = display_name_override
+            else:
+                filename = Path(ecto_path).stem
+                display_name = f"{filename}.ecto"
             if tab:
                 tab.file_path = ecto_path
                 tab.filename = display_name

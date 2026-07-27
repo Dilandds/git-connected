@@ -836,14 +836,10 @@
       "col_delivery": "Delivery Date",
       "overview_tab": "Overview",
       "overview_title": "Overview — Best Partner per Trade",
-      "set_password": "🔒 Set Password",
       "overview_note": "Auto-generated from Best partner selection in each trade — read only",
       "col_trade": "Trade",
       "col_best_partner": "Best Partner",
       "grand_total": "Grand Total:",
-      "change_password": "🔒 Change Password",
-      "enter_password": "🔓 Enter Password",
-      "protected_msg": "This section is password-protected.",
       "add_partner": "＋ Add partner",
       "project_ctx": "Project:",
       "company_ctx": "Company:",
@@ -1133,6 +1129,8 @@
     "import_btn": "Import File",
     "import_title": "Import Product Image",
     "import_tooltip": "Import a product image (JPEG, PNG, HEIC/iPhone, PDF)",
+    "remove_image_btn": "Remove Image",
+    "remove_image_tooltip": "Remove the imported product image (cards are kept)",
     "add_area": "Add card",
     "add_area_tooltip": "Add an assignment card on the left or right of the image",
     "line": "Line",
@@ -1148,6 +1146,74 @@
     "card_supplier": "Supplier / Task",
     "card_supplier_ph": "e.g. Supplier A",
     "card_status": "Status"
+  },
+  "quality_control": {
+    "control_points_title": "Control Points",
+    "card": {
+      "color_tooltip": "Click to change color",
+      "name_placeholder": "Control point name...",
+      "comment_placeholder": "Enter your comments..."
+    },
+    "status": {
+      "compliant": "Compliant",
+      "to_check": "To Check",
+      "non_compliant": "Non-compliant"
+    },
+    "instructions": {
+      "title": "How to add control points",
+      "step1_title": "Capture an image",
+      "step1_body": "Press the 📷 camera button in the viewer toolbar — or drag & drop an image onto the drop zone below.",
+      "step2_title": "Switch to Image View",
+      "step2_body": "Click a thumbnail in the Inspection Images strip. The viewer switches from 3D Model to Image View.",
+      "step3_title": "Place a marker on the image",
+      "step3_body": "Click once on the inspection point (anchor), then click again where the number label should appear. A numbered marker is placed and a control point is added here automatically.",
+      "note": "ℹ️  To return to the 3D model, press the ■ 3D button in the viewer toolbar."
+    },
+    "annotation": {
+      "tooltip": "Scroll to zoom · middle-click drag to pan",
+      "placeholder": "Click an image below to annotate"
+    },
+    "drop_zone": {
+      "line1": "Drag &amp; drop images here",
+      "line2": "or click to browse",
+      "dialog_title": "Select Images"
+    },
+    "left_panel": {
+      "title": "3D Inspection",
+      "hint": "Select an area to view inspection details",
+      "mode_3d": "3D Model",
+      "mode_image": "Image View",
+      "no_model": "No model loaded",
+      "inspection_images": "Inspection Images",
+      "inspected_by_placeholder": "Inspector name...",
+      "comments_placeholder": "Enter your comments...",
+      "inspection_date_label": "Inspection Date",
+      "inspected_by_label": "Inspected By",
+      "comments_label": "Comments",
+      "snap_tooltip": "Capture current view to thumbnail strip",
+      "fullscreen_tooltip": "Toggle fullscreen viewer"
+    },
+    "logo": {
+      "drop_text": "Drag & drop your logo here\nor click to browse",
+      "dialog_title": "Select Logo"
+    },
+    "company_panel": {
+      "title": "Company / Part Information",
+      "designation_label": "Designation",
+      "designation_placeholder": "Enter designation...",
+      "reference_label": "Reference Number",
+      "reference_placeholder": "Enter reference number...",
+      "manufacturer_label": "Manufactured By",
+      "manufacturer_placeholder": "Enter manufacturer name...",
+      "due_date_label": "Inspection Due Date",
+      "due_date_placeholder": "Select a date...",
+      "overall_status_title": "Overall Status",
+      "status_in_progress": "In Progress",
+      "status_approved": "Approved",
+      "status_rejected": "Rejected",
+      "waived_by_label": "Waived By",
+      "waived_by_placeholder": "Enter name..."
+    }
   },
   "common": {
     "save": "Save",

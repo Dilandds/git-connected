@@ -150,6 +150,31 @@ _CONTENT_MUTED = '#6b7280'
 # ── credentials (single admin user) ──────────────────────────────────────────
 _PROJECT_CREDENTIALS = {'chris': 'admin'}
 
+_PROJECT_EXTS = ('.lyns.pjt', '.ectopjt', '.pjt')
+
+
+def _normalize_project_path(path: str) -> str:
+    """Strip any project-file extension from `path` and re-apply the
+    canonical .lyns.pjt suffix exactly once.
+
+    Windows' native save dialog treats compound extensions like ".lyns.pjt"
+    as unrecognized and appends the filter's default extension again on top
+    of whatever the default filename already had, so a re-save of
+    "Demo.lyns.pjt" can come back from the dialog as
+    "Demo.lyns.pjt.lyns.pjt". Stripping just once (as this used to) only
+    undoes one layer of that, leaving the duplicate in place — so this
+    strips repeatedly until no known suffix remains, however many times the
+    dialog (or a user pasting a name) piled it on.
+    """
+    while True:
+        for sfx in _PROJECT_EXTS:
+            if path.lower().endswith(sfx):
+                path = path[:-len(sfx)]
+                break
+        else:
+            break
+    return path + '.lyns.pjt'
+
 
 def _status_combo_style(color: str) -> str:
     """Generate the QComboBox stylesheet for the current status color."""
@@ -398,10 +423,8 @@ class ProjectNavPanel(QWidget):
             btn.setCheckable(True)
             # Ignored: a translated label (e.g. French "ESTIMATION DES COÛTS")
             # must never widen this button's sizeHint enough to pull the
-            # sidebar itself wider — text just elides instead, full label
-            # still available via tooltip.
+            # sidebar itself wider — text just elides instead.
             btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-            btn.setToolTip(label)
             btn.clicked.connect(lambda _, k=key: self._navigate(k))
             self._buttons[key] = btn
             layout.addWidget(btn)
@@ -424,7 +447,6 @@ class ProjectNavPanel(QWidget):
                     sb.setCheckable(True)
                     sb.setStyleSheet(_NAV_SUBNAV_INACTIVE)
                     sb.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-                    sb.setToolTip(sub_label)
                     sb.clicked.connect(
                         lambda _, i=tab_idx: self._on_rd_sub_clicked(i)
                     )
@@ -550,6 +572,13 @@ class ProjectNavPanel(QWidget):
                 self._photo_btn.setIcon(QIcon(scaled))
                 self._photo_btn.setIconSize(self._photo_btn.size())
                 self._photo_btn.setText('')
+        else:
+            # No photo in the data being loaded (e.g. a brand new project) —
+            # clear whatever the previous project's photo left behind instead
+            # of leaving it stuck on screen.
+            self._photo_path = ''
+            self._photo_btn.setIcon(QIcon())
+            self._photo_btn.setText(t('project.sidebar.add_photo'))
 
     def retranslate(self):
         """Update all visible labels/buttons when language changes."""
@@ -564,12 +593,10 @@ class ProjectNavPanel(QWidget):
         for key, btn in self._buttons.items():
             label = t(f'project.nav.{key}').replace('&', '&&')
             btn.setText(label)
-            btn.setToolTip(label)
         _rd_tab_keys = ['rd.tab_textures', 'rd.tab_techniques']
         for i, sb in enumerate(self._rd_sub_btns):
             sub_label = t(_rd_tab_keys[i])
             sb.setText(sub_label)
-            sb.setToolTip(sub_label)
         self._populate_status_combo()
 
 
@@ -632,7 +659,11 @@ class ProjectLoginDialog(FormModal):
 class TheProjectWidget(QWidget):
     """Main container for The Project tab."""
 
-    open_in_viewer = pyqtSignal(str)
+    open_in_viewer         = pyqtSignal(str)
+    restore_viewer_tab     = pyqtSignal(str, str)  # temp bundle path, original tab name
+    clear_viewer_tabs      = pyqtSignal()  # close whatever's open before restoring a loaded project's tabs
+    qc_model_remove_requested = pyqtSignal(object)
+    qc_upload_requested    = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -804,17 +835,22 @@ class TheProjectWidget(QWidget):
             widget.changed.connect(self._sync_traceability_from_brief)
         if key == 'traceability' and hasattr(widget, 'changed'):
             widget.changed.connect(self._sync_brief_from_traceability)
-        if key == 'traceability' and hasattr(widget, 'update_project_info'):
+        if key in ('traceability', 'assignment', 'timeline', 'report') and hasattr(widget, 'update_project_info'):
             # The sidebar's main photo only reaches an already-open screen via
-            # _on_project_info_changed — a freshly (lazily) created Traceability
-            # screen never got that first push, so its photo + main product
-            # thumbnail stayed blank until some unrelated info field changed.
-            # Seed it once with the current info right at construction time.
+            # _on_project_info_changed — a freshly (lazily) created screen
+            # never got that first push, so its photo (Traceability's main
+            # product thumbnail, Assignment's canvas background, Report's
+            # header photo, ...) stayed blank until some unrelated info field
+            # changed afterwards. Seed it once with the current info right at
+            # construction time.
             widget.update_project_info(self._nav.get_info_data())
         if key == 'rd' and hasattr(widget, 'tab_changed'):
             widget.tab_changed.connect(self._on_rd_tab_changed)
             # Set the callback so sidebar sub-items call switch_tab on the widget
             self._nav.set_rd_tab_switch_callback(widget.switch_tab)
+        if key == 'quality_control' and hasattr(widget, 'model_remove_requested'):
+            widget.model_remove_requested.connect(self.qc_model_remove_requested)
+            widget.upload_requested.connect(self.qc_upload_requested)
         if key == 'quality_control' and hasattr(widget, 'set_viewers') and self._pending_viewers:
             # Replay the cached viewer list so the QC screen is fully wired
             # even when the user first opens it after models are already loaded.
@@ -825,7 +861,7 @@ class TheProjectWidget(QWidget):
             # Seed the QC logo from whatever's already on the Report screen
             # (e.g. loaded from a saved project) right at creation time —
             # otherwise it stays blank until the report's logo changes again.
-            self._sync_qc_logo_from_report()
+            self._sync_qc_logo_from_report(qc_widget=widget)
 
     # ── navigation ────────────────────────────────────────────────────────────
 
@@ -905,13 +941,19 @@ class TheProjectWidget(QWidget):
         except ValueError:
             return 0.0
 
-    def _sync_qc_logo_from_report(self):
+    def _sync_qc_logo_from_report(self, qc_widget=None):
         """Copy the company logo set on the Report screen into the Quality
         Control screen's own logo field, so the same logo doesn't have to be
         uploaded a second time there. The Report screen's logo is treated as
-        the source of truth — QC's own logo field just mirrors it."""
+        the source of truth — QC's own logo field just mirrors it.
+
+        qc_widget — pass the QC widget directly when called from _wire_screen
+        during QC's own construction: at that point self._screen_widgets['quality_control']
+        hasn't been set yet (_ensure_screen assigns it only after _wire_screen
+        returns), so the dict lookup alone would silently find nothing and the
+        seed would never happen."""
         report = self._screen_widgets.get('report')
-        qc = self._screen_widgets.get('quality_control')
+        qc = qc_widget if qc_widget is not None else self._screen_widgets.get('quality_control')
         if report is None or qc is None:
             return
         if not hasattr(report, 'get_logo_pixmap') or not hasattr(qc, 'set_company_logo'):
@@ -1061,6 +1103,18 @@ class TheProjectWidget(QWidget):
         """Store the full TabState list so _save_project can embed viewer bundles."""
         self._viewer_tabs = list(tabs)
 
+    def show_qc_loading(self):
+        """Show the loading overlay on the QC viewer area while a model is loading."""
+        qc = self._screen_widgets.get('quality_control')
+        if qc:
+            qc.show_loading()
+
+    def hide_qc_loading(self):
+        """Hide the QC viewer loading overlay after a model finishes loading."""
+        qc = self._screen_widgets.get('quality_control')
+        if qc:
+            qc.hide_loading()
+
     # ── top bar ───────────────────────────────────────────────────────────────
 
     # ── project file operations ───────────────────────────────────────────────
@@ -1068,7 +1122,27 @@ class TheProjectWidget(QWidget):
     def _on_new_project(self):
         if self._unsaved_changes and not self._confirm_discard():
             return
-        self._release_lock()
+
+        # Reset the sidebar info card (company, title, photo, dates, ...)
+        self._nav.set_info_data({})
+
+        # Reset every screen that's already been created back to its blank
+        # state — same per-key pattern _load_project uses to populate them,
+        # just with empty data instead of data read from a file. Screens
+        # never opened this session don't need touching; they start blank.
+        for key, _ in _NAV_ITEMS:
+            w = self._screen_widgets.get(key)
+            if w is not None and hasattr(w, 'set_data'):
+                w.set_data({})
+        # Also drop any data queued for a screen torn down by a language
+        # switch — otherwise it would silently reappear (or get saved into
+        # the new project) once that screen is reopened.
+        self._pending_restoration.clear()
+
+        # Whatever's open in the 3D viewer belongs to the project being
+        # closed, not to the new one.
+        self.clear_viewer_tabs.emit()
+
         self._project_path = None
         self._unsaved_changes = False
         self._project_password_hash = None
@@ -1100,13 +1174,7 @@ class TheProjectWidget(QWidget):
             )
             if not path:
                 return
-            # Strip any project-file extension the user may have typed before enforcing .lyns.pjt
-            for _sfx in ('.lyns.pjt', '.ectopjt', '.pjt'):
-                if path.lower().endswith(_sfx):
-                    path = path[:-len(_sfx)]
-                    break
-            path += '.lyns.pjt'
-            self._project_path = path
+            self._project_path = _normalize_project_path(path)
         try:
             self._save_project(self._project_path)
         except Exception as e:
@@ -1127,12 +1195,7 @@ class TheProjectWidget(QWidget):
         )
         if not path:
             return
-        for _sfx in ('.lyns.pjt', '.ectopjt', '.pjt'):
-            if path.lower().endswith(_sfx):
-                path = path[:-len(_sfx)]
-                break
-        path += '.lyns.pjt'
-        self._project_path = path
+        self._project_path = _normalize_project_path(path)
         try:
             self._save_project(self._project_path)
         except Exception as e:
@@ -1216,7 +1279,7 @@ class TheProjectWidget(QWidget):
             fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
             os.close(fd)
             try:
-                success, _, _ = EctoFormat.export(
+                success, _, creator_token = EctoFormat.export(
                     mesh=mesh,
                     annotations=annotations,
                     output_path=tmp_path,
@@ -1224,8 +1287,21 @@ class TheProjectWidget(QWidget):
                     original_filename=tab_name,
                     drawings=drawings,
                     texture_data=texture_data,
+                    reader_mode=False,
                 )
                 if success:
+                    # This bundle is just this session's own storage format for
+                    # restoring the tab on reload, not a file shared with anyone
+                    # else — register the token so import_ecto's sender/reader
+                    # check recognizes it as ours and reopens it editable instead
+                    # of read-only. Without this, every restored tab silently
+                    # landed in "Reader Mode - View Only".
+                    if creator_token:
+                        try:
+                            from core.creator_registry import register_creator_token
+                            register_creator_token(creator_token)
+                        except ImportError:
+                            pass
                     bundle_bytes = Path(tmp_path).read_bytes()
                     result.append({
                         'tab_name': tab_name,
@@ -1243,7 +1319,7 @@ class TheProjectWidget(QWidget):
         return result
 
     def _restore_viewer_tabs(self, viewer_tabs: list) -> None:
-        """Decode base64 .lyns bundles and emit open_in_viewer for each."""
+        """Decode base64 .lyns bundles and emit restore_viewer_tab for each."""
         for entry in viewer_tabs:
             b64 = entry.get('bundle_b64', '')
             if not b64:
@@ -1253,11 +1329,11 @@ class TheProjectWidget(QWidget):
             os.close(fd)
             try:
                 Path(tmp_path).write_bytes(base64.b64decode(b64))
-                self.open_in_viewer.emit(tmp_path)
+                self.restore_viewer_tab.emit(tmp_path, tab_name)
             except Exception as e:
                 logger.warning(f'_restore_viewer_tabs: could not restore "{tab_name}": {e}')
             finally:
-                # Safe to delete — open_in_viewer is a direct connection and
+                # Safe to delete — restore_viewer_tab is a direct connection and
                 # _load_ecto_file extracts the bundle to its own temp dir synchronously.
                 try:
                     os.remove(tmp_path)
@@ -1265,27 +1341,6 @@ class TheProjectWidget(QWidget):
                     pass
 
     def _load_project(self, path: str):
-        # Check for an existing lock file (another user/instance has this open)
-        lock_path = path + '.lock'
-        if os.path.exists(lock_path):
-            try:
-                lock_info = json.loads(Path(lock_path).read_text(encoding='utf-8'))
-                locked_by = lock_info.get('locked_by', 'another user')
-                locked_at = lock_info.get('locked_at', '')
-            except Exception:
-                locked_by = 'another user'
-                locked_at = ''
-            msg = f'This project is currently open by "{locked_by}"'
-            if locked_at:
-                msg += f' (since {locked_at[:16].replace("T", " ")} UTC)'
-            msg += '.\n\nOpening it may cause conflicts. Continue anyway?'
-            reply = QMessageBox.warning(
-                self, 'File In Use', msg,
-                QMessageBox.Open | QMessageBox.Cancel, QMessageBox.Cancel
-            )
-            if reply != QMessageBox.Open:
-                return
-
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
@@ -1298,9 +1353,6 @@ class TheProjectWidget(QWidget):
             if dlg.exec_() != QDialog.Accepted:
                 return  # user cancelled — do not load
 
-        # Release lock on previously open file
-        self._release_lock()
-
         self._nav.set_info_data(data.get('project_info', {}))
         for key, _ in _NAV_ITEMS:
             screen_data = data.get(key)
@@ -1309,6 +1361,11 @@ class TheProjectWidget(QWidget):
             w = self._ensure_screen(key)
             if hasattr(w, 'set_data'):
                 w.set_data(screen_data)
+
+        # Whatever's currently open in the 3D viewer belongs to the session
+        # being replaced, not to the project being opened — close it first so
+        # the restored tabs replace it instead of piling up alongside it.
+        self.clear_viewer_tabs.emit()
 
         # Restore viewer tabs — decode each .lyns bundle to a temp file and open in viewer
         self._restore_viewer_tabs(data.get('viewer_tabs', []))
@@ -1320,31 +1377,7 @@ class TheProjectWidget(QWidget):
         self._unsaved_changes = False
         self._update_lock_btn()
         self._update_title()
-        self._acquire_lock(path)
         logger.info(f'Project loaded from {path}')
-
-    def _acquire_lock(self, path: str):
-        lock_path = path + '.lock'
-        try:
-            lock_data = {
-                'locked_by': getpass.getuser(),
-                'locked_at': datetime.now(timezone.utc).isoformat(),
-            }
-            Path(lock_path).write_text(
-                json.dumps(lock_data, indent=2), encoding='utf-8'
-            )
-        except Exception as e:
-            logger.warning(f'Could not write lock file: {e}')
-
-    def _release_lock(self):
-        if not self._project_path:
-            return
-        lock_path = self._project_path + '.lock'
-        try:
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-        except Exception as e:
-            logger.warning(f'Could not remove lock file: {e}')
 
     def _update_lock_btn(self):
         """Update the password button appearance to reflect the current lock state."""
@@ -1457,5 +1490,4 @@ class TheProjectWidget(QWidget):
         self._unsaved_changes = True
 
     def closeEvent(self, event):
-        self._release_lock()
         super().closeEvent(event)

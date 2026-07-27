@@ -29,6 +29,8 @@ from PyQt5.QtWidgets import (
 )
 
 from ui.styles import default_theme
+from ui.loading_overlay import LoadingOverlay
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +48,16 @@ _BADGE_PALETTE = [
     '#a855f7', '#06b6d4', '#ec4899', '#84cc16',
 ]
 
-_STATUS_META = {
-    'compliant':     ('Compliant',     '#dcfce7', '#16a34a'),
-    'to_check':      ('To Check',      '#fef3c7', '#b45309'),
-    'non_compliant': ('Non-compliant', '#fee2e2', '#dc2626'),
-}
+def _status_meta() -> dict:
+    """Built lazily (not at import time) so labels reflect the current
+    language — this module-level dict used to be a constant, but section
+    widgets are destroyed and rebuilt on language change, and a constant
+    computed once at import would never pick up a later switch."""
+    return {
+        'compliant':     (t('quality_control.status.compliant'),     '#dcfce7', '#16a34a'),
+        'to_check':      (t('quality_control.status.to_check'),      '#fef3c7', '#b45309'),
+        'non_compliant': (t('quality_control.status.non_compliant'), '#fee2e2', '#dc2626'),
+    }
 
 _INPUT = f"""
     QLineEdit {{
@@ -374,14 +381,16 @@ class _ControlPointCard(QWidget):
         self._badge.setFlat(True)
         self._badge.setFocusPolicy(Qt.NoFocus)
         self._badge.setCursor(Qt.PointingHandCursor)
-        self._badge.setToolTip('Click to change color')
-        self._badge.setStyleSheet('border: none; background: transparent; padding: 0;')
+        self._badge.setToolTip(t('quality_control.card.color_tooltip'))
+        self._badge.setStyleSheet(
+            'QPushButton { border: none; background: transparent; padding: 0; }' + _TOOLTIP_SS
+        )
         self._badge.clicked.connect(self._pick_color)
         self._refresh_badge()
         header_l.addWidget(self._badge)
 
         self._name_edit = QLineEdit(self._cp.name)
-        self._name_edit.setPlaceholderText('Control point name...')
+        self._name_edit.setPlaceholderText(t('quality_control.card.name_placeholder'))
         self._name_edit.setStyleSheet(_INPUT)
         # ClickFocus prevents the new QLineEdit from auto-grabbing keyboard focus
         # when it is inserted into a layout — on macOS full-screen mode an automatic
@@ -415,7 +424,7 @@ class _ControlPointCard(QWidget):
         card_l.addWidget(header)
 
         self._comment_edit = QTextEdit()
-        self._comment_edit.setPlaceholderText('Enter your comments...')
+        self._comment_edit.setPlaceholderText(t('quality_control.card.comment_placeholder'))
         self._comment_edit.setFixedHeight(58)
         self._comment_edit.setStyleSheet(_TEXTEDIT)
         self._comment_edit.setFocusPolicy(Qt.ClickFocus)
@@ -468,7 +477,8 @@ class _ControlPointCard(QWidget):
         self.changed.emit()
 
     def _refresh_status_btn(self):
-        label, bg, fg = _STATUS_META.get(self._cp.status, ('To Check', '#fef3c7', '#b45309'))
+        meta = _status_meta()
+        label, bg, fg = meta.get(self._cp.status, meta['to_check'])
         self._status_btn.setText(label)
         self._status_btn.setStyleSheet(f"""
             QPushButton {{
@@ -492,7 +502,7 @@ class _ControlPointCard(QWidget):
             }}
             QMenu::item:selected {{ background: {_BG}; }}
         """)
-        for key, (label, bg, fg) in _STATUS_META.items():
+        for key, (label, bg, fg) in _status_meta().items():
             act = QAction(label, self)
             act.setData(key)
             menu.addAction(act)
@@ -546,7 +556,7 @@ class _ControlPointsPanel(QWidget):
         hdr_l.setContentsMargins(0, 0, 0, 0)
         hdr_l.setSpacing(8)
 
-        lbl = QLabel('Control Points')
+        lbl = QLabel(t('quality_control.control_points_title'))
         lbl.setStyleSheet(_SECTION_TITLE)
         hdr_l.addWidget(lbl)
 
@@ -559,6 +569,23 @@ class _ControlPointsPanel(QWidget):
         """)
         hdr_l.addWidget(self._count_lbl)
         hdr_l.addStretch()
+
+        self._help_btn = QPushButton('?')
+        self._help_btn.setFixedSize(26, 26)
+        self._help_btn.setCursor(Qt.PointingHandCursor)
+        self._help_btn.setCheckable(True)
+        self._help_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {_MUTED};
+                border: 1px solid {_BORDER_DARK}; border-radius: 13px;
+                font-size: 12px; font-weight: bold;
+                padding: 0; margin: 0;
+            }}
+            QPushButton:hover {{ color: {_ACCENT}; border-color: {_ACCENT}; }}
+            QPushButton:checked {{ background: {_ACCENT}; color: white; border-color: {_ACCENT}; }}
+        """)
+        self._help_btn.clicked.connect(self._toggle_instructions)
+        hdr_l.addWidget(self._help_btn)
         layout.addWidget(hdr)
 
         layout.addWidget(_hsep())
@@ -611,19 +638,15 @@ class _ControlPointsPanel(QWidget):
             )
             return lbl
 
-        instr_l.addWidget(_instr_label('How to add control points', bold=True, color=_TEXT))
+        instr_l.addWidget(_instr_label(t('quality_control.instructions.title'), bold=True, color=_TEXT))
 
         steps = [
-            ('1', 'Capture an image',
-             'Press the \U0001f4f7 camera button in the viewer toolbar — '
-             'or drag & drop an image onto the drop zone below.'),
-            ('2', 'Switch to Image View',
-             'Click a thumbnail in the Inspection Images strip. '
-             'The viewer switches from 3D Model to Image View.'),
-            ('3', 'Place a marker on the image',
-             'Click once on the inspection point (anchor), '
-             'then click again where the number label should appear. '
-             'A numbered marker is placed and a control point is added here automatically.'),
+            ('1', t('quality_control.instructions.step1_title'),
+             t('quality_control.instructions.step1_body')),
+            ('2', t('quality_control.instructions.step2_title'),
+             t('quality_control.instructions.step2_body')),
+            ('3', t('quality_control.instructions.step3_title'),
+             t('quality_control.instructions.step3_body')),
         ]
         for num, title, body in steps:
             row = QWidget()
@@ -653,15 +676,21 @@ class _ControlPointsPanel(QWidget):
             instr_l.addWidget(row)
 
         note = _instr_label(
-            'ℹ️  To return to the 3D model, press the ■ 3D button '
-            'in the viewer toolbar.',
+            t('quality_control.instructions.note'),
             color='#6b7280',
         )
         note.setStyleSheet(
             note.styleSheet() + 'padding-top: 4px;'
         )
         instr_l.addWidget(note)
+        self._instr_card = instr
+        instr.setVisible(False)
         layout.addWidget(instr)
+
+    def _toggle_instructions(self):
+        visible = not self._instr_card.isVisible()
+        self._instr_card.setVisible(visible)
+        self._help_btn.setChecked(visible)
 
     def _add_point(self, cp: Optional[ControlPoint] = None):
         from PyQt5.QtWidgets import QApplication as _QApp
@@ -752,6 +781,7 @@ class _ImageAnnotationView(QWidget):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
         self._annotations: list = []       # [(dot_xf, dot_yf, badge_xf, badge_yf), ...]
+        self._annotation_offset: int = 0   # number of points placed on earlier images
         self._pending_dot: Optional[tuple] = None   # (x_frac, y_frac) after first click
         self._mouse_pos = None             # QPoint — live preview target
         self._zoom = 1.0                   # 1.0 = fit to view, up to 4.0
@@ -766,8 +796,8 @@ class _ImageAnnotationView(QWidget):
         # Any first-responder change in a macOS full-screen window can cause
         # Mission Control to switch the user to a different Space.
         self.setFocusPolicy(Qt.NoFocus)
-        self.setStyleSheet('background: transparent;')
-        self.setToolTip('Scroll to zoom · middle-click drag to pan')
+        self.setStyleSheet('QWidget { background: transparent; }' + _TOOLTIP_SS)
+        self.setToolTip(t('quality_control.annotation.tooltip'))
 
     def set_image(self, pixmap: Optional[QPixmap]):
         self._pixmap = pixmap
@@ -776,8 +806,9 @@ class _ImageAnnotationView(QWidget):
         self._pan = QPointF(0, 0)
         self.update()
 
-    def set_annotations(self, annotations: list):
+    def set_annotations(self, annotations: list, offset: int = 0):
         self._annotations = list(annotations)
+        self._annotation_offset = offset
         self._pending_dot = None
         self.update()
 
@@ -913,7 +944,7 @@ class _ImageAnnotationView(QWidget):
                 my = r.y() + int(dot_yf   * r.height())
                 bx = r.x() + int(badge_xf * r.width())
                 by = r.y() + int(badge_yf * r.height())
-                color = QColor(_BADGE_PALETTE[i % len(_BADGE_PALETTE)])
+                color = QColor(_BADGE_PALETTE[(i + self._annotation_offset) % len(_BADGE_PALETTE)])
 
                 # Leader line
                 p.setPen(QPen(color, 1.5, Qt.SolidLine))
@@ -938,12 +969,12 @@ class _ImageAnnotationView(QWidget):
                 p.drawText(
                     QRect(int(bx - BADGE_R), int(by - BADGE_R),
                           BADGE_R * 2, BADGE_R * 2),
-                    Qt.AlignCenter, str(i + 1)
+                    Qt.AlignCenter, str(i + 1 + self._annotation_offset)
                 )
 
             # Draw pending first click: dot + dashed preview line to cursor
             if self._pending_dot is not None:
-                next_color = QColor(_BADGE_PALETTE[len(self._annotations) % len(_BADGE_PALETTE)])
+                next_color = QColor(_BADGE_PALETTE[(len(self._annotations) + self._annotation_offset) % len(_BADGE_PALETTE)])
                 mx = r.x() + int(self._pending_dot[0] * r.width())
                 my = r.y() + int(self._pending_dot[1] * r.height())
 
@@ -961,7 +992,7 @@ class _ImageAnnotationView(QWidget):
         else:
             p.setPen(QColor(_MUTED))
             p.drawText(self.rect(), Qt.AlignCenter,
-                       'Click an image below to annotate')
+                       t('quality_control.annotation.placeholder'))
         p.end()
 
 
@@ -1004,14 +1035,14 @@ class _InspectionDropZone(QLabel):
         self.setCursor(Qt.PointingHandCursor)
         self.setTextFormat(Qt.RichText)
         self.setText(
-            'Drag &amp; drop images here<br/>'
-            f'<span style="color:{_ACCENT};">or click to browse</span>'
+            f'{t("quality_control.drop_zone.line1")}<br/>'
+            f'<span style="color:{_ACCENT};">{t("quality_control.drop_zone.line2")}</span>'
         )
         self.setStyleSheet(self._IDLE_SS)
 
     def mousePressEvent(self, event):
         paths, _ = QFileDialog.getOpenFileNames(
-            self, 'Select Images', '',
+            self, t('quality_control.drop_zone.dialog_title'), '',
             'Images (*.png *.jpg *.jpeg *.bmp *.webp)'
         )
         if paths:
@@ -1147,10 +1178,12 @@ class _InspThumbCard(QFrame):
 
 class _QCLeftPanel(QWidget):
     """Left column: live 3D viewer + standard-view toolbar + thumbnail strip + inspection metadata."""
-    changed              = pyqtSignal()
-    fullscreen_requested = pyqtSignal(bool)
-    model_selected       = pyqtSignal(int)
-    annotation_added     = pyqtSignal(int)   # emitted with annotation number (1-based) when image point placed
+    changed                = pyqtSignal()
+    fullscreen_requested   = pyqtSignal(bool)
+    model_selected         = pyqtSignal(int)
+    annotation_added       = pyqtSignal(int)
+    model_remove_requested = pyqtSignal(object)  # carries the viewer_widget to remove
+    upload_requested       = pyqtSignal()         # user clicked "No model loaded" placeholder
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1180,8 +1213,8 @@ class _QCLeftPanel(QWidget):
         title_l = QVBoxLayout(title_w)
         title_l.setContentsMargins(0, 0, 0, 0)
         title_l.setSpacing(2)
-        title_l.addWidget(_make_section_label('3D Inspection'))
-        hint = QLabel('Select an area to view inspection details')
+        title_l.addWidget(_make_section_label(t('quality_control.left_panel.title')))
+        hint = QLabel(t('quality_control.left_panel.hint'))
         hint.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent;')
         title_l.addWidget(hint)
         layout.addWidget(title_w)
@@ -1230,7 +1263,7 @@ class _QCLeftPanel(QWidget):
         vh_outer.setSpacing(0)
 
         # Mode badge — floats at top-left of viewer host, updates on mode switch
-        self._mode_badge = QLabel('3D Model')
+        self._mode_badge = QLabel(t('quality_control.left_panel.mode_3d'))
         self._mode_badge.setStyleSheet(f"""
             background: #1d4ed8; color: white;
             border-radius: 10px; font-size: 10px; font-weight: 700;
@@ -1255,11 +1288,13 @@ class _QCLeftPanel(QWidget):
         self._3d_page_layout = QVBoxLayout(self._3d_page)
         self._3d_page_layout.setContentsMargins(0, 0, 0, 0)
         self._3d_page_layout.setSpacing(0)
-        self._placeholder = QLabel('No model loaded')
+        self._placeholder = QLabel(t('quality_control.left_panel.no_model'))
         self._placeholder.setAlignment(Qt.AlignCenter)
+        self._placeholder.setCursor(Qt.PointingHandCursor)
         self._placeholder.setStyleSheet(
-            f'color: {_MUTED}; font-size: 13px; background: transparent; border: none;'
+            f'color: {_ACCENT}; font-size: 13px; background: transparent; border: none; text-decoration: underline;'
         )
+        self._placeholder.mousePressEvent = lambda _: self.upload_requested.emit()
         self._3d_page_layout.addWidget(self._placeholder)
         self._mode_stack.addWidget(self._3d_page)   # index 0
 
@@ -1270,12 +1305,15 @@ class _QCLeftPanel(QWidget):
 
         viewer_col_l.addWidget(self._viewer_host, 1)
 
+        # Overlay shown while a model is loading into the QC viewer area
+        self._qc_loading = LoadingOverlay(self._viewer_host)
+
         viewer_col_l.addWidget(self._build_bottom_toolbar())
         viewer_row_l.addWidget(viewer_col, 1)
         layout.addWidget(viewer_row, 1)
 
         # ── Inspection Images ─────────────────────────────────────────────────
-        layout.addWidget(_make_section_label('Inspection Images'))
+        layout.addWidget(_make_section_label(t('quality_control.left_panel.inspection_images')))
 
         self._drop_zone = _InspectionDropZone()
         self._drop_zone.paths_chosen.connect(self._add_images_from_paths)
@@ -1324,17 +1362,17 @@ class _QCLeftPanel(QWidget):
         self._date_edit.dateChanged.connect(lambda _: self.changed.emit())
 
         self._inspected_by = QLineEdit()
-        self._inspected_by.setPlaceholderText('Inspector name...')
+        self._inspected_by.setPlaceholderText(t('quality_control.left_panel.inspected_by_placeholder'))
         self._inspected_by.setStyleSheet(_INPUT)
         self._inspected_by.textChanged.connect(lambda _: self.changed.emit())
 
-        row1_l.addWidget(_col(_make_field_label('Inspection Date'), self._date_edit), 1)
-        row1_l.addWidget(_col(_make_field_label('Inspected By'), self._inspected_by), 1)
+        row1_l.addWidget(_col(_make_field_label(t('quality_control.left_panel.inspection_date_label')), self._date_edit), 1)
+        row1_l.addWidget(_col(_make_field_label(t('quality_control.left_panel.inspected_by_label')), self._inspected_by), 1)
         layout.addWidget(row1)
 
-        layout.addWidget(_make_field_label('Comments'))
+        layout.addWidget(_make_field_label(t('quality_control.left_panel.comments_label')))
         self._comments = QTextEdit()
-        self._comments.setPlaceholderText('Enter your comments...')
+        self._comments.setPlaceholderText(t('quality_control.left_panel.comments_placeholder'))
         self._comments.setFixedHeight(56)
         self._comments.setStyleSheet(_TEXTEDIT)
         self._comments.textChanged.connect(lambda: self.changed.emit())
@@ -1363,25 +1401,39 @@ class _QCLeftPanel(QWidget):
         l.setContentsMargins(0, 0, 0, 0)
         l.setSpacing(3)
 
-        snap_btn = QPushButton()
-        snap_btn.setFixedHeight(26)
-        snap_btn.setFixedWidth(30)
-        snap_btn.setToolTip('Capture current view to thumbnail strip')
-        snap_btn.setCursor(Qt.PointingHandCursor)
-        snap_btn.setIcon(_make_tb_icon('camera', 16))
-        snap_btn.setIconSize(QSize(16, 16))
-        snap_btn.setStyleSheet(f"""
+        self._snap_btn = QPushButton()
+        self._snap_btn.setFixedHeight(26)
+        self._snap_btn.setFixedWidth(30)
+        self._snap_btn.setToolTip(t('quality_control.left_panel.snap_tooltip'))
+        self._snap_btn.setCursor(Qt.PointingHandCursor)
+        self._snap_btn.setIcon(_make_tb_icon('camera', 16))
+        self._snap_btn.setIconSize(QSize(16, 16))
+        self._snap_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {_SURFACE}; border: 1px solid {_BORDER}; border-radius: 5px;
             }}
             QPushButton:hover {{ background: {_BG}; border-color: {_BORDER_DARK}; }}
         """ + _TOOLTIP_SS)
-        snap_btn.clicked.connect(self._capture_current_view)
+        self._snap_btn.clicked.connect(self._capture_current_view)
+
+        self._back_3d_btn = QPushButton('← 3D')
+        self._back_3d_btn.setFixedHeight(26)
+        self._back_3d_btn.setCursor(Qt.PointingHandCursor)
+        self._back_3d_btn.setVisible(False)
+        self._back_3d_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {_SURFACE}; color: #1d4ed8;
+                border: 1px solid #1d4ed8; border-radius: 5px;
+                padding: 0 8px; font-size: 11px; font-weight: 600;
+            }}
+            QPushButton:hover {{ background: #eff6ff; }}
+        """)
+        self._back_3d_btn.clicked.connect(self._show_3d)
 
         self._fullscreen_btn = QPushButton()
         self._fullscreen_btn.setFixedHeight(26)
         self._fullscreen_btn.setFixedWidth(30)
-        self._fullscreen_btn.setToolTip('Toggle fullscreen viewer')
+        self._fullscreen_btn.setToolTip(t('quality_control.left_panel.fullscreen_tooltip'))
         self._fullscreen_btn.setCursor(Qt.PointingHandCursor)
         self._fullscreen_btn.setCheckable(True)
         self._fullscreen_btn.setIcon(_make_tb_icon('fullscreen', 16))
@@ -1396,15 +1448,15 @@ class _QCLeftPanel(QWidget):
         self._fullscreen_btn.clicked.connect(
             lambda: self.fullscreen_requested.emit(self._fullscreen_btn.isChecked()))
 
-        for item in (snap_btn, self._fullscreen_btn):
+        for item in (self._snap_btn, self._back_3d_btn, self._fullscreen_btn):
             l.addWidget(item)
         l.addStretch()
         return w
 
     # ── Model selector ────────────────────────────────────────────────────────
 
-    def set_model_list(self, labels: list, current_idx: int):
-        """Rebuild the pill selector strip. Hidden when len(labels) <= 1."""
+    def set_model_list(self, viewers: list, current_idx: int):
+        """Rebuild the pill selector strip. viewers: [(label, viewer_widget), ...]"""
         # Clear old pills
         while self._model_selector_l.count():
             item = self._model_selector_l.takeAt(0)
@@ -1412,7 +1464,13 @@ class _QCLeftPanel(QWidget):
                 item.widget().deleteLater()
         self._model_pills.clear()
 
-        for i, label in enumerate(labels):
+        for i, (label, vw) in enumerate(viewers):
+            container = QWidget()
+            container.setStyleSheet('background: transparent;')
+            ch = QHBoxLayout(container)
+            ch.setContentsMargins(0, 0, 0, 0)
+            ch.setSpacing(4)
+
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setChecked(i == current_idx)
@@ -1433,16 +1491,59 @@ class _QCLeftPanel(QWidget):
             """)
             btn.clicked.connect(lambda _, idx=i: self._on_model_pill_clicked(idx))
             self._model_pills.append(btn)
-            self._model_selector_l.addWidget(btn)
 
-        # Stretch + scroll hint when many objects
+            close_btn = QPushButton('×')
+            close_btn.setFixedSize(18, 18)
+            close_btn.setCursor(Qt.PointingHandCursor)
+            close_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {_BORDER_DARK}; color: {_MUTED};
+                    border: none; border-radius: 9px;
+                    font-size: 11px; font-weight: bold; padding: 0;
+                }}
+                QPushButton:hover {{ background: #ef4444; color: white; }}
+            """)
+            close_btn.clicked.connect(lambda _, viewer=vw: self.model_remove_requested.emit(viewer))
+
+            ch.addWidget(btn)
+            ch.addWidget(close_btn)
+            self._model_selector_l.addWidget(container)
+
+        # "+" button to add another 3D model
+        add_btn = QPushButton('+')
+        add_btn.setFixedSize(24, 24)
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setToolTip('Add 3D model')
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {_SURFACE}; color: {_TEXT};
+                border: 1px solid {_BORDER}; border-radius: 12px;
+                font-size: 14px; font-weight: bold; padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {_ACCENT}; color: white; border-color: {_ACCENT};
+            }}
+        """)
+        add_btn.clicked.connect(self.upload_requested.emit)
+        self._model_selector_l.addWidget(add_btn)
+
         self._model_selector_l.addStretch()
-        self._model_selector_w.setVisible(len(labels) > 1)
+        self._model_selector_w.setVisible(bool(viewers))
 
     def _on_model_pill_clicked(self, idx: int):
         for i, btn in enumerate(self._model_pills):
             btn.setChecked(i == idx)
         self.model_selected.emit(idx)
+
+    def show_loading(self):
+        """Show the loading overlay over the viewer host while a model loads."""
+        self._qc_loading.setGeometry(self._viewer_host.rect())
+        self._qc_loading.raise_()
+        self._qc_loading.show_loading()
+
+    def hide_loading(self):
+        """Hide the loading overlay."""
+        self._qc_loading.hide_loading()
 
     # ── Mode switching (3D ↔ image annotation) ───────────────────────────────
 
@@ -1452,10 +1553,14 @@ class _QCLeftPanel(QWidget):
         self._mode_stack.setCurrentIndex(0)
         for card in self._thumb_cards:
             card.set_active(False)
+        if hasattr(self, '_snap_btn'):
+            self._snap_btn.setVisible(True)
+        if hasattr(self, '_back_3d_btn'):
+            self._back_3d_btn.setVisible(False)
         if hasattr(self, '_btn_3d'):
             self._btn_3d.setChecked(True)
         if hasattr(self, '_mode_badge'):
-            self._mode_badge.setText('3D Model')
+            self._mode_badge.setText(t('quality_control.left_panel.mode_3d'))
             self._mode_badge.setStyleSheet("""
                 background: #1d4ed8; color: white;
                 border-radius: 10px; font-size: 10px; font-weight: 700;
@@ -1480,14 +1585,19 @@ class _QCLeftPanel(QWidget):
         self._active_img_idx = idx
         self._img_view.set_image(pix)
         annots = self._image_annotations[idx] if idx < len(self._image_annotations) else []
-        self._img_view.set_annotations(annots)
+        offset = sum(len(self._image_annotations[i]) for i in range(idx))
+        self._img_view.set_annotations(annots, offset)
         self._mode_stack.setCurrentIndex(1)
         for i, card in enumerate(self._thumb_cards):
             card.set_active(i == idx)
+        if hasattr(self, '_snap_btn'):
+            self._snap_btn.setVisible(False)
+        if hasattr(self, '_back_3d_btn'):
+            self._back_3d_btn.setVisible(True)
         if hasattr(self, '_btn_3d'):
             self._btn_3d.setChecked(False)
         if hasattr(self, '_mode_badge'):
-            self._mode_badge.setText('Image View')
+            self._mode_badge.setText(t('quality_control.left_panel.mode_image'))
             self._mode_badge.setStyleSheet("""
                 background: #059669; color: white;
                 border-radius: 10px; font-size: 10px; font-weight: 700;
@@ -1501,8 +1611,9 @@ class _QCLeftPanel(QWidget):
         if idx < 0 or idx >= len(self._image_annotations):
             return
         self._image_annotations[idx].append((dot_xf, dot_yf, badge_xf, badge_yf))
-        self._img_view.set_annotations(self._image_annotations[idx])
-        number = len(self._image_annotations[idx])
+        offset = sum(len(self._image_annotations[i]) for i in range(idx))
+        self._img_view.set_annotations(self._image_annotations[idx], offset)
+        number = offset + len(self._image_annotations[idx])
         self.annotation_added.emit(number)
         self.changed.emit()
 
@@ -1752,7 +1863,7 @@ class _LogoDropZone(QLabel):
                     color: {_MUTED}; font-size: 12px;
                 }}
             """)
-            self.setText('Drag & drop your logo here\nor click to browse')
+            self.setText(t('quality_control.logo.drop_text'))
         else:
             self.setStyleSheet(f"""
                 QLabel {{
@@ -1765,7 +1876,7 @@ class _LogoDropZone(QLabel):
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
             path, _ = QFileDialog.getOpenFileName(
-                self, 'Select Logo', '',
+                self, t('quality_control.logo.dialog_title'), '',
                 'Images (*.png *.jpg *.jpeg *.bmp)'
             )
             if path:
@@ -1839,7 +1950,7 @@ class _CompanyInfoPanel(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
 
-        layout.addWidget(_make_section_label('Company / Part Information'))
+        layout.addWidget(_make_section_label(t('quality_control.company_panel.title')))
         layout.addSpacing(2)
 
         self._logo = _LogoDropZone()
@@ -1853,30 +1964,30 @@ class _CompanyInfoPanel(QWidget):
             f.textChanged.connect(lambda _: self.changed.emit())
             return f
 
-        layout.addWidget(_make_field_label('Designation'))
-        self._designation = _field('Enter designation...')
+        layout.addWidget(_make_field_label(t('quality_control.company_panel.designation_label')))
+        self._designation = _field(t('quality_control.company_panel.designation_placeholder'))
         layout.addWidget(self._designation)
 
-        layout.addWidget(_make_field_label('Reference Number'))
-        self._reference = _field('Enter reference number...')
+        layout.addWidget(_make_field_label(t('quality_control.company_panel.reference_label')))
+        self._reference = _field(t('quality_control.company_panel.reference_placeholder'))
         layout.addWidget(self._reference)
 
-        layout.addWidget(_make_field_label('Manufactured By'))
-        self._manufacturer = _field('Enter manufacturer name...')
+        layout.addWidget(_make_field_label(t('quality_control.company_panel.manufacturer_label')))
+        self._manufacturer = _field(t('quality_control.company_panel.manufacturer_placeholder'))
         layout.addWidget(self._manufacturer)
 
-        layout.addWidget(_make_field_label('Inspection Due Date'))
+        layout.addWidget(_make_field_label(t('quality_control.company_panel.due_date_label')))
         self._due_date = QDateEdit()
         self._due_date.setCalendarPopup(True)
         self._due_date.setDisplayFormat('dd/MM/yyyy')
-        self._due_date.setSpecialValueText('Select a date...')
+        self._due_date.setSpecialValueText(t('quality_control.company_panel.due_date_placeholder'))
         self._due_date.setDate(QDate(2000, 1, 1))
         self._due_date.setStyleSheet(_DATE)
         self._due_date.dateChanged.connect(lambda _: self.changed.emit())
         layout.addWidget(self._due_date)
 
         layout.addWidget(_hsep())
-        layout.addWidget(_make_section_label('Overall Status'))
+        layout.addWidget(_make_section_label(t('quality_control.company_panel.overall_status_title')))
         layout.addSpacing(2)
 
         cb_style = f"""
@@ -1894,17 +2005,17 @@ class _CompanyInfoPanel(QWidget):
             }}
             QCheckBox::indicator:hover {{ border-color: {_ACCENT}; }}
         """
-        self._cb_in_progress = QCheckBox('In Progress')
-        self._cb_approved    = QCheckBox('Approved')
-        self._cb_rejected    = QCheckBox('Rejected')
+        self._cb_in_progress = QCheckBox(t('quality_control.company_panel.status_in_progress'))
+        self._cb_approved    = QCheckBox(t('quality_control.company_panel.status_approved'))
+        self._cb_rejected    = QCheckBox(t('quality_control.company_panel.status_rejected'))
         for cb in (self._cb_in_progress, self._cb_approved, self._cb_rejected):
             cb.setStyleSheet(cb_style)
             cb.toggled.connect(self._on_status_toggled)
             layout.addWidget(cb)
 
         layout.addWidget(_hsep())
-        layout.addWidget(_make_field_label('Waived By'))
-        self._waived_by = _field('Enter name...')
+        layout.addWidget(_make_field_label(t('quality_control.company_panel.waived_by_label')))
+        self._waived_by = _field(t('quality_control.company_panel.waived_by_placeholder'))
         layout.addWidget(self._waived_by)
         layout.addStretch()
 
@@ -1969,7 +2080,9 @@ class _CompanyInfoPanel(QWidget):
 
 class QualityControlWidget(QWidget):
     """Top-level QC screen inside TheProjectWidget."""
-    changed = pyqtSignal()
+    changed                = pyqtSignal()
+    model_remove_requested = pyqtSignal(object)
+    upload_requested       = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1993,6 +2106,8 @@ class QualityControlWidget(QWidget):
         self._right_panel.changed.connect(self.changed)
         self._left_panel.fullscreen_requested.connect(self._set_fullscreen)
         self._left_panel.model_selected.connect(self._on_model_selected)
+        self._left_panel.model_remove_requested.connect(self.model_remove_requested)
+        self._left_panel.upload_requested.connect(self.upload_requested)
         # Clicking on an image auto-adds a matching control point in the center panel
         self._left_panel.annotation_added.connect(
             lambda _n: self._center_panel._add_point()
@@ -2038,8 +2153,7 @@ class QualityControlWidget(QWidget):
                         self._selected_idx = i
                         break
 
-        labels = [label for label, _ in viewers]
-        self._left_panel.set_model_list(labels, self._selected_idx)
+        self._left_panel.set_model_list(viewers, self._selected_idx)
 
         if viewers:
             _, viewer = viewers[self._selected_idx]
@@ -2052,8 +2166,7 @@ class QualityControlWidget(QWidget):
         for i, (_, vw) in enumerate(self._viewers):
             if vw is viewer:
                 self._selected_idx = i
-                self._left_panel.set_model_list(
-                    [l for l, _ in self._viewers], i)
+                self._left_panel.set_model_list(self._viewers, i)
                 self._viewer_ref = viewer
                 if self.isVisible():
                     self._left_panel.embed_viewer(viewer)
@@ -2090,6 +2203,12 @@ class QualityControlWidget(QWidget):
             self._left_panel.setFixedWidth(self.width() - 32)
         else:
             self._left_panel.setFixedWidth(440)
+
+    def show_loading(self):
+        self._left_panel.show_loading()
+
+    def hide_loading(self):
+        self._left_panel.hide_loading()
 
     # ── data persistence ──────────────────────────────────────────────────────
 

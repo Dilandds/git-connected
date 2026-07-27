@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea,
     QSizePolicy, QAbstractScrollArea, QDialog,
 )
-from PyQt5.QtCore import Qt, QDate, QRect, QRectF, QPoint, QSize, QMimeData, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QRect, QRectF, QPoint, QSize, pyqtSignal, QTimer, QMimeData, QEvent
 from PyQt5.QtGui import (
     QPainter, QColor, QPen, QBrush, QFont, QFontMetrics,
     QPainterPath, QCursor, QDrag,
@@ -120,8 +120,19 @@ class GanttCanvas(QWidget):
         self._drag_orig_end: Optional[QDate] = None
         self._drag_active: bool = False
         self._operation_hit_rects: list = []   # (y_top, y_bot, operator, operation)
+        self._operator_header_hit_rects: list = []   # (y_top, y_bot, operator)
         self._hovered_operation = None
         self._selected_operation = None       # Operation currently selected by click
+        self._min_viewport_w: int = 0         # scroll area's viewport width — see set_viewport_width
+
+        # Marquee — scrolls a hovered Operations-column label left when its
+        # text is too long to fit, mirroring the hover marquee used for the
+        # long component/stage names in Traceability (_MarqueeLabel).
+        self._marquee_key = None      # ('operator', op) or ('operation', oper)
+        self._marquee_offset: int = 0
+        self._marquee_timer = QTimer(self)
+        self._marquee_timer.timeout.connect(self._marquee_step)
+
         self.setMouseTracking(True)
         self.setCursor(Qt.ArrowCursor)
 
@@ -142,6 +153,16 @@ class GanttCanvas(QWidget):
     def set_deadline(self, date: Optional[QDate]):
         self._deadline = date; self.update()
 
+    def set_viewport_width(self, w: int):
+        """Called whenever the enclosing scroll area's viewport is resized —
+        on a wide/large monitor the fixed day-count (see _total_days) can be
+        narrower than the actual visible area, leaving blank canvas past the
+        last rendered month instead of stretching to fill the screen."""
+        if w != self._min_viewport_w:
+            self._min_viewport_w = w
+            self._recalc_size()
+            self.update()
+
     # ── sizing ────────────────────────────────────────────────────────────────
 
     def _day_w(self) -> int:
@@ -161,12 +182,24 @@ class GanttCanvas(QWidget):
                    for op in self._visible_operators())
 
     def _total_days(self) -> int:
-        return 400 if self._view_mode == 'Year' else 90
+        base = 400 if self._view_mode == 'Year' else 90
+        available = self._min_viewport_w - OP_LABEL_W
+        if available > 0:
+            needed = -(-available // self._day_w())   # ceil division
+            base = max(base, needed)
+        return base
 
     def _recalc_size(self):
         w = OP_LABEL_W + self._total_days() * self._day_w()
         h = HEADER_H + self._total_content_h() + 20
         self.setMinimumSize(w, max(h, 300))
+        # setMinimumSize alone only ever grows an already-larger widget, never
+        # shrinks it — sitting in a QScrollArea with widgetResizable=False,
+        # nothing else resizes this canvas, so switching to a view mode with a
+        # smaller natural width (e.g. Day → Month) left it stuck at the wider
+        # size, and its background/columns stop short of the actual widget
+        # edge, showing as blank canvas past the last rendered month.
+        self.resize(w, max(h, 300))
 
     def sizeHint(self) -> QSize:
         return QSize(
@@ -178,6 +211,7 @@ class GanttCanvas(QWidget):
 
     def paintEvent(self, event):
         self._operation_hit_rects = []
+        self._operator_header_hit_rects = []
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.TextAntialiasing)
@@ -383,11 +417,19 @@ class GanttCanvas(QWidget):
         abs_y = HEADER_H + y_pos
         p.fillRect(0, abs_y, OP_LABEL_W, OP_HEADER_H, QColor('#dbeafe'))
         p.fillRect(0, abs_y, 3, OP_HEADER_H, QColor(ACCENT))
-        p.setPen(QColor('#1d4ed8')); p.setFont(make_font(size=11, bold=True))
-        p.drawText(QRect(8, abs_y, OP_LABEL_W - 10, OP_HEADER_H),
-                   Qt.AlignVCenter | Qt.AlignLeft, op.name.upper())
+        p.setPen(QColor('#1d4ed8'))
+        header_font = make_font(size=11, bold=True)
+        p.setFont(header_font)
+        header_rect = QRect(8, abs_y, OP_LABEL_W - 10, OP_HEADER_H)
+        header_text = op.name.upper()
+        p.save()
+        p.setClipRect(header_rect)
+        dx = self._marquee_text_x(('operator', op), header_text, header_font, header_rect.width())
+        p.drawText(header_rect.translated(dx, 0), Qt.AlignVCenter | Qt.AlignLeft, header_text)
+        p.restore()
         p.setPen(QPen(QColor(BORDER), 1))
         p.drawLine(0, abs_y + OP_HEADER_H - 1, OP_LABEL_W, abs_y + OP_HEADER_H - 1)
+        self._operator_header_hit_rects.append((abs_y, abs_y + OP_HEADER_H, op))
         y_pos += OP_HEADER_H
         for i, oper in enumerate(op.operations):
             oy = HEADER_H + y_pos
@@ -402,9 +444,15 @@ class GanttCanvas(QWidget):
                 p.fillRect(0, oy, OP_LABEL_W, ROW_H, QColor('#f6f8fa'))
             p.setPen(QPen(QColor(BORDER), 1))
             p.drawLine(0, oy + ROW_H - 1, OP_LABEL_W, oy + ROW_H - 1)
-            p.setPen(QColor(TEXT)); p.setFont(make_font(size=11))
-            p.drawText(QRect(10, oy, OP_LABEL_W - 32, ROW_H),
-                       Qt.AlignVCenter | Qt.AlignLeft, oper.name)
+            p.setPen(QColor(TEXT))
+            row_font = make_font(size=11)
+            p.setFont(row_font)
+            row_rect = QRect(10, oy, OP_LABEL_W - 32, ROW_H)
+            p.save()
+            p.setClipRect(row_rect)
+            dx = self._marquee_text_x(('operation', oper), oper.name, row_font, row_rect.width())
+            p.drawText(row_rect.translated(dx, 0), Qt.AlignVCenter | Qt.AlignLeft, oper.name)
+            p.restore()
             # Pencil hint — always faint, brighter on hover
             p.setPen(QColor(ACCENT if is_hovered else MUTED))
             p.setFont(make_font(size=11))
@@ -422,6 +470,48 @@ class GanttCanvas(QWidget):
         p.drawLine(x, HEADER_H, x, self.height())
         p.setPen(QColor('#ef4444')); p.setFont(make_font(size=10, bold=True))
         p.drawText(x + 3, HEADER_H + 12, t('project.timeline.deadline_label'))
+
+    # ── Operations-column marquee (hover-to-scroll long names) ─────────────────
+
+    def _marquee_text_x(self, key, text: str, font: QFont, avail_w: int) -> int:
+        """Return the x-offset to draw `text` at when `key` is the row
+        currently under the cursor — 0 if not hovered/not overflowing."""
+        if key != self._marquee_key:
+            return 0
+        overflow = QFontMetrics(font).horizontalAdvance(text) - avail_w
+        return -self._marquee_offset if overflow > 0 else 0
+
+    def _set_marquee_hover(self, key, text: str, font: QFont, avail_w: int):
+        """Update which row is being marquee-scrolled, starting immediately
+        (no delay) the moment the cursor lands on a row whose label overflows
+        — same trigger feel as _MarqueeLabel.enterEvent in Traceability."""
+        if key is None or QFontMetrics(font).horizontalAdvance(text) <= avail_w:
+            key = None
+        if key == self._marquee_key:
+            return
+        self._marquee_key = key
+        self._marquee_offset = 0
+        if key is not None:
+            self._marquee_timer.start(25)
+        else:
+            self._marquee_timer.stop()
+        self.update()
+
+    def _marquee_step(self):
+        if self._marquee_key is None:
+            self._marquee_timer.stop()
+            return
+        kind, obj = self._marquee_key
+        if kind == 'operator':
+            text, font, avail_w = obj.name.upper(), make_font(size=11, bold=True), OP_LABEL_W - 10
+        else:
+            text, font, avail_w = obj.name, make_font(size=11), OP_LABEL_W - 32
+        overflow = QFontMetrics(font).horizontalAdvance(text) - avail_w
+        self._marquee_offset += 1
+        if overflow <= 0 or self._marquee_offset > overflow + 16:
+            # Loop back to the start and keep scrolling while still hovered.
+            self._marquee_offset = 0
+        self.update()
 
     # ── interaction ───────────────────────────────────────────────────────────
 
@@ -499,6 +589,7 @@ class GanttCanvas(QWidget):
                 if self._hovered_operation is not None:
                     self._hovered_operation = None
                     self.update()
+                self._set_marquee_hover(None, '', make_font(), 0)
                 # Word is cutted — reveal the full name on hover when it
                 # doesn't fit the bar (mirrors the marquee-on-hover cards
                 # used in Traceability).
@@ -507,6 +598,23 @@ class GanttCanvas(QWidget):
                 fm = QFontMetrics(make_font(size=11, bold=task.is_urgent))
                 self.setToolTip(task.name if fm.horizontalAdvance(task.name) > bar_w - 10 else '')
             elif event.pos().x() < OP_LABEL_W:
+                header_op = None
+                for y_top, y_bot, hop in self._operator_header_hit_rects:
+                    if y_top <= event.pos().y() < y_bot:
+                        header_op = hop
+                        break
+                if header_op is not None:
+                    if self._hovered_operation is not None:
+                        self._hovered_operation = None
+                        self.update()
+                    self.setCursor(Qt.ArrowCursor)
+                    self.setToolTip('')
+                    self._set_marquee_hover(
+                        ('operator', header_op), header_op.name.upper(),
+                        make_font(size=11, bold=True), OP_LABEL_W - 10,
+                    )
+                    return
+
                 hovered = None
                 for y_top, y_bot, _op, oper in self._operation_hit_rects:
                     if y_top <= event.pos().y() < y_bot:
@@ -518,15 +626,30 @@ class GanttCanvas(QWidget):
                 self.setCursor(Qt.PointingHandCursor if hovered else Qt.ArrowCursor)
                 if hovered is not None:
                     fm = QFontMetrics(make_font(size=11))
-                    self.setToolTip(hovered.name if fm.horizontalAdvance(hovered.name) > OP_LABEL_W - 32 else '')
+                    overflow = fm.horizontalAdvance(hovered.name) > OP_LABEL_W - 32
+                    self.setToolTip(hovered.name if overflow else '')
+                    self._set_marquee_hover(
+                        ('operation', hovered), hovered.name,
+                        make_font(size=11), OP_LABEL_W - 32,
+                    )
                 else:
                     self.setToolTip('')
+                    self._set_marquee_hover(None, '', make_font(), 0)
             else:
                 if self._hovered_operation is not None:
                     self._hovered_operation = None
                     self.update()
                 self.setCursor(Qt.ArrowCursor)
                 self.setToolTip('')
+                self._set_marquee_hover(None, '', make_font(), 0)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._hovered_operation is not None:
+            self._hovered_operation = None
+            self.update()
+        self._set_marquee_hover(None, '', make_font(), 0)
+        self.setToolTip('')
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self._dragging_task:
@@ -553,46 +676,66 @@ class GanttCanvas(QWidget):
 # ── Main Timeline Widget ──────────────────────────────────────────────────────
 
 class _DraggableOperatorTab(QWidget):
-    """Container widget for a single operator tab (name button + close
-    button) that can be dragged onto another operator tab to reorder them.
-    Reordering itself is delegated back to the owning TimelineWidget via the
-    on_reorder(source_index, target_index) callback — this widget only
-    knows its own current index and how to start/accept a drag."""
+    """Container for one operator tab (name button + close button).
 
-    _MIME_TYPE = 'application/x-ectoform-operator-tab-index'
-    _DRAG_THRESHOLD = 10
+    Child QPushButtons consume all mouse events before the container sees
+    them, so the container installs an event filter on the name button via
+    watch().  The filter detects a drag threshold and starts a QDrag —
+    after exec_() returns, Qt has already delivered the drop so no click
+    signal fires on the button.  Dropping onto another tab calls the
+    on_reorder(source_idx, target_idx) callback.
+    """
+
+    _MIME_TYPE      = 'application/x-ectoform-operator-tab-index'
+    _DRAG_THRESHOLD = 8
 
     def __init__(self, index: int, on_reorder, parent=None):
         super().__init__(parent)
         self._index = index
         self._on_reorder = on_reorder
         self._drag_start_pos: Optional[QPoint] = None
+        self._watched_btn: Optional[QWidget]   = None
         self.setStyleSheet('background: transparent;')
         self.setAcceptDrops(True)
 
     def set_index(self, index: int):
         self._index = index
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_start_pos = event.pos()
-        super().mousePressEvent(event)
+    def watch(self, btn: QWidget):
+        """Install drag-detection filter on the tab's name button."""
+        self._watched_btn = btn
+        btn.installEventFilter(self)
 
-    def mouseMoveEvent(self, event):
-        if (self._drag_start_pos is not None and event.buttons() & Qt.LeftButton
-                and (event.pos() - self._drag_start_pos).manhattanLength() >= self._DRAG_THRESHOLD):
-            drag = QDrag(self)
-            mime = QMimeData()
-            mime.setData(self._MIME_TYPE, str(self._index).encode('ascii'))
-            drag.setMimeData(mime)
+    # ── event filter on the name button ───────────────────────────────────────
+
+    def eventFilter(self, obj, event):
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            # Map to container coords so the threshold is consistent
+            self._drag_start_pos = self.mapFromGlobal(obj.mapToGlobal(event.pos()))
+
+        elif t == QEvent.MouseMove and (event.buttons() & Qt.LeftButton):
+            if self._drag_start_pos is not None:
+                cur = self.mapFromGlobal(obj.mapToGlobal(event.pos()))
+                if (cur - self._drag_start_pos).manhattanLength() >= self._DRAG_THRESHOLD:
+                    self._drag_start_pos = None
+                    drag = QDrag(self)
+                    mime = QMimeData()
+                    mime.setData(self._MIME_TYPE, str(self._index).encode('ascii'))
+                    drag.setMimeData(mime)
+                    if self._watched_btn:
+                        pix = self._watched_btn.grab()
+                        drag.setPixmap(pix)
+                        drag.setHotSpot(QPoint(pix.width() // 2, pix.height() // 2))
+                    drag.exec_(Qt.MoveAction)
+                    return True   # suppress the pending click
+
+        elif t == QEvent.MouseButtonRelease:
             self._drag_start_pos = None
-            drag.exec_(Qt.MoveAction)
-            return
-        super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        self._drag_start_pos = None
-        super().mouseReleaseEvent(event)
+        return False
+
+    # ── drop target ───────────────────────────────────────────────────────────
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(self._MIME_TYPE):
@@ -633,6 +776,19 @@ class TimelineWidget(QWidget):
         self._build_ui()
         self._refresh_tabs()
         self._switch_tab(-1)
+        QTimer.singleShot(0, self._sync_canvas_viewport_width)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Deferred: the scroll area's viewport geometry isn't updated yet at
+        # the moment this event fires — read it after the layout pass settles,
+        # so a maximized/large-monitor window actually widens the visible
+        # range instead of leaving blank canvas past the last rendered month.
+        QTimer.singleShot(0, self._sync_canvas_viewport_width)
+
+    def _sync_canvas_viewport_width(self):
+        if hasattr(self, '_scroll') and hasattr(self, '_canvas'):
+            self._canvas.set_viewport_width(self._scroll.viewport().width())
 
     # ── build ─────────────────────────────────────────────────────────────────
 
@@ -731,23 +887,24 @@ class TimelineWidget(QWidget):
         # Wrap in a horizontally-scrollable strip so a long legend (many task
         # types) never pushes the date/view controls off the bar — it scrolls
         # in its own lane between the legend label and the Gantt operations.
+        # Given stretch (instead of a fixed max-width + a separate addStretch)
+        # so it actually uses the free space in the row before falling back
+        # to scrolling — previously it was capped at 320px and clipped mid-word
+        # while the rest of the row sat empty.
         legend_scroll = QScrollArea()
         legend_scroll.setWidget(self._legend_area)
         legend_scroll.setWidgetResizable(True)
         legend_scroll.setFrameShape(QFrame.NoFrame)
         legend_scroll.setFixedHeight(30)
-        legend_scroll.setMaximumWidth(320)
         legend_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         legend_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         legend_scroll.setStyleSheet(f"""
             QScrollArea {{ background: transparent; border: none; }}
-            QScrollBar:horizontal {{ background: {BG}; height: 10px; border-radius: 5px; }}
-            QScrollBar::handle:horizontal {{ background: {ACCENT}; border-radius: 5px; min-width: 30px; }}
+            QScrollBar:horizontal {{ background: transparent; height: 5px; border-radius: 2px; }}
+            QScrollBar::handle:horizontal {{ background: {ACCENT}; border-radius: 2px; min-width: 20px; }}
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
         """)
-        layout.addWidget(legend_scroll)
-
-        layout.addStretch()
+        layout.addWidget(legend_scroll, 1)
 
         prev = QPushButton('◀'); prev.setFixedSize(32, 28); prev.setStyleSheet(_BTN_SMALL)
         prev.setCursor(Qt.PointingHandCursor); prev.clicked.connect(lambda: self._shift_date(-1))
@@ -833,6 +990,7 @@ class TimelineWidget(QWidget):
             btn.setToolTip(t('project.timeline.dlg_rename_operator_tip'))
             btn.clicked.connect(lambda _, idx=i: self._switch_tab(idx))
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_operator(idx)
+            container.watch(btn)   # enable drag-to-reorder via event filter
 
             close_btn = QPushButton('×'); close_btn.setFixedHeight(28); close_btn.setFixedWidth(22)
             close_btn.setCursor(Qt.PointingHandCursor)

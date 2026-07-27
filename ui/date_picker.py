@@ -17,8 +17,8 @@ Public API mirrors QDateEdit:
     setStyleSheet(str)      # absorbed — widget manages its own style
     dateChanged             # pyqtSignal(QDate)
 """
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QLineEdit
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QLineEdit, QApplication
+from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont
 
 # ── palette (all hardcoded — no stylesheet involvement in the grid) ────────────
@@ -330,6 +330,52 @@ class _EctoCalendarPopup(QWidget):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Marquee-on-hover line edit
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _MarqueeLineEdit(QLineEdit):
+    """Read-only QLineEdit that scrolls its text left-to-right on mouse hover."""
+
+    _TICK_MS   = 80   # ms between cursor steps
+    _PAUSE_MS  = 400  # ms to hold at position 0 before scrolling
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._marquee_pos = 0
+        self._paused = True
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._marquee_pos = 0
+        self._paused = True
+        self.setCursorPosition(0)
+        self._timer.start(self._PAUSE_MS)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._timer.stop()
+        self._marquee_pos = 0
+        self.setCursorPosition(0)
+
+    def _tick(self):
+        if self._paused:
+            self._paused = False
+            self._timer.setInterval(self._TICK_MS)
+
+        text_len = len(self.text())
+        self._marquee_pos += 1
+        if self._marquee_pos >= text_len:
+            self._marquee_pos = text_len
+            self.setCursorPosition(text_len)
+            self._timer.stop()
+        else:
+            self.setCursorPosition(self._marquee_pos)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public widget
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -348,7 +394,8 @@ class EctoDateEdit(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._line = QLineEdit(self._date.toString('dd/MM/yyyy'))
+        self._line = _MarqueeLineEdit()
+        self._line.setText(self._date.toString('dd/MM/yyyy'))
         self._line.setReadOnly(True)
         self._line.setStyleSheet(_FIELD_STYLE)
         self._line.setCursor(Qt.PointingHandCursor)
@@ -368,8 +415,21 @@ class EctoDateEdit(QWidget):
             return
         popup = _EctoCalendarPopup(self._date, self)
         popup.date_selected.connect(self._on_picked)
-        pos = self.mapToGlobal(self.rect().bottomLeft())
-        popup.move(pos)
+        below = self.mapToGlobal(self.rect().bottomLeft())
+        above = self.mapToGlobal(self.rect().topLeft())
+        x, y = below.x(), below.y()
+        screen = QApplication.screenAt(below)
+        if screen:
+            sr = screen.availableGeometry()
+            # Flip above the field if it would otherwise run off the bottom
+            # of the screen (e.g. task-detail panels near the window edge).
+            if y + popup.height() > sr.bottom():
+                y = above.y() - popup.height()
+            if x + popup.width() > sr.right():
+                x = sr.right() - popup.width()
+            x = max(sr.left(), x)
+            y = max(sr.top(), y)
+        popup.move(x, y)
         popup.show()
 
     def _on_picked(self, date: QDate):
