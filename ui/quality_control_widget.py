@@ -2009,6 +2009,14 @@ class QualityControlWidget(QWidget):
 
     # ── viewer lifecycle ──────────────────────────────────────────────────────
 
+    def set_company_logo(self, pix) -> None:
+        """Copy a company logo (pushed automatically from the Report screen,
+        or set programmatically some other way) into this screen's own logo
+        field, same as if it had been dropped/uploaded directly here."""
+        if pix is None or pix.isNull():
+            return
+        self._right_panel._logo.set_logo_data(_pixmap_to_b64(pix))
+
     def set_viewers(self, viewers: list, active_viewer=None):
         """Update the full list of (label, viewer_widget) pairs.
 

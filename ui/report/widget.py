@@ -197,6 +197,12 @@ class ReportWidget(QWidget):
     def _get_logo(self) -> Optional[QPixmap]:
         return self._logo_pix
 
+    def get_logo_pixmap(self) -> Optional[QPixmap]:
+        """Public accessor for the company logo set on this report — used by
+        TheProjectWidget to auto-copy the same logo into the Quality Control
+        screen so it doesn't need to be uploaded twice."""
+        return self._logo_pix
+
     def _set_logo(self, pix: QPixmap, path: str):
         self._logo_pix  = pix
         self._logo_path = path

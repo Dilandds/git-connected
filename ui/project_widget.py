@@ -819,6 +819,13 @@ class TheProjectWidget(QWidget):
             # Replay the cached viewer list so the QC screen is fully wired
             # even when the user first opens it after models are already loaded.
             widget.set_viewers(self._pending_viewers, active_viewer=self._pending_active_viewer)
+        if key == 'report' and hasattr(widget, 'changed'):
+            widget.changed.connect(self._sync_qc_logo_from_report)
+        if key == 'quality_control':
+            # Seed the QC logo from whatever's already on the Report screen
+            # (e.g. loaded from a saved project) right at creation time —
+            # otherwise it stays blank until the report's logo changes again.
+            self._sync_qc_logo_from_report()
 
     # ── navigation ────────────────────────────────────────────────────────────
 
@@ -897,6 +904,21 @@ class TheProjectWidget(QWidget):
             return float(cleaned) if cleaned else 0.0
         except ValueError:
             return 0.0
+
+    def _sync_qc_logo_from_report(self):
+        """Copy the company logo set on the Report screen into the Quality
+        Control screen's own logo field, so the same logo doesn't have to be
+        uploaded a second time there. The Report screen's logo is treated as
+        the source of truth — QC's own logo field just mirrors it."""
+        report = self._screen_widgets.get('report')
+        qc = self._screen_widgets.get('quality_control')
+        if report is None or qc is None:
+            return
+        if not hasattr(report, 'get_logo_pixmap') or not hasattr(qc, 'set_company_logo'):
+            return
+        pix = report.get_logo_pixmap()
+        if pix is not None and not pix.isNull():
+            qc.set_company_logo(pix)
 
     def _sync_traceability_from_brief(self):
         """Push brief component names into traceability (full reconcile)."""
