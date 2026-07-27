@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QDialog,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QEvent, QPoint
 from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
 from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE, _translate_status
@@ -35,9 +35,11 @@ class _ProductInfoRow(QFrame):
         self._planned_launch     = ''
         self._overall_progress   = 0
         self._product_image_path = ''
+        self._zoom_lbl = None   # lazily-created floating hover-zoom preview
         self.setFixedHeight(152)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
         self._build()
+        self._img_btn.installEventFilter(self)
 
     def _build(self):
         root = QHBoxLayout(self)
@@ -189,6 +191,44 @@ class _ProductInfoRow(QFrame):
             self._product_image_path = path
             self._apply_image(path)
             self.changed.emit()
+
+    # ── hover-zoom preview ───────────────────────────────────────────────────
+
+    def eventFilter(self, obj, event):
+        if obj is self._img_btn:
+            if event.type() == QEvent.Enter and self._product_image_path:
+                self._show_zoom_preview()
+            elif event.type() == QEvent.Leave:
+                self._hide_zoom_preview()
+        return super().eventFilter(obj, event)
+
+    def _show_zoom_preview(self):
+        """Float an enlarged copy of the product photo next to the thumbnail
+        while the mouse hovers over it."""
+        pix = QPixmap(self._product_image_path)
+        if pix.isNull():
+            return
+        scaled = pix.scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if self._zoom_lbl is None:
+            self._zoom_lbl = QLabel(None, Qt.ToolTip | Qt.FramelessWindowHint)
+            self._zoom_lbl.setStyleSheet(f"""
+                QLabel {{
+                    background: {_CARD};
+                    border: 2px solid {_ACCENT};
+                    border-radius: 8px;
+                    padding: 4px;
+                }}
+            """)
+        self._zoom_lbl.setPixmap(scaled)
+        self._zoom_lbl.adjustSize()
+        pos = self._img_btn.mapToGlobal(QPoint(self._img_btn.width() + 14, 0))
+        self._zoom_lbl.move(pos)
+        self._zoom_lbl.show()
+        self._zoom_lbl.raise_()
+
+    def _hide_zoom_preview(self):
+        if self._zoom_lbl is not None:
+            self._zoom_lbl.hide()
 
     def _edit(self, field: str):
         from ui.modal_utils import FormModal
