@@ -42,8 +42,8 @@ _ACCENT_H = default_theme.button_primary_hover
 
 # ── nav items — order defines sidebar display order ───────────────────────────
 _NAV_KEYS = [
-    'brief', 'assignment', 'timeline', 'validation', 'report', 'estimated_cost',
-    'files', 'rd', 'prototype', 'traceability', 'quality_control', 'version_comparison', 'todo', 'glossary',
+    'brief', 'assignment', 'timeline', 'rd', 'estimated_cost', 'traceability',
+    'report', 'files', 'validation', 'prototype', 'version_comparison', 'quality_control', 'todo', 'glossary',
 ]
 # Keep a fallback list for print label lookup; labels filled at runtime via t()
 _NAV_ITEMS = [(k, k) for k in _NAV_KEYS]
