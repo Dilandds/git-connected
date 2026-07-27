@@ -311,8 +311,9 @@ class _StageTimelineRow(QWidget):
         n      = len(self._stages) + 1
         new_id = max((s.id for s in self._stages), default=0) + 1
         self._stages.append(TraceStage(
-            id=new_id, number=n, name=f'Stage {n}', status='Upcoming',
-            sub_stages=[TraceSubStage(id=1, name='Sub-stage 1')]
+            id=new_id, number=n, name=t('project.traceability.default_stage_number_name').format(n=n),
+            status='Upcoming',
+            sub_stages=[TraceSubStage(id=1, name=t('project.traceability.default_substage_name').format(n=1))]
         ))
         self._select(len(self._stages) - 1)
         self.changed.emit()

@@ -31,8 +31,10 @@ class ComponentsCard(QFrame):
         return {'components': self._table.get_data()}
 
     def set_data(self, data: dict):
-        if data.get('components'):
-            self._table.set_data(data['components'])
+        # replace_data (not set_data) — ComponentsTable.set_data only grows
+        # the table, never shrinks it, so loading data with fewer/no rows
+        # than currently shown (e.g. New Project) left old rows in place.
+        self._table.replace_data(data.get('components', []))
 
     def get_components(self) -> list:
         """Convenience accessor used by TraceabilityWidget sync."""

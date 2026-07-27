@@ -269,6 +269,7 @@ class ReportWidget(QWidget):
 
     def set_data(self, data: dict):
         self._logo_path = data.get("logo_path", "")
+        self._logo_pix = None
         if self._logo_path:
             pix = QPixmap(self._logo_path)
             if not pix.isNull():
@@ -318,7 +319,9 @@ class ReportWidget(QWidget):
                 r.pages.append(page)
             reports.append(r)
 
-        if reports:
-            self._reports = reports
+        # Without this fallback, loading data with no reports (e.g. New
+        # Project) left the previous project's reports displayed, since
+        # self._reports was only ever reassigned when truthy.
+        self._reports = reports if reports else [_default_report(1)]
         self._rebuild_all()
         self._switch_report(0)

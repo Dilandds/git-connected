@@ -232,6 +232,13 @@
     "enter_text": "Entrez le texte",
     "text_input_title": "Ajouter du Texte"
   },
+  "drop_zone_3d": {
+    "title": "Glissez-déposez votre fichier 3D ici",
+    "title_release": "Relâchez pour charger votre fichier",
+    "subtitle": "ou cliquez n'importe où dans cette zone pour importer",
+    "formats": "Fichiers STL, STEP, 3DM, OBJ, IGES, DXF et LYNS",
+    "invalid_file": "Type de fichier invalide. Utilisez uniquement des fichiers .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF ou .LYNS."
+  },
   "texture": {
     "panel_title": "Mode rendu ",
     "instruction": "Importez des textures et glissez-les sur les pièces du modèle pour les appliquer.",
@@ -518,6 +525,9 @@
     },
     "traceability": {
       "main_product": "Produit Principal",
+      "default_stage_name": "Conception initiale",
+      "default_stage_number_name": "Étape {n}",
+      "default_substage_name": "Sous-étape {n}",
       "photo_btn": "＋\nPhoto",
       "reference": "Référence",
       "manager": "Chef(fe) de projet",
@@ -1139,6 +1149,13 @@
     "redo": "Rétablir",
     "delete": "Supprimer",
     "delete_tooltip": "Supprimer la carte sélectionnée (ou appuyer sur Suppr)",
+    "delete_card": "Supprimer la carte",
+    "color_label": "Couleur :",
+    "pick_color": "Choisir une couleur",
+    "pick_color_tooltip": "Choisir une couleur pour la carte sélectionnée",
+    "landscape": "Paysage",
+    "portrait": "Portrait",
+    "orientation_tooltip": "Basculer entre portrait et paysage A4",
     "drop_hint": "Importer une image du produit\n(JPEG · PNG · HEIC · PDF)",
     "edit_card": "Modifier la zone",
     "card_title": "Titre",

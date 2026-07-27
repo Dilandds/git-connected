@@ -385,6 +385,55 @@ def run_screenshot_mode(app, window, outdir):
             {"id": 2, "term": "Anodizing", "definition": "Electrochemical process that increases corrosion resistance."},
         ]}))
 
+    _NATIVE_DIALOG_TARGET = "99_save_project_as_dialog"
+
+    def _save_as_native_dialog(win):
+        """Trigger the OS-native "Save Project As" file dialog, screen-grab
+        it, then dismiss it with a synthetic Escape keypress.
+
+        Unlike every other target above, this dialog is a real Windows
+        window, not part of our own Qt widget tree, so window.grab() can't
+        see it — a full-screen grab is the only way to capture it. And
+        QFileDialog.getSaveFileName() blocks the calling thread until the
+        dialog closes, so the grab + dismiss must be scheduled on a timer
+        *before* making the call, timed for after the dialog has had a
+        moment to actually paint. Escape is the OS's own universal cancel
+        for this dialog, so dismissal doesn't depend on window titles or
+        locale (the dialog title is translated; the Escape key isn't).
+        Windows-only — there's no native-dialog quirk to check on
+        macOS/Linux, and keybd_event doesn't exist there anyway.
+
+        A failed auto-dismiss would hang this call — and therefore the rest
+        of the capture run — rather than merely failing this one
+        screenshot, so this target MUST stay last in SCREENSHOT_TARGETS:
+        every capture before it is already saved to disk, and the "Run app
+        in screenshot mode" step's own timeout plus the upload step's
+        `if: always()` mean a hang here still ships every other screenshot
+        instead of losing the whole run.
+        """
+        if sys.platform != 'win32':
+            return
+        import ctypes
+
+        path = os.path.join(outdir, f"{_NATIVE_DIALOG_TARGET}.png")
+
+        def _snap_and_dismiss():
+            try:
+                pix = app.primaryScreen().grabWindow(0)
+                ok = pix.save(path)
+                logger.info(f"screenshot-mode: saved {path} (native dialog, {'ok' if ok else 'FAILED'})")
+            except Exception as e:
+                logger.error(f"screenshot-mode: native dialog capture failed: {e}")
+            finally:
+                user32 = ctypes.windll.user32
+                VK_ESCAPE, KEYEVENTF_KEYUP = 0x1B, 0x0002
+                user32.keybd_event(VK_ESCAPE, 0, 0, 0)
+                user32.keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0)
+
+        win._switch_mode("project")
+        QTimer.singleShot(700, _snap_and_dismiss)
+        win.project_widget._on_save_project_as()  # blocks until Escape lands
+
     SCREENSHOT_TARGETS = {
         "01_3d_viewer":            lambda win: win._switch_mode("3d"),
         "01b_3d_viewer_with_model": _view_3d_with_model,
@@ -404,6 +453,8 @@ def run_screenshot_mode(app, window, outdir):
         SCREENSHOT_TARGETS[f"04_project_{_key}"] = _project_section(_key)
     SCREENSHOT_TARGETS["04_project_rd_0_textures"] = _rd_sub_tab(0)
     SCREENSHOT_TARGETS["04_project_rd_1_techniques"] = _rd_sub_tab(1)
+    # Must be inserted last — see _save_as_native_dialog's docstring.
+    SCREENSHOT_TARGETS[_NATIVE_DIALOG_TARGET] = _save_as_native_dialog
 
     print("screenshot-mode: seeding Project sections with sample data...", file=sys.stderr)
     safe_flush(sys.stderr)
@@ -422,7 +473,12 @@ def run_screenshot_mode(app, window, outdir):
     for name, action in SCREENSHOT_TARGETS.items():
         try:
             action(window)
-            _capture(name)
+            # _save_as_native_dialog captures itself (a full-screen grab
+            # while the native dialog is up) — window.grab() here would
+            # just overwrite that with a shot of the app after the dialog
+            # already closed.
+            if name != _NATIVE_DIALOG_TARGET:
+                _capture(name)
         except Exception as e:
             print(f"screenshot-mode: target '{name}' FAILED: {e}", file=sys.stderr)
             safe_flush(sys.stderr)
@@ -486,11 +542,17 @@ def main():
         print("Step 2: Setting application properties...", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("Step 2: Setting application properties...")
-        app.setApplicationName("ECTOFORM")
-        app.setOrganizationName("ECTOFORM")
+        app.setApplicationName("LYNS360")
+        app.setOrganizationName("LYNS360")
         print("✓ Application properties set", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("✓ Application properties set")
+
+        # Windows only, no-op in dev mode — registers .lyns.pjt with File
+        # Explorer so project files show the app's icon instead of a blank
+        # generic one. Self-registering since there's no installer step.
+        from core.file_association import register_file_association
+        register_file_association()
         
         # Create splash screen
         splash_pixmap = None
@@ -534,7 +596,7 @@ def main():
             }
         """)
         
-        splash.showMessage("Loading ECTOFORM...", 
+        splash.showMessage("Loading LYNS360...",
                           QtCore.AlignCenter | QtCore.AlignBottom, 
                           QColor("#5294E2"))
         splash.show()

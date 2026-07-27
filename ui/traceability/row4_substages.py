@@ -233,7 +233,8 @@ class _SubStagePanel(QWidget):
             return
         new_id = max((s.id for s in self._stage.sub_stages), default=0) + 1
         n = len(self._stage.sub_stages) + 1
-        self._stage.sub_stages.append(TraceSubStage(id=new_id, name=f'Sub-stage {n}'))
+        name = t('project.traceability.default_substage_name').format(n=n)
+        self._stage.sub_stages.append(TraceSubStage(id=new_id, name=name))
         self._current_sub = len(self._stage.sub_stages) - 1
         self._refresh_tabs()
         self._refresh_table()
@@ -242,9 +243,14 @@ class _SubStagePanel(QWidget):
 
     def _renumber_substages(self):
         import re
+        # Build the "still using the auto-generated name" pattern from the
+        # current language's template, not a hardcoded English one — an
+        # unrenamed "Sous-étape 2" in French must still get caught here.
+        template = t('project.traceability.default_substage_name')
+        pattern = '^' + re.escape(template).replace(re.escape('{n}'), r'\d+') + '$'
         for i, sub in enumerate(self._stage.sub_stages):
-            if re.match(r'^Sub-stage \d+$', sub.name):
-                sub.name = f'Sub-stage {i + 1}'
+            if re.match(pattern, sub.name):
+                sub.name = template.format(n=i + 1)
 
     def _duplicate_sub(self, idx: int):
         if not self._stage or idx >= len(self._stage.sub_stages):

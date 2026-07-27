@@ -167,7 +167,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='ECTOFORM-Education',
+    name='LYNS360-Education',
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,  # Enable stripping for size reduction
@@ -188,7 +188,7 @@ coll = COLLECT(
     strip=True,  # Enable stripping for size reduction
     upx=True,
     upx_exclude=[],
-    name='ECTOFORM-Education',
+    name='LYNS360-Education',
 )
 
 # Debug icon for BUNDLE
@@ -201,7 +201,7 @@ else:
 
 app = BUNDLE(
     coll,
-    name='ECTOFORM-Education.app',
+    name='LYNS360-Education.app',
     icon=bundle_icon,
         bundle_identifier='com.ectoform.education',
     info_plist={

@@ -1,6 +1,6 @@
 """
 Semi-transparent diagonal watermark overlay for the Education edition.
-Paints repeated "ECTOFORM" text across the widget at a 30° angle.
+Paints repeated "LYNS360" text across the widget at a 30° angle.
 """
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt
@@ -8,9 +8,9 @@ from PyQt5.QtGui import QPainter, QFont, QColor
 
 
 class WatermarkOverlay(QWidget):
-    """Transparent overlay that draws tiled diagonal 'ECTOFORM' watermarks."""
+    """Transparent overlay that draws tiled diagonal 'LYNS360' watermarks."""
 
-    def __init__(self, parent=None, text: str = "ECTOFORM", opacity: float = 0.07):
+    def __init__(self, parent=None, text: str = "LYNS360", opacity: float = 0.07):
         super().__init__(parent)
         self._text = text
         self._opacity = opacity

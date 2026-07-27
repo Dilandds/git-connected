@@ -220,7 +220,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ECTOFORM',
+    name='LYNS360',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,  # Disable stripping to prevent DLL loading issues

@@ -4,7 +4,7 @@
 
 set -e  # Exit on error
 
-echo "Building ECTOFORM for macOS..."
+echo "Building LYNS360 for macOS..."
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -49,7 +49,7 @@ echo "Running PyInstaller..."
 pyinstaller stl_viewer_mac.spec --clean --noconfirm
 
 # Check if .app was created
-APP_PATH="dist/ECTOFORM.app"
+APP_PATH="dist/LYNS360.app"
 if [ ! -d "$APP_PATH" ]; then
     echo "Error: .app bundle not found at $APP_PATH"
     exit 1
@@ -73,7 +73,7 @@ fi
 
 # Create DMG
 echo "Creating DMG installer..."
-DMG_NAME="ECTOFORM-${VERSION}-macOS-${ARCH}.dmg"
+DMG_NAME="LYNS360-${VERSION}-macOS-${ARCH}.dmg"
 
 # Create a temporary folder for DMG contents
 DMG_TEMP="dist/dmg_temp"
@@ -89,7 +89,7 @@ fi
 cp -R "$APP_PATH" "$DMG_TEMP/"
 
 # Verify the app was copied
-if [ ! -d "$DMG_TEMP/ECTOFORM.app" ]; then
+if [ ! -d "$DMG_TEMP/LYNS360.app" ]; then
     echo "Error: Failed to copy .app bundle to temp folder"
     exit 1
 fi
@@ -111,25 +111,25 @@ DMG_SCRIPT_ERROR=""
 # First attempt: with full customization
 if [ -f "$ICON_FILE" ]; then
     create-dmg \
-        --volname "ECTOFORM" \
+        --volname "LYNS360" \
         --volicon "$ICON_FILE" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
-        --icon "ECTOFORM.app" 175 190 \
-        --hide-extension "ECTOFORM.app" \
+        --icon "LYNS360.app" 175 190 \
+        --hide-extension "LYNS360.app" \
         --app-drop-link 425 190 \
         --hdiutil-quiet \
         "$ABS_DMG_NAME" \
         "$ABS_DMG_TEMP" 2>&1 | tee /tmp/create-dmg-output.log || DMG_ERROR=$?
 else
     create-dmg \
-        --volname "ECTOFORM" \
+        --volname "LYNS360" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
-        --icon "ECTOFORM.app" 175 190 \
-        --hide-extension "ECTOFORM.app" \
+        --icon "LYNS360.app" 175 190 \
+        --hide-extension "LYNS360.app" \
         --app-drop-link 425 190 \
         --hdiutil-quiet \
         "$ABS_DMG_NAME" \
@@ -149,14 +149,14 @@ if [ "$DMG_ERROR" -ne 0 ] && [ ! -f "$ABS_DMG_NAME" ] && [ -z "$TEMP_DMG_EXISTS"
     echo -e "${YELLOW}Retrying with simpler DMG creation (without window customization)...${NC}"
     if [ -f "$ICON_FILE" ]; then
         create-dmg \
-            --volname "ECTOFORM" \
+            --volname "LYNS360" \
             --volicon "$ICON_FILE" \
             --hdiutil-quiet \
             "$ABS_DMG_NAME" \
             "$ABS_DMG_TEMP" 2>&1 || DMG_ERROR=$?
     else
         create-dmg \
-            --volname "ECTOFORM" \
+            --volname "LYNS360" \
             --hdiutil-quiet \
             "$ABS_DMG_NAME" \
             "$ABS_DMG_TEMP" 2>&1 || DMG_ERROR=$?

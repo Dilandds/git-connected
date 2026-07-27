@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import List
 
-from i18n import t
+from i18n import t, t_in
 
 
 @dataclass
@@ -76,19 +76,49 @@ class Report:
         return f"{prefix}Report {self.id}"
 
 
+_ATTENDEE_DEFAULT_KEYS = [
+    "project.report.attendee_default_production",
+    "project.report.attendee_default_studio",
+    "project.report.attendee_default_marketing",
+    "project.report.attendee_default_partner1",
+    "project.report.attendee_default_other",
+]
+
+_SUPPORTED_LANGS = ("en", "fr")
+
+
+def display_attendee_header(header: str) -> str:
+    """If `header` exactly matches one of the known default column names in
+    *any* supported language, return that default translated into the
+    *current* language. Otherwise return it unchanged.
+
+    Headers used to get translated once, at report-creation time, and
+    stored as plain text from then on — so a column created in English
+    stayed "Partner 1"/"Other" forever, even after switching the app to
+    French (or opening a project saved while it was still in English).
+    Re-deriving the display text from a canonical key on every render
+    fixes that, while a value the user typed themselves never matches one
+    of these keys and is always shown exactly as they wrote it.
+    """
+    for key in _ATTENDEE_DEFAULT_KEYS:
+        if any(header == t_in(key, lang) for lang in _SUPPORTED_LANGS):
+            return t(key)
+    return header
+
+
 def _default_report(rid: int) -> Report:
     today = date.today().strftime("%d/%m/%Y")
     r = Report(id=rid, date=today)
     r.company_extras = []
     r.partner_extras = []
     r.attendees = [
-        AttendeeColumn(h, "") for h in [
-            t("project.report.attendee_default_production"),
-            t("project.report.attendee_default_studio"),
-            t("project.report.attendee_default_marketing"),
-            t("project.report.attendee_default_partner1"),
-            t("project.report.attendee_default_other"),
-            t("project.report.attendee_default_other"),
+        AttendeeColumn(t(k), "") for k in [
+            "project.report.attendee_default_production",
+            "project.report.attendee_default_studio",
+            "project.report.attendee_default_marketing",
+            "project.report.attendee_default_partner1",
+            "project.report.attendee_default_other",
+            "project.report.attendee_default_other",
         ]
     ]
     page = ReportPage(id=1)

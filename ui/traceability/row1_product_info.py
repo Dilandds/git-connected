@@ -5,9 +5,15 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QEvent, QPoint
 from PyQt5.QtGui import QPixmap, QIcon
 from ui.styles import make_font
-from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _STATUS_COLORS, _TOOLTIP_STYLE, _translate_status
+from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _TOOLTIP_STYLE
 from .shared import _ProgressBar
 from i18n import t
+# "Statut global" mirrors the project sidebar's own status field (info['status']
+# is 'in_progress'/'awaiting'/'completed'/'cancelled'), not a traceability
+# stage's status ('Upcoming'/'In Progress'/'Completed') — translate/color it
+# against the project's own vocabulary instead of traceability/shared.py's.
+from ui.project_widget import _STATUS_COLORS as _GLOBAL_STATUS_COLORS
+from ui.project_widget import _STATUS_I18N as _GLOBAL_STATUS_I18N
 
 _LAUNCH_TOOLTIP = f"""
     QLabel {{
@@ -183,6 +189,17 @@ class _ProductInfoRow(QFrame):
                 QPushButton:hover {{ border: 2px solid {_ACCENT}; }}
             """)
 
+    def _clear_image(self):
+        self._img_btn.setIcon(QIcon())
+        self._img_btn.setText(t('project.traceability.photo_btn'))
+        self._img_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #f1f3f5; border: 2px dashed {_BORDER};
+                border-radius: 12px; color: {_MUTED}; font-size: 11px;
+            }}
+            QPushButton:hover {{ border-color: {_ACCENT}; background: #e8f0fe; }}
+        """)
+
     def _upload_image(self):
         path, _ = QFileDialog.getOpenFileName(
             self, 'Select Product Image', '', 'Images (*.png *.jpg *.jpeg *.webp)'
@@ -266,9 +283,10 @@ class _ProductInfoRow(QFrame):
 
     def _set_status_pill(self, status: str):
         if status and status != '—':
-            color = _STATUS_COLORS.get(status, _MUTED)
+            color = _GLOBAL_STATUS_COLORS.get(status, _MUTED)
             bg = color + '22'
-            self._status_lbl.setText(_translate_status(status))
+            i18n_key = _GLOBAL_STATUS_I18N.get(status)
+            self._status_lbl.setText(t(i18n_key) if i18n_key else status)
             self._status_lbl.setStyleSheet(
                 f'color: {color}; background: {bg}; border: 1px solid {color}44;'
                 f'border-radius: 9px; padding: 2px 10px; font-size: 11px; font-weight: bold;'
@@ -321,3 +339,8 @@ class _ProductInfoRow(QFrame):
         self._prog_bar.set_value(self._overall_progress)
         if self._product_image_path:
             self._apply_image(self._product_image_path)
+        else:
+            # _apply_image was only ever called when truthy — without this,
+            # New Project / opening a project with no image left the
+            # previous project's photo still showing on the button.
+            self._clear_image()

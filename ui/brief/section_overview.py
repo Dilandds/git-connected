@@ -197,6 +197,11 @@ class ProductOverviewCard(QFrame):
             old_path = data.get('image_path', '')
             if old_path:
                 self.set_image_from_path(old_path)
+            else:
+                # Without this, loading/new-project data with no image left
+                # the *previous* project's image still showing — the icon
+                # on _img_btn was never cleared, only re-set when truthy.
+                self.clear_image()
             return
         pix = _b64_to_pixmap(b64)
         if not pix.isNull():

@@ -69,7 +69,5 @@ class TechniquesCard(QFrame):
         }
 
     def set_data(self, data: dict):
-        if data.get('techniques'):
-            self._techniques_list.set_values(data['techniques'])
-        if data.get('watchpoints'):
-            self._watchpoints_list.set_values(data['watchpoints'])
+        self._techniques_list.set_values(data.get('techniques', []))
+        self._watchpoints_list.set_values(data.get('watchpoints', []))

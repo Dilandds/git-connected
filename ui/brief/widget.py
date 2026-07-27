@@ -128,7 +128,7 @@ class ProjectBriefWidget(QWidget):
         layout.setContentsMargins(0, 8, 0, 0)
         today = date.today().strftime('%d %B %Y')
         for text, align in [(t('project.brief.generated_on').format(today=today), Qt.AlignLeft),
-                             ('ECTOFORM v1.2.0', Qt.AlignRight)]:
+                             ('LYNS360 v1.2.0', Qt.AlignRight)]:
             lbl = QLabel(text)
             lbl.setStyleSheet(
                 f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;'

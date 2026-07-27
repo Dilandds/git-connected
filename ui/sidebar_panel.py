@@ -280,7 +280,7 @@ class SidebarPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._settings = QSettings("ECTOFORM", "Sidebar")
+        self._settings = QSettings("LYNS360", "Sidebar")
         self._surface_area_expanded = self._settings.value("surface_area_expanded", True, type=bool)
         self._adjust_weight_expanded = self._settings.value("adjust_weight_expanded", True, type=bool)
         self.current_volume_mm3 = 0.0

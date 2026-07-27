@@ -58,7 +58,7 @@ class LicenseDialog(QDialog):
     
     def init_ui(self):
         """Initialize the dialog UI."""
-        self.setWindowTitle("Activate ECTOFORM")
+        self.setWindowTitle("Activate LYNS360")
         self.setFixedSize(460, 440)
         self.setModal(True)
         from ui.annotation_icon import get_app_window_icon
@@ -143,7 +143,7 @@ class LicenseDialog(QDialog):
         layout.addWidget(icon_label)
 
         # Title
-        title_label = QLabel("Activate ECTOFORM")
+        title_label = QLabel("Activate LYNS360")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)

@@ -9,10 +9,28 @@ from PyQt5.QtCore import pyqtSignal, QTimer, QPoint, Qt
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
 from .models import TracePart, TraceTask, TraceStep, TraceSubStage, TraceStage, TraceComponent
 from .shared import _BG, _ACCENT, _SEL_BORDER
+from i18n import t
 from .row1_product_info import _ProductInfoRow
 from .row2_components import _ComponentsRow
 from .row3_timeline import _StageTimelineRow
 from .row4_substages import _SubStagePanel
+
+
+def _default_components() -> List[TraceComponent]:
+    """The single blank 'Main Product' component the widget starts with —
+    also used to reset back to this state (New Project, or a saved file too
+    old to parse) instead of leaving stale data on screen."""
+    return [
+        TraceComponent(
+            id=1, name=t('project.traceability.main_product'), is_main=True,
+            stages=[
+                TraceStage(
+                    id=1, number=1, name=t('project.traceability.default_stage_name'), status='Upcoming',
+                    sub_stages=[TraceSubStage(id=1, name=t('project.traceability.default_substage_name').format(n=1))]
+                )
+            ]
+        )
+    ]
 
 
 class _ArrowConnector(QWidget):
@@ -73,17 +91,7 @@ class TraceabilityWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._components: List[TraceComponent] = [
-            TraceComponent(
-                id=1, name='Main Product', is_main=True,
-                stages=[
-                    TraceStage(
-                        id=1, number=1, name='Initial Design', status='Upcoming',
-                        sub_stages=[TraceSubStage(id=1, name='Sub-stage 1')]
-                    )
-                ]
-            )
-        ]
+        self._components: List[TraceComponent] = _default_components()
         self._current_component = 0
         self.setStyleSheet(f'background: {_BG};')
         self._build_ui()
@@ -194,8 +202,9 @@ class TraceabilityWidget(QWidget):
                 new_non_main.append(TraceComponent(
                     id=next_id, name=name,
                     stages=[TraceStage(
-                        id=1, number=1, name='Stage 1', status='Upcoming',
-                        sub_stages=[TraceSubStage(id=1, name='Sub-stage 1')]
+                        id=1, number=1, name=t('project.traceability.default_stage_number_name').format(n=1),
+                        status='Upcoming',
+                        sub_stages=[TraceSubStage(id=1, name=t('project.traceability.default_substage_name').format(n=1))]
                     )]
                 ))
 
@@ -263,7 +272,16 @@ class TraceabilityWidget(QWidget):
     def set_data(self, data: dict):
         version = data.get('version', 1)
         if version < 2:
-            return  # too old — start fresh
+            # Old/unsupported format (or empty data, e.g. New Project) —
+            # nothing to migrate. This used to just `return` here without
+            # resetting anything, which only produced the "start fresh"
+            # this comment promises the very first time; every later call
+            # (New Project, opening a v1 file) left whatever was already
+            # loaded on screen untouched.
+            self._components = _default_components()
+            self._info_row.set_extra_data({})
+            self._load_component(0)
+            return
 
         components = []
         for cd in data.get('components', []):
@@ -332,7 +350,6 @@ class TraceabilityWidget(QWidget):
                 stages=stages,
             ))
 
-        if components:
-            self._components = components
+        self._components = components if components else _default_components()
         self._info_row.set_extra_data(data.get('extra', {}))
         self._load_component(data.get('current_component', 0))

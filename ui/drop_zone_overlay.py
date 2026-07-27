@@ -5,6 +5,7 @@ Appears when no STL model is loaded.
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPainter, QColor, QPen
+from i18n import t, on_language_changed
 
 
 class DropZoneOverlay(QWidget):
@@ -25,6 +26,11 @@ class DropZoneOverlay(QWidget):
         self.setAcceptDrops(True)
         self._is_dragging = False
         self._init_ui()
+        # This overlay lives inside the 3D viewer, which isn't torn down
+        # and rebuilt on language switch the way the Project sidebar
+        # screens are — without this it would keep showing whichever
+        # language was active when the app started.
+        on_language_changed(self.retranslate)
     
     def _init_ui(self):
         """Initialize the overlay UI."""
@@ -42,7 +48,7 @@ class DropZoneOverlay(QWidget):
         layout.setAlignment(Qt.AlignCenter)
         
         # Primary text
-        self.primary_label = QLabel("Drag & drop your 3D file here")
+        self.primary_label = QLabel(t("drop_zone_3d.title"))
         self.primary_label.setAlignment(Qt.AlignCenter)
         self.primary_label.setStyleSheet("""
             QLabel {
@@ -54,7 +60,7 @@ class DropZoneOverlay(QWidget):
         """)
         
         # Secondary text
-        self.secondary_label = QLabel("or click anywhere in this area to upload")
+        self.secondary_label = QLabel(t("drop_zone_3d.subtitle"))
         self.secondary_label.setAlignment(Qt.AlignCenter)
         self.secondary_label.setStyleSheet("""
             QLabel {
@@ -66,7 +72,7 @@ class DropZoneOverlay(QWidget):
         """)
         
         # Helper text
-        self.helper_label = QLabel("STL, STEP, 3DM, OBJ, IGES, DXF & LYNS files")
+        self.helper_label = QLabel(t("drop_zone_3d.formats"))
         self.helper_label.setAlignment(Qt.AlignCenter)
         self.helper_label.setStyleSheet("""
             QLabel {
@@ -143,7 +149,7 @@ class DropZoneOverlay(QWidget):
                 # Validate file extension
                 file_ext = file_path.lower()
                 if not (file_ext.endswith('.stl') or file_ext.endswith('.step') or file_ext.endswith('.stp') or file_ext.endswith('.3dm') or file_ext.endswith('.obj') or file_ext.endswith('.iges') or file_ext.endswith('.igs') or file_ext.endswith('.ecto') or file_ext.endswith('.dxf')):
-                    self.error_occurred.emit("Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF, or .LYNS files only.")
+                    self.error_occurred.emit(t("drop_zone_3d.invalid_file"))
                     return
                 
                 event.acceptProposedAction()
@@ -157,7 +163,7 @@ class DropZoneOverlay(QWidget):
     def _update_dragging_state(self, is_dragging: bool):
         """Update the text labels based on drag state."""
         if is_dragging:
-            self.primary_label.setText("Release to load your file")
+            self.primary_label.setText(t("drop_zone_3d.title_release"))
             self.primary_label.setStyleSheet("""
                 QLabel {
                     font-size: 18px;
@@ -167,7 +173,7 @@ class DropZoneOverlay(QWidget):
                 }
             """)
         else:
-            self.primary_label.setText("Drag & drop your 3D file here")
+            self.primary_label.setText(t("drop_zone_3d.title"))
             self.primary_label.setStyleSheet("""
                 QLabel {
                     font-size: 18px;
@@ -176,7 +182,16 @@ class DropZoneOverlay(QWidget):
                     background: transparent;
                 }
             """)
-    
+
+    def retranslate(self):
+        """Re-apply all label text in the now-active language — this
+        overlay is built once at viewer construction and never torn down,
+        so without this it would keep showing whatever language was active
+        on startup even after switching in the UI."""
+        self._update_dragging_state(self._is_dragging)
+        self.secondary_label.setText(t("drop_zone_3d.subtitle"))
+        self.helper_label.setText(t("drop_zone_3d.formats"))
+
     def setCursor(self, cursor):
         """Override to always show pointer cursor."""
         super().setCursor(Qt.PointingHandCursor)

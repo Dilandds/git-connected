@@ -191,6 +191,13 @@ class InspirationCard(QFrame):
         btn.setStyleSheet(_PHOTO_BTN_STYLE_FILLED)
         btn.set_orig_pixmap(pix)
 
+    def _clear_photo(self, idx: int):
+        btn = self._photo_btns[idx]
+        btn.setIcon(QIcon())
+        btn.setText(f'＋\n{t("project.brief.s5_add_photo")}')
+        btn.setStyleSheet(_PHOTO_BTN_STYLE)
+        btn.set_orig_pixmap(None)
+
     # ── public API ─────────────────────────────────────────────────────────
 
     def set_edit_mode(self, enabled: bool):
@@ -213,11 +220,19 @@ class InspirationCard(QFrame):
             old_paths = data.get('photo_paths', [])
             for i in range(_NUM_PHOTOS):
                 path = old_paths[i] if i < len(old_paths) else ''
+                self._photo_b64s[i] = ''
                 if path:
                     pix = QPixmap(path)
                     if not pix.isNull():
                         self._photo_b64s[i] = _pixmap_to_b64(pix)
                         self._apply_photo(i, pix)
+                        continue
+                # Every branch above either fills a slot or falls through to
+                # here — without this, a slot that had a photo in the
+                # previous project (e.g. New Project resetting to none)
+                # kept showing it, since _apply_photo was only ever called,
+                # never its inverse.
+                self._clear_photo(i)
             return
         for i in range(_NUM_PHOTOS):
             b64 = b64s[i] if i < len(b64s) else ''
@@ -226,3 +241,5 @@ class InspirationCard(QFrame):
                 pix = _b64_to_pixmap(b64)
                 if not pix.isNull():
                     self._apply_photo(i, pix)
+                    continue
+            self._clear_photo(i)

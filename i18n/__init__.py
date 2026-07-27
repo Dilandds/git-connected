@@ -36,9 +36,19 @@ def _load_translations():
 def t(key: str) -> str:
     """Look up a dotted key (e.g. 'sidebar.upload') in the current language.
     Returns the key itself if not found."""
+    return t_in(key, _current_lang)
+
+
+def t_in(key: str, lang: str) -> str:
+    """Like t(), but looks up a specific language regardless of which one is
+    currently active. Used to check whether a value stored in a project file
+    matches a known default string in *any* supported language — e.g. text
+    baked in while the app was in English needs to be recognized (and
+    re-translated for display) after switching to French, not just text
+    created after the switch."""
     if not _translations:
         _load_translations()
-    data = _translations.get(_current_lang, {})
+    data = _translations.get(lang, {})
     for part in key.split("."):
         if isinstance(data, dict):
             data = data.get(part)

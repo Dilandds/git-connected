@@ -503,7 +503,7 @@ class _BriefRenderer:
                         f'Document generated on {today}',
                         self._MUTED, self._f(9), Qt.AlignLeft | Qt.AlignVCenter)
         self._draw_text(self.MX + self.CW // 2, foot_y + 10, self.CW // 2, 20,
-                        'ECTOFORM v1.2.0',
+                        'LYNS360 v1.2.0',
                         self._MUTED, self._f(9), Qt.AlignRight | Qt.AlignVCenter)
 
 

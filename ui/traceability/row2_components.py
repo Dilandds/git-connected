@@ -233,8 +233,10 @@ class _ComponentsRow(QWidget):
         new_id = max((c.id for c in self._components), default=0) + 1
         self._components.append(TraceComponent(
             id=new_id, name=dlg.name, image_path=dlg.image_path,
-            stages=[TraceStage(id=1, number=1, name='Stage 1', status='Upcoming',
-                               sub_stages=[TraceSubStage(id=1, name='Sub-stage 1')])]
+            stages=[TraceStage(id=1, number=1,
+                               name=t('project.traceability.default_stage_number_name').format(n=1),
+                               status='Upcoming',
+                               sub_stages=[TraceSubStage(id=1, name=t('project.traceability.default_substage_name').format(n=1))])]
         ))
         self._select(len(self._components) - 1)
         self.changed.emit()

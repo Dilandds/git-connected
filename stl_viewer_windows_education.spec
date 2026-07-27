@@ -201,7 +201,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ECTOFORM-Education',
+    name='LYNS360-Education',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,  # Disable stripping to prevent DLL loading issues

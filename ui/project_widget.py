@@ -153,6 +153,20 @@ _PROJECT_CREDENTIALS = {'chris': 'admin'}
 _PROJECT_EXTS = ('.lyns.pjt', '.ectopjt', '.pjt')
 
 
+def _strip_project_ext(name: str) -> str:
+    """Strip any (possibly repeated) project-file extension from `name`,
+    leaving the bare stem. Repeats until no known suffix remains, since a
+    name can pick up more than one layer (see _normalize_project_path)."""
+    while True:
+        for sfx in _PROJECT_EXTS:
+            if name.lower().endswith(sfx):
+                name = name[:-len(sfx)]
+                break
+        else:
+            break
+    return name
+
+
 def _normalize_project_path(path: str) -> str:
     """Strip any project-file extension from `path` and re-apply the
     canonical .lyns.pjt suffix exactly once.
@@ -166,14 +180,7 @@ def _normalize_project_path(path: str) -> str:
     strips repeatedly until no known suffix remains, however many times the
     dialog (or a user pasting a name) piled it on.
     """
-    while True:
-        for sfx in _PROJECT_EXTS:
-            if path.lower().endswith(sfx):
-                path = path[:-len(sfx)]
-                break
-        else:
-            break
-    return path + '.lyns.pjt'
+    return _strip_project_ext(path) + '.lyns.pjt'
 
 
 def _status_combo_style(color: str) -> str:
@@ -835,7 +842,7 @@ class TheProjectWidget(QWidget):
             widget.changed.connect(self._sync_traceability_from_brief)
         if key == 'traceability' and hasattr(widget, 'changed'):
             widget.changed.connect(self._sync_brief_from_traceability)
-        if key in ('traceability', 'assignment', 'timeline', 'report') and hasattr(widget, 'update_project_info'):
+        if key in ('traceability', 'assignment', 'timeline', 'report', 'quality_control') and hasattr(widget, 'update_project_info'):
             # The sidebar's main photo only reaches an already-open screen via
             # _on_project_info_changed — a freshly (lazily) created screen
             # never got that first push, so its photo (Traceability's main
@@ -916,6 +923,8 @@ class TheProjectWidget(QWidget):
         if w := self._screen_widgets.get('traceability'):
             w.update_project_info(info)
         if w := self._screen_widgets.get('assignment'):
+            w.update_project_info(info)
+        if w := self._screen_widgets.get('quality_control'):
             w.update_project_info(info)
 
     def _push_validation_costs(self):
@@ -1168,8 +1177,13 @@ class TheProjectWidget(QWidget):
 
     def _on_save_project(self):
         if not self._project_path:
+            # Pass the bare stem (no extension) as the suggested filename —
+            # Windows' native dialog appends the filter's ".lyns.pjt" itself,
+            # but if the suggested name already ends in ".lyns.pjt" it
+            # doesn't recognize that as "already there" and appends it
+            # again, showing "project.lyns.pjt.lyns.pjt" in the box.
             path, _ = QFileDialog.getSaveFileName(
-                self, 'Save Project', 'project.lyns.pjt',
+                self, 'Save Project', 'project',
                 'LYNS Project (*.lyns.pjt);;All Files (*)'
             )
             if not path:
@@ -1188,7 +1202,13 @@ class TheProjectWidget(QWidget):
         """Always prompt for a new file path and save there, regardless of
         whether the project already has one (unlike _on_save_project, which
         reuses the existing path once set)."""
-        default_name = os.path.basename(self._project_path) if self._project_path else 'project.lyns.pjt'
+        # Bare stem, same reasoning as _on_save_project above — an already-
+        # saved project's path already ends in ".lyns.pjt", so it has to be
+        # stripped before being offered back to the dialog as a suggestion.
+        default_name = (
+            _strip_project_ext(os.path.basename(self._project_path))
+            if self._project_path else 'project'
+        )
         path, _ = QFileDialog.getSaveFileName(
             self, t('project.topbar.save_as'), default_name,
             'LYNS Project (*.lyns.pjt);;All Files (*)'

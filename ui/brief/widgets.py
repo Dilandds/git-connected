@@ -101,6 +101,11 @@ class BulletListWidget(QWidget):
     def set_values(self, values: list):
         while len(self._inputs) < len(values):
             self._append_row()
+        while len(self._inputs) > len(values):
+            # Only grew before — loading data with fewer items than the
+            # widget currently has (e.g. New Project resetting to none)
+            # left the extra old rows still visible.
+            self._remove_row(self._row_widgets[-1], self._inputs[-1])
         for i, v in enumerate(values):
             self._inputs[i].setText(v)
 

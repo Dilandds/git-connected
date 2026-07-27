@@ -1363,7 +1363,9 @@ class EstimatedCostWidget(QWidget):
                 partners.append(p)
             trades.append(CostTrade(id=td["id"], name=td.get("name", "Activity"),
                                      partners=partners))
-        if trades:
-            self._trades = trades
+        # Without this fallback, loading data with no trades (e.g. New
+        # Project) left the previous project's trades displayed, since
+        # self._trades was only ever reassigned when truthy.
+        self._trades = trades if trades else [_default_trade(1)]
         self._rebuild_all()
         self._switch_trade(0)

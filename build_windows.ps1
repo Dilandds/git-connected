@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "Building ECTOFORM for Windows..." -ForegroundColor Cyan
+Write-Host "Building LYNS360 for Windows..." -ForegroundColor Cyan
 
 # Get script directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -59,7 +59,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Check if EXE was created
-$ExePath = "dist\ECTOFORM.exe"
+$ExePath = "dist\LYNS360.exe"
 if (-not (Test-Path $ExePath)) {
     Write-Host "Error: EXE not found at $ExePath" -ForegroundColor Red
     exit 1
@@ -69,7 +69,7 @@ Write-Host "EXE created successfully: $ExePath" -ForegroundColor Green
 
 # Read version from single source of truth and rename to versioned filename
 $Version = (python -c "from core.version import __version__; print(__version__)").Trim()
-$VersionedExe = "dist\ECTOFORM-Setup-$Version.exe"
+$VersionedExe = "dist\LYNS360-Setup-$Version.exe"
 Copy-Item $ExePath $VersionedExe -Force
 Write-Host "Versioned EXE: $VersionedExe" -ForegroundColor Green
 

@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, QSize, QTimer, pyqtSignal
 from PyQt5.QtGui import QPixmap, QIcon
 
-from .models import Report, AttendeeColumn, CompanyRow
+from .models import Report, AttendeeColumn, CompanyRow, display_attendee_header
 from .shared import (
     _BG, _CARD, _BORDER, _MUTED, _ACCENT, _HDR_TEXT,
     _INPUT, _BTN_OUTLINE,
@@ -477,7 +477,14 @@ class HeaderSection(QWidget):
         col_l.addLayout(del_row)
 
         hdr_inp = _MarqueeLineEdit(t("project.report.header_col_ph"))
-        hdr_inp.setText(att.header)
+        # blockSignals: setText() below would otherwise fire textChanged and
+        # write the *translated display* text back into att.header — turning
+        # a harmless re-render into a silent edit. A value the user actually
+        # types still updates att.header normally, since that goes through
+        # textChanged with signals unblocked.
+        hdr_inp.blockSignals(True)
+        hdr_inp.setText(display_attendee_header(att.header))
+        hdr_inp.blockSignals(False)
         hdr_inp.setFixedWidth(140)
         hdr_inp.setStyleSheet(_INPUT + "QLineEdit { font-weight: bold; }")
         hdr_inp.textChanged.connect(

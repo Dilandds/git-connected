@@ -321,7 +321,8 @@ class AssignmentCanvas(QWidget):
                 Qt.AlignLeft | Qt.AlignVCenter,
                 self._image_name,
             )
-        orient_label = 'A4 Portrait' if self._orientation == 'portrait' else 'A4 Landscape'
+        orient_label = ('A4 ' + t('assignment.portrait')) if self._orientation == 'portrait' \
+            else ('A4 ' + t('assignment.landscape'))
         p.drawText(
             QRectF(img_rect.right() - 110, img_rect.y() - 22, 110, 18),
             Qt.AlignRight | Qt.AlignVCenter,
@@ -979,6 +980,13 @@ class AssignmentCanvas(QWidget):
 
         if self._image_path:
             self._load_pixmap(self._image_path)
+        else:
+            # _load_pixmap only runs (and reassigns self._image) when
+            # there's a path — without this, loading/new-project data with
+            # no image left the *previous* project's pixmap still painted,
+            # since self._image is a raw attribute here (not a QLabel,
+            # where setText()/clear() would implicitly drop the old pixmap).
+            self._image = None
         self.update()
 
 
@@ -1208,7 +1216,9 @@ class AssignmentWidget(QWidget):
         gone — clicking directly on a card's (now larger) connection dot
         starts/finishes a line, see AssignmentCanvas._dot_at."""
         bar = QWidget()
-        bar.setFixedWidth(150)
+        # Wide enough for the longest French label ("Importer un fichier",
+        # "Supprimer la carte", ...) — 150px clipped button text in French.
+        bar.setFixedWidth(200)
         bar.setStyleSheet(f'background: {_CANVAS}; border-right: 1px solid {_BORDER};')
         col = QVBoxLayout(bar)
         col.setContentsMargins(10, 12, 10, 12)
@@ -1246,7 +1256,7 @@ class AssignmentWidget(QWidget):
         redo_btn.clicked.connect(self._canvas.redo)
         col.addWidget(redo_btn)
 
-        del_btn = QPushButton('🗑 Delete Card')
+        del_btn = QPushButton('🗑 ' + t('assignment.delete_card'))
         del_btn.setStyleSheet(_BTN)
         del_btn.setFixedHeight(30)
         del_btn.setCursor(Qt.PointingHandCursor)
@@ -1256,11 +1266,11 @@ class AssignmentWidget(QWidget):
 
         col.addWidget(self._hsep())
 
-        clr_lbl = QLabel('Color:')
+        clr_lbl = QLabel(t('assignment.color_label'))
         clr_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent;')
         col.addWidget(clr_lbl)
 
-        self._color_btn = QPushButton('🎨  Pick color')
+        self._color_btn = QPushButton('🎨  ' + t('assignment.pick_color'))
         self._color_btn.setFixedHeight(30)
         self._color_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1271,17 +1281,17 @@ class AssignmentWidget(QWidget):
             QPushButton:hover {{ background: #e5e7eb; border-color: {_ACCENT}; }}
         """ + TOOLTIP_STYLE)
         self._color_btn.setCursor(Qt.PointingHandCursor)
-        self._color_btn.setToolTip('Pick a color for the selected card')
+        self._color_btn.setToolTip(t('assignment.pick_color_tooltip'))
         self._color_btn.clicked.connect(self._on_color_btn_clicked)
         col.addWidget(self._color_btn)
 
         col.addWidget(self._hsep())
 
-        self._orient_btn = QPushButton('⇄  Landscape')
+        self._orient_btn = QPushButton('⇄  ' + t('assignment.landscape'))
         self._orient_btn.setStyleSheet(_BTN)
         self._orient_btn.setFixedHeight(30)
         self._orient_btn.setCursor(Qt.PointingHandCursor)
-        self._orient_btn.setToolTip('Toggle between A4 portrait and landscape')
+        self._orient_btn.setToolTip(t('assignment.orientation_tooltip'))
         self._orient_btn.clicked.connect(self._toggle_orientation)
         col.addWidget(self._orient_btn)
 
@@ -1297,11 +1307,11 @@ class AssignmentWidget(QWidget):
         row.setSpacing(8)
 
         # ── Color picker ──────────────────────────────────────────────────────
-        clr_lbl = QLabel('Color:')
+        clr_lbl = QLabel(t('assignment.color_label'))
         clr_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent;')
         row.addWidget(clr_lbl)
 
-        self._color_btn = QPushButton('🎨  Pick color')
+        self._color_btn = QPushButton('🎨  ' + t('assignment.pick_color'))
         self._color_btn.setFixedHeight(28)
         self._color_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1312,18 +1322,18 @@ class AssignmentWidget(QWidget):
             QPushButton:hover {{ background: #e5e7eb; border-color: {_ACCENT}; }}
         """ + TOOLTIP_STYLE)
         self._color_btn.setCursor(Qt.PointingHandCursor)
-        self._color_btn.setToolTip('Pick a color for the selected card')
+        self._color_btn.setToolTip(t('assignment.pick_color_tooltip'))
         self._color_btn.clicked.connect(self._on_color_btn_clicked)
         row.addWidget(self._color_btn)
 
         row.addWidget(self._vsep())
 
         # ── Orientation toggle ────────────────────────────────────────────────
-        self._orient_btn = QPushButton('⇄  Landscape')
+        self._orient_btn = QPushButton('⇄  ' + t('assignment.landscape'))
         self._orient_btn.setStyleSheet(_BTN)
         self._orient_btn.setFixedHeight(28)
         self._orient_btn.setCursor(Qt.PointingHandCursor)
-        self._orient_btn.setToolTip('Toggle between A4 portrait and landscape')
+        self._orient_btn.setToolTip(t('assignment.orientation_tooltip'))
         self._orient_btn.clicked.connect(self._toggle_orientation)
         row.addWidget(self._orient_btn)
 
@@ -1360,7 +1370,10 @@ class AssignmentWidget(QWidget):
 
     def _on_canvas_orientation_changed(self, orientation: str):
         if self._orient_btn is not None:
-            self._orient_btn.setText('⇅  Portrait' if orientation == 'landscape' else '⇄  Landscape')
+            self._orient_btn.setText(
+                '⇅  ' + t('assignment.portrait') if orientation == 'landscape'
+                else '⇄  ' + t('assignment.landscape')
+            )
         QTimer.singleShot(50, self._center_scroll)
 
     def _toggle_orientation(self):
@@ -1446,5 +1459,8 @@ class AssignmentWidget(QWidget):
         # Sync orient button label to the active canvas
         orientation = self._canvas._orientation
         if self._orient_btn is not None:
-            self._orient_btn.setText('⇅  Portrait' if orientation == 'landscape' else '⇄  Landscape')
+            self._orient_btn.setText(
+                '⇅  ' + t('assignment.portrait') if orientation == 'landscape'
+                else '⇄  ' + t('assignment.landscape')
+            )
         QTimer.singleShot(100, self._center_scroll)

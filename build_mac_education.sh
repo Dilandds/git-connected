@@ -1,11 +1,11 @@
 #!/bin/bash
-# Build ECTOFORM Education edition for macOS
+# Build LYNS360 Education edition for macOS
 # Usage: ./build_mac_education.sh
 
 set -e
 
 echo "=========================================="
-echo "  ECTOFORM Education — macOS Build"
+echo "  LYNS360 Education — macOS Build"
 echo "=========================================="
 
 # Ensure pyinstaller is installed
@@ -29,34 +29,34 @@ if [ "$RAW_ARCH" = "arm64" ]; then ARCH="arm64"; else ARCH="x64"; fi
 echo "Version: $VERSION  Arch: $ARCH"
 
 # Clean previous education build
-rm -rf build dist ECTOFORM-Education-*.dmg
+rm -rf build dist LYNS360-Education-*.dmg
 
 # Build
-echo "Building ECTOFORM Education .app..."
+echo "Building LYNS360 Education .app..."
 pyinstaller stl_viewer_mac_education.spec --clean --noconfirm
 
-if [ ! -d "dist/ECTOFORM-Education.app" ]; then
+if [ ! -d "dist/LYNS360-Education.app" ]; then
     echo "ERROR: .app bundle not found!"
     exit 1
 fi
 
-echo "✓ ECTOFORM Education .app created successfully"
+echo "✓ LYNS360 Education .app created successfully"
 
-DMG_NAME="ECTOFORM-Education-${VERSION}-macOS-${ARCH}.dmg"
+DMG_NAME="LYNS360-Education-${VERSION}-macOS-${ARCH}.dmg"
 
 # Create DMG (optional)
 if command -v create-dmg &> /dev/null; then
     echo "Creating DMG..."
     mkdir -p dist/dmg_temp
-    cp -R "dist/ECTOFORM-Education.app" dist/dmg_temp/
+    cp -R "dist/LYNS360-Education.app" dist/dmg_temp/
 
     create-dmg \
-        --volname "ECTOFORM Education" \
+        --volname "LYNS360 Education" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \
         --app-drop-link 425 175 \
-        --icon "ECTOFORM-Education.app" 175 175 \
+        --icon "LYNS360-Education.app" 175 175 \
         "${DMG_NAME}" \
         "dist/dmg_temp/" || echo "Warning: DMG creation had issues"
 

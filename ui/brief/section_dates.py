@@ -65,9 +65,6 @@ class TargetDatesCard(QFrame):
             ('_d_prototype', 'prototype_date'),
             ('_d_production', 'production_date'),
         ]:
-            val = data.get(key, '')
-            if val:
-                d = QDate.fromString(val, 'dd/MM/yyyy')
-                if d.isValid():
-                    getattr(self, attr).setDate(d)
+            d = QDate.fromString(data.get(key, ''), 'dd/MM/yyyy')
+            getattr(self, attr).setDate(d if d.isValid() else QDate.currentDate())
         self._f_date_notes.setPlainText(data.get('date_notes', ''))

@@ -232,6 +232,13 @@
     "enter_text": "Enter text",
     "text_input_title": "Add Text"
   },
+  "drop_zone_3d": {
+    "title": "Drag & drop your 3D file here",
+    "title_release": "Release to load your file",
+    "subtitle": "or click anywhere in this area to upload",
+    "formats": "STL, STEP, 3DM, OBJ, IGES, DXF & LYNS files",
+    "invalid_file": "Invalid file type. Please use .STL, .STEP, .STP, .3DM, .OBJ, .IGES, .IGS, .DXF, or .LYNS files only."
+  },
   "texture": {
     "panel_title": "Textures",
     "instruction": "Upload textures and drag them onto model parts to apply.",
@@ -518,6 +525,9 @@
     },
     "traceability": {
       "main_product": "Main Product",
+      "default_stage_name": "Initial Design",
+      "default_stage_number_name": "Stage {n}",
+      "default_substage_name": "Sub-stage {n}",
       "photo_btn": "＋\nPhoto",
       "reference": "Reference",
       "manager": "Project Manager",
@@ -1139,6 +1149,13 @@
     "redo": "Redo",
     "delete": "Delete",
     "delete_tooltip": "Delete the selected area card (or press Delete key)",
+    "delete_card": "Delete Card",
+    "color_label": "Color:",
+    "pick_color": "Pick color",
+    "pick_color_tooltip": "Pick a color for the selected card",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "orientation_tooltip": "Toggle between A4 portrait and landscape",
     "drop_hint": "Import a product image\n(JPEG · PNG · HEIC · PDF)",
     "edit_card": "Edit Area",
     "card_title": "Title",

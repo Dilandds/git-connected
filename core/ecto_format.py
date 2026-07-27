@@ -212,7 +212,7 @@ class EctoFormat:
             from core.edition import is_education, WATERMARK_TEXT
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
-                'created_by': 'ECTOFORM',
+                'created_by': 'LYNS360',
                 'created_at': datetime.now().isoformat(),
                 'model_file': model_filename,
                 'model_format': source_format,
@@ -507,7 +507,7 @@ class EctoFormat:
             manifest = {
                 'format_version': ECTO_FORMAT_VERSION,
                 'type': 'technical_overview',
-                'created_by': 'ECTOFORM',
+                'created_by': 'LYNS360',
                 'created_at': datetime.now().isoformat(),
                 'document_file': doc_filename,
                 'annotation_count': len(processed),

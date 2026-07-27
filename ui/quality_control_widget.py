@@ -1823,21 +1823,22 @@ class _QCLeftPanel(QWidget):
         }
 
     def set_data(self, d: dict):
-        if d.get('inspection_date'):
-            dt = QDate.fromString(d['inspection_date'], 'yyyy-MM-dd')
-            if dt.isValid():
-                self._date_edit.setDate(dt)
+        dt = QDate.fromString(d.get('inspection_date', ''), 'yyyy-MM-dd')
+        self._date_edit.setDate(dt if dt.isValid() else QDate.currentDate())
         self._inspected_by.setText(d.get('inspected_by', ''))
         self._comments.setPlainText(d.get('comments', ''))
+        # Always reassign + rebuild, even when empty — this used to only
+        # run `if images:`, so New Project / opening a project with no
+        # inspection images left the previous project's photos still shown
+        # in the strip.
         images = d.get('inspection_images', [])
-        if images:
-            self._inspection_images = list(images)
-            annots = d.get('image_annotations', [])
-            self._image_annotations = [
-                list(annots[i]) if i < len(annots) else []
-                for i in range(len(images))
-            ]
-            self._rebuild_insp_strip()
+        self._inspection_images = list(images)
+        annots = d.get('image_annotations', [])
+        self._image_annotations = [
+            list(annots[i]) if i < len(annots) else []
+            for i in range(len(images))
+        ]
+        self._rebuild_insp_strip()
 
 
 # ── _CompanyInfoPanel ─────────────────────────────────────────────────────────
@@ -1924,7 +1925,22 @@ class _CompanyInfoPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._last_auto_designation = ''
         self._build_ui()
+
+    def update_project_info(self, info: dict):
+        """Copy the sidebar's main product title into Designation, unless
+        the user has already typed something else in — same auto-fill-
+        unless-manually-changed pattern used by Brief/Report/Traceability."""
+        title = (info.get('title') or '').strip()
+        current = self._designation.text().strip()
+        if title and title != self._last_auto_designation:
+            if not current or current == self._last_auto_designation:
+                self._designation.setText(title)
+                self._last_auto_designation = title
+        elif not title and current and current == self._last_auto_designation:
+            self._designation.setText('')
+            self._last_auto_designation = ''
 
     def _build_ui(self):
         self.setStyleSheet(f'background: {_BG};')
@@ -2067,11 +2083,8 @@ class _CompanyInfoPanel(QWidget):
         self._designation.setText(d.get('designation', ''))
         self._reference.setText(d.get('reference_number', ''))
         self._manufacturer.setText(d.get('manufacturer', ''))
-        due = d.get('inspection_due_date', '')
-        if due:
-            dt = QDate.fromString(due, 'yyyy-MM-dd')
-            if dt.isValid():
-                self._due_date.setDate(dt)
+        dt = QDate.fromString(d.get('inspection_due_date', ''), 'yyyy-MM-dd')
+        self._due_date.setDate(dt if dt.isValid() else QDate.currentDate())
         self._set_status(d.get('overall_status', ''))
         self._waived_by.setText(d.get('waived_by', ''))
 
@@ -2121,6 +2134,9 @@ class QualityControlWidget(QWidget):
         layout.addWidget(self._center_panel, 1)
         layout.addWidget(self._sep_cr)
         layout.addWidget(self._right_panel)
+
+    def update_project_info(self, info: dict):
+        self._right_panel.update_project_info(info)
 
     # ── viewer lifecycle ──────────────────────────────────────────────────────
 

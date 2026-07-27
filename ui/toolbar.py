@@ -625,7 +625,7 @@ class ViewControlsToolbar(QWidget):
         self._draw_font_size_multiplier = 1.0
         self.stl_loaded = False
         
-        self.settings = QSettings("ECTOFORM", "Toolbar")
+        self.settings = QSettings("LYNS360", "Toolbar")
         self.init_ui()
         on_language_changed(self.retranslate)
     

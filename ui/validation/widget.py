@@ -341,8 +341,13 @@ class ValidationWidget(QWidget):
             sess.schedule_dates     = sd.get("schedule_dates", [""] * 7)
             sessions.append(sess)
 
-        if sessions:
-            self._sessions    = sessions
-            self._next_id     = max(s.id for s in sessions) + 1
-            self._current_idx = 0
-            self._load_session(0)
+        if not sessions:
+            # Without this fallback, loading data with no sessions (e.g.
+            # New Project) left the previous project's sessions/panels
+            # displayed, since the block below never ran — mirror the same
+            # fresh-state default used in __init__.
+            sessions = [_default_session(1)]
+        self._sessions    = sessions
+        self._next_id     = max(s.id for s in sessions) + 1
+        self._current_idx = 0
+        self._load_session(0)
