@@ -647,7 +647,17 @@
       "no_tasks_empty": "Pas encore de tâches. Cliquez sur ＋ Ajouter une tâche pour commencer.",
       "no_parts_empty": "Pas encore de pièces. Cliquez sur ＋ Ajouter une pièce pour commencer.",
       "hint_tasks": "ⓘ  Cliquez sur une tâche pour voir les détails, ajouter des commentaires et suivre la progression.",
-      "hint_parts": "ⓘ  Les pièces regroupent les tâches. Cliquez sur ＋ Ajouter une pièce pour créer un groupe."
+      "hint_parts": "ⓘ  Les pièces regroupent les tâches. Cliquez sur ＋ Ajouter une pièce pour créer un groupe.",
+      "task_edit_btn": "Modifier",
+      "task_delete_btn": "Supprimer",
+      "steps_btn": "Étapes",
+      "add_substep_btn": "＋  Ajouter une sous-étape",
+      "delete_substep_title": "Supprimer la sous-étape",
+      "delete_substep_confirm": "Supprimer « {name} » ? Cette action est irréversible.",
+      "rename_group_tooltip": "Renommer le groupe de pièces",
+      "delete_group_tooltip": "Supprimer le groupe de pièces",
+      "delete_task_title": "Supprimer la tâche",
+      "delete_task_confirm": "Supprimer « {name} » ? Cette action est irréversible."
     },
     "validation": {
       "title": "Validation",

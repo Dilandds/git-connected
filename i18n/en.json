@@ -647,7 +647,17 @@
       "no_tasks_empty": "No tasks yet. Click ＋ Add Task to begin.",
       "no_parts_empty": "No parts yet. Click ＋ Add Part to begin.",
       "hint_tasks": "ⓘ  Click on a task to view details, add comments and track progress.",
-      "hint_parts": "ⓘ  Parts group related tasks. Click ＋ Add Part to create a new part group."
+      "hint_parts": "ⓘ  Parts group related tasks. Click ＋ Add Part to create a new part group.",
+      "task_edit_btn": "Edit",
+      "task_delete_btn": "Delete",
+      "steps_btn": "Steps",
+      "add_substep_btn": "＋  Add Sub-step",
+      "delete_substep_title": "Delete Sub-step",
+      "delete_substep_confirm": "Delete '{name}'? This cannot be undone.",
+      "rename_group_tooltip": "Rename part group",
+      "delete_group_tooltip": "Delete part group",
+      "delete_task_title": "Delete Task",
+      "delete_task_confirm": "Delete '{name}'? This cannot be undone."
     },
     "validation": {
       "title": "Validation",

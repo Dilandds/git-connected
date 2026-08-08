@@ -160,11 +160,11 @@ class _FlatPartRow(QWidget):
         lay.addWidget(prog_w, 0, Qt.AlignVCenter)
 
         _ACT = 'QPushButton { background: transparent; border: none; font-size: 11px; font-weight: 600; padding: 2px 6px; }'
-        edit_btn = QPushButton('Edit')
+        edit_btn = QPushButton(t('project.traceability.task_edit_btn'))
         edit_btn.setStyleSheet(_ACT + f'QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ color: #1d6fc4; text-decoration: underline; }}')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._part))
-        del_btn = QPushButton('Delete')
+        del_btn = QPushButton(t('project.traceability.task_delete_btn'))
         del_btn.setStyleSheet(_ACT + 'QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; text-decoration: underline; }')
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._part))
@@ -222,7 +222,7 @@ class _StepRow(QFrame):
         lay.addWidget(pct)
 
         _ACT = 'QPushButton { background: transparent; border: none; font-size: 10px; padding: 1px 4px; }'
-        edit_btn = QPushButton('Edit')
+        edit_btn = QPushButton(t('project.traceability.task_edit_btn'))
         edit_btn.setStyleSheet(_ACT + f'QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ text-decoration: underline; }}')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._step))
@@ -354,11 +354,11 @@ class _TaskRow(QWidget):
         lay.addWidget(prog_w, 0, Qt.AlignVCenter)
 
         _ACT = 'QPushButton { background: transparent; border: none; font-size: 11px; font-weight: 600; padding: 2px 6px; }'
-        edit_btn = QPushButton('Edit')
+        edit_btn = QPushButton(t('project.traceability.task_edit_btn'))
         edit_btn.setStyleSheet(_ACT + f'QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ color: #1d6fc4; text-decoration: underline; }}')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._task))
-        del_btn = QPushButton('Delete')
+        del_btn = QPushButton(t('project.traceability.task_delete_btn'))
         del_btn.setStyleSheet(_ACT + 'QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; text-decoration: underline; }')
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._task))
@@ -369,7 +369,7 @@ class _TaskRow(QWidget):
         lay.addWidget(actions_w, 0, Qt.AlignVCenter)
 
         # Steps toggle button
-        self._steps_btn = QPushButton('▶ Steps')
+        self._steps_btn = QPushButton(f"▶ {t('project.traceability.steps_btn')}")
         self._steps_btn.setStyleSheet(f"""
             QPushButton {{ background: transparent; border: 1px solid {_BORDER};
                 border-radius: 4px; color: {_MUTED}; font-size: 10px; padding: 2px 8px; }}
@@ -397,7 +397,7 @@ class _TaskRow(QWidget):
     def _toggle_steps(self):
         self._steps_expanded = not self._steps_expanded
         self._steps_container.setVisible(self._steps_expanded)
-        self._steps_btn.setText(f'{"▼" if self._steps_expanded else "▶"} Steps ({len(self._task.steps)})')
+        self._steps_btn.setText(f'{"▼" if self._steps_expanded else "▶"} {t("project.traceability.steps_btn")} ({len(self._task.steps)})')
 
     def _refresh_steps(self):
         while self._steps_l.count():
@@ -417,7 +417,7 @@ class _TaskRow(QWidget):
         add_row.setFixedHeight(32)
         add_row.setStyleSheet(f'background: #f0f4ff; border-bottom: 1px solid {_BORDER};')
         add_lay = QHBoxLayout(add_row); add_lay.setContentsMargins(52, 0, 12, 0); add_lay.setSpacing(8)
-        add_btn = QPushButton('＋  Add Sub-step')
+        add_btn = QPushButton(t('project.traceability.add_substep_btn'))
         add_btn.setStyleSheet(f"""
             QPushButton {{ background: transparent; border: none; color: {_ACCENT};
                 font-size: 11px; font-weight: 600; padding: 0; text-align: left; }}
@@ -429,7 +429,7 @@ class _TaskRow(QWidget):
         add_lay.addStretch()
         self._steps_l.addWidget(add_row)
 
-        self._steps_btn.setText(f'{"▼" if self._steps_expanded else "▶"} Steps ({len(self._task.steps)})')
+        self._steps_btn.setText(f'{"▼" if self._steps_expanded else "▶"} {t("project.traceability.steps_btn")} ({len(self._task.steps)})')
 
     def _add_step(self):
         dlg = _StepDialog(parent=self)
@@ -450,7 +450,11 @@ class _TaskRow(QWidget):
         self.data_changed.emit()
 
     def _delete_step(self, step: TraceStep):
-        if not ask_yes_no_dialog(self, 'Delete Sub-step', f"Delete '{step.name}'? This cannot be undone."):
+        if not ask_yes_no_dialog(
+            self,
+            t('project.traceability.delete_substep_title'),
+            t('project.traceability.delete_substep_confirm').format(name=step.name),
+        ):
             return
         self._task.steps.remove(step)
         self._refresh_steps()
@@ -533,7 +537,7 @@ class _PartGroupRow(QWidget):
         edit_btn.setStyleSheet(_BTN_ICON)
         edit_btn.setFixedSize(26, 26)
         edit_btn.setCursor(Qt.PointingHandCursor)
-        edit_btn.setToolTip('Rename part group')
+        edit_btn.setToolTip(t('project.traceability.rename_group_tooltip'))
         edit_btn.mousePressEvent = lambda e: (e.accept(), self.edit_requested.emit(self._part))
         h_lay.addWidget(edit_btn)
 
@@ -541,7 +545,7 @@ class _PartGroupRow(QWidget):
         del_btn.setStyleSheet(_BTN_DELETE)
         del_btn.setFixedSize(26, 26)
         del_btn.setCursor(Qt.PointingHandCursor)
-        del_btn.setToolTip('Delete part group')
+        del_btn.setToolTip(t('project.traceability.delete_group_tooltip'))
         del_btn.mousePressEvent = lambda e: (e.accept(), self.delete_requested.emit(self._part))
         h_lay.addWidget(del_btn)
 
@@ -615,7 +619,11 @@ class _PartGroupRow(QWidget):
         self.changed.emit()
 
     def _delete_task(self, task: TraceTask):
-        if not ask_yes_no_dialog(self, 'Delete Task', f"Delete '{task.name}'? This cannot be undone."):
+        if not ask_yes_no_dialog(
+            self,
+            t('project.traceability.delete_task_title'),
+            t('project.traceability.delete_task_confirm').format(name=task.name),
+        ):
             return
         self._part.tasks.remove(task)
         self._refresh_tasks()
