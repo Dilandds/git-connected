@@ -440,7 +440,12 @@ class TechnicalAnnotationPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(320)
+        # Windows renders the card's fonts/buttons a bit wider than macOS, which
+        # was squeezing the delete (✕) button off the right edge of the fixed-
+        # width panel (no horizontal scrollbar to reveal it). Give Windows a
+        # little extra width so the full card — including the delete cross —
+        # stays visible.
+        self.setFixedWidth(344 if IS_WINDOWS else 320)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.setObjectName("technicalAnnotationPanel")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -680,8 +685,14 @@ class TechnicalAnnotationPanel(QWidget):
         card.setMinimumHeight(64)
 
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
+        # Slightly tighter margins/spacing on Windows to leave room for the
+        # wider native font/button rendering (see the panel width note above).
+        if IS_WINDOWS:
+            layout.setContentsMargins(8, 8, 6, 8)
+            layout.setSpacing(6)
+        else:
+            layout.setContentsMargins(10, 8, 10, 8)
+            layout.setSpacing(8)
 
         # Color swatch (change arrow color)
         color_btn = QPushButton()
