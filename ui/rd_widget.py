@@ -256,12 +256,15 @@ class _ProposalDialog(FormModal):
     def __init__(self, prop: MaterialProposal = None, parent=None):
         label = t('rd.edit_proposal') if prop else t('rd.add_proposal_dlg')
         super().__init__(parent, label, theme=FormModal.LIGHT, min_width=440)
+        # Origin field removed from the Add Texture modal — not needed (tracker
+        # task 6cbd5b48). Keep any existing value around unchanged so older
+        # proposals that already had an origin don't silently lose it.
+        self._orig_origin = prop.origin if prop else ''
         self._photo = _MiniPhoto(prop.image_path if prop else '', 200, 140)
         self.add_widget(self._photo)
         self._f_name  = self.add_field(t('rd.prop_name'),      QLineEdit(prop.name if prop else ''))
         self._f_cat   = self.add_field(t('rd.prop_category'),  QLineEdit(prop.category if prop else ''))
         self._f_treat = self.add_field(t('rd.prop_treatment'), QLineEdit(prop.treatment if prop else ''))
-        self._f_orig  = self.add_field(t('rd.prop_origin'),    QLineEdit(prop.origin if prop else ''))
         self._f_sup   = self.add_field(t('rd.prop_supplier'),  QLineEdit(prop.supplier if prop else ''))
         notes_edit = QTextEdit(prop.notes if prop else '')
         notes_edit.setFixedHeight(60)
@@ -273,7 +276,7 @@ class _ProposalDialog(FormModal):
             'name':      self._f_name.text().strip(),
             'category':  self._f_cat.text().strip(),
             'treatment': self._f_treat.text().strip(),
-            'origin':    self._f_orig.text().strip(),
+            'origin':    self._orig_origin,
             'supplier':  self._f_sup.text().strip(),
             'image_path': self._photo.get_path(),
             'notes':     self._f_notes.toPlainText().strip(),
