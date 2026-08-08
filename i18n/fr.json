@@ -618,6 +618,7 @@
       "comment_ph": "Tapez un commentaire et appuyez sur Entrée…",
       "add_comment_btn": "Ajouter un commentaire",
       "no_comments": "Pas encore de commentaires.",
+      "task_comment_ph": "Ajouter un commentaire…",
       "edit_stage_title": "Modifier l'étape",
       "stage_name": "NOM DE L'ÉTAPE",
       "delete_stage_btn": "Supprimer l'étape",

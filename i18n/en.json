@@ -618,6 +618,7 @@
       "comment_ph": "Type a comment and press Enter…",
       "add_comment_btn": "Add Comment",
       "no_comments": "No comments yet.",
+      "task_comment_ph": "Add a comment…",
       "edit_stage_title": "Edit Stage",
       "stage_name": "STAGE NAME",
       "delete_stage_btn": "Delete Stage",

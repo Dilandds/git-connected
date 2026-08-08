@@ -125,7 +125,7 @@ class _FlatPartRow(QWidget):
 
         comm_edit = QTextEdit()
         comm_edit.setFixedWidth(_W_COMMENTS); comm_edit.setFixedHeight(62)
-        comm_edit.setPlaceholderText('Add a comment…')
+        comm_edit.setPlaceholderText(t('project.traceability.task_comment_ph'))
         comm_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         comm_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         comm_edit.setStyleSheet(f"""
@@ -310,7 +310,7 @@ class _TaskRow(QWidget):
 
         comm_edit = QTextEdit()
         comm_edit.setFixedWidth(_W_COMMENTS); comm_edit.setFixedHeight(62)
-        comm_edit.setPlaceholderText('Add a comment…')
+        comm_edit.setPlaceholderText(t('project.traceability.task_comment_ph'))
         comm_edit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         comm_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         comm_edit.setStyleSheet(f"""
