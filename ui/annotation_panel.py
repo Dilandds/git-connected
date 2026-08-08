@@ -258,7 +258,16 @@ class AnnotationCard(QFrame):
         """)
         self.label_edit.setFixedHeight(24)
         self.label_edit.editingFinished.connect(self._on_label_editing_finished)
-        
+
+        # Description preview — shows the annotation note text inline, same as
+        # the Technical Overview annotation card, so you don't have to click
+        # the card just to see what it says.
+        self.desc_label = QLabel(self._desc_preview_text())
+        self.desc_label.setStyleSheet(
+            f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent;"
+        )
+        self.desc_label.setWordWrap(True)
+
         # Status row: checkmark icon (drawn, not Unicode) + text (avoids poor rendering on Windows)
         status_row = QWidget()
         status_row.setStyleSheet("background-color: transparent;")
@@ -277,6 +286,7 @@ class AnnotationCard(QFrame):
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(2)
         info_layout.addWidget(self.label_edit)
+        info_layout.addWidget(self.desc_label)
         info_layout.addWidget(status_row)
         
         layout.addLayout(info_layout, 1)  # stretch
@@ -317,6 +327,14 @@ class AnnotationCard(QFrame):
         self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.annotation.id))
         layout.addWidget(self.delete_btn)
     
+    def _desc_preview_text(self) -> str:
+        """Return the truncated note text for the inline preview, matching
+        the Technical Overview card's 60-character preview."""
+        text = self.annotation.text or ""
+        if len(text) > 60:
+            return text[:60] + "…"
+        return text or t("annotation.click_to_edit")
+
     def _on_label_editing_finished(self):
         """Handle label edit - emit to panel."""
         new_label = self.label_edit.text().strip() or "Point"
@@ -454,6 +472,7 @@ class AnnotationCard(QFrame):
         self.label_edit.blockSignals(True)
         self.label_edit.setText(annotation.label)
         self.label_edit.blockSignals(False)
+        self.desc_label.setText(self._desc_preview_text())
         self._update_style()
         self._update_tooltip()
     
