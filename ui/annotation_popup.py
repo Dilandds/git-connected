@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent
 from PyQt5.QtGui import QFont, QPixmap
 from ui.styles import make_font
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class ImageThumbnail(QFrame):
             }}
         """)
         remove_btn.clicked.connect(lambda: self.remove_requested.emit(self.image_path))
-        self.img_label.setToolTip("Click to zoom")
+        self.img_label.setToolTip(t('annotation.zoom_tooltip'))
         
         # Position remove button at top-right
         remove_btn.setParent(self)
@@ -146,7 +147,7 @@ class AnnotationPopup(QDialog):
         self.created_at = created_at
         self._display_number = display_number if display_number is not None else annotation_id
         
-        self.setWindowTitle(f"Annotation {label} {self._display_number}")
+        self.setWindowTitle(t('annotation.popup_title').format(label=label, number=self._display_number))
         self.setModal(False)  # Non-modal so user can still interact with 3D view
         self.setMinimumSize(500, 550)
         from ui.annotation_icon import get_app_window_icon
@@ -226,7 +227,7 @@ class AnnotationPopup(QDialog):
         header_layout.addWidget(num_icon)
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.label)
-        self.label_edit.setPlaceholderText("Point")
+        self.label_edit.setPlaceholderText(t('annotation.label_placeholder'))
         title_font = make_font(size=13, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
@@ -257,14 +258,14 @@ class AnnotationPopup(QDialog):
         main_layout.addLayout(header_layout)
         
         # Text input
-        text_label = QLabel("Comment:")
+        text_label = QLabel(t('annotation.comment_label'))
         text_label.setObjectName("annotationCommentHeading")
         text_label.setAutoFillBackground(False)
         main_layout.addWidget(text_label)
         
         self.text_edit = QTextEdit()
         self.text_edit.setObjectName("annotationCommentEdit")
-        self.text_edit.setPlaceholderText("Add your annotation comment here...")
+        self.text_edit.setPlaceholderText(t('annotation.comment_placeholder'))
         self.text_edit.setText(self.text)
         self.text_edit.setMinimumHeight(80)
         self.text_edit.setMaximumHeight(120)
@@ -285,14 +286,14 @@ class AnnotationPopup(QDialog):
         
         # Photos section
         photos_header = QHBoxLayout()
-        photos_label = QLabel("Photos:")
+        photos_label = QLabel(t('annotation.photos_label'))
         photos_label.setObjectName("annotationPhotosHeading")
         photos_label.setAutoFillBackground(False)
         photos_header.addWidget(photos_label)
         
         photos_header.addStretch()
         
-        add_photo_btn = QPushButton("📷 Add Photo")
+        add_photo_btn = QPushButton(f"📷 {t('annotation.add_photo')}")
         add_photo_btn.setFixedHeight(28)
         add_photo_btn.setCursor(Qt.PointingHandCursor)
         add_photo_btn.setStyleSheet(f"""
@@ -339,7 +340,7 @@ class AnnotationPopup(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
         
-        delete_btn = QPushButton("🗑 Delete")
+        delete_btn = QPushButton(f"🗑 {t('annotation.delete')}")
         delete_btn.setFixedHeight(36)
         delete_btn.setCursor(Qt.PointingHandCursor)
         delete_btn.setStyleSheet(f"""
@@ -361,7 +362,7 @@ class AnnotationPopup(QDialog):
         
         btn_layout.addStretch()
         
-        done_btn = QPushButton("✓ Done")
+        done_btn = QPushButton(f"✓ {t('annotation.done')}")
         done_btn.setFixedHeight(36)
         done_btn.setCursor(Qt.PointingHandCursor)
         done_btn.setStyleSheet(f"""
@@ -387,7 +388,7 @@ class AnnotationPopup(QDialog):
         """Open file dialog to add a photo. HEIC (iPhone) files are auto-converted to JPEG."""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Select Photos",
+            t('annotation.select_photos_title'),
             "",
             "Images (*.png *.jpg *.jpeg *.bmp *.gif *.heic *.heif);;All Files (*)"
         )
@@ -427,7 +428,7 @@ class AnnotationPopup(QDialog):
         
         # Add placeholder if empty
         if not self.image_paths:
-            placeholder = QLabel("No photos attached")
+            placeholder = QLabel(t('annotation.no_photos'))
             placeholder.setObjectName("annotationPhotosPlaceholder")
             placeholder.setAutoFillBackground(False)
             placeholder.setAlignment(Qt.AlignCenter)

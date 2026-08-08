@@ -167,7 +167,13 @@
     "delete": "Delete",
     "add_photo": "Add Photo",
     "comment_placeholder": "Add a comment…",
-    "label_placeholder": "Label"
+    "label_placeholder": "Label",
+    "popup_title": "Annotation {label} {number}",
+    "comment_label": "Comment:",
+    "photos_label": "Photos:",
+    "no_photos": "No photos attached",
+    "select_photos_title": "Select Photos",
+    "zoom_tooltip": "Click to zoom"
   },
   "arrow": {
     "panel_title": "Arrows",

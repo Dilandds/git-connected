@@ -167,7 +167,13 @@
     "delete": "Supprimer",
     "add_photo": "Ajouter Photo",
     "comment_placeholder": "Ajouter un commentaire…",
-    "label_placeholder": "Étiquette"
+    "label_placeholder": "Étiquette",
+    "popup_title": "Annotation {label} {number}",
+    "comment_label": "Commentaire :",
+    "photos_label": "Photos :",
+    "no_photos": "Aucune photo jointe",
+    "select_photos_title": "Sélectionner des photos",
+    "zoom_tooltip": "Cliquer pour zoomer"
   },
   "arrow": {
     "panel_title": "Flèches",
