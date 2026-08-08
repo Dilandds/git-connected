@@ -79,6 +79,20 @@ _TEX_TEAL_BOTTOM = "#006064"
 # ---------------------------------------------------------------------------
 # Material preset definitions
 # ---------------------------------------------------------------------------
+def _material_name_key(name: str) -> str:
+    """Build the i18n key for a built-in material preset's display name."""
+    slug = name.lower().replace(" ", "_")
+    return f"texture.material_names.{slug}"
+
+
+def _translated_material_name(name: str) -> str:
+    """Translate a material preset name, falling back to the raw English
+    name if no translation exists for the current language."""
+    key = _material_name_key(name)
+    translated = t(key)
+    return translated if translated != key else name
+
+
 MATERIAL_PRESETS = [
     {
         "name": "Gold",
@@ -804,7 +818,7 @@ class MaterialPresetCard(QFrame):
         layout.addWidget(thumb)
 
         # Name label
-        name_lbl = QLabel(preset["name"])
+        name_lbl = QLabel(_translated_material_name(preset["name"]))
         name_lbl.setAlignment(Qt.AlignCenter)
         name_lbl.setStyleSheet(f"""
             color: {default_theme.text_primary};
