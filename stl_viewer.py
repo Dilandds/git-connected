@@ -3444,7 +3444,15 @@ class STLViewerWindow(QMainWindow):
             self.annotation_panel.validate_annotation(annotation_id, text, image_paths, label)
         vw = self.viewer_widget
         if vw and hasattr(vw, 'update_annotation_marker_color'):
-            vw.update_annotation_marker_color(annotation_id, VALIDATED_COLOR)
+            # Validating used to force the marker to the plain "validated" green
+            # even when the point had its own color (custom pick, or the
+            # auto-assigned palette color) — so the 3D marker and the sidebar
+            # badge would show two different colors for the same point. Follow
+            # the same "explicit color wins" rule used everywhere else the
+            # marker color is computed (e.g. after deleting/renumbering).
+            annotation = self.annotation_panel.get_annotation_by_id(annotation_id) if self.annotation_panel else None
+            marker_color = getattr(annotation, 'color', None) or VALIDATED_COLOR
+            vw.update_annotation_marker_color(annotation_id, marker_color)
         logger.info(f"_on_popup_validated: Annotation {annotation_id} validated")
     
     def _on_popup_deleted(self, annotation_id: int):
