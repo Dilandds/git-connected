@@ -117,19 +117,19 @@ class _SubStagePanel(QWidget):
             tab_font.setBold(is_active)
             tab_color = 'white' if is_active else _MUTED
 
+            # No hover state on the sub-stage tab itself (tracker task dc59603a) —
+            # it didn't need one and just made the tab bar look noisy/inconsistent.
             _ta_w = f"""
                 QWidget {{
                     background: {_SEL_BORDER}; border: none;
                     border-radius: 5px 0 0 5px;
                 }}
-                QWidget:hover {{ background: {_SEL_NUM}; }}
             """
             _ti_w = f"""
                 QWidget {{
                     background: transparent;
                     border: 1px solid {_BORDER}; border-radius: 5px 0 0 5px;
                 }}
-                QWidget:hover {{ background: {_SEL_BG}; border-color: {_SEL_BORDER}; }}
             """
 
             btn = QWidget()
