@@ -147,6 +147,7 @@ class PhotoSlot(QPushButton):
     def __init__(self, w: int, h: int, parent=None):
         super().__init__(parent)
         self._path = ""
+        self._zoom_preview: Optional[QLabel] = None
         self.setFixedSize(w, h)
         self.setCursor(Qt.PointingHandCursor)
         self._set_empty()
@@ -183,12 +184,49 @@ class PhotoSlot(QPushButton):
         """)
 
     def _upload(self):
+        self._hide_zoom_preview()
         path, _ = QFileDialog.getOpenFileName(
             self, t('project.timeline.detail_photo_title'), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
             self.set_path(path)
             self.photo_changed.emit(path)
+
+    # ── hover zoom preview ────────────────────────────────────────────────
+    def _show_zoom_preview(self):
+        if not self._path:
+            return
+        pix = QPixmap(self._path)
+        if pix.isNull():
+            return
+        self._hide_zoom_preview()
+        scaled = pix.scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        preview = QLabel(None)
+        preview.setWindowFlags(Qt.ToolTip | Qt.FramelessWindowHint)
+        preview.setAttribute(Qt.WA_TransparentForMouseEvents)
+        preview.setPixmap(scaled)
+        preview.setFixedSize(scaled.size())
+        preview.setStyleSheet(
+            "background: white; border: 2px solid #ffffff; border-radius: 8px;"
+        )
+        global_pos = self.mapToGlobal(self.rect().topRight())
+        preview.move(global_pos.x() + 10, max(0, global_pos.y() - scaled.height() // 2))
+        preview.show()
+        self._zoom_preview = preview
+
+    def _hide_zoom_preview(self):
+        if self._zoom_preview is not None:
+            self._zoom_preview.close()
+            self._zoom_preview.deleteLater()
+            self._zoom_preview = None
+
+    def enterEvent(self, event):
+        self._show_zoom_preview()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hide_zoom_preview()
+        super().leaveEvent(event)
 
 
 # ── Star ranking dialog ───────────────────────────────────────────────────────
