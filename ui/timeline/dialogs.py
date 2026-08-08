@@ -159,6 +159,17 @@ class TaskFormDialog(FormModal):
         self.f_unavail_start = self.add_hfield(t('project.timeline.dlg_unavail_from'), EctoDateEdit(_ustart))
         self.f_unavail_end   = self.add_hfield(t('project.timeline.dlg_unavail_to'),   EctoDateEdit(_uend))
 
+        # Same guard as the task's own start/end fields above — don't allow
+        # the "unavailable" period's end date to land before its start date.
+        def _on_unavail_start_changed(date):
+            if self.f_unavail_end.date() < date:
+                self.f_unavail_end.setDate(date)
+        def _on_unavail_end_changed(date):
+            if date < self.f_unavail_start.date():
+                self.f_unavail_end.setDate(self.f_unavail_start.date())
+        self.f_unavail_start.dateChanged.connect(_on_unavail_start_changed)
+        self.f_unavail_end.dateChanged.connect(_on_unavail_end_changed)
+
         def _toggle_unavail(checked):
             self.f_unavail_start.setEnabled(checked)
             self.f_unavail_end.setEnabled(checked)
