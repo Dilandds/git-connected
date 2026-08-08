@@ -3332,12 +3332,16 @@ class STLViewerWindow(QMainWindow):
             return
         
         annotation = self.annotation_panel.add_annotation(point)
-        
+
         vw = self.viewer_widget
         if vw and hasattr(vw, 'add_annotation_marker'):
             display_num = self.annotation_panel.get_display_number(annotation.id)
+            # Marker color follows the point's own auto-assigned color (see
+            # AnnotationPanel.add_annotation) instead of always starting gray,
+            # so the 3D marker matches the sidebar card right away.
+            marker_color = annotation.color or PENDING_COLOR
             vw.add_annotation_marker(
-                annotation.id, point, PENDING_COLOR,
+                annotation.id, point, marker_color,
                 display_date=str(display_num or len(self.annotation_panel.annotations))
             )
     

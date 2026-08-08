@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
+from ui.color_palette import PALETTE
 
 logger = logging.getLogger(__name__)
 
@@ -741,13 +742,18 @@ class AnnotationPanel(QWidget):
         return self._reader_mode
     
     def add_annotation(self, point: tuple) -> Annotation:
-        """Add a new annotation at the given point (gray, pending)."""
+        """Add a new annotation at the given point. Each new point automatically
+        picks up the next color in the shared palette (cycling), so consecutive
+        points are easy to tell apart at a glance instead of all starting out
+        the same gray."""
+        color = PALETTE[len(self.annotations) % len(PALETTE)]
         annotation = Annotation(
             id=self._next_id,
             point=point,
             text="",
-            is_validated=False,  # Gray - pending
+            is_validated=False,  # Pending
             image_paths=[],
+            color=color,
         )
         self._next_id += 1
         self.annotations.append(annotation)
