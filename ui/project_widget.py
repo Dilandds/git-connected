@@ -420,6 +420,7 @@ class ProjectNavPanel(QWidget):
         self._rd_sub_btns: list = []
         self._rd_subnav: Optional[QWidget] = None
         self._on_rd_tab_switch = None  # set by TheProjectWidget
+        self._rd_subnav_suppress_reopen = False
 
         for key, _label in _NAV_ITEMS:
             label = t(f'project.nav.{key}').replace('&', '&&')
@@ -506,7 +507,16 @@ class ProjectNavPanel(QWidget):
             btn.setStyleSheet(_NAV_ACTIVE if k == key else _NAV_INACTIVE)
             btn.setChecked(k == key)
         if self._rd_subnav is not None:
-            self._rd_subnav.setVisible(key == 'rd')
+            # A double-click on the R&D button delivers press/release/press/
+            # doubleClick/release. QAbstractButton emits `clicked` on *every*
+            # release, so the second release of that double-click calls
+            # _navigate('rd') again right after _close_rd_subnav() ran on the
+            # doubleClick event — silently reopening the sub-nav and making
+            # the close "not stick". Swallow just that one reopen.
+            if key == 'rd' and self._rd_subnav_suppress_reopen:
+                self._rd_subnav_suppress_reopen = False
+            else:
+                self._rd_subnav.setVisible(key == 'rd')
         if self._on_navigate:
             self._on_navigate(key)
 
@@ -519,6 +529,10 @@ class ProjectNavPanel(QWidget):
         """Double-click on the R&D nav button closes its sub-nav list."""
         if self._rd_subnav is not None:
             self._rd_subnav.setVisible(False)
+            # The button's own mouseRelease (right after this doubleClick
+            # event) will still fire `clicked` -> _navigate('rd'); suppress
+            # that one reopen so the close actually sticks.
+            self._rd_subnav_suppress_reopen = True
 
     def show_rd_subnav(self, visible: bool):
         if self._rd_subnav is not None:
