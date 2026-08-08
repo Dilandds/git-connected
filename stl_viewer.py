@@ -842,6 +842,7 @@ class STLViewerWindow(QMainWindow):
         elif mode == "technical":
             self._workspace_stack.setCurrentIndex(1)
             self.setWindowTitle("LYNS - Technical Overview")
+            self._autofill_technical_object_title()
         elif mode == "scale":
             self._workspace_stack.setCurrentIndex(2)
             self.setWindowTitle("LYNS - Drawing Scale")
@@ -876,6 +877,28 @@ class STLViewerWindow(QMainWindow):
                 pass
 
         logger.info(f"_switch_mode: Switched to {mode} mode")
+
+    def _autofill_technical_object_title(self):
+        """Auto-copy the company name + product title from The Project's main
+        info card into the Technical Overview 'Object Title' field, so users
+        don't have to retype info that's already entered elsewhere. Only
+        fills it in while it's still empty — never overwrites a value the
+        user already typed."""
+        try:
+            sidebar = getattr(self, 'technical_sidebar', None)
+            project_widget = getattr(self, 'project_widget', None)
+            if sidebar is None or project_widget is None:
+                return
+            if sidebar.title_edit.text().strip():
+                return
+            info = project_widget._nav.get_info_data()
+            company = (info.get('company') or '').strip()
+            title = (info.get('title') or '').strip()
+            combined = ' — '.join(p for p in (company, title) if p)
+            if combined:
+                sidebar.title_edit.setText(combined)
+        except Exception:
+            logger.debug("_autofill_technical_object_title: failed", exc_info=True)
 
     def _on_viewer_splitter_moved(self, _pos: int, _index: int):
         """Remember the last non-zero right panel width."""
