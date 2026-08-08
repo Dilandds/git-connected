@@ -213,5 +213,35 @@ app = BUNDLE(
         'CFBundleVersion': APP_VERSION,
         'NSHumanReadableCopyright': 'Copyright © 2024',
         'LSMinimumSystemVersion': '10.13',
+        # Associates .lyns.pjt project files with this app so Finder shows
+        # the app's icon on them (and double-click opens LYNS360) — the
+        # macOS equivalent of the Windows file-association registration in
+        # core/file_association.py.
+        'CFBundleDocumentTypes': [
+            {
+                'CFBundleTypeName': 'LYNS360 Project',
+                'CFBundleTypeRole': 'Editor',
+                'LSHandlerRank': 'Owner',
+                'CFBundleTypeIconFile': 'icon.icns',
+                'LSItemContentTypes': ['com.lyns360.project'],
+            },
+        ],
+        'UTExportedTypeDeclarations': [
+            {
+                'UTTypeIdentifier': 'com.lyns360.project',
+                'UTTypeDescription': 'LYNS360 Project',
+                'UTTypeConformsTo': ['public.data'],
+                'UTTypeIconFile': 'icon.icns',
+                'UTTypeTagSpecification': {
+                    # macOS resolves a file's UTI from the LAST path
+                    # extension only (NSString.pathExtension) — "pjt" for
+                    # "Demo.lyns.pjt" — so that's what Finder actually
+                    # matches on. "lyns.pjt" is listed too in case a future
+                    # macOS version starts matching compound extensions
+                    # directly; harmless no-op today either way.
+                    'public.filename-extension': ['pjt', 'lyns.pjt'],
+                },
+            },
+        ],
     },
 )

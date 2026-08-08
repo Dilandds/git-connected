@@ -211,5 +211,32 @@ app = BUNDLE(
         'CFBundleVersion': APP_VERSION,
         'NSHumanReadableCopyright': 'Copyright © 2024',
         'LSMinimumSystemVersion': '10.13',
+        # Associates .lyns.pjt project files with this app so Finder shows
+        # the app's icon on them (and double-click opens LYNS360) — the
+        # macOS equivalent of the Windows file-association registration in
+        # core/file_association.py. Same UTI as the commercial edition
+        # (stl_viewer_mac.spec) since both open the same file format —
+        # a user only ever has one edition installed, so there's no real
+        # clash from sharing it.
+        'CFBundleDocumentTypes': [
+            {
+                'CFBundleTypeName': 'LYNS360 Project',
+                'CFBundleTypeRole': 'Editor',
+                'LSHandlerRank': 'Owner',
+                'CFBundleTypeIconFile': 'icon.icns',
+                'LSItemContentTypes': ['com.lyns360.project'],
+            },
+        ],
+        'UTExportedTypeDeclarations': [
+            {
+                'UTTypeIdentifier': 'com.lyns360.project',
+                'UTTypeDescription': 'LYNS360 Project',
+                'UTTypeConformsTo': ['public.data'],
+                'UTTypeIconFile': 'icon.icns',
+                'UTTypeTagSpecification': {
+                    'public.filename-extension': ['pjt', 'lyns.pjt'],
+                },
+            },
+        ],
     },
 )
