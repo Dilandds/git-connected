@@ -774,6 +774,7 @@
       "operations_header": "OPERATIONS",
       "deadline_label": "DEADLINE",
       "remove_task": "Remove Task",
+      "remove_task_body": "Remove task '{name}'?\n\nThis cannot be undone.",
       "remove_operator": "Remove Operator",
       "remove_operator_body": "Remove operator '{name}' and all its operations and tasks?\n\nThis cannot be undone.",
       "select_operator": "Select an Operator",

@@ -1180,7 +1180,7 @@ class TimelineWidget(QWidget):
 
     def _on_task_delete(self, task: Task):
         if not ask_yes_no_dialog(self, t('project.timeline.remove_task'),
-                                  f"Remove task '{task.name}'?\n\nThis cannot be undone."):
+                                  t('project.timeline.remove_task_body').format(name=task.name)):
             return
         for op in self._operators:
             for oper in op.operations:
