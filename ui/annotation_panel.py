@@ -267,6 +267,7 @@ class AnnotationCard(QFrame):
             f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent;"
         )
         self.desc_label.setWordWrap(True)
+        self.desc_label.setVisible(bool(self.annotation.text))
 
         # Status row: checkmark icon (drawn, not Unicode) + text (avoids poor rendering on Windows)
         status_row = QWidget()
@@ -329,11 +330,14 @@ class AnnotationCard(QFrame):
     
     def _desc_preview_text(self) -> str:
         """Return the truncated note text for the inline preview, matching
-        the Technical Overview card's 60-character preview."""
+        the Technical Overview card's 60-character preview. Left blank when
+        there's no text yet — the status row below already shows "Click to
+        edit" for pending annotations, so repeating it here would show the
+        same sentence twice on one card."""
         text = self.annotation.text or ""
         if len(text) > 60:
             return text[:60] + "…"
-        return text or t("annotation.click_to_edit")
+        return text
 
     def _on_label_editing_finished(self):
         """Handle label edit - emit to panel."""
@@ -473,6 +477,7 @@ class AnnotationCard(QFrame):
         self.label_edit.setText(annotation.label)
         self.label_edit.blockSignals(False)
         self.desc_label.setText(self._desc_preview_text())
+        self.desc_label.setVisible(bool(self.annotation.text))
         self._update_style()
         self._update_tooltip()
     

@@ -729,10 +729,15 @@ class TechnicalAnnotationPanel(QWidget):
         title.setStyleSheet(f"color: {default_theme.text_primary}; background-color: transparent; border: none;")
         info.addWidget(title)
 
-        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else (ann.text or t("annotation.click_to_edit"))
+        # Note: when there's no text yet, leave this preview blank rather than
+        # falling back to "Click to edit" — the status row right below already
+        # shows that same "Click to edit" message, so filling this in too made
+        # the card show the sentence twice.
+        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else ann.text
         desc = QLabel(desc_text)
         desc.setStyleSheet(f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
         desc.setWordWrap(True)
+        desc.setVisible(bool(desc_text))
         info.addWidget(desc)
 
         # Status row — green checkmark when validated, grey pending otherwise
