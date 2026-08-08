@@ -247,7 +247,12 @@ class DrawColorPicker(QWidget):
             accepted = wrapper.exec()
 
         if accepted == QDialog.Accepted:
-            col = picker.selectedColor()
+            # selectedColor() only gets set by QColorDialog's own native OK
+            # button, which we hide in favour of our own OK/Cancel row — so
+            # it stayed stuck on the initial #FF0000 and the color the user
+            # actually picked never got applied. currentColor() always
+            # reflects whatever's selected in the dialog right now.
+            col = picker.currentColor()
             if col.isValid():
                 self.color_selected.emit(col.name())
         self.close()
