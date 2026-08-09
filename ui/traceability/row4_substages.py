@@ -111,7 +111,6 @@ class _SubStagePanel(QWidget):
             container = QWidget(); container.setStyleSheet('background: transparent;')
             ch = QHBoxLayout(container); ch.setContentsMargins(0, 0, 0, 0); ch.setSpacing(0)
 
-            full_label = f'{snum}.{i + 1}  {sub.name}'
             tab_font = QFont()
             tab_font.setPixelSize(14)
             tab_font.setBold(is_active)
@@ -139,7 +138,6 @@ class _SubStagePanel(QWidget):
             btn.setMaximumWidth(140)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_ta_w if is_active else _ti_w)
-            btn.setToolTip(f'{full_label}\n{t("project.traceability.dbl_click_rename")}')
             btn.mousePressEvent = lambda _e, idx=i: self._switch_sub(idx)
             btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_sub(idx)
 

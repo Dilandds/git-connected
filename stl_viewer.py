@@ -681,6 +681,11 @@ class STLViewerWindow(QMainWindow):
         self.project_widget.clear_viewer_tabs.connect(self._clear_all_viewer_tabs)
         self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
         self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
+        self.project_widget.project_info_changed.connect(self.technical_sidebar.update_project_info)
+        self.project_widget.set_technical_overview_refs(self.technical_overview, self.technical_sidebar)
+        self.project_widget.restore_technical_overview.connect(self._restore_technical_overview_from_project)
+        self.project_widget.set_scale_refs(self.scale_canvas, self.scale_sidebar)
+        self.project_widget.restore_drawing_scale.connect(self._restore_drawing_scale_from_project)
         self._workspace_stack.addWidget(self.project_widget)
 
         # ==== Help Workspace ====
@@ -1779,7 +1784,27 @@ class STLViewerWindow(QMainWindow):
         self.annotation_stack.removeWidget(tab.annotation_panel)
         self.arrow_stack.removeWidget(tab.arrow_panel)
         self.parts_stack.removeWidget(tab.parts_panel)
-        
+
+        # Close this tab's WebGPU render canvas explicitly (synchronously,
+        # via .close()) before scheduling the widget tree's deletion below.
+        # rendercanvas tracks every canvas in a loop-wide weak registry that
+        # only forgets a canvas once .close() has run; a canvas whose C++
+        # object gets torn down by plain deleteLater() first — without ever
+        # going through .close() — stays in that registry as a dangling
+        # entry. Nothing touches it again until the app quits, at which
+        # point rendercanvas's own aboutToQuit handler iterates the
+        # registry and crashes on it ("wrapped C/C++ object ... has been
+        # deleted"), even though the crash's real cause was a tab closed
+        # much earlier in the session. See the matching cleanup in
+        # closeEvent for the same reasoning applied to tabs still open at
+        # quit time.
+        canvas = getattr(tab.viewer_widget, '_canvas', None)
+        if canvas is not None:
+            try:
+                canvas.close()
+            except Exception:
+                pass
+
         # Destroy widgets
         tab.viewer_widget.deleteLater()
         tab.annotation_panel.deleteLater()
@@ -2137,6 +2162,53 @@ class STLViewerWindow(QMainWindow):
             return
         self._switch_mode("3d")
         self._load_ecto_file(tmp_path, display_name_override=original_name)
+
+    def _restore_technical_overview_from_project(self, tmp_path: str):
+        """Restore the Technical Overview workspace from a saved project's
+        embedded .ecto bundle. Same import path as opening a standalone
+        technical .ecto file (_load_technical_ecto), minus the passcode
+        prompt — project saves never set a passcode on this bundle."""
+        if not os.path.exists(tmp_path):
+            return
+        from core.ecto_format import EctoFormat
+        doc_path, annotations, metadata, passcode_hash, temp_dir = EctoFormat.import_technical(tmp_path)
+        if doc_path is None:
+            logger.warning(f"_restore_technical_overview_from_project: import failed: {temp_dir}")
+            return
+        self.technical_overview.load_from_ecto(doc_path, annotations or [], passcode_hash)
+        if metadata:
+            self.technical_sidebar.set_metadata(metadata)
+        self._tech_ecto_temp_dir = temp_dir
+
+    def _restore_drawing_scale_from_project(self, tmp_path: str, state: dict):
+        """Restore the Drawing Scale workspace from a saved project's
+        embedded source file + calibration/shapes state.
+
+        ScaleCanvas keeps referencing tmp_path as its source file (unlike the
+        viewer tabs / technical overview, which extract into their own
+        throwaway storage), so we take ownership of it here instead of the
+        caller deleting it — cleaned up on app close alongside
+        _tech_ecto_temp_dir, and any previous one is cleaned up now.
+        """
+        if not os.path.exists(tmp_path):
+            return
+        old_tmp = getattr(self, '_scale_temp_path', None)
+        if old_tmp and old_tmp != tmp_path and os.path.exists(old_tmp):
+            try:
+                os.remove(old_tmp)
+            except OSError:
+                pass
+        self._scale_temp_path = tmp_path
+        self.scale_canvas.load_file(tmp_path)
+        self.scale_canvas.set_state(state)
+        self.scale_sidebar.set_state(
+            unit=state.get('unit', 'cm'),
+            scale_ratio=state.get('scale_ratio', 1.0),
+            show_static_border=state.get('show_static_border', True),
+            show_moving_border=state.get('show_moving_border', True),
+            show_ref_lines=state.get('show_ref_lines', True),
+            pdf_locked=state.get('pdf_locked', False),
+        )
 
     def _clear_all_viewer_tabs(self):
         """Close every currently open viewer tab.
@@ -3934,6 +4006,32 @@ class STLViewerWindow(QMainWindow):
         except Exception:
             pass
 
+        # Release this session's lock on whatever project is currently open —
+        # otherwise it stays marked as "open" until someone else's stale-lock
+        # threshold expires, even though this session actually closed cleanly.
+        try:
+            if hasattr(self, 'project_widget'):
+                self.project_widget.release_lock()
+        except Exception:
+            pass
+
+        # Explicitly close every tab's WebGPU render canvas while its Qt
+        # widget is still alive. rendercanvas registers each QRenderWidget
+        # with a shared loop that reacts to QApplication.aboutToQuit; if a
+        # canvas's C++ object gets torn down by normal Qt parent/child
+        # deletion before that handler runs, rendercanvas tries to touch the
+        # already-deleted widget and the app aborts with "wrapped C/C++
+        # object ... has been deleted". Calling .close() here lets each
+        # canvas unregister itself cleanly first, same reasoning as the
+        # QC-panel release above.
+        for tab in self.tabs:
+            canvas = getattr(tab.viewer_widget, '_canvas', None)
+            if canvas is not None:
+                try:
+                    canvas.close()
+                except Exception:
+                    pass
+
         # Cleanup all ecto temp directories
         for tab in self.tabs:
             if tab.ecto_temp_dir:
@@ -3948,6 +4046,12 @@ class STLViewerWindow(QMainWindow):
                 from core.ecto_format import EctoFormat
                 EctoFormat.cleanup_temp_dir(self._tech_ecto_temp_dir)
             except Exception:
+                pass
+        # Cleanup drawing scale temp source file (restored from a saved project)
+        if getattr(self, '_scale_temp_path', None) and os.path.exists(self._scale_temp_path):
+            try:
+                os.remove(self._scale_temp_path)
+            except OSError:
                 pass
         super().closeEvent(event)
 

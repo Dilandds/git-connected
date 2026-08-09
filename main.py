@@ -716,7 +716,16 @@ def main():
 
         # Finish splash screen
         splash.finish(window)
-        
+
+        # First-run only: suggest a display name from the OS account and let
+        # the user confirm/edit it once. Every save/lock/merge-conflict
+        # prompt reuses this stored name afterward instead of asking the OS.
+        try:
+            from core.identity import ensure_identity_prompt
+            ensure_identity_prompt(window)
+        except Exception as e:
+            logger.warning(f"identity prompt failed: {e}")
+
         print("Step 5: Starting event loop...", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("Step 5: Starting event loop...")

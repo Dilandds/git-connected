@@ -242,41 +242,47 @@ class SidebarPanel(QWidget):
     annotations_exported = pyqtSignal()
     
     
-    # Material density data (g/cm³)
+    # Material density data (g/cm³) — first element is an i18n key
+    # (sidebar.mat_<key>), not a display string; use _material_label() to
+    # get the translated name for the current language.
     MATERIALS = [
-        ("24 carat gold (999)", 19.32),
-        ("22 carat gold (916)", 17.7),
-        ("18K yellow gold 3N", 15.5),
-        ("18K rose gold", 15.0),
-        ("18K white gold (Pd)", 15.0),
-        ("18K white gold (Ag)", 14.7),
-        ("14K yellow gold N2", 13.58),
-        ("14K rose gold", 13.2),
-        ("14K white gold", 13.0),
-        ("10K gold", 11.6),
-        ("9K gold", 10.8),
-        ("Pure platinum (999)", 21.45),
-        ("Platinum 950", 20.64),
-        ("Platinum 900", 20.0),
-        ("Pure palladium (999)", 12.02),
-        ("Palladium 950", 11.5),
-        ("Pure silver (999)", 10.49),
-        ("Sterling Silver 925", 10.36),
-        ("Copper Cu", 8.96),
-        ("Brass UZ36", 8.5),
-        ("Bronze", 8.8),
-        ("316L Stainless Steel", 8.0),
-        ("Grade 2 Titanium", 4.51),
-        ("Aluminium", 2.7),
-        ("Standard Resin", 1.2),
-        ("Diamond", 3.52),
-        ("Sapphire / Ruby", 4.0),
-        ("Emerald", 2.75),
-        ("Quartz", 2.65),
-        ("Lapis lazuli", 2.75),
-        ("Crystal glass", 3.0),
-        ("Aventurine glass", 2.65),
+        ("gold_24k", 19.32),
+        ("gold_22k", 17.7),
+        ("gold_18k_yellow", 15.5),
+        ("gold_18k_rose", 15.0),
+        ("gold_18k_white_pd", 15.0),
+        ("gold_18k_white_ag", 14.7),
+        ("gold_14k_yellow", 13.58),
+        ("gold_14k_rose", 13.2),
+        ("gold_14k_white", 13.0),
+        ("gold_10k", 11.6),
+        ("gold_9k", 10.8),
+        ("platinum_pure", 21.45),
+        ("platinum_950", 20.64),
+        ("platinum_900", 20.0),
+        ("palladium_pure", 12.02),
+        ("palladium_950", 11.5),
+        ("silver_pure", 10.49),
+        ("silver_sterling", 10.36),
+        ("copper", 8.96),
+        ("brass", 8.5),
+        ("bronze", 8.8),
+        ("steel_316l", 8.0),
+        ("titanium_g2", 4.51),
+        ("aluminium", 2.7),
+        ("resin", 1.2),
+        ("diamond", 3.52),
+        ("sapphire_ruby", 4.0),
+        ("emerald", 2.75),
+        ("quartz", 2.65),
+        ("lapis_lazuli", 2.75),
+        ("crystal_glass", 3.0),
+        ("aventurine_glass", 2.65),
     ]
+
+    @staticmethod
+    def _material_label(key: str) -> str:
+        return t(f"sidebar.mat_{key}")
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -679,8 +685,8 @@ class SidebarPanel(QWidget):
                 selection-color: {default_theme.text_white}; padding: 4px;
             }}
         """)
-        for material_name, density in self.MATERIALS:
-            self.material_combo.addItem(f"{material_name} ({density} g/cm³)", density)
+        for material_key, density in self.MATERIALS:
+            self.material_combo.addItem(f"{self._material_label(material_key)} ({density} g/cm³)", density)
         self.material_combo.currentIndexChanged.connect(self._on_material_changed_new)
         self.material_combo.popupClosed.connect(lambda: self.material_combo.setVisible(False))
         self.material_combo.setVisible(False)   # hidden — triggered by material row click
@@ -750,8 +756,8 @@ class SidebarPanel(QWidget):
 
     def _update_material_display(self, index: int):
         if 0 <= index < len(self.MATERIALS):
-            name, density = self.MATERIALS[index]
-            self._material_display_row.set_value(f"{name} ({density} g/cm³)")
+            key, density = self.MATERIALS[index]
+            self._material_display_row.set_value(f"{self._material_label(key)} ({density} g/cm³)")
     
     def create_adjust_weight_section(self):
         """Create the adjust to target weight section (collapsible)."""
@@ -1854,7 +1860,8 @@ class SidebarPanel(QWidget):
 
         try:
             from core.ecto_format import EctoFormat
-            import getpass, json
+            from core.identity import get_display_name
+            import json
             from datetime import datetime, timezone
 
             self.export_review_btn.setEnabled(False)
@@ -1888,7 +1895,7 @@ class SidebarPanel(QWidget):
             review_data = {
                 "file_type": "lyns.review",
                 "version": "1.0",
-                "exported_by": getpass.getuser(),
+                "exported_by": get_display_name(),
                 "exported_at": datetime.now(timezone.utc).isoformat(),
                 "original_filename": self.current_stl_filename,
                 "supplier_name": "",
@@ -2037,10 +2044,12 @@ class SidebarPanel(QWidget):
         self.export_scaled_btn.setText(t("sidebar.export_scaled_stl"))
         self.export_ecto_title_label.setText(t("sidebar.export_ecto_title"))
         self.export_ecto_desc_label.setText(t("sidebar.export_ecto_desc"))
-        self.export_ecto_help_badge.setToolTip(t("sidebar.export_ecto_footer"))
         self.export_annotations_btn.setText(t("sidebar.export_ecto_btn"))
         self.target_weight_input.setPlaceholderText(t("sidebar.enter_target_weight"))
         self.update_annotation_count(self._annotation_count)
+        for i, (key, density) in enumerate(self.MATERIALS):
+            self.material_combo.setItemText(i, f"{self._material_label(key)} ({density} g/cm³)")
+        self._update_material_display(self.material_combo.currentIndex())
         fm = self.adjust_weight_title_label.fontMetrics()
         self.adjust_weight_title_label.setMinimumWidth(fm.horizontalAdvance(self.adjust_weight_title_label.text()) + 8)
 

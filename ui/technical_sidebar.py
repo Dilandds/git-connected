@@ -71,6 +71,8 @@ class TechnicalSidebar(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(260)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self._last_auto_property = ''
+        self._last_auto_title = ''
         self._init_ui()
 
     def _add_card_shadow(self, widget, blur_radius=26, y_offset=8, alpha=110):
@@ -425,6 +427,31 @@ class TechnicalSidebar(QWidget):
             if d.isValid():
                 self.deadline_date.setDate(d)
         self.comments_edit.setPlainText(meta.get('comments', ''))
+
+    def update_project_info(self, info: dict):
+        """Auto-fill Property from the project's company name and Object
+        title from the project's title, unless the user has already typed
+        something different — same auto-fill-unless-manually-changed pattern
+        used elsewhere (e.g. Report header's project manager/photo)."""
+        company = (info.get('company') or '').strip()
+        current_property = self.property_edit.text().strip()
+        if company:
+            if not current_property or current_property == self._last_auto_property:
+                self.property_edit.setText(company)
+                self._last_auto_property = company
+        elif current_property and current_property == self._last_auto_property:
+            self.property_edit.clear()
+            self._last_auto_property = ''
+
+        title = (info.get('title') or '').strip()
+        current_title = self.title_edit.text().strip()
+        if title:
+            if not current_title or current_title == self._last_auto_title:
+                self.title_edit.setText(title)
+                self._last_auto_title = title
+        elif current_title and current_title == self._last_auto_title:
+            self.title_edit.clear()
+            self._last_auto_title = ''
 
     def _create_manufacturer_row(self, placeholder: str, removable: bool = True):
         """Create a manufacturer input row, optionally with a remove button."""

@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QFrame, QSizePolicy, QScrollArea,
     QGraphicsDropShadowEffect
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPointF, QPoint
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QPainter, QPen, QPolygonF, QFont
 from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style, TOOLTIP_STYLE
 from i18n import t, on_language_changed
@@ -744,6 +744,49 @@ class ScaleSidebar(QWidget):
         self._update_lock_btn_style(self._pdf_locked)
         self.pdf_locked.emit(self._pdf_locked)
 
+    def set_state(self, unit: str = 'cm', scale_ratio: float = 1.0,
+                  show_static_border: bool = True, show_moving_border: bool = True,
+                  show_ref_lines: bool = True, pdf_locked: bool = False):
+        """Reflect externally-restored canvas state (e.g. after loading a saved
+        project) in the sidebar controls, without re-emitting signals — the
+        canvas already has this state applied directly via ScaleCanvas.set_state."""
+        units = ["cm", "mm", "inches", "m"]
+        ratios = [1.0, 2.0, 5.0, 10.0]
+
+        self.unit_combo.blockSignals(True)
+        if unit in units:
+            self.unit_combo.setCurrentIndex(units.index(unit))
+        self.unit_combo.blockSignals(False)
+
+        self.scale_combo.blockSignals(True)
+        if scale_ratio in ratios:
+            self.scale_combo.setCurrentIndex(ratios.index(scale_ratio))
+        self.scale_combo.blockSignals(False)
+
+        self._static_border_visible = show_static_border
+        self.static_border_btn.blockSignals(True)
+        self.static_border_btn.setChecked(show_static_border)
+        self.static_border_btn.blockSignals(False)
+        self._update_static_border_btn_style(show_static_border)
+
+        self._moving_border_visible = show_moving_border
+        self.moving_border_btn.blockSignals(True)
+        self.moving_border_btn.setChecked(show_moving_border)
+        self.moving_border_btn.blockSignals(False)
+        self._update_moving_border_btn_style(show_moving_border)
+
+        self._ref_lines_visible = show_ref_lines
+        self.ref_lines_btn.blockSignals(True)
+        self.ref_lines_btn.setChecked(show_ref_lines)
+        self.ref_lines_btn.blockSignals(False)
+        self._update_ref_lines_btn_style(show_ref_lines)
+
+        self._pdf_locked = pdf_locked
+        self.lock_btn.blockSignals(True)
+        self.lock_btn.setChecked(pdf_locked)
+        self.lock_btn.blockSignals(False)
+        self._update_lock_btn_style(pdf_locked)
+
     def reset(self):
         """Reset controls to defaults and notify listeners (ruler off, unit/ratio defaults)."""
         self.unit_combo.blockSignals(True)
@@ -824,9 +867,26 @@ class ScaleSidebar(QWidget):
                 self.drawing_color_changed.emit(color)
 
         picker.color_selected.connect(_on_pick)
-        # Position popup under the color button
-        pos = self.color_btn.mapToGlobal(self.color_btn.rect().bottomLeft())
-        picker.move(pos + QPoint(-6, 8))
+        picker.adjustSize()
+
+        # Position under the color button, but flip above it (and clamp
+        # horizontally) if it would otherwise render off the bottom/side of
+        # the screen — e.g. when the button sits near the bottom of the
+        # sidebar's scroll viewport, "below" pushed the popup past the
+        # screen edge, making it invisible/unreachable.
+        from PyQt5.QtWidgets import QApplication
+        btn_rect = self.color_btn.rect()
+        below = self.color_btn.mapToGlobal(btn_rect.bottomLeft()) + QPoint(-6, 8)
+        screen_geo = QApplication.desktop().availableGeometry(self.color_btn)
+        picker_size = picker.size()
+
+        if below.y() + picker_size.height() > screen_geo.bottom():
+            pos = self.color_btn.mapToGlobal(btn_rect.topLeft()) + QPoint(-6, -8 - picker_size.height())
+        else:
+            pos = below
+        pos.setX(max(screen_geo.left(), min(pos.x(), screen_geo.right() - picker_size.width())))
+
+        picker.move(pos)
         picker.show()
 
     def _update_color_btn_style(self):

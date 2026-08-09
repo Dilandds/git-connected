@@ -376,6 +376,110 @@ class ScaleCanvas(QWidget):
         else:
             logger.warning(f"Unsupported file type: {ext}")
 
+    def get_source_path(self) -> Optional[str]:
+        """Return the original file path last passed to load_file/set_image, if any."""
+        return self._source_path
+
+    def get_state(self) -> dict:
+        """Serialize calibration, borders, reference lines, measurements, and
+        drawn shapes to a plain JSON-safe dict (for project save). The loaded
+        image/PDF itself is not included here — the caller embeds the source
+        file separately and re-loads it via load_file() before applying this."""
+        return {
+            'unit': self._unit,
+            'scale_ratio': self._scale_ratio,
+            'show_static_border': self._show_static_border,
+            'show_moving_border': self._show_moving_border,
+            'show_ref_lines': self._show_ref_lines,
+            'pdf_locked': self._pdf_locked,
+            'ref_line_pos': [self._ref_line_pos.x(), self._ref_line_pos.y()],
+            'extra_ref_lines': [
+                {'id': r.id, 'x': r.pos.x(), 'y': r.pos.y()} for r in self._extra_ref_lines
+            ],
+            'measurements': [
+                {'id': m.id, 'x1': m.x1, 'y1': m.y1, 'x2': m.x2, 'y2': m.y2,
+                 'distance_real': m.distance_real}
+                for m in self._measurements
+            ],
+            'arrows': [
+                {'id': a.id, 'x1': a.x1, 'y1': a.y1, 'x2': a.x2, 'y2': a.y2,
+                 'color': a.color.name()}
+                for a in self._arrows
+            ],
+            'rectangles': [
+                {'id': r.id, 'x': r.x, 'y': r.y, 'width': r.width, 'height': r.height,
+                 'color': r.color.name(), 'angle': r.angle}
+                for r in self._rectangles
+            ],
+            'circles': [
+                {'id': c.id, 'cx': c.cx, 'cy': c.cy, 'radius': c.radius,
+                 'color': c.color.name(), 'angle': c.angle}
+                for c in self._circles
+            ],
+            'texts': [
+                {'id': t_.id, 'x': t_.x, 'y': t_.y, 'text': t_.text, 'color': t_.color.name()}
+                for t_ in self._texts
+            ],
+        }
+
+    def set_state(self, state: dict):
+        """Restore calibration, borders, reference lines, measurements, and
+        drawn shapes from get_state()'s output. Call after load_file() —
+        loading a new image resets these fields, so this must run afterward."""
+        self._unit = state.get('unit', 'cm')
+        self._scale_ratio = state.get('scale_ratio', 1.0)
+        self._show_static_border = state.get('show_static_border', True)
+        self._show_moving_border = state.get('show_moving_border', True)
+        self._show_ref_lines = state.get('show_ref_lines', True)
+        self._pdf_locked = state.get('pdf_locked', False)
+
+        rlp = state.get('ref_line_pos')
+        if rlp and len(rlp) == 2:
+            self._ref_line_pos = QPointF(rlp[0], rlp[1])
+
+        self._extra_ref_lines = [
+            ExtraRefLine(id=r['id'], pos=QPointF(r['x'], r['y']))
+            for r in state.get('extra_ref_lines', [])
+        ]
+        self._next_extra_ref_id = max([r.id for r in self._extra_ref_lines], default=0) + 1
+
+        self._measurements = [
+            Measurement(id=m['id'], x1=m['x1'], y1=m['y1'], x2=m['x2'], y2=m['y2'],
+                        distance_real=m.get('distance_real', 0.0))
+            for m in state.get('measurements', [])
+        ]
+        self._next_measurement_id = max([m.id for m in self._measurements], default=0) + 1
+
+        self._arrows = [
+            DrawingArrow(id=a['id'], x1=a['x1'], y1=a['y1'], x2=a['x2'], y2=a['y2'],
+                         color=QColor(a.get('color', '#000000')))
+            for a in state.get('arrows', [])
+        ]
+        self._next_arrow_id = max([a.id for a in self._arrows], default=0) + 1
+
+        self._rectangles = [
+            DrawingRectangle(id=r['id'], x=r['x'], y=r['y'], width=r['width'], height=r['height'],
+                              color=QColor(r.get('color', '#000000')), angle=r.get('angle', 0.0))
+            for r in state.get('rectangles', [])
+        ]
+        self._next_rectangle_id = max([r.id for r in self._rectangles], default=0) + 1
+
+        self._circles = [
+            DrawingCircle(id=c['id'], cx=c['cx'], cy=c['cy'], radius=c['radius'],
+                          color=QColor(c.get('color', '#000000')), angle=c.get('angle', 0.0))
+            for c in state.get('circles', [])
+        ]
+        self._next_circle_id = max([c.id for c in self._circles], default=0) + 1
+
+        self._texts = [
+            DrawingText(id=t_['id'], x=t_['x'], y=t_['y'], text=t_.get('text', ''),
+                        color=QColor(t_.get('color', '#000000')))
+            for t_ in state.get('texts', [])
+        ]
+        self._next_text_id = max([t_.id for t_ in self._texts], default=0) + 1
+
+        self.update()
+
     def export_scaled(self, output_path: str) -> Tuple[bool, str]:
         """Export the current view (drawing + measurements + reference line) as an image or PDF."""
         if not self._pixmap:

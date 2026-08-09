@@ -6,7 +6,6 @@ Right panel: top bar (open/save + user account) + stacked content screens.
 Screens are loaded lazily — only instantiated on first navigation.
 """
 import base64
-import getpass
 import json
 import logging
 import os
@@ -25,6 +24,7 @@ from PyQt5.QtGui import QPixmap, QIcon, QFontMetrics
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 from i18n import t, on_language_changed
+from core.identity import get_display_name
 
 _ARROW_URL = _get_arrow()
 
@@ -685,6 +685,9 @@ class TheProjectWidget(QWidget):
     clear_viewer_tabs      = pyqtSignal()  # close whatever's open before restoring a loaded project's tabs
     qc_model_remove_requested = pyqtSignal(object)
     qc_upload_requested    = pyqtSignal()
+    project_info_changed   = pyqtSignal(dict)  # sidebar info, for widgets outside The Project (e.g. Technical Overview)
+    restore_technical_overview = pyqtSignal(str)  # temp .ecto bundle path
+    restore_drawing_scale = pyqtSignal(str, object)  # temp source-file path, state dict
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -694,8 +697,18 @@ class TheProjectWidget(QWidget):
         self._project_password_hash: Optional[str] = None  # SHA-256 hash; None = no protection
         self._created_by: Optional[str] = None  # OS username who first created the file
         self._created_at: Optional[str] = None  # ISO timestamp of first save
+        self._read_only = False  # True when opened while someone else's lock is active
+        self._loaded_snapshot: Optional[dict] = None  # data as last read from/written to disk — merge base
         self._component_syncing = False  # guard against brief↔traceability sync loops
         self._viewer_tabs: list = []  # TabState list injected from main window before save
+        # Direct refs to the Technical Overview workspace, injected from the main
+        # window (it lives outside The Project) so save/load can reach it the
+        # same way _viewer_tabs lets us reach the 3D viewer tabs.
+        self._technical_overview = None
+        self._technical_sidebar = None
+        # Same pattern for the Drawing Scale workspace.
+        self._scale_canvas = None
+        self._scale_sidebar = None
         # Lazy screen registry: key → widget instance (None until first visited)
         self._screen_widgets: dict[str, Optional[QWidget]] = {k: None for k, _ in _NAV_ITEMS}
         self._screen_idx: dict[str, int] = {}
@@ -706,6 +719,7 @@ class TheProjectWidget(QWidget):
         self.setStyleSheet(f'background-color: {_BG};')
         self._build_ui()
         self._setup_autosave()
+        self._setup_lock_heartbeat()
         on_language_changed(self._on_language_changed)
 
     # ── construction ──────────────────────────────────────────────────────────
@@ -940,6 +954,7 @@ class TheProjectWidget(QWidget):
             w.update_project_info(info)
         if w := self._screen_widgets.get('quality_control'):
             w.update_project_info(info)
+        self.project_info_changed.emit(info)
 
     def _push_validation_costs(self):
         ec = self._screen_widgets.get('estimated_cost')
@@ -1126,6 +1141,18 @@ class TheProjectWidget(QWidget):
         """Store the full TabState list so _save_project can embed viewer bundles."""
         self._viewer_tabs = list(tabs)
 
+    def set_technical_overview_refs(self, technical_overview, technical_sidebar) -> None:
+        """Store direct refs to the Technical Overview workspace so _save_project
+        can pull its current state, same as set_viewer_tabs does for the 3D viewer."""
+        self._technical_overview = technical_overview
+        self._technical_sidebar = technical_sidebar
+
+    def set_scale_refs(self, scale_canvas, scale_sidebar) -> None:
+        """Store direct refs to the Drawing Scale workspace so _save_project
+        can pull its current state, same as set_technical_overview_refs."""
+        self._scale_canvas = scale_canvas
+        self._scale_sidebar = scale_sidebar
+
     def show_qc_loading(self):
         """Show the loading overlay on the QC viewer area while a model is loading."""
         qc = self._screen_widgets.get('quality_control')
@@ -1166,11 +1193,34 @@ class TheProjectWidget(QWidget):
         # closed, not to the new one.
         self.clear_viewer_tabs.emit()
 
+        # Same for the Technical Overview workspace — it's now part of the
+        # saved project too, so it must reset along with everything else.
+        if self._technical_overview is not None and self._technical_sidebar is not None:
+            if hasattr(self._technical_overview, 'clear_all'):
+                self._technical_overview.clear_all()
+            if hasattr(self._technical_overview, 'canvas'):
+                self._technical_overview.canvas.clear_image()
+            if hasattr(self._technical_sidebar, 'reset'):
+                self._technical_sidebar.reset()
+
+        # Same for the Drawing Scale workspace.
+        if self._scale_canvas is not None and self._scale_sidebar is not None:
+            if hasattr(self._scale_canvas, 'reset_workspace'):
+                self._scale_canvas.reset_workspace()
+            if hasattr(self._scale_sidebar, 'reset'):
+                self._scale_sidebar.reset()
+
+        # Release this session's lock on whatever project is being closed —
+        # otherwise it stays marked as "open" until the app itself quits.
+        self.release_lock()
+
         self._project_path = None
         self._unsaved_changes = False
         self._project_password_hash = None
         self._created_by = None
         self._created_at = None
+        self._read_only = False
+        self._loaded_snapshot = None
         self._update_lock_btn()
         self._update_title()
 
@@ -1190,6 +1240,9 @@ class TheProjectWidget(QWidget):
             QMessageBox.critical(self, t('project.msg.open_failed'), t('project.msg.open_error').format(e=e))
 
     def _on_save_project(self):
+        if self._read_only:
+            self._warn_read_only()
+            return
         if not self._project_path:
             # Pass the bare stem (no extension) as the suggested filename —
             # Windows' native dialog appends the filter's ".lyns.pjt" itself,
@@ -1216,6 +1269,9 @@ class TheProjectWidget(QWidget):
         """Always prompt for a new file path and save there, regardless of
         whether the project already has one (unlike _on_save_project, which
         reuses the existing path once set)."""
+        if self._read_only:
+            self._warn_read_only()
+            return
         # Bare stem, same reasoning as _on_save_project above — an already-
         # saved project's path already ends in ".lyns.pjt", so it has to be
         # stripped before being offered back to the dialog as a suggestion.
@@ -1241,7 +1297,7 @@ class TheProjectWidget(QWidget):
 
     def _save_project(self, path: str):
         now = datetime.now(timezone.utc).isoformat()
-        user = getpass.getuser()
+        user = get_display_name()
         if self._created_by is None:
             self._created_by = user
         if self._created_at is None:
@@ -1275,11 +1331,75 @@ class TheProjectWidget(QWidget):
         # Bundle each viewer tab (model + annotations + drawings + texture) as base64
         data['viewer_tabs'] = self._bundle_viewer_tabs()
 
+        # Bundle the Technical Overview workspace (document + annotations + metadata)
+        data['technical_overview'] = self._bundle_technical_overview()
+
+        # Bundle the Drawing Scale workspace (source drawing + calibration/shapes)
+        data['drawing_scale'] = self._bundle_drawing_scale()
+
+        final_data = self._resolve_save_conflicts(path, data)
+        if final_data is None:
+            return  # user cancelled the conflict-resolution prompt — nothing written
+
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(final_data, f, indent=2, ensure_ascii=False)
+        self._loaded_snapshot = final_data
         self._unsaved_changes = False
         self._update_title()
+        from core.file_lock import refresh_lock
+        refresh_lock(path)
         logger.info(f'Project saved to {path} by {user}')
+
+    def _resolve_save_conflicts(self, path: str, local_data: dict) -> Optional[dict]:
+        """Re-reads what's actually on disk and three-way merges it with
+        local_data if someone else saved since this session last touched
+        the file. Returns the data to write, or None if the user cancelled
+        a conflict prompt (nothing should be written in that case).
+        Returns local_data unchanged — today's plain-overwrite behavior,
+        zero extra cost — whenever there's nothing to merge against."""
+        if self._loaded_snapshot is None or not os.path.exists(path):
+            return local_data  # first save to this path, or brand new file — nothing to diff
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                remote_data = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f'_resolve_save_conflicts: could not re-read {path}, overwriting: {e}')
+            return local_data
+
+        if remote_data == self._loaded_snapshot:
+            return local_data  # nobody else touched it since we loaded/last saved
+
+        from core.project_merge import merge_project, field_conflicts_only
+        merged, conflicts = merge_project(self._loaded_snapshot, local_data, remote_data)
+
+        interactive = field_conflicts_only(conflicts)
+        if interactive:
+            from ui.merge_conflict_dialog import MergeConflictDialog
+            dlg = MergeConflictDialog(self, interactive)
+            if dlg.exec_() != QDialog.Accepted:
+                return None  # cancelled — abort this save entirely, try again later
+            dlg.apply_resolutions()
+
+        # Push any remotely-changed sections back into whichever screens are
+        # currently live, so the visible UI doesn't silently diverge from
+        # what was just written (e.g. a to-do task someone else added must
+        # actually appear on the still-open To-Do screen, not just exist in
+        # the file). Scoped to the Project's own nav screens + info card —
+        # viewer_tabs/technical_overview/drawing_scale aren't live-refreshed
+        # here, since pushing those back means reloading 3D/document
+        # content mid-session, a heavier operation than this safety net
+        # needs to solve right now.
+        self._apply_merged_data_to_screens(merged)
+
+        return merged
+
+    def _apply_merged_data_to_screens(self, merged: dict) -> None:
+        self._nav.set_info_data(merged.get('project_info', {}))
+        for key, _ in _NAV_ITEMS:
+            w = self._screen_widgets.get(key)
+            if w is not None and hasattr(w, 'set_data'):
+                w.set_data(merged.get(key, {}))
 
     def _bundle_viewer_tabs(self) -> list:
         """For each viewer tab with a loaded mesh, create a .lyns bundle and return as base64 entries."""
@@ -1352,6 +1472,121 @@ class TheProjectWidget(QWidget):
                     pass
         return result
 
+    def _bundle_technical_overview(self) -> Optional[dict]:
+        """Bundle the Technical Overview workspace (document + annotations +
+        metadata) as a base64 .ecto entry, mirroring _bundle_viewer_tabs.
+        Returns None if there's no document loaded (nothing to save)."""
+        to = self._technical_overview
+        ts = self._technical_sidebar
+        if to is None or ts is None or not hasattr(to, 'get_document_path'):
+            return None
+        doc_path = to.get_document_path()
+        if not doc_path:
+            return None
+        from core.ecto_format import EctoFormat
+        annotations = []
+        if hasattr(to, 'get_annotations_data'):
+            try:
+                annotations = to.get_annotations_data() or []
+            except Exception:
+                annotations = []
+        metadata = ts.get_metadata() if hasattr(ts, 'get_metadata') else {}
+        fd, tmp_path = tempfile.mkstemp(suffix='.ecto')
+        os.close(fd)
+        try:
+            success, msg = EctoFormat.export_technical(
+                document_path=doc_path,
+                annotations=annotations,
+                metadata=metadata,
+                output_path=tmp_path,
+            )
+            if not success:
+                logger.warning(f'_bundle_technical_overview: export failed: {msg}')
+                return None
+            bundle_bytes = Path(tmp_path).read_bytes()
+            return {'bundle_b64': base64.b64encode(bundle_bytes).decode()}
+        except Exception as e:
+            logger.warning(f'_bundle_technical_overview: could not bundle: {e}')
+            return None
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+    def _restore_technical_overview(self, entry: Optional[dict]) -> None:
+        """Decode the base64 .ecto entry and emit restore_technical_overview
+        for the main window to apply, mirroring _restore_viewer_tabs."""
+        if not entry:
+            return
+        b64 = entry.get('bundle_b64', '')
+        if not b64:
+            return
+        fd, tmp_path = tempfile.mkstemp(suffix='.ecto')
+        os.close(fd)
+        try:
+            Path(tmp_path).write_bytes(base64.b64decode(b64))
+            self.restore_technical_overview.emit(tmp_path)
+        except Exception as e:
+            logger.warning(f'_restore_technical_overview: could not restore: {e}')
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+    def _bundle_drawing_scale(self) -> Optional[dict]:
+        """Bundle the Drawing Scale workspace (source drawing file + calibration/
+        border/reference-line/shape state) for project save. Returns None if
+        there's no drawing loaded (nothing to save)."""
+        sc = self._scale_canvas
+        if sc is None or not hasattr(sc, 'get_source_path'):
+            return None
+        src_path = sc.get_source_path()
+        if not src_path or not os.path.exists(src_path):
+            return None
+        try:
+            file_bytes = Path(src_path).read_bytes()
+        except OSError as e:
+            logger.warning(f'_bundle_drawing_scale: could not read source file: {e}')
+            return None
+        return {
+            'file_name': os.path.basename(src_path),
+            'file_ext': Path(src_path).suffix.lower(),
+            'file_b64': base64.b64encode(file_bytes).decode(),
+            'state': sc.get_state(),
+        }
+
+    def _restore_drawing_scale(self, entry: Optional[dict]) -> None:
+        """Decode the bundled source file and emit restore_drawing_scale for
+        the main window to apply, mirroring _restore_technical_overview.
+
+        Unlike _restore_viewer_tabs/_restore_technical_overview (which extract
+        into their own throwaway/self-managed temp storage), ScaleCanvas keeps
+        pointing at this exact tmp_path as its "source file" after loading it
+        (get_source_path() returns it), and a later save re-reads that path —
+        so the temp file must be left in place rather than deleted here. The
+        main window takes ownership of it and cleans it up on app close, same
+        as the Technical Overview's _tech_ecto_temp_dir.
+        """
+        if not entry:
+            return
+        b64 = entry.get('file_b64', '')
+        if not b64:
+            return
+        ext = entry.get('file_ext') or '.png'
+        fd, tmp_path = tempfile.mkstemp(suffix=ext)
+        os.close(fd)
+        try:
+            Path(tmp_path).write_bytes(base64.b64decode(b64))
+            self.restore_drawing_scale.emit(tmp_path, entry.get('state', {}))
+        except Exception as e:
+            logger.warning(f'_restore_drawing_scale: could not restore: {e}')
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
     def _restore_viewer_tabs(self, viewer_tabs: list) -> None:
         """Decode base64 .lyns bundles and emit restore_viewer_tab for each."""
         for entry in viewer_tabs:
@@ -1387,6 +1622,26 @@ class TheProjectWidget(QWidget):
             if dlg.exec_() != QDialog.Accepted:
                 return  # user cancelled — do not load
 
+        # File lock — is someone else already editing this project?
+        from core.file_lock import check_lock_status, read_lock, acquire_lock, HELD_ACTIVE, HELD_STALE
+        lock_status = check_lock_status(path)
+        opening_read_only = False
+        if lock_status == HELD_STALE:
+            if not self._confirm_lock_override(read_lock(path)):
+                return
+            acquire_lock(path, force=True)
+        elif lock_status == HELD_ACTIVE:
+            if not self._confirm_read_only_open(read_lock(path)):
+                return
+            opening_read_only = True
+        else:
+            acquire_lock(path)
+
+        # Committed to opening `path` now — release whatever this session
+        # previously had open (if it's a different project).
+        if self._project_path and self._project_path != path:
+            self.release_lock()
+
         self._nav.set_info_data(data.get('project_info', {}))
         for key, _ in _NAV_ITEMS:
             screen_data = data.get(key)
@@ -1404,14 +1659,23 @@ class TheProjectWidget(QWidget):
         # Restore viewer tabs — decode each .lyns bundle to a temp file and open in viewer
         self._restore_viewer_tabs(data.get('viewer_tabs', []))
 
+        # Restore the Technical Overview workspace, if the save included one
+        self._restore_technical_overview(data.get('technical_overview'))
+
+        # Restore the Drawing Scale workspace, if the save included one
+        self._restore_drawing_scale(data.get('drawing_scale'))
+
         self._project_path = path
         self._project_password_hash = stored_hash
         self._created_by = data.get('created_by')
         self._created_at = data.get('created_at')
+        self._read_only = opening_read_only
+        self._loaded_snapshot = data  # merge base for the next save
         self._unsaved_changes = False
         self._update_lock_btn()
         self._update_title()
-        logger.info(f'Project loaded from {path}')
+        self._update_read_only_ui()
+        logger.info(f'Project loaded from {path} (read_only={opening_read_only})')
 
     def _update_lock_btn(self):
         """Update the password button appearance to reflect the current lock state."""
@@ -1426,6 +1690,9 @@ class TheProjectWidget(QWidget):
 
     def _on_password_btn(self):
         """Set, change, or remove the project password."""
+        if self._read_only:
+            self._warn_read_only()
+            return
         from ui.passcode_dialog import PasscodeDialog
 
         if self._project_password_hash is None:
@@ -1484,6 +1751,69 @@ class TheProjectWidget(QWidget):
         dlg.exec_()
         return result['discard']
 
+    @staticmethod
+    def _format_lock_time(iso_ts: str) -> str:
+        try:
+            dt = datetime.fromisoformat(iso_ts)
+        except (TypeError, ValueError):
+            return iso_ts or ''
+        return dt.astimezone().strftime('%Y-%m-%d %H:%M')
+
+    def _confirm_lock_override(self, lock_data: Optional[dict]) -> bool:
+        """Lock looks abandoned (stale heartbeat) — Override or Cancel.
+        Distinct copy/color from _confirm_read_only_open so the two can't be
+        confused: this one offers an override, the active-lock one doesn't."""
+        from ui.modal_utils import MessageModal, BaseModal
+        user = (lock_data or {}).get('user', '?')
+        when = self._format_lock_time((lock_data or {}).get('last_active_at', ''))
+        dlg = MessageModal(
+            self, t('project.msg.lock_stale_title'),
+            t('project.msg.lock_stale_body').format(user=user, time=when),
+            theme=BaseModal.LIGHT,
+            primary_text=t('project.msg.lock_override'),
+            secondary_text=t('common.cancel'),
+        )
+        result = {'override': False}
+        dlg.primary_btn.clicked.connect(lambda: (result.update(override=True), dlg.accept()))
+        if dlg.secondary_btn:
+            dlg.secondary_btn.clicked.connect(lambda: (result.update(override=False), dlg.reject()))
+        dlg.exec_()
+        return result['override']
+
+    def _confirm_read_only_open(self, lock_data: Optional[dict]) -> bool:
+        """Lock is actively held by someone else — Open Read-Only or Cancel.
+        No override offered here (unlike the stale case) — that's the whole
+        point of the lock while someone is genuinely still editing."""
+        from ui.modal_utils import MessageModal, BaseModal
+        user = (lock_data or {}).get('user', '?')
+        when = self._format_lock_time((lock_data or {}).get('acquired_at', ''))
+        dlg = MessageModal(
+            self, t('project.msg.lock_active_title'),
+            t('project.msg.lock_active_body').format(user=user, time=when),
+            theme=BaseModal.LIGHT,
+            primary_text=t('project.msg.lock_read_only'),
+            secondary_text=t('common.cancel'),
+        )
+        result = {'read_only': False}
+        dlg.primary_btn.clicked.connect(lambda: (result.update(read_only=True), dlg.accept()))
+        if dlg.secondary_btn:
+            dlg.secondary_btn.clicked.connect(lambda: (result.update(read_only=False), dlg.reject()))
+        dlg.exec_()
+        return result['read_only']
+
+    def _update_read_only_ui(self):
+        """Grey out/disable the write affordances that a read-only-opened
+        project must not allow: saving and changing project protection."""
+        read_only = self._read_only
+        if hasattr(self, '_save_btn'):
+            self._save_btn.setEnabled(not read_only)
+        if hasattr(self, '_lock_btn'):
+            self._lock_btn.setEnabled(not read_only)
+
+    def _warn_read_only(self):
+        from ui.modal_utils import show_message_dialog
+        show_message_dialog(self, t('project.msg.read_only_title'), t('project.msg.read_only_body'))
+
     def _update_title(self):
         if self._project_path:
             p = Path(self._project_path)
@@ -1522,6 +1852,30 @@ class TheProjectWidget(QWidget):
 
     def mark_unsaved(self):
         self._unsaved_changes = True
+
+    # ── file lock ─────────────────────────────────────────────────────────────
+
+    def _setup_lock_heartbeat(self):
+        """Refresh this session's lock every few minutes while a project is
+        open, independent of Save — an active-but-not-saving session (e.g.
+        just reading/annotating) must not look abandoned to a colleague."""
+        self._lock_heartbeat_timer = QTimer(self)
+        self._lock_heartbeat_timer.setInterval(3 * 60_000)
+        self._lock_heartbeat_timer.timeout.connect(self._lock_heartbeat)
+        self._lock_heartbeat_timer.start()
+
+    def _lock_heartbeat(self):
+        if self._project_path and not self._read_only:
+            from core.file_lock import refresh_lock
+            refresh_lock(self._project_path)
+
+    def release_lock(self):
+        """Release this session's lock on whatever project is currently
+        open, if any. Safe to call even if nothing is open or the project
+        was opened read-only (no-ops in both cases)."""
+        if self._project_path and not self._read_only:
+            from core.file_lock import release_lock as _release_lock
+            _release_lock(self._project_path)
 
     def closeEvent(self, event):
         super().closeEvent(event)
