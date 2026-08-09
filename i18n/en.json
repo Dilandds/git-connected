@@ -557,7 +557,11 @@
       "conflict_intro": "Someone else saved changes to this project since you opened it. Everything that doesn't overlap was combined automatically — for the fields below, pick which version to keep.",
       "conflict_apply": "Save With These Choices",
       "conflict_keep_mine": "Keep Mine: {value}",
-      "conflict_keep_theirs": "Keep Theirs: {value}"
+      "conflict_keep_theirs": "Keep Theirs: {value}",
+      "conflict_keep_mine_generic": "Keep Mine",
+      "conflict_keep_theirs_generic": "Keep Theirs",
+      "conflict_whole_section": "{section} has conflicting changes",
+      "conflict_also_affects": "Also updates: {sections}"
     },
     "brief": {
       "title": "Project Brief",

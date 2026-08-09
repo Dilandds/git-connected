@@ -1597,7 +1597,7 @@ class SidebarPanel(QWidget):
         card_layout.addWidget(self.annotation_count_label)
         
         # Export button
-        self.export_annotations_btn = QPushButton("Export as .ecto")
+        self.export_annotations_btn = QPushButton(t("sidebar.export_ecto_btn"))
         self.export_annotations_btn.setObjectName("exportAnnotationsBtn")
         self.export_annotations_btn.setMinimumHeight(44)
         self.export_annotations_btn.setEnabled(False)

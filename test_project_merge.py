@@ -10,7 +10,7 @@ Usage:
 from core.project_merge import (
     Conflict, merge_dict_fields, merge_list_by_id, merge_nested_by_path,
     merge_list_add_only, detect_id_collision, merge_section, merge_project,
-    field_conflicts_only,
+    field_conflicts_only, fold_linked_conflicts,
 )
 
 _passed = 0
@@ -271,6 +271,148 @@ def test_merge_project_end_to_end():
     check("metadata not merged by merge_project (caller's job)", 'last_saved_by' in merged)
 
 
+def test_quality_control_merge():
+    print("test_quality_control_merge")
+    base = {
+        'inspection_date': '2026-01-01', 'inspected_by': '', 'comments': '',
+        'inspection_images': [], 'image_annotations': [],
+        'logo_data': '', 'designation': 'Original', 'reference_number': '',
+        'manufacturer': '', 'inspection_due_date': '', 'overall_status': '',
+        'waived_by': '', 'control_points': [{'id': 1, 'name': 'CP1', 'status': 'to_check',
+                                              'comment': '', 'annotation_id': None, 'color': ''}],
+    }
+    local = dict(base)
+    local['inspected_by'] = 'Alice'
+    local['control_points'] = base['control_points'] + [
+        {'id': 2, 'name': 'CP2 local', 'status': 'to_check', 'comment': '', 'annotation_id': None, 'color': ''}
+    ]
+    remote = dict(base)
+    remote['reference_number'] = 'REF-99'
+
+    merged, conflicts = merge_section('quality_control', base, local, remote)
+    check("no conflicts (different fields changed)", conflicts == [])
+    check("local's inspected_by kept", merged['inspected_by'] == 'Alice')
+    check("remote's reference_number kept", merged['reference_number'] == 'REF-99')
+    check("both control points present", {cp['id'] for cp in merged['control_points']} == {1, 2})
+
+    # same field, different values -> real conflict
+    remote2 = dict(base)
+    remote2['designation'] = 'Remote designation'
+    local2 = dict(base)
+    local2['designation'] = 'Local designation'
+    merged2, conflicts2 = merge_section('quality_control', base, local2, remote2)
+    check("designation conflict detected", len(conflicts2) == 1 and conflicts2[0].field == 'designation')
+
+
+def test_brief_merge():
+    print("test_brief_merge")
+    base = {'product_name': 'Ring', 'reference': 'R1', 'techniques': ['Casting'], 'notes': ''}
+    local = dict(base)
+    local['notes'] = 'Local note'
+    remote = dict(base)
+    remote['techniques'] = ['Casting', 'Polishing']
+
+    merged, conflicts = merge_section('brief', base, local, remote)
+    check("no conflicts (different fields changed)", conflicts == [])
+    check("local's notes kept", merged['notes'] == 'Local note')
+    check("remote's techniques list kept", merged['techniques'] == ['Casting', 'Polishing'])
+
+    # same id-less list changed differently on both sides -> conflict, whole list
+    local2 = dict(base)
+    local2['techniques'] = ['Casting', 'Local addition']
+    remote2 = dict(base)
+    remote2['techniques'] = ['Casting', 'Remote addition']
+    merged2, conflicts2 = merge_section('brief', base, local2, remote2)
+    check("techniques conflict detected", len(conflicts2) == 1 and conflicts2[0].field == 'techniques')
+
+
+def test_drawing_scale_merge():
+    print("test_drawing_scale_merge")
+    base = {
+        'file_name': 'doc.pdf', 'file_ext': '.pdf', 'file_b64': 'AAA',
+        'state': {'unit': 'cm', 'scale_ratio': 1.0, 'arrows': []},
+    }
+    local = dict(base)
+    local['state'] = dict(base['state']); local['state']['unit'] = 'mm'
+    remote = dict(base)
+    remote['state'] = dict(base['state']); remote['state']['scale_ratio'] = 2.0
+
+    merged, conflicts = merge_section('drawing_scale', base, local, remote)
+    check("no conflicts (different state fields changed)", conflicts == [])
+    check("local's unit kept", merged['state']['unit'] == 'mm')
+    check("remote's scale_ratio kept", merged['state']['scale_ratio'] == 2.0)
+
+    # both change 'unit' differently -> isolated conflict, not the whole workspace
+    local2 = dict(base); local2['state'] = dict(base['state']); local2['state']['unit'] = 'mm'
+    remote2 = dict(base); remote2['state'] = dict(base['state']); remote2['state']['unit'] = 'inches'
+    merged2, conflicts2 = merge_section('drawing_scale', base, local2, remote2)
+    check("unit conflict isolated to state.unit, not whole section",
+          len(conflicts2) == 1 and conflicts2[0].field == 'unit' and conflicts2[0].section == 'drawing_scale')
+
+
+def test_path_labels_resolve_item_names():
+    print("test_path_labels_resolve_item_names")
+    base = {'tasks': [{'id': 'a', 'title': 'Buy fabric', 'notes': ''}]}
+    local = {'tasks': [{'id': 'a', 'title': 'Buy fabric', 'notes': 'Local note'}]}
+    remote = {'tasks': [{'id': 'a', 'title': 'Buy fabric', 'notes': 'Remote note'}]}
+    merged, conflicts = merge_section('todo', base, local, remote)
+    check("one conflict", len(conflicts) == 1)
+    check("path_labels resolves to the task's own title, not its id",
+          conflicts[0].path_labels == ('Buy fabric',))
+
+    # item with no name/title field at all falls back to a formatted id
+    base2 = {'reports': [{'id': 7, 'followup': ''}]}  # report page shape has no name field
+    # (use merge_list_by_id directly since this isn't a full report section)
+    merged2, conflicts2 = merge_list_by_id(
+        base2['reports'], [{'id': 7, 'followup': 'local'}], [{'id': 7, 'followup': 'remote'}],
+        id_key='id', section='report', path=('pages',),
+    )
+    check("no-name item falls back to formatted id", conflicts2[0].path_labels == ('#7',))
+
+
+def test_fold_linked_conflicts():
+    print("test_fold_linked_conflicts")
+    base = {
+        'project_info': {'title': 'Original Title'},
+        'report': {'reports': [{'id': 1, 'project_name': 'Original Title'}]},
+        'quality_control': {'designation': 'Original Title'},
+    }
+    # Both sides change the title the same way everywhere EXCEPT quality_control,
+    # which only diverged locally (still equals the source's local value, so it
+    # should still fold — the fold criterion is "matches the source conflict's
+    # local/remote", not "differs from base").
+    local = {
+        'project_info': {'title': 'Local Title'},
+        'report': {'reports': [{'id': 1, 'project_name': 'Local Title'}]},
+        'quality_control': {'designation': 'Local Title'},
+    }
+    remote = {
+        'project_info': {'title': 'Remote Title'},
+        'report': {'reports': [{'id': 1, 'project_name': 'Remote Title'}]},
+        'quality_control': {'designation': 'Someone Customized This'},  # diverged independently
+    }
+    merged, conflicts = merge_project(base, local, remote)
+    folded = fold_linked_conflicts(conflicts)
+    interactive = field_conflicts_only(folded)
+
+    title_conflict = next(c for c in interactive if c.section == 'project_info' and c.field == 'title')
+    check("title conflict folds in report's project_name (still a straight mirror)",
+          any(f.section == 'report' and f.field == 'project_name' for f in title_conflict.also_affects))
+    check("quality_control's independently-diverged designation is NOT folded in",
+          not any(f.section == 'quality_control' for f in title_conflict.also_affects))
+    check("quality_control's designation conflict still shown on its own",
+          any(c.section == 'quality_control' and c.field == 'designation' for c in interactive))
+    check("folded conflicts don't ALSO appear as their own top-level rows",
+          not any(c.section == 'report' and c.field == 'project_name' for c in interactive))
+
+    # Resolving the primary should resolve its folded followers too
+    report_follower = next(f for f in title_conflict.also_affects if f.section == 'report')
+    title_conflict.resolve('Chosen Title')
+    report_follower.resolve('Chosen Title')
+    check("primary resolution applied", merged['project_info']['title'] == 'Chosen Title')
+    check("folded follower resolution applied", merged['report']['reports'][0]['project_name'] == 'Chosen Title')
+
+
 def main():
     tests = [
         test_no_conflict_both_sides_add,
@@ -287,6 +429,11 @@ def main():
         test_deleted_conflicts_excluded_from_interactive_list,
         test_report_page_photo_blocks_opaque_merge,
         test_merge_project_end_to_end,
+        test_quality_control_merge,
+        test_brief_merge,
+        test_drawing_scale_merge,
+        test_path_labels_resolve_item_names,
+        test_fold_linked_conflicts,
     ]
     for t in tests:
         t()

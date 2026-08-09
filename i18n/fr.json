@@ -557,7 +557,11 @@
       "conflict_intro": "Une autre personne a enregistré des modifications sur ce projet depuis que vous l'avez ouvert. Tout ce qui ne se chevauche pas a été combiné automatiquement — pour les champs ci-dessous, choisissez la version à conserver.",
       "conflict_apply": "Enregistrer avec ces choix",
       "conflict_keep_mine": "Garder le mien : {value}",
-      "conflict_keep_theirs": "Garder le sien : {value}"
+      "conflict_keep_theirs": "Garder le sien : {value}",
+      "conflict_keep_mine_generic": "Garder le mien",
+      "conflict_keep_theirs_generic": "Garder le sien",
+      "conflict_whole_section": "{section} a des modifications en conflit",
+      "conflict_also_affects": "Met aussi à jour : {sections}"
     },
     "brief": {
       "title": "BRIEF DU PROJET",

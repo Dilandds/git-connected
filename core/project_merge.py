@@ -51,12 +51,22 @@ class Conflict:
     local_value: Any
     remote_value: Any
     resolve: Optional[Callable[[Any], None]] = field(default=None, compare=False, repr=False)
+    # Human-readable version of `path` (item names instead of raw ids), where
+    # cheaply available — e.g. a to-do task's own title instead of its uuid.
+    # Falls back to '#<id>' per segment when no obvious name field exists.
+    path_labels: Tuple[str, ...] = field(default_factory=tuple, compare=False)
+    # Other Conflicts that are just mirrored copies of THIS one (see
+    # core.linked_fields / fold_linked_conflicts) — populated by
+    # fold_linked_conflicts, empty otherwise. The caller resolves these
+    # together with their parent instead of asking about each separately.
+    also_affects: List['Conflict'] = field(default_factory=list, compare=False, repr=False)
 
 
 # ── generic three-way scalar merge ──────────────────────────────────────────
 
 def _merge_scalar(base_v, local_v, remote_v, section: str, path: tuple, field_name: str,
-                   *, target: Optional[dict] = None, target_key: Optional[str] = None):
+                   *, target: Optional[dict] = None, target_key: Optional[str] = None,
+                   path_labels: tuple = ()):
     """Three-way merge of a single value. Returns (value, [Conflict]).
     If target/target_key are given, a resulting Conflict's resolve()
     writes the chosen value straight into target[target_key]."""
@@ -67,7 +77,8 @@ def _merge_scalar(base_v, local_v, remote_v, section: str, path: tuple, field_na
     if remote_v == base_v:
         return local_v, []             # only local changed it
     # changed differently on both sides
-    conflict = Conflict(section, path, field_name, local_value=local_v, remote_value=remote_v)
+    conflict = Conflict(section, path, field_name, local_value=local_v, remote_value=remote_v,
+                         path_labels=path_labels)
     if target is not None and target_key is not None:
         conflict.resolve = lambda v, _t=target, _k=target_key: _t.__setitem__(_k, v)
     return remote_v, [conflict]
@@ -86,7 +97,7 @@ def merge_whole_section(base, local, remote, section: str,
 # ── field-based dict merge ──────────────────────────────────────────────────
 
 def merge_dict_fields(base: Optional[dict], local: Optional[dict], remote: Optional[dict],
-                       section: str = '', path: tuple = (),
+                       section: str = '', path: tuple = (), path_labels: tuple = (),
                        skip_keys: Sequence[str] = ()) -> Tuple[dict, List[Conflict]]:
     """Three-way merge of a flat dict, field by field. `skip_keys` lets a
     caller exclude keys it's merging separately (e.g. a nested id-keyed
@@ -108,7 +119,7 @@ def merge_dict_fields(base: Optional[dict], local: Optional[dict], remote: Optio
             continue
         value, key_conflicts = _merge_scalar(
             base.get(key, _SENTINEL), local.get(key, _SENTINEL), remote.get(key, _SENTINEL),
-            section, path, key, target=merged, target_key=key,
+            section, path, key, target=merged, target_key=key, path_labels=path_labels,
         )
         if value is not _SENTINEL:
             merged[key] = value
@@ -150,9 +161,25 @@ def _index_by_id(items: List[dict], id_key: str) -> Dict[Any, dict]:
     return {item[id_key]: item for item in items if id_key in item}
 
 
+def _item_label(item_id, *dicts: dict) -> str:
+    """Best-effort human label for an item, tried across whichever of
+    base/local/remote dicts have it (in that preference order) — 'name'
+    covers timeline/traceability/quality_control items, 'title' covers
+    to-do tasks, 'project_name' covers report entries. Falls back to the
+    raw id (formatted, not bare) when none of those exist, e.g. report
+    pages have no name field at all."""
+    for d in dicts:
+        for key in ('name', 'title', 'project_name'):
+            val = (d or {}).get(key)
+            if val:
+                return str(val)
+    return f'#{item_id}'
+
+
 def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict],
                           id_key: str = 'id', child_keys: Sequence[str] = (),
-                          section: str = '', path: tuple = ()) -> Tuple[List[dict], List[Conflict]]:
+                          section: str = '', path: tuple = (),
+                          path_labels: tuple = ()) -> Tuple[List[dict], List[Conflict]]:
     """Three-way merge of a list of id-keyed dicts. If child_keys is given,
     child_keys[0] names a nested id-keyed list inside each item that gets
     recursively merged the same way (using child_keys[1:] at that level) —
@@ -235,15 +262,18 @@ def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict]
         # Present on at least local + remote (possibly base too) — field-merge,
         # recursing into the nested child list separately if this level has one.
         b, l, r = base_by_id.get(item_id, {}), local_by_id[item_id], remote_by_id[item_id]
+        item_path_labels = path_labels + (_item_label(item_id, l, r, b),)
         skip = (child_key,) if child_key else ()
-        merged_item, field_conflicts = merge_dict_fields(b, l, r, section=section, path=item_path, skip_keys=skip)
+        merged_item, field_conflicts = merge_dict_fields(
+            b, l, r, section=section, path=item_path, path_labels=item_path_labels, skip_keys=skip,
+        )
         conflicts.extend(field_conflicts)
 
         if child_key:
             nested_merged, nested_conflicts = merge_nested_by_path(
                 b.get(child_key, []), l.get(child_key, []), r.get(child_key, []),
                 id_key=id_key, child_keys=grandchild_keys,
-                section=section, path=item_path + (child_key,),
+                section=section, path=item_path + (child_key,), path_labels=item_path_labels,
             )
             merged_item[child_key] = nested_merged
             conflicts.extend(nested_conflicts)
@@ -254,9 +284,11 @@ def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict]
 
 
 def merge_list_by_id(base: List[dict], local: List[dict], remote: List[dict],
-                      id_key: str = 'id', section: str = '', path: tuple = ()) -> Tuple[List[dict], List[Conflict]]:
+                      id_key: str = 'id', section: str = '', path: tuple = (),
+                      path_labels: tuple = ()) -> Tuple[List[dict], List[Conflict]]:
     """Three-way merge of a flat list of id-keyed dicts (no nesting)."""
-    return merge_nested_by_path(base, local, remote, id_key=id_key, child_keys=(), section=section, path=path)
+    return merge_nested_by_path(base, local, remote, id_key=id_key, child_keys=(), section=section,
+                                 path=path, path_labels=path_labels)
 
 
 def merge_list_add_only(local: List[Any], remote: List[Any]) -> List[Any]:
@@ -342,18 +374,19 @@ def _merge_traceability(base, local, remote):
 def _merge_report(base, local, remote):
     base, local, remote = base or {}, local or {}, remote or {}
 
-    def _merge_report_item(b, l, r, path):
+    def _merge_report_item(b, l, r, path, path_labels=()):
         # pages need id-based merging; company_extras/partner_extras/attendees
         # have no id field at all, so they're merged as opaque values below
         # (same reasoning as photo_blocks inside pages — handled for free by
         # merge_dict_fields treating an un-skipped list value as one opaque
         # field, replaced wholesale if only one side changed it).
         skip = ('pages', 'company_extras', 'partner_extras', 'attendees')
-        merged, conflicts = merge_dict_fields(b, l, r, section='report', path=path, skip_keys=skip)
+        merged, conflicts = merge_dict_fields(b, l, r, section='report', path=path,
+                                               path_labels=path_labels, skip_keys=skip)
 
         pages, page_conflicts = merge_list_by_id(
             b.get('pages', []), l.get('pages', []), r.get('pages', []),
-            id_key='id', section='report', path=path + ('pages',),
+            id_key='id', section='report', path=path + ('pages',), path_labels=path_labels,
         )
         merged['pages'] = pages
         conflicts += page_conflicts
@@ -361,7 +394,7 @@ def _merge_report(base, local, remote):
         for key in ('company_extras', 'partner_extras', 'attendees'):
             value, key_conflicts = _merge_scalar(
                 b.get(key), l.get(key), r.get(key), 'report', path, key,
-                target=merged, target_key=key,
+                target=merged, target_key=key, path_labels=path_labels,
             )
             merged[key] = value
             conflicts += key_conflicts
@@ -422,7 +455,8 @@ def _merge_report(base, local, remote):
             continue
 
         b, l, r = base_by_id.get(rid, {}), local_by_id[rid], remote_by_id[rid]
-        merged_report, item_conflicts = _merge_report_item(b, l, r, r_path)
+        r_path_labels = (_item_label(rid, l, r, b),)
+        merged_report, item_conflicts = _merge_report_item(b, l, r, r_path, r_path_labels)
         conflicts += item_conflicts
         reports.append(merged_report)
 
@@ -440,6 +474,51 @@ def _merge_viewer_tabs(base, local, remote):
     return merge_list_add_only(local, remote), []
 
 
+def _merge_quality_control(base, local, remote):
+    base, local, remote = base or {}, local or {}, remote or {}
+    # inspection_images/image_annotations have no id field — left un-skipped,
+    # they fall through merge_dict_fields' generic opaque-list handling
+    # (same treatment as report's photo_blocks: whole-list-replace-if-only-
+    # one-side-changed, conflict only if both changed it differently).
+    skip = ('control_points',)
+    merged, conflicts = merge_dict_fields(base, local, remote, section='quality_control', path=(), skip_keys=skip)
+    control_points, cp_conflicts = merge_list_by_id(
+        base.get('control_points', []), local.get('control_points', []), remote.get('control_points', []),
+        id_key='id', section='quality_control', path=('control_points',),
+    )
+    merged['control_points'] = control_points
+    conflicts += cp_conflicts
+    return merged, conflicts
+
+
+def _merge_brief(base, local, remote):
+    # Brief.get_data() is already one flat dict (every sub-card's fields
+    # merged together with dict.update()) with no id-keyed nested lists —
+    # techniques/watchpoints/photo_b64s/components are all id-less lists
+    # that correctly fall through to the same opaque whole-value handling
+    # used for report's company_extras/attendees. Plain field merge covers
+    # the whole section, no skip_keys needed.
+    return merge_dict_fields(base, local, remote, section='brief', path=())
+
+
+def _merge_drawing_scale(base, local, remote):
+    base, local, remote = base or {}, local or {}, remote or {}
+    # The file itself (file_name/file_ext/file_b64) is a real document, not
+    # metadata — opaque is the honest treatment, same as technical_overview.
+    # `state` (calibration/borders/shapes — see ui/scale_canvas.py's
+    # ScaleCanvas.get_state()) is field-merged separately so a conflict
+    # there isolates to "the calibration" instead of the whole workspace.
+    merged, conflicts = merge_dict_fields(base, local, remote, section='drawing_scale', path=(),
+                                           skip_keys=('state',))
+    state, state_conflicts = merge_dict_fields(
+        base.get('state', {}), local.get('state', {}), remote.get('state', {}),
+        section='drawing_scale', path=('state',),
+    )
+    merged['state'] = state
+    conflicts += state_conflicts
+    return merged, conflicts
+
+
 _SECTION_MERGERS = {
     'todo': _merge_todo,
     'timeline': _merge_timeline,
@@ -447,12 +526,18 @@ _SECTION_MERGERS = {
     'traceability': _merge_traceability,
     'report': _merge_report,
     'viewer_tabs': _merge_viewer_tabs,
+    'quality_control': _merge_quality_control,
+    'brief': _merge_brief,
+    'drawing_scale': _merge_drawing_scale,
 }
 
-# Sections that are single opaque blobs (not lists) — whole-section
-# replace-if-differs. technical_overview/drawing_scale by explicit design
-# decision; everything else not yet audited defaults here too, so adding
-# real support for one later is a _SECTION_MERGERS entry, not new engine code.
+# Any section not in _SECTION_MERGERS falls back to whole-section
+# replace-if-differs (merge_section, below). technical_overview stays there
+# by explicit design decision — it's an opaque zip blob (document +
+# annotations + metadata bundled together), not something to field-merge
+# without restructuring that save format. Everything else not yet audited
+# defaults here too, so adding real support for one later is a
+# _SECTION_MERGERS entry, not new engine code.
 
 
 def merge_section(section_name: str, base, local, remote,
@@ -483,6 +568,51 @@ def merge_project(base: dict, local: dict, remote: dict) -> Tuple[dict, List[Con
         all_conflicts.extend(conflicts)
 
     return merged, all_conflicts
+
+
+def fold_linked_conflicts(conflicts: List[Conflict]) -> List[Conflict]:
+    """Collapse conflicts on fields that are just auto-filled mirrors of an
+    already-conflicting source field (see core.linked_fields.LINKED_FIELDS)
+    into the source conflict's `also_affects` list, so the caller shows one
+    prompt instead of several for what's really a single edit.
+
+    A destination conflict only folds in when its local_value/remote_value
+    EXACTLY match the source conflict's — i.e. it's still a straight
+    mirror, nobody customized it independently. A destination that doesn't
+    match is left as its own separate conflict; this function never
+    silently overwrites or hides a genuinely independent edit.
+
+    Safe to call on any conflict list, including ones with no linked
+    fields present — it's a no-op fold in that case."""
+    from core.linked_fields import LINKED_FIELDS
+
+    # First pass: decide which conflicts fold into which source, without
+    # touching the output list yet — `conflicts` comes from merge_project's
+    # set-keyed iteration over section names, so its order isn't
+    # guaranteed; building the result incrementally in a single pass would
+    # make the outcome depend on whether a destination happens to be
+    # visited before or after its source.
+    folded_into: Dict[int, Conflict] = {}  # id(destination conflict) -> its source conflict
+    for source in conflicts:
+        destinations = LINKED_FIELDS.get((source.section, source.field))
+        if not destinations:
+            continue
+        for other in conflicts:
+            if other is source or id(other) in folded_into:
+                continue
+            if (other.section, other.field) in destinations \
+                    and other.local_value == source.local_value \
+                    and other.remote_value == source.remote_value:
+                folded_into[id(other)] = source
+
+    result = []
+    for c in conflicts:
+        source = folded_into.get(id(c))
+        if source is not None:
+            source.also_affects.append(c)
+        else:
+            result.append(c)
+    return result
 
 
 def field_conflicts_only(conflicts: List[Conflict]) -> List[Conflict]:

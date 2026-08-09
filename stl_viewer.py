@@ -3959,41 +3959,16 @@ class STLViewerWindow(QMainWindow):
         logger.info(f"_load_technical_ecto: Loaded {ecto_path}")
 
     def closeEvent(self, event):
-        """Handle window close - prompt for unsaved annotations across all tabs, then cleanup."""
-        # Check all tabs for unsaved annotations
-        for i, tab in enumerate(self.tabs):
-            if tab.annotation_panel is None:
-                continue
-            annotations = tab.annotation_panel.get_annotations()
-            if annotations and not tab.annotations_exported:
-                tab_name = tab.filename or 'Untitled'
-                choice = ask_yes_no_cancel_dialog(
-                    self,
-                    "Unsaved Annotations",
-                    f"Tab '{tab_name}' has {len(annotations)} annotation(s) that have not been exported.\n\n"
-                    "Would you like to export them as .lyns before closing?\n\n"
-                    "• Click 'Yes' to export first\n"
-                    "• Click 'No' to close without exporting\n"
-                    "• Click 'Cancel' to stay",
-                )
-                if choice == 'yes':
-                    event.ignore()
-                    # Switch to that tab and export
-                    self.tab_bar.setCurrentIndex(i)
-                    self.sidebar_panel.export_as_ecto()
-                    return
-                if choice == 'cancel':
-                    event.ignore()
-                    return
-        
-        # Screenshot warning (second warning, after annotations)
-        if len(self.screenshot_panel.screenshots) > 0:
-            n = len(self.screenshot_panel.screenshots)
-            msg = f"You have {n} screenshot(s) that have not been saved. They will be lost. Continue?"
-            if not confirm_dialog(self, "Unsaved Screenshots", msg):
-                event.ignore()
-                return
-        
+        """Handle window close and cleanup.
+
+        No standalone "unsaved annotations"/"unsaved screenshots" prompts
+        here — both are already captured by a project Save (which bundles
+        every tab's annotations and the screenshot panel in one go), so
+        warning about them separately from the project's own unsaved-changes
+        check would just be a redundant second/third popup for the same
+        underlying "you have unsaved work" fact.
+        """
+
         # Release the QC panel's embedded viewer back to viewer_stack BEFORE
         # Qt destroys the widget hierarchy.  If the viewer is still reparented
         # into the QC panel when aboutToQuit fires, rendercanvas tries to access

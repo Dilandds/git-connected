@@ -87,6 +87,8 @@ class HeaderSection(QWidget):
         self._set_logo = set_logo_fn
         self._last_auto_pm = ''
         self._last_auto_photo = ''
+        self._last_auto_title = ''
+        self._last_auto_number = ''
         self._project_photo_pix: Optional[QPixmap] = None
         self._project_photo_scaled_for = QSize()
         self.setStyleSheet(f"background: {_BG};")
@@ -591,10 +593,36 @@ class HeaderSection(QWidget):
     # ── public API ────────────────────────────────────────────────────────────
 
     def update_project_info(self, info: dict):
-        self._f_project.setText(info.get("title", "") or "")
-        self._report.project_name = self._f_project.text()
-        self._f_reference.setText(info.get("number", "") or "")
-        self._report.project_reference = self._f_reference.text()
+        # Same auto-fill-unless-manually-changed pattern as PM/photo below —
+        # previously these two always overwrote, silently clobbering a
+        # manually-typed project name/reference every time the sidebar
+        # changed (and, in the merge-conflict dialog, making a linked-field
+        # fold impossible to trust since a "still just following" copy
+        # couldn't be told apart from a genuinely customized one).
+        title = (info.get("title") or "").strip()
+        current_name = self._f_project.text().strip()
+        if title:
+            if not current_name or current_name == self._last_auto_title:
+                self._f_project.setText(title)
+                self._report.project_name = title
+                self._last_auto_title = title
+        elif current_name and current_name == self._last_auto_title:
+            self._f_project.setText('')
+            self._report.project_name = ''
+            self._last_auto_title = ''
+
+        number = (info.get("number") or "").strip()
+        current_ref = self._f_reference.text().strip()
+        if number:
+            if not current_ref or current_ref == self._last_auto_number:
+                self._f_reference.setText(number)
+                self._report.project_reference = number
+                self._last_auto_number = number
+        elif current_ref and current_ref == self._last_auto_number:
+            self._f_reference.setText('')
+            self._report.project_reference = ''
+            self._last_auto_number = ''
+
         pm = (info.get("project_manager") or "").strip()
         current_pm = self._f_pm.text().strip()
         if pm:

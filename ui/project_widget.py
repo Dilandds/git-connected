@@ -1256,6 +1256,7 @@ class TheProjectWidget(QWidget):
             if not path:
                 return
             self._project_path = _normalize_project_path(path)
+            self._acquire_lock_for_current_path()
         try:
             self._save_project(self._project_path)
         except Exception as e:
@@ -1285,7 +1286,17 @@ class TheProjectWidget(QWidget):
         )
         if not path:
             return
-        self._project_path = _normalize_project_path(path)
+        new_path = _normalize_project_path(path)
+        if new_path != self._project_path:
+            old_path = self._project_path
+            self._project_path = new_path
+            if old_path:
+                # This session no longer has the old path open — release its
+                # lock rather than leaving it orphaned (nothing else still
+                # points at old_path to refresh or release it later).
+                from core.file_lock import release_lock as _release_lock
+                _release_lock(old_path)
+            self._acquire_lock_for_current_path()
         try:
             self._save_project(self._project_path)
         except Exception as e:
@@ -1370,10 +1381,14 @@ class TheProjectWidget(QWidget):
         if remote_data == self._loaded_snapshot:
             return local_data  # nobody else touched it since we loaded/last saved
 
-        from core.project_merge import merge_project, field_conflicts_only
+        from core.project_merge import merge_project, field_conflicts_only, fold_linked_conflicts
         merged, conflicts = merge_project(self._loaded_snapshot, local_data, remote_data)
 
-        interactive = field_conflicts_only(conflicts)
+        # Collapse conflicts on fields that are just auto-filled mirrors of
+        # an already-conflicting field elsewhere (e.g. the sidebar Title
+        # copied into Report/Brief/Quality Control) into one prompt instead
+        # of asking the same question several times for one edit.
+        interactive = field_conflicts_only(fold_linked_conflicts(conflicts))
         if interactive:
             from ui.merge_conflict_dialog import MergeConflictDialog
             dlg = MergeConflictDialog(self, interactive)
@@ -1876,6 +1891,23 @@ class TheProjectWidget(QWidget):
         if self._project_path and not self._read_only:
             from core.file_lock import release_lock as _release_lock
             _release_lock(self._project_path)
+
+    def _acquire_lock_for_current_path(self):
+        """Acquire this session's lock at self._project_path. Needed by Save
+        and Save As, which — unlike _load_project's Open flow — never went
+        through a lock acquisition step for the path they're about to write
+        to (a brand-new project's first save, or Save As to a different
+        location, both land here without ever calling acquire_lock). Without
+        this, no .lock sidecar ever appeared next to a project saved that
+        way, and the heartbeat/release_lock (both keyed off
+        self._project_path) would silently drift onto a path nothing had
+        actually locked. Not forced — if the target path happens to be
+        actively locked by someone else already, this just no-ops and the
+        save proceeds without lock protection, same as the prior behavior."""
+        if not self._project_path:
+            return
+        from core.file_lock import acquire_lock
+        acquire_lock(self._project_path)
 
     def closeEvent(self, event):
         super().closeEvent(event)
