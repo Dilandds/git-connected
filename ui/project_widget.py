@@ -1258,13 +1258,14 @@ class TheProjectWidget(QWidget):
             self._project_path = _normalize_project_path(path)
             self._acquire_lock_for_current_path()
         try:
-            self._save_project(self._project_path)
+            saved = self._save_project(self._project_path)
         except Exception as e:
             logger.error(f'Failed to save project: {e}', exc_info=True)
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
         else:
-            from ui.modal_utils import show_message_dialog
-            show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
+            if saved:
+                from ui.modal_utils import show_message_dialog
+                show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
 
     def _on_save_project_as(self):
         """Always prompt for a new file path and save there, regardless of
@@ -1298,15 +1299,19 @@ class TheProjectWidget(QWidget):
                 _release_lock(old_path)
             self._acquire_lock_for_current_path()
         try:
-            self._save_project(self._project_path)
+            saved = self._save_project(self._project_path)
         except Exception as e:
             logger.error(f'Failed to save project as: {e}', exc_info=True)
             QMessageBox.critical(self, t('project.msg.save_failed'), t('project.msg.save_error').format(e=e))
         else:
-            from ui.modal_utils import show_message_dialog
-            show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
+            if saved:
+                from ui.modal_utils import show_message_dialog
+                show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
 
-    def _save_project(self, path: str):
+    def _save_project(self, path: str) -> bool:
+        """Write the project to `path`. Returns False without writing
+        anything if the user cancelled a conflict-resolution prompt along
+        the way — callers must check this before reporting success."""
         now = datetime.now(timezone.utc).isoformat()
         user = get_display_name()
         if self._created_by is None:
@@ -1350,7 +1355,7 @@ class TheProjectWidget(QWidget):
 
         final_data = self._resolve_save_conflicts(path, data)
         if final_data is None:
-            return  # user cancelled the conflict-resolution prompt — nothing written
+            return False  # user cancelled the conflict-resolution prompt — nothing written
 
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(final_data, f, indent=2, ensure_ascii=False)
@@ -1360,6 +1365,7 @@ class TheProjectWidget(QWidget):
         from core.file_lock import refresh_lock
         refresh_lock(path)
         logger.info(f'Project saved to {path} by {user}')
+        return True
 
     def _resolve_save_conflicts(self, path: str, local_data: dict) -> Optional[dict]:
         """Re-reads what's actually on disk and three-way merges it with
