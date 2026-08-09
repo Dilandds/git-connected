@@ -32,6 +32,7 @@ last_saved_by/at, password_hash, file_type, version) are NOT part of what
 this module merges — the caller stamps those directly, since "who saved
 last and when" is always this save, not something to three-way-merge.
 """
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -125,6 +126,35 @@ def merge_dict_fields(base: Optional[dict], local: Optional[dict], remote: Optio
             merged[key] = value
         conflicts.extend(key_conflicts)
     return merged, conflicts
+
+
+def merge_dict_fields_prefer_local(base: Optional[dict], local: Optional[dict], remote: Optional[dict],
+                                    skip_keys: Sequence[str] = ()) -> dict:
+    """Same three-way field logic as merge_dict_fields, but a genuine
+    dual-edit on the same key is silently resolved in favor of `local`
+    instead of producing a Conflict. For low-stakes fields where asking is
+    worse than occasionally picking the "wrong" side (e.g.
+    technical_overview's sidebar metadata, which mostly just mirrors
+    project_info and is explicitly not worth interrupting a save over)."""
+    base = base or {}
+    local = local or {}
+    remote = remote or {}
+    merged: Dict[str, Any] = {}
+    for key in set(base) | set(local) | set(remote):
+        if key in skip_keys:
+            continue
+        b, l, r = base.get(key, _SENTINEL), local.get(key, _SENTINEL), remote.get(key, _SENTINEL)
+        if l == r:
+            value = l
+        elif l == b:
+            value = r        # only remote changed it
+        elif r == b:
+            value = l        # only local changed it
+        else:
+            value = l        # changed differently on both sides — never ask, prefer local
+        if value is not _SENTINEL:
+            merged[key] = value
+    return merged
 
 
 # ── id-collision detection ───────────────────────────────────────────────────
@@ -519,6 +549,72 @@ def _merge_drawing_scale(base, local, remote):
     return merged, conflicts
 
 
+def _normalize_annotations_for_compare(annotations: List[dict]) -> List[dict]:
+    """Comparison-only view of a technical_overview annotations list: each
+    annotation's image_paths reduced to their bare filename. The real
+    values are absolute paths under a fresh temp-extraction directory
+    every time the bundle is decoded (see ui/project_widget.py's
+    _decode_technical_overview), so comparing them directly would make an
+    unchanged attached image look "different" on every single merge —
+    the same class of non-determinism as the outer zip blob, one level
+    deeper. os.path.basename is pure string manipulation, not I/O."""
+    normalized = []
+    for ann in annotations or []:
+        a = dict(ann)
+        a['image_paths'] = [os.path.basename(p) for p in a.get('image_paths', [])]
+        normalized.append(a)
+    return normalized
+
+
+def _merge_technical_overview(base, local, remote):
+    """technical_overview is decoded to this structural shape by
+    ui/project_widget.py before merge_project() runs (and re-encoded back
+    to {'bundle_b64': ...} afterward) — this function never touches the
+    zip/base64 form itself, keeping this module I/O-free:
+        {'metadata': {...}, 'document_bytes': bytes|None,
+         'document_ext': '.pdf', 'annotations': [...]}
+
+    Two different policies, per explicit product decision: the sidebar
+    metadata (title/property/dates/comments) mostly just mirrors
+    project_info and is low-stakes — merged field by field but never
+    interactively conflicted. The document + annotations are the actual
+    content; a genuine simultaneous edit there IS worth a (rare) prompt."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    metadata = merge_dict_fields_prefer_local(
+        base.get('metadata', {}), local.get('metadata', {}), remote.get('metadata', {}),
+    )
+    merged: Dict[str, Any] = {'metadata': metadata}
+    conflicts: List[Conflict] = []
+
+    def _content(d: dict):
+        return d.get('document_bytes'), _normalize_annotations_for_compare(d.get('annotations', []))
+
+    local_c, remote_c, base_c = _content(local), _content(remote), _content(base)
+    if local_c == remote_c:
+        winner = local
+    elif local_c == base_c:
+        winner = remote           # only remote changed the document/annotations
+    elif remote_c == base_c:
+        winner = local            # only local changed the document/annotations
+    else:
+        winner = local            # placeholder — resolve() overwrites once the user picks
+
+        def _resolve(value, _m=merged):
+            _m['document_bytes'] = value.get('document_bytes')
+            _m['document_ext'] = value.get('document_ext', '')
+            _m['annotations'] = value.get('annotations', [])
+
+        conflicts.append(Conflict(
+            'technical_overview', (), 'document',
+            local_value=local, remote_value=remote, resolve=_resolve,
+        ))
+
+    merged['document_bytes'] = winner.get('document_bytes')
+    merged['document_ext'] = winner.get('document_ext', '')
+    merged['annotations'] = winner.get('annotations', [])
+    return merged, conflicts
+
+
 _SECTION_MERGERS = {
     'todo': _merge_todo,
     'timeline': _merge_timeline,
@@ -529,15 +625,19 @@ _SECTION_MERGERS = {
     'quality_control': _merge_quality_control,
     'brief': _merge_brief,
     'drawing_scale': _merge_drawing_scale,
+    'technical_overview': _merge_technical_overview,
 }
 
 # Any section not in _SECTION_MERGERS falls back to whole-section
-# replace-if-differs (merge_section, below). technical_overview stays there
-# by explicit design decision — it's an opaque zip blob (document +
-# annotations + metadata bundled together), not something to field-merge
-# without restructuring that save format. Everything else not yet audited
+# replace-if-differs (merge_section, below). Everything not yet audited
 # defaults here too, so adding real support for one later is a
-# _SECTION_MERGERS entry, not new engine code.
+# _SECTION_MERGERS entry, not new engine code. technical_overview used to
+# live here too (as an opaque zip blob), but the blob got regenerated with
+# non-deterministic bytes (a fresh created_at + zip-entry mtimes) on every
+# single save, so it looked "conflicting" almost every time regardless of
+# whether anyone actually touched it — ui/project_widget.py now decodes it
+# to real parts before merging (see _merge_technical_overview above) so
+# equality is judged on content, not incidental re-encoding noise.
 
 
 def merge_section(section_name: str, base, local, remote,

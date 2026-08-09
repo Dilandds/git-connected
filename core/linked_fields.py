@@ -16,10 +16,12 @@ Each entry: source (section, field) -> list of destination (section, field)
 pairs. Deliberately NOT exhaustive — see the omissions below.
 
 Omitted on purpose:
-- technical_overview's own copy of title/property lives inside its zip
-  bundle (a base64 blob), not as plain top-level JSON, so it can't be
-  compared/folded at this level without restructuring that save format —
-  a separate, bigger change, not part of this table.
+- technical_overview's own copy of title/property (inside its bundle's
+  sidebar metadata) is merged field-by-field but never interactively
+  conflicted at all (core.project_merge._merge_technical_overview uses
+  merge_dict_fields_prefer_local, which silently auto-resolves a dual-edit
+  instead of producing a Conflict) — there's simply never a Conflict on
+  this side to fold into, so it stays out of this table.
 - photo_path is omitted entirely: two of its known destinations
   (traceability's main-component image and extra.product_image_path)
   have no auto-fill guard at all (ui/traceability/widget.py:174-181,

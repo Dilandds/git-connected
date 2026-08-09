@@ -12,7 +12,7 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Type
+from typing import Optional, Tuple, Type
 
 from PyQt5.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
@@ -1387,20 +1387,55 @@ class TheProjectWidget(QWidget):
         if remote_data == self._loaded_snapshot:
             return local_data  # nobody else touched it since we loaded/last saved
 
-        from core.project_merge import merge_project, field_conflicts_only, fold_linked_conflicts
-        merged, conflicts = merge_project(self._loaded_snapshot, local_data, remote_data)
+        base_data = dict(self._loaded_snapshot)
+        local_data = dict(local_data)
+        remote_data = dict(remote_data)
 
-        # Collapse conflicts on fields that are just auto-filled mirrors of
-        # an already-conflicting field elsewhere (e.g. the sidebar Title
-        # copied into Report/Brief/Quality Control) into one prompt instead
-        # of asking the same question several times for one edit.
-        interactive = field_conflicts_only(fold_linked_conflicts(conflicts))
-        if interactive:
-            from ui.merge_conflict_dialog import MergeConflictDialog
-            dlg = MergeConflictDialog(self, interactive)
-            if dlg.exec_() != QDialog.Accepted:
-                return None  # cancelled — abort this save entirely, try again later
-            dlg.apply_resolutions()
+        # technical_overview is stored as one opaque {'bundle_b64': ...}
+        # blob, but re-zipping it on every save embeds a fresh timestamp
+        # plus non-deterministic zip-entry mtimes even when nothing inside
+        # actually changed — comparing those raw bytes made this section
+        # look "conflicting" on almost every concurrent save regardless of
+        # whether Technical Overview was ever touched. Decode all three
+        # sides to their real parts (sidebar metadata / document /
+        # annotations) before merging, so equality is judged on content,
+        # not incidental re-encoding noise. Each decode may return a temp
+        # dir holding the extracted document/images — kept alive until
+        # after re-encoding below, since whichever side "wins" the merge
+        # may still need those files on disk.
+        temp_dirs = []
+
+        def _decode(entry):
+            structural, temp_dir = self._decode_technical_overview(entry)
+            if temp_dir:
+                temp_dirs.append(temp_dir)
+            return structural
+
+        base_data['technical_overview'] = _decode(base_data.get('technical_overview'))
+        local_data['technical_overview'] = _decode(local_data.get('technical_overview'))
+        remote_data['technical_overview'] = _decode(remote_data.get('technical_overview'))
+
+        try:
+            from core.project_merge import merge_project, field_conflicts_only, fold_linked_conflicts
+            merged, conflicts = merge_project(base_data, local_data, remote_data)
+
+            # Collapse conflicts on fields that are just auto-filled mirrors of
+            # an already-conflicting field elsewhere (e.g. the sidebar Title
+            # copied into Report/Brief/Quality Control) into one prompt instead
+            # of asking the same question several times for one edit.
+            interactive = field_conflicts_only(fold_linked_conflicts(conflicts))
+            if interactive:
+                from ui.merge_conflict_dialog import MergeConflictDialog
+                dlg = MergeConflictDialog(self, interactive)
+                if dlg.exec_() != QDialog.Accepted:
+                    return None  # cancelled — abort this save entirely, try again later
+                dlg.apply_resolutions()
+
+            merged['technical_overview'] = self._encode_technical_overview(merged.get('technical_overview'))
+        finally:
+            import shutil
+            for d in temp_dirs:
+                shutil.rmtree(d, ignore_errors=True)
 
         # Push any remotely-changed sections back into whichever screens are
         # currently live, so the visible UI doesn't silently diverge from
@@ -1414,6 +1449,74 @@ class TheProjectWidget(QWidget):
         self._apply_merged_data_to_screens(merged)
 
         return merged
+
+    def _decode_technical_overview(self, entry: Optional[dict]) -> Tuple[dict, Optional[str]]:
+        """Decode a saved technical_overview {'bundle_b64': ...} entry into
+        its real parts for merge comparison. Returns (structural_dict,
+        temp_dir) — temp_dir (holding the extracted document + any
+        annotation images) must stay alive until after
+        _encode_technical_overview runs, since its files may be the ones
+        that end up re-zipped if this side wins the merge. Returns the
+        all-empty structural shape (document_bytes=None, matching
+        _bundle_technical_overview's own "nothing to save" contract) for a
+        None/absent entry or on any decode failure."""
+        empty: dict = {'metadata': {}, 'document_bytes': None, 'document_ext': '', 'annotations': []}
+        if not entry or not entry.get('bundle_b64'):
+            return empty, None
+        from core.ecto_format import EctoFormat
+        fd, tmp_ecto = tempfile.mkstemp(suffix='.ecto')
+        os.close(fd)
+        try:
+            Path(tmp_ecto).write_bytes(base64.b64decode(entry['bundle_b64']))
+            doc_path, annotations, metadata, _passcode, temp_dir_or_err = EctoFormat.import_technical(tmp_ecto)
+            if doc_path is None:
+                logger.warning(f'_decode_technical_overview: could not decode: {temp_dir_or_err}')
+                return empty, None
+            return {
+                'metadata': metadata or {},
+                'document_bytes': Path(doc_path).read_bytes(),
+                'document_ext': os.path.splitext(doc_path)[1],
+                'annotations': annotations or [],
+            }, temp_dir_or_err
+        except Exception as e:
+            logger.warning(f'_decode_technical_overview: could not decode: {e}')
+            return empty, None
+        finally:
+            try:
+                os.remove(tmp_ecto)
+            except OSError:
+                pass
+
+    def _encode_technical_overview(self, structural: Optional[dict]) -> Optional[dict]:
+        """Re-encode a merged structural technical_overview dict back into
+        the saved {'bundle_b64': ...} shape. Returns None when there's no
+        document — mirrors _bundle_technical_overview's own contract
+        exactly, so downstream save/load code needs no changes."""
+        if not structural or not structural.get('document_bytes'):
+            return None
+        from core.ecto_format import EctoFormat
+        fd, tmp_doc = tempfile.mkstemp(suffix=structural.get('document_ext') or '')
+        os.write(fd, structural['document_bytes'])
+        os.close(fd)
+        fd2, tmp_ecto = tempfile.mkstemp(suffix='.ecto')
+        os.close(fd2)
+        try:
+            success, msg = EctoFormat.export_technical(
+                document_path=tmp_doc,
+                annotations=structural.get('annotations', []),
+                metadata=structural.get('metadata', {}),
+                output_path=tmp_ecto,
+            )
+            if not success:
+                logger.warning(f'_encode_technical_overview: export failed: {msg}')
+                return None
+            return {'bundle_b64': base64.b64encode(Path(tmp_ecto).read_bytes()).decode()}
+        finally:
+            for p in (tmp_doc, tmp_ecto):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
 
     def _apply_merged_data_to_screens(self, merged: dict) -> None:
         self._nav.set_info_data(merged.get('project_info', {}))

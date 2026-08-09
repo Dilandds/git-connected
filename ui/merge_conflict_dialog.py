@@ -69,6 +69,7 @@ _FIELD_LABELS = {
     ('traceability', 'status'): 'Status',
     ('drawing_scale', 'unit'): 'Unit',
     ('drawing_scale', 'scale_ratio'): 'Scale Ratio',
+    ('technical_overview', 'document'): 'Document',
 }
 
 
@@ -125,7 +126,7 @@ class MergeConflictDialog(BaseModal):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(6)
 
-        is_whole_section = self._is_whole_section(conflict)
+        needs_generic = self._needs_generic_buttons(conflict)
 
         label = QLabel(self._describe(conflict))
         label.setWordWrap(True)
@@ -143,7 +144,7 @@ class MergeConflictDialog(BaseModal):
                                 f'background: transparent; border: none;')
             layout.addWidget(note)
 
-        if is_whole_section:
+        if needs_generic:
             mine_text = t('project.msg.conflict_keep_mine_generic')
             theirs_text = t('project.msg.conflict_keep_theirs_generic')
         else:
@@ -192,6 +193,23 @@ class MergeConflictDialog(BaseModal):
         # an entire opaque section, not a specific named field, so there's
         # no meaningful single "value" to preview.
         return conflict.field == conflict.section
+
+    @classmethod
+    def _needs_generic_buttons(cls, conflict) -> bool:
+        """True whenever a value isn't sensible to preview as short text —
+        a whole opaque section, or any conflict whose local_value/
+        remote_value is itself a list/dict/bytes/etc rather than a simple
+        scalar (e.g. technical_overview's document+annotations conflict,
+        or report's photo_blocks/attendees). Deliberately broader than
+        _is_whole_section (which still drives _describe's message wording
+        below) — this only controls whether the buttons try to preview the
+        raw value."""
+        if cls._is_whole_section(conflict):
+            return True
+        for value in (conflict.local_value, conflict.remote_value):
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                return True
+        return False
 
     @classmethod
     def _describe(cls, conflict) -> str:

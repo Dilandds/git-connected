@@ -8,9 +8,9 @@ Usage:
     python test_project_merge.py
 """
 from core.project_merge import (
-    Conflict, merge_dict_fields, merge_list_by_id, merge_nested_by_path,
-    merge_list_add_only, detect_id_collision, merge_section, merge_project,
-    field_conflicts_only, fold_linked_conflicts,
+    Conflict, merge_dict_fields, merge_dict_fields_prefer_local, merge_list_by_id,
+    merge_nested_by_path, merge_list_add_only, detect_id_collision, merge_section,
+    merge_project, field_conflicts_only, fold_linked_conflicts,
 )
 
 _passed = 0
@@ -413,6 +413,84 @@ def test_fold_linked_conflicts():
     check("folded follower resolution applied", merged['report']['reports'][0]['project_name'] == 'Chosen Title')
 
 
+def test_merge_dict_fields_prefer_local():
+    print("test_merge_dict_fields_prefer_local")
+    base = {'title': 'Orig', 'comments': 'Orig comment', 'unused': 'x'}
+    local = {'title': 'Orig', 'comments': 'Local comment', 'unused': 'x'}
+    remote = {'title': 'Orig', 'comments': 'Remote comment', 'unused': 'x'}
+    merged = merge_dict_fields_prefer_local(base, local, remote)
+    check("dual-edit on the same field auto-resolved to local (no Conflict object involved)",
+          merged['comments'] == 'Local comment')
+    check("untouched field passes through unchanged", merged['title'] == 'Orig')
+
+    # only one side changed -> that side's value wins, same as merge_dict_fields
+    local2 = dict(base)
+    local2['title'] = 'Local title'
+    merged2 = merge_dict_fields_prefer_local(base, local2, remote)
+    check("only-local change kept when remote didn't touch the field", merged2['title'] == 'Local title')
+
+
+def test_technical_overview_merge():
+    print("test_technical_overview_merge")
+    base = {
+        'metadata': {'title': 'Widget', 'comments': ''},
+        'document_bytes': b'PDF-BYTES-V1', 'document_ext': '.pdf',
+        'annotations': [{'id': 1, 'text': 'note', 'image_paths': ['/tmp/x1/images/ann_1_img_0.png']}],
+    }
+
+    # Side-panel metadata edited differently on both sides; content
+    # identical (annotations' image_paths point into two different temp
+    # dirs, exactly like two independent _decode_technical_overview calls
+    # of the same underlying image would produce) -> must NOT produce an
+    # interactive conflict, and metadata must not just be dropped.
+    local = {
+        'metadata': {'title': 'Widget', 'comments': 'Local comment'},
+        'document_bytes': b'PDF-BYTES-V1', 'document_ext': '.pdf',
+        'annotations': [{'id': 1, 'text': 'note', 'image_paths': ['/tmp/local_xyz/images/ann_1_img_0.png']}],
+    }
+    remote = {
+        'metadata': {'title': 'Widget', 'comments': 'Remote comment'},
+        'document_bytes': b'PDF-BYTES-V1', 'document_ext': '.pdf',
+        'annotations': [{'id': 1, 'text': 'note', 'image_paths': ['/tmp/remote_abc/images/ann_1_img_0.png']}],
+    }
+    merged, conflicts = merge_section('technical_overview', base, local, remote)
+    check("metadata dual-edit never surfaces as an interactive conflict", conflicts == [])
+    check("metadata dual-edit auto-resolved to local", merged['metadata']['comments'] == 'Local comment')
+    check("identical content (different temp-dir image_paths) treated as unchanged",
+          merged['document_bytes'] == b'PDF-BYTES-V1' and len(merged['annotations']) == 1)
+
+    # Only local touched the document; remote never touched Technical
+    # Overview at all -> silent, no conflict, local's document kept. This
+    # is the exact scenario behind the reported bug: two sessions that
+    # never touched Technical Overview must not conflict just because the
+    # bundle gets re-zipped with fresh timestamps on every save.
+    local_doc_change = dict(base)
+    local_doc_change['metadata'] = dict(base['metadata'])
+    local_doc_change['document_bytes'] = b'PDF-BYTES-V2'
+    local_doc_change['annotations'] = list(base['annotations'])
+    merged2, conflicts2 = merge_section('technical_overview', base, local_doc_change, base)
+    check("only-local document change kept silently, no conflict",
+          merged2['document_bytes'] == b'PDF-BYTES-V2' and conflicts2 == [])
+
+    # Both sides genuinely changed the document differently -> one real,
+    # rare conflict, not a whole-section dump.
+    local3 = dict(base)
+    local3['metadata'] = dict(base['metadata'])
+    local3['document_bytes'] = b'PDF-BYTES-LOCAL'
+    local3['annotations'] = list(base['annotations'])
+    remote3 = dict(base)
+    remote3['metadata'] = dict(base['metadata'])
+    remote3['document_bytes'] = b'PDF-BYTES-REMOTE'
+    remote3['annotations'] = list(base['annotations'])
+    merged3, conflicts3 = merge_section('technical_overview', base, local3, remote3)
+    check("genuine document divergence produces exactly one conflict",
+          len(conflicts3) == 1 and conflicts3[0].field == 'document'
+          and conflicts3[0].section == 'technical_overview')
+    conflicts3[0].resolve(conflicts3[0].remote_value)
+    check("resolve() writes the chosen side's document bytes into the merged result",
+          merged3['document_bytes'] == b'PDF-BYTES-REMOTE')
+
+
 def main():
     tests = [
         test_no_conflict_both_sides_add,
@@ -434,6 +512,8 @@ def main():
         test_drawing_scale_merge,
         test_path_labels_resolve_item_names,
         test_fold_linked_conflicts,
+        test_merge_dict_fields_prefer_local,
+        test_technical_overview_merge,
     ]
     for t in tests:
         t()
