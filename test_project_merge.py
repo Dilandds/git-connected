@@ -7,6 +7,8 @@ just plain asserts, matching the style of the other test_*.py scripts here.
 Usage:
     python test_project_merge.py
 """
+import json
+
 from core.project_merge import (
     Conflict, merge_dict_fields, merge_dict_fields_prefer_local, merge_list_by_id,
     merge_nested_by_path, merge_list_add_only, detect_id_collision, merge_section,
@@ -491,6 +493,222 @@ def test_technical_overview_merge():
           merged3['document_bytes'] == b'PDF-BYTES-REMOTE')
 
 
+def test_assignment_merge():
+    print("test_assignment_merge")
+    base = {
+        'tabs': [{
+            'id': 'tab-1', 'image_name': 'plan.png', 'image_path': '/x/plan.png',
+            'orientation': 'portrait', 'font_family': '', 'font_size': 13,
+            'cards': [{'id': 'c1', 'title': 'Handle', 'supplier': '', 'status': 'In progress',
+                       'number': 1, 'x': 0.0, 'y': 0.0, 'color': '#3b82f6', 'arrows': []}],
+        }],
+        'current_tab': 0,
+    }
+
+    # local edits one card's status; remote's own tab (independently
+    # untouched, still identical to base) must survive fully intact,
+    # including its image — the exact bug reported: a card-only edit must
+    # not wholesale-clobber the rest of the section.
+    local = json.loads(json.dumps(base))
+    local['tabs'][0]['cards'][0]['status'] = 'Done'
+    remote = json.loads(json.dumps(base))
+
+    merged, conflicts = merge_section('assignment', base, local, remote)
+    check("no conflicts (only local touched anything)", conflicts == [])
+    check("card status change kept", merged['tabs'][0]['cards'][0]['status'] == 'Done')
+    check("tab's image untouched by an unrelated card edit",
+          merged['tabs'][0]['image_path'] == '/x/plan.png')
+
+    # remote adds a second tab with its own image; local only edited a
+    # card in tab 1 -> both survive, tab 2's image is not lost.
+    remote2 = json.loads(json.dumps(base))
+    remote2['tabs'].append({
+        'id': 'tab-2', 'image_name': 'back.png', 'image_path': '/x/back.png',
+        'orientation': 'portrait', 'font_family': '', 'font_size': 13, 'cards': [],
+    })
+    merged2, conflicts2 = merge_section('assignment', base, local, remote2)
+    check("no conflicts (different things changed)", conflicts2 == [])
+    check("both tabs present after merge", {tb['id'] for tb in merged2['tabs']} == {'tab-1', 'tab-2'})
+    check("remote's new tab image kept",
+          next(tb for tb in merged2['tabs'] if tb['id'] == 'tab-2')['image_path'] == '/x/back.png')
+    check("local's card edit on tab 1 also kept",
+          next(tb for tb in merged2['tabs'] if tb['id'] == 'tab-1')['cards'][0]['status'] == 'Done')
+
+    # same card field changed differently on both sides -> real, isolated
+    # conflict, not a whole-tab or whole-section one.
+    local3 = json.loads(json.dumps(base))
+    local3['tabs'][0]['cards'][0]['status'] = 'Done'
+    remote3 = json.loads(json.dumps(base))
+    remote3['tabs'][0]['cards'][0]['status'] = 'Blocked'
+    merged3, conflicts3 = merge_section('assignment', base, local3, remote3)
+    check("isolated card-field conflict, not a whole-section one",
+          len(conflicts3) == 1 and conflicts3[0].field == 'status' and conflicts3[0].section == 'assignment')
+
+    # current_tab re-resolved by id, not raw index, when tabs shift
+    local4 = json.loads(json.dumps(base))
+    local4['tabs'].insert(0, {
+        'id': 'tab-0', 'image_name': '', 'image_path': '', 'orientation': 'portrait',
+        'font_family': '', 'font_size': 13, 'cards': [],
+    })
+    local4['current_tab'] = 1  # still pointing at tab-1, now at index 1
+    merged4, _ = merge_section('assignment', base, local4, base)
+    check("current_tab re-resolved to tab-1's new index after a tab was inserted ahead of it",
+          merged4['tabs'][merged4['current_tab']]['id'] == 'tab-1')
+
+
+def test_rd_merge():
+    print("test_rd_merge")
+    base = {'components': [{
+        'id': 'c1', 'name': 'Handle', 'supplier': '', 'color': '',
+        'brief': {'objective': '', 'constraints': '', 'budget_min': 0.0, 'budget_max': 0.0,
+                  'quantity': 1, 'quantity_unit': 'piece',
+                  'notes': [{'id': 'n1', 'text': 'first note', 'author': 'A', 'date': '2026-01-01'}]},
+        'proposals': [{'id': 'p1', 'name': 'Brass', 'image_path': '/x/brass.png', 'status': 'in_evaluation'}],
+        'technique_proposals': [],
+    }]}
+
+    # local edits a brief note; remote independently edits a proposal's
+    # status in the SAME component -> both survive, proposal's image intact.
+    local = json.loads(json.dumps(base))
+    local['components'][0]['brief']['notes'][0]['text'] = 'edited note'
+    remote = json.loads(json.dumps(base))
+    remote['components'][0]['proposals'][0]['status'] = 'selected'
+
+    merged, conflicts = merge_section('rd', base, local, remote)
+    check("no conflicts (different things changed)", conflicts == [])
+    check("local's note edit kept", merged['components'][0]['brief']['notes'][0]['text'] == 'edited note')
+    check("remote's proposal status change kept",
+          merged['components'][0]['proposals'][0]['status'] == 'selected')
+    check("unrelated proposal's image untouched by a note edit elsewhere in the same component",
+          merged['components'][0]['proposals'][0]['image_path'] == '/x/brass.png')
+
+
+def test_estimated_cost_merge():
+    print("test_estimated_cost_merge")
+    base = {'currency': 'EUR', 'trades': [{'id': 1, 'name': 'Trade', 'partners': [
+        {'id': 1, 'name': 'Partner', 'activity': '', 'start_date': '', 'delivery_date': '',
+         'is_best': False, 'tax_rate': 0,
+         'tasks': [{'component': 'a', 'task': 'b', 'hours': 1, 'hourly_rate': 10}]},
+    ]}]}
+    local = json.loads(json.dumps(base))
+    local['trades'][0]['name'] = 'Renamed Trade'
+    remote = json.loads(json.dumps(base))
+    remote['trades'][0]['partners'][0]['tasks'][0]['hours'] = 8
+
+    merged, conflicts = merge_section('estimated_cost', base, local, remote)
+    check("no conflicts (different fields changed)", conflicts == [])
+    check("local's trade rename kept", merged['trades'][0]['name'] == 'Renamed Trade')
+    check("remote's task hours change kept (id-less tasks list replaced wholesale, safely)",
+          merged['trades'][0]['partners'][0]['tasks'][0]['hours'] == 8)
+
+
+def test_files_merge():
+    print("test_files_merge")
+    base = {
+        'next_folder_id': 2, 'next_file_id': 2,
+        'folders': [{'id': 1, 'name': 'Docs'}],
+        'files': [{'id': 1, 'folder_id': 1, 'name': 'a.txt',
+                   'versions': [{'version_str': 'v1', 'file_data_b64': 'QQQQ'}]}],
+    }
+    # local renames folder; remote independently uploads a brand new file
+    # with real content -> both survive, remote's file content intact.
+    local = json.loads(json.dumps(base))
+    local['folders'][0]['name'] = 'Documents'
+    remote = json.loads(json.dumps(base))
+    remote['files'].append({'id': 2, 'folder_id': 1, 'name': 'b.txt',
+                             'versions': [{'version_str': 'v1', 'file_data_b64': 'QkJCQg=='}]})
+    remote['next_file_id'] = 3
+
+    merged, conflicts = merge_section('files', base, local, remote)
+    check("no conflicts (different things changed)", conflicts == [])
+    check("local's folder rename kept", merged['folders'][0]['name'] == 'Documents')
+    check("both files present", {f['id'] for f in merged['files']} == {1, 2})
+    new_file = next(f for f in merged['files'] if f['id'] == 2)
+    check("remote's new file content survived the merge (not dropped)",
+          new_file['versions'][0]['file_data_b64'] == 'QkJCQg==')
+    check("next_file_id bumped past the highest surviving id", merged['next_file_id'] == 3)
+
+
+def test_validation_merge():
+    print("test_validation_merge")
+    base = {'sessions': [{
+        'id': 's1', 'signature': '', 'schedule_dates': [''] * 7,
+        'stakeholders': [{'id': 'st1', 'name': 'Alice', 'role': ''}],
+        'modifications': [], 'action_plan': [],
+    }]}
+    local = json.loads(json.dumps(base))
+    local['sessions'][0]['stakeholders'][0]['name'] = 'Alice Renamed'
+    remote = json.loads(json.dumps(base))
+    remote['sessions'][0]['signature'] = 'Approved'
+
+    merged, conflicts = merge_section('validation', base, local, remote)
+    check("no conflicts (different fields changed)", conflicts == [])
+    check("local's stakeholder rename kept", merged['sessions'][0]['stakeholders'][0]['name'] == 'Alice Renamed')
+    check("remote's signature change kept", merged['sessions'][0]['signature'] == 'Approved')
+
+
+def test_prototype_merge():
+    print("test_prototype_merge")
+    base = {'next_number': 3, 'versions': [
+        {'id': 'v1', 'version_number': 1, 'date': '', 'status': '', 'comments': '',
+         'image_paths': ['/x/v1_main.png'], 'file_paths': []},
+        {'id': 'v2', 'version_number': 2, 'date': '', 'status': '', 'comments': '',
+         'image_paths': ['/x/v2_main.png'], 'file_paths': []},
+    ]}
+    # local edits v1's comments; remote independently edits v2's status ->
+    # both survive, neither version's photos are touched by the other's edit.
+    local = json.loads(json.dumps(base))
+    local['versions'][0]['comments'] = 'looks good'
+    remote = json.loads(json.dumps(base))
+    remote['versions'][1]['status'] = 'approved'
+
+    merged, conflicts = merge_section('prototype', base, local, remote)
+    check("no conflicts (different versions/fields changed)", conflicts == [])
+    by_id = {v['id']: v for v in merged['versions']}
+    check("local's v1 comment kept", by_id['v1']['comments'] == 'looks good')
+    check("remote's v2 status kept", by_id['v2']['status'] == 'approved')
+    check("v1's own photo untouched by a comment edit", by_id['v1']['image_paths'] == ['/x/v1_main.png'])
+    check("v2's own photo untouched by a status edit elsewhere", by_id['v2']['image_paths'] == ['/x/v2_main.png'])
+
+
+def test_version_comparison_merge():
+    print("test_version_comparison_merge")
+    base = {'next_id': 2, 'cards': [
+        {'id': 1, 'star_number': 1, 'version': 'v1', 'comments': '', 'cost': '',
+         'positive_points': '', 'negative_points': '', 'photo_paths': ['/x/card1.png']},
+    ]}
+    local = json.loads(json.dumps(base))
+    local['cards'][0]['comments'] = 'note from local'
+    remote = json.loads(json.dumps(base))
+    remote['cards'].append({'id': 2, 'star_number': 2, 'version': 'v2', 'comments': '', 'cost': '',
+                             'positive_points': '', 'negative_points': '', 'photo_paths': ['/x/card2.png']})
+    remote['next_id'] = 3
+
+    merged, conflicts = merge_section('version_comparison', base, local, remote)
+    check("no conflicts (different things changed)", conflicts == [])
+    by_id = {c['id']: c for c in merged['cards']}
+    check("local's comment kept", by_id[1]['comments'] == 'note from local')
+    check("card 1's own photo untouched by remote adding a different card",
+          by_id[1]['photo_paths'] == ['/x/card1.png'])
+    check("remote's new card 2 (and its photo) survived", by_id[2]['photo_paths'] == ['/x/card2.png'])
+    check("next_id bumped past the highest surviving id", merged['next_id'] == 3)
+
+
+def test_glossary_merge():
+    print("test_glossary_merge")
+    base = {'next_id': 2, 'terms': [{'id': 1, 'term': 'Anodizing', 'definition': 'Old def'}]}
+    local = json.loads(json.dumps(base))
+    local['terms'][0]['definition'] = 'Updated def'
+    remote = json.loads(json.dumps(base))
+    remote['terms'].append({'id': 2, 'term': 'Casting', 'definition': 'New term'})
+    remote['next_id'] = 3
+
+    merged, conflicts = merge_section('glossary', base, local, remote)
+    check("no conflicts (different things changed)", conflicts == [])
+    check("both terms present", {t['id'] for t in merged['terms']} == {1, 2})
+    check("next_id bumped past the highest surviving id", merged['next_id'] == 3)
+
+
 def main():
     tests = [
         test_no_conflict_both_sides_add,
@@ -514,6 +732,14 @@ def main():
         test_fold_linked_conflicts,
         test_merge_dict_fields_prefer_local,
         test_technical_overview_merge,
+        test_assignment_merge,
+        test_rd_merge,
+        test_estimated_cost_merge,
+        test_files_merge,
+        test_validation_merge,
+        test_prototype_merge,
+        test_version_comparison_merge,
+        test_glossary_merge,
     ]
     for t in tests:
         t()

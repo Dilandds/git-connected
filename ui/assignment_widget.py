@@ -197,6 +197,12 @@ class AssignmentCanvas(QWidget):
         self.setCursor(Qt.ArrowCursor)
         self.setFocusPolicy(Qt.StrongFocus)
 
+        # Stable identity for this tab/canvas — needed so a save-conflict
+        # merge can match "the same tab" across local/remote instead of
+        # only being able to compare tabs by list position (see
+        # core.project_merge._merge_assignment). Overwritten by whatever
+        # id (or positional fallback) set_data loads, if any.
+        self._id: str = str(uuid.uuid4())
         self._image: Optional[QPixmap] = None
         self._image_name: str = ''
         self._image_path: str = ''
@@ -936,6 +942,7 @@ class AssignmentCanvas(QWidget):
 
     def get_data(self) -> dict:
         return {
+            'id': self._id,
             'cards': [asdict(c) for c in self._cards],
             'image_name': self._image_name,
             'image_path': self._image_path,
@@ -944,7 +951,14 @@ class AssignmentCanvas(QWidget):
             'font_size': self._font_size,
         }
 
-    def set_data(self, data: dict):
+    def set_data(self, data: dict, idx: int = 0):
+        # A save from before tabs had stable ids won't have one — fall back
+        # to a positional id so the very first merge after upgrading still
+        # matches "the same tab" correctly on both sides (both derive the
+        # same fallback from the same list position). Once this session
+        # saves, the real id above is what gets stored and compared from
+        # then on — see core.project_merge._merge_assignment.
+        self._id = data.get('id') or f'tab-{idx}'
         cards = []
         for d in data.get('cards', []):
             d = dict(d)
@@ -1450,7 +1464,7 @@ class AssignmentWidget(QWidget):
             scroll.deleteLater()
 
         for i, td in enumerate(tabs_data):
-            self._canvases[i].set_data(td)
+            self._canvases[i].set_data(td, idx=i)
 
         self._current_tab = max(0, min(current_tab, len(self._canvases) - 1))
         self._stack.setCurrentWidget(self._scrolls[self._current_tab])

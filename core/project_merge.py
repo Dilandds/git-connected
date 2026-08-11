@@ -209,7 +209,9 @@ def _item_label(item_id, *dicts: dict) -> str:
 def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict],
                           id_key: str = 'id', child_keys: Sequence[str] = (),
                           section: str = '', path: tuple = (),
-                          path_labels: tuple = ()) -> Tuple[List[dict], List[Conflict]]:
+                          path_labels: tuple = (),
+                          item_merger: Optional[Callable[..., Tuple[dict, List[Conflict]]]] = None,
+                          ) -> Tuple[List[dict], List[Conflict]]:
     """Three-way merge of a list of id-keyed dicts. If child_keys is given,
     child_keys[0] names a nested id-keyed list inside each item that gets
     recursively merged the same way (using child_keys[1:] at that level) —
@@ -220,6 +222,15 @@ def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict]
     across different parents would be wrong).
 
     merge_list_by_id() is just this function with child_keys=().
+
+    An item with MULTIPLE sibling nested lists to merge (not just one
+    linear child_keys chain), or a mix of id-keyed and non-id-keyed nested
+    lists, doesn't fit the child_keys shape — pass `item_merger(b, l, r,
+    item_path, item_path_labels) -> (merged_item, conflicts)` instead;
+    it takes full responsibility for that item's own fields and any
+    nesting (child_keys is ignored when item_merger is given). See
+    core.project_merge's _merge_report_item / _merge_rd_component /
+    _merge_validation_session for examples.
     """
     base, local, remote = base or [], local or [], remote or []
     base_by_id = _index_by_id(base, id_key)
@@ -293,6 +304,13 @@ def merge_nested_by_path(base: List[dict], local: List[dict], remote: List[dict]
         # recursing into the nested child list separately if this level has one.
         b, l, r = base_by_id.get(item_id, {}), local_by_id[item_id], remote_by_id[item_id]
         item_path_labels = path_labels + (_item_label(item_id, l, r, b),)
+
+        if item_merger is not None:
+            merged_item, field_conflicts = item_merger(b, l, r, item_path, item_path_labels)
+            conflicts.extend(field_conflicts)
+            merged.append(merged_item)
+            continue
+
         skip = (child_key,) if child_key else ()
         merged_item, field_conflicts = merge_dict_fields(
             b, l, r, section=section, path=item_path, path_labels=item_path_labels, skip_keys=skip,
@@ -431,64 +449,10 @@ def _merge_report(base, local, remote):
 
         return merged, conflicts
 
-    base_by_id = _index_by_id(base.get('reports', []), 'id')
-    local_by_id = _index_by_id(local.get('reports', []), 'id')
-    remote_by_id = _index_by_id(remote.get('reports', []), 'id')
-
-    # Resolve id collisions on brand-new reports the same way
-    # merge_nested_by_path would, before deciding which reports survive.
-    local_new = set(local_by_id) - set(base_by_id)
-    remote_new = set(remote_by_id) - set(base_by_id)
-    colliding = detect_id_collision(local_new, remote_new)
-    if colliding:
-        all_ids = set(base_by_id) | set(local_by_id) | set(remote_by_id)
-        remote_reports = _renumber_collisions(remote.get('reports', []), colliding, all_ids, 'id')
-        remote_by_id = _index_by_id(remote_reports, 'id')
-
-    conflicts: List[Conflict] = []
-    reports: List[dict] = []
-    seen = set()
-
-    def _order():
-        for r_item in local.get('reports', []):
-            rid = r_item.get('id')
-            if rid is not None and rid not in seen:
-                seen.add(rid)
-                yield rid
-        for r_item in remote_by_id.values():
-            rid = r_item.get('id')
-            if rid is not None and rid not in seen:
-                seen.add(rid)
-                yield rid
-
-    for rid in _order():
-        in_base, in_local, in_remote = rid in base_by_id, rid in local_by_id, rid in remote_by_id
-        r_path = ('reports', rid)
-
-        if in_base and not in_local and not in_remote:
-            continue
-        if in_base and not in_local and in_remote:
-            if remote_by_id[rid] != base_by_id[rid]:
-                conflicts.append(Conflict('report', r_path, '__deleted__', None, remote_by_id[rid]))
-                reports.append(remote_by_id[rid])
-            continue
-        if in_base and in_local and not in_remote:
-            if local_by_id[rid] != base_by_id[rid]:
-                conflicts.append(Conflict('report', r_path, '__deleted__', local_by_id[rid], None))
-                reports.append(local_by_id[rid])
-            continue
-        if not in_base and in_local and not in_remote:
-            reports.append(local_by_id[rid])
-            continue
-        if not in_base and not in_local and in_remote:
-            reports.append(remote_by_id[rid])
-            continue
-
-        b, l, r = base_by_id.get(rid, {}), local_by_id[rid], remote_by_id[rid]
-        r_path_labels = (_item_label(rid, l, r, b),)
-        merged_report, item_conflicts = _merge_report_item(b, l, r, r_path, r_path_labels)
-        conflicts += item_conflicts
-        reports.append(merged_report)
+    reports, conflicts = merge_nested_by_path(
+        base.get('reports', []), local.get('reports', []), remote.get('reports', []),
+        id_key='id', section='report', path=('reports',), item_merger=_merge_report_item,
+    )
 
     result = {'logo_path': local.get('logo_path'), 'reports': reports}
     result['logo_path'], logo_conflicts = _merge_scalar(
@@ -615,6 +579,214 @@ def _merge_technical_overview(base, local, remote):
     return merged, conflicts
 
 
+def _merge_assignment(base, local, remote):
+    base, local, remote = base or {}, local or {}, remote or {}
+    tabs, conflicts = merge_nested_by_path(
+        base.get('tabs', []), local.get('tabs', []), remote.get('tabs', []),
+        id_key='id', child_keys=('cards',),
+        section='assignment', path=('tabs',),
+    )
+
+    # current_tab is a raw list INDEX, not an id — resolve post-merge by
+    # looking up whichever tab id it pointed to before merging, same
+    # reasoning as traceability's current_component (local's index and
+    # remote's index refer to different tabs once the lists diverge, e.g.
+    # a tab got deleted or a new one inserted ahead of it on either side).
+    local_tabs = local.get('tabs', [])
+    idx = local.get('current_tab', 0)
+    target_id = local_tabs[idx].get('id') if 0 <= idx < len(local_tabs) else None
+    current_tab = 0
+    if target_id is not None:
+        for i, tb in enumerate(tabs):
+            if tb.get('id') == target_id:
+                current_tab = i
+                break
+
+    return {'tabs': tabs, 'current_tab': current_tab}, conflicts
+
+
+def _merge_rd(base, local, remote):
+    """R&D components. Each component has THREE sibling nested lists
+    (brief.notes, proposals, technique_proposals) rather than one linear
+    child_keys chain, so it needs a custom item_merger — same shape as
+    _merge_report_item. proposals/technique_proposals each carry their own
+    image_path (ui/rd_widget.py's MaterialProposal/TechniqueProposal) —
+    id-based merging keeps an unrelated proposal's image intact when only
+    a different proposal/component was actually edited."""
+    base, local, remote = base or {}, local or {}, remote or {}
+
+    def _merge_component(b, l, r, path, path_labels=()):
+        skip = ('brief', 'proposals', 'technique_proposals')
+        merged, conflicts = merge_dict_fields(b, l, r, section='rd', path=path,
+                                               path_labels=path_labels, skip_keys=skip)
+
+        b_brief, l_brief, r_brief = b.get('brief') or {}, l.get('brief') or {}, r.get('brief') or {}
+        brief, brief_conflicts = merge_dict_fields(
+            b_brief, l_brief, r_brief, section='rd', path=path + ('brief',),
+            path_labels=path_labels, skip_keys=('notes',),
+        )
+        notes, notes_conflicts = merge_list_by_id(
+            b_brief.get('notes', []), l_brief.get('notes', []), r_brief.get('notes', []),
+            id_key='id', section='rd', path=path + ('brief', 'notes'), path_labels=path_labels,
+        )
+        brief['notes'] = notes
+        merged['brief'] = brief
+        conflicts += brief_conflicts + notes_conflicts
+
+        for key in ('proposals', 'technique_proposals'):
+            items, item_conflicts = merge_list_by_id(
+                b.get(key, []), l.get(key, []), r.get(key, []),
+                id_key='id', section='rd', path=path + (key,), path_labels=path_labels,
+            )
+            merged[key] = items
+            conflicts += item_conflicts
+
+        return merged, conflicts
+
+    components, conflicts = merge_nested_by_path(
+        base.get('components', []), local.get('components', []), remote.get('components', []),
+        id_key='id', section='rd', path=('components',), item_merger=_merge_component,
+    )
+    return {'components': components}, conflicts
+
+
+def _merge_estimated_cost(base, local, remote):
+    """trades -> partners are id-keyed (ui/estimated_cost.py's CostTrade/
+    CostPartner), but a partner's own `tasks` have no id at all (CostTask),
+    so the nesting stops at partners — `tasks` is then just a normal list
+    field of the partner dict, handled by merge_dict_fields' existing
+    opaque-whole-list-if-differs fallback (same treatment as report's
+    photo_blocks), which is the correct/safe behavior for an unkeyed list."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    merged, conflicts = merge_dict_fields(base, local, remote, section='estimated_cost', path=(),
+                                           skip_keys=('trades',))
+    trades, trade_conflicts = merge_nested_by_path(
+        base.get('trades', []), local.get('trades', []), remote.get('trades', []),
+        id_key='id', child_keys=('partners',), section='estimated_cost', path=('trades',),
+    )
+    merged['trades'] = trades
+    conflicts += trade_conflicts
+    return merged, conflicts
+
+
+def _merge_files(base, local, remote):
+    """folders/files (ui/files_widget.py) are id-keyed; a file's own
+    `versions` have no id (only a display version_str), so they're left as
+    one opaque list field per file — same reasoning as estimated_cost's
+    tasks. `file_data_b64` (the actual uploaded content) lives inside those
+    versions, so this still isolates a conflict to "this one file's
+    versions", not the entire files+folders tree, unlike the previous
+    whole-section fallback. next_folder_id/next_file_id are bumped past
+    whatever ids actually survived the merge (from either side) so a
+    future add on either machine can't mint a colliding id."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    folders, folder_conflicts = merge_list_by_id(
+        base.get('folders', []), local.get('folders', []), remote.get('folders', []),
+        id_key='id', section='files', path=('folders',),
+    )
+    files, file_conflicts = merge_list_by_id(
+        base.get('files', []), local.get('files', []), remote.get('files', []),
+        id_key='id', section='files', path=('files',),
+    )
+    next_folder_id = max(
+        [f.get('id', 0) + 1 for f in folders] + [local.get('next_folder_id', 1), remote.get('next_folder_id', 1)]
+    )
+    next_file_id = max(
+        [f.get('id', 0) + 1 for f in files] + [local.get('next_file_id', 1), remote.get('next_file_id', 1)]
+    )
+    return {
+        'folders': folders, 'files': files,
+        'next_folder_id': next_folder_id, 'next_file_id': next_file_id,
+    }, folder_conflicts + file_conflicts
+
+
+def _merge_validation(base, local, remote):
+    """Validation sessions (ui/validation/models.py's ValidationSession)
+    each have a mix of an id-keyed nested list (stakeholders) and two that
+    aren't (modifications, action_plan — ModificationRow/ActionRow have no
+    id field), plus a fixed-length positional schedule_dates list — a
+    custom item_merger, same shape as _merge_report_item/_merge_component:
+    stakeholders merged by id, the rest fall through as opaque list
+    fields (safe fallback for the id-less ones, and schedule_dates is
+    positional by nature anyway)."""
+    base, local, remote = base or {}, local or {}, remote or {}
+
+    def _merge_session(b, l, r, path, path_labels=()):
+        skip = ('stakeholders',)
+        merged, conflicts = merge_dict_fields(b, l, r, section='validation', path=path,
+                                               path_labels=path_labels, skip_keys=skip)
+        stakeholders, sh_conflicts = merge_list_by_id(
+            b.get('stakeholders', []), l.get('stakeholders', []), r.get('stakeholders', []),
+            id_key='id', section='validation', path=path + ('stakeholders',), path_labels=path_labels,
+        )
+        merged['stakeholders'] = stakeholders
+        conflicts += sh_conflicts
+        return merged, conflicts
+
+    sessions, conflicts = merge_nested_by_path(
+        base.get('sessions', []), local.get('sessions', []), remote.get('sessions', []),
+        id_key='id', section='validation', path=('sessions',), item_merger=_merge_session,
+    )
+    return {'sessions': sessions}, conflicts
+
+
+def _merge_prototype(base, local, remote):
+    """Prototype versions (ui/prototype_widget.py's PrototypeVersion) are
+    id-keyed (a uuid — no collision-counter concern); each version's own
+    image_paths/file_paths are plain list fields with no per-item id, so
+    they fall through to merge_dict_fields' opaque-whole-list treatment —
+    id-based versioning is what actually matters here, since that's what
+    previously let editing one version's comments wipe out a DIFFERENT
+    version's photos entirely. next_number is a display counter (not an
+    id) — bumped past the highest version_number that survived the merge
+    so the next new version doesn't duplicate a number."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    versions, conflicts = merge_list_by_id(
+        base.get('versions', []), local.get('versions', []), remote.get('versions', []),
+        id_key='id', section='prototype', path=('versions',),
+    )
+    next_number = max(
+        [v.get('version_number', 0) + 1 for v in versions]
+        + [local.get('next_number', 1), remote.get('next_number', 1)]
+    )
+    return {'versions': versions, 'next_number': next_number}, conflicts
+
+
+def _merge_version_comparison(base, local, remote):
+    """Cards (ui/version_comparison.py's VersionCard) are id-keyed by a
+    persisted sequential next_id counter (unlike prototype's uuids) —
+    each card's own photo_paths (up to 3 per card) fall through to
+    merge_dict_fields' opaque-list treatment. next_id is bumped past every
+    surviving card id so a future add on either machine can't mint an id
+    that collides with one the other machine already saved."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    cards, conflicts = merge_list_by_id(
+        base.get('cards', []), local.get('cards', []), remote.get('cards', []),
+        id_key='id', section='version_comparison', path=('cards',),
+    )
+    next_id = max(
+        [c.get('id', 0) + 1 for c in cards] + [local.get('next_id', 1), remote.get('next_id', 1)]
+    )
+    return {'cards': cards, 'next_id': next_id}, conflicts
+
+
+def _merge_glossary(base, local, remote):
+    """Terms (ui/glossary_widget.py's GlossaryTerm) are id-keyed by a
+    persisted sequential next_id counter, same reasoning as
+    version_comparison's cards — no images here, but still a plain id-keyed
+    list vulnerable to "concurrent edits to different terms wipe each
+    other" under the old whole-section fallback."""
+    base, local, remote = base or {}, local or {}, remote or {}
+    terms, conflicts = merge_list_by_id(
+        base.get('terms', []), local.get('terms', []), remote.get('terms', []),
+        id_key='id', section='glossary', path=('terms',),
+    )
+    next_id = max(
+        [t.get('id', 0) + 1 for t in terms] + [local.get('next_id', 1), remote.get('next_id', 1)]
+    )
+    return {'terms': terms, 'next_id': next_id}, conflicts
+
+
 _SECTION_MERGERS = {
     'todo': _merge_todo,
     'timeline': _merge_timeline,
@@ -626,11 +798,21 @@ _SECTION_MERGERS = {
     'brief': _merge_brief,
     'drawing_scale': _merge_drawing_scale,
     'technical_overview': _merge_technical_overview,
+    'assignment': _merge_assignment,
+    'rd': _merge_rd,
+    'estimated_cost': _merge_estimated_cost,
+    'files': _merge_files,
+    'validation': _merge_validation,
+    'prototype': _merge_prototype,
+    'version_comparison': _merge_version_comparison,
+    'glossary': _merge_glossary,
 }
 
-# Any section not in _SECTION_MERGERS falls back to whole-section
-# replace-if-differs (merge_section, below). Everything not yet audited
-# defaults here too, so adding real support for one later is a
+# Every top-level save section (all of _NAV_KEYS in ui/project_widget.py,
+# plus project_info/viewer_tabs/technical_overview/drawing_scale) has a real
+# entry above as of the "assignment" image-loss bug audit — none are left on
+# the whole-section fallback below. merge_section still falls back to it for
+# any genuinely new section added later, so wiring one up is a
 # _SECTION_MERGERS entry, not new engine code. technical_overview used to
 # live here too (as an opaque zip blob), but the blob got regenerated with
 # non-deterministic bytes (a fresh created_at + zip-entry mtimes) on every

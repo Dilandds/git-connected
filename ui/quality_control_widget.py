@@ -692,7 +692,7 @@ class _ControlPointsPanel(QWidget):
         self._instr_card.setVisible(visible)
         self._help_btn.setChecked(visible)
 
-    def _add_point(self, cp: Optional[ControlPoint] = None):
+    def _add_point(self, cp: Optional[ControlPoint] = None, annotation_id: Optional[int] = None):
         from PyQt5.QtWidgets import QApplication as _QApp
         _app = _QApp.instance()
         _aw = _app.activeWindow()
@@ -706,7 +706,8 @@ class _ControlPointsPanel(QWidget):
 
         if cp is None:
             color = _BADGE_PALETTE[(self._next_id - 1) % len(_BADGE_PALETTE)]
-            cp = ControlPoint(id=self._next_id, name='', status='to_check', color=color)
+            cp = ControlPoint(id=self._next_id, name='', status='to_check', color=color,
+                               annotation_id=annotation_id)
         card = _ControlPointCard(cp, self)
         card.changed.connect(self.changed)
         card.delete_requested.connect(self._delete_card)
@@ -748,6 +749,30 @@ class _ControlPointsPanel(QWidget):
     def _renumber(self):
         for i, card in enumerate(self._cards, 1):
             card.set_number(i)
+
+    def remove_points_for_removed_annotations(self, first: int, count: int):
+        """Drop any control point auto-linked (via annotation_id) to one of
+        the `count` annotations starting at 1-based global number `first` —
+        called when an inspection image carrying those annotations is
+        deleted, so its control points don't stick around pointing at
+        annotations that no longer exist. Every remaining point whose
+        annotation_id comes after the removed range is shifted down by
+        `count` too, since deleting an earlier image renumbers every later
+        image's annotations (see _QCLeftPanel._delete_inspection_image)."""
+        last = first + count - 1
+        for card in list(self._cards):
+            cp = card.get_data()
+            if cp.annotation_id is not None and first <= cp.annotation_id <= last:
+                self._cards_layout.removeWidget(card)
+                card.deleteLater()
+                self._cards.remove(card)
+        for card in self._cards:
+            cp = card.get_data()
+            if cp.annotation_id is not None and cp.annotation_id > last:
+                cp.annotation_id -= count
+        self._renumber()
+        self._refresh_count()
+        self.changed.emit()
 
     def _refresh_count(self):
         self._count_lbl.setText(str(len(self._cards)))
@@ -1182,6 +1207,12 @@ class _QCLeftPanel(QWidget):
     fullscreen_requested   = pyqtSignal(bool)
     model_selected         = pyqtSignal(int)
     annotation_added       = pyqtSignal(int)
+    # Emitted when an inspection image is deleted, carrying the 1-based
+    # global annotation number range that image's dots occupied (first,
+    # count) — annotation numbers are global across all images (see
+    # _on_image_point_added's `offset` scheme), so removing an earlier
+    # image also shifts every later image's numbers down by `count`.
+    annotations_removed    = pyqtSignal(int, int)
     model_remove_requested = pyqtSignal(object)  # carries the viewer_widget to remove
     upload_requested       = pyqtSignal()         # user clicked "No model loaded" placeholder
 
@@ -1687,6 +1718,8 @@ class _QCLeftPanel(QWidget):
     def _delete_inspection_image(self, idx: int):
         if idx < 0 or idx >= len(self._inspection_images):
             return
+        offset = sum(len(self._image_annotations[i]) for i in range(idx))
+        removed_count = len(self._image_annotations[idx])
         self._inspection_images.pop(idx)
         self._image_annotations.pop(idx)
         if self._active_img_idx == idx:
@@ -1694,6 +1727,10 @@ class _QCLeftPanel(QWidget):
         elif self._active_img_idx > idx:
             self._active_img_idx -= 1
         self._rebuild_insp_strip()
+        if removed_count:
+            # 1-based, matching the annotation_id values _on_image_point_added
+            # hands out (offset + len(...) after appending).
+            self.annotations_removed.emit(offset + 1, removed_count)
         self.changed.emit()
 
     def _rebuild_insp_strip(self):
@@ -2123,7 +2160,12 @@ class QualityControlWidget(QWidget):
         self._left_panel.upload_requested.connect(self.upload_requested)
         # Clicking on an image auto-adds a matching control point in the center panel
         self._left_panel.annotation_added.connect(
-            lambda _n: self._center_panel._add_point()
+            lambda n: self._center_panel._add_point(annotation_id=n)
+        )
+        # Deleting an inspection image must take its control points with it,
+        # not leave them behind pointing at annotations that no longer exist.
+        self._left_panel.annotations_removed.connect(
+            self._center_panel.remove_points_for_removed_annotations
         )
 
         self._sep_lc = _vsep()
