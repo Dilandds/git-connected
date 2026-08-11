@@ -121,7 +121,7 @@ class MaterialProposal:
     origin: str = ''
     supplier: str = ''
     status: str = 'in_evaluation'
-    image_path: str = ''
+    image_b64: str = ''
     notes: str = ''
 
 
@@ -137,7 +137,7 @@ class TechniqueProposal:
     supplier: str = ''
     notes: str = ''
     status: str = 'in_evaluation'
-    image_path: str = ''
+    image_b64: str = ''
 
 
 @dataclass
@@ -159,11 +159,15 @@ def _brief_from_dict(d: dict) -> ComponentBrief:
 
 
 def _proposal_from_dict(d: dict) -> MaterialProposal:
+    from core.image_utils import migrate_path_to_b64
+    d = migrate_path_to_b64(d, 'image_path', 'image_b64')
     d2 = {k: v for k, v in d.items() if k in MaterialProposal.__dataclass_fields__}
     return MaterialProposal(**d2)
 
 
 def _technique_from_dict(d: dict) -> TechniqueProposal:
+    from core.image_utils import migrate_path_to_b64
+    d = migrate_path_to_b64(d, 'image_path', 'image_b64')
     d2 = {k: v for k, v in d.items() if k in TechniqueProposal.__dataclass_fields__}
     return TechniqueProposal(**d2)
 
@@ -186,9 +190,9 @@ class _MiniPhoto(QLabel):
     """Clickable square that shows a photo thumbnail or placeholder."""
     changed = pyqtSignal(str)
 
-    def __init__(self, path: str = '', w: int = 150, h: int = 110, parent=None):
+    def __init__(self, b64: str = '', w: int = 150, h: int = 110, parent=None):
         super().__init__(parent)
-        self._path = path
+        self._b64 = b64
         self._w, self._h = w, h
         self.setFixedSize(w, h)
         self.setAlignment(Qt.AlignCenter)
@@ -203,8 +207,10 @@ class _MiniPhoto(QLabel):
         self._refresh()
 
     def _refresh(self):
-        if self._path and os.path.exists(self._path):
-            pix = QPixmap(self._path).scaled(
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._b64)
+        if pix is not None:
+            pix = pix.scaled(
                 self._w - 4, self._h - 4,
                 Qt.KeepAspectRatio, Qt.SmoothTransformation,
             )
@@ -217,12 +223,12 @@ class _MiniPhoto(QLabel):
             self.clear()
             self.setText('📷\n' + t('rd.click_to_add_photo'))
 
-    def set_path(self, path: str):
-        self._path = path
+    def set_b64(self, b64: str):
+        self._b64 = b64
         self._refresh()
 
-    def get_path(self) -> str:
-        return self._path
+    def get_b64(self) -> str:
+        return self._b64
 
     def mousePressEvent(self, _e):
         path, _ = QFileDialog.getOpenFileName(
@@ -230,8 +236,11 @@ class _MiniPhoto(QLabel):
             'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
         )
         if path:
-            self._path = path
-            self._refresh()
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._b64 = b64
+                self._refresh()
             self.changed.emit(path)
 
 
@@ -260,7 +269,7 @@ class _ProposalDialog(FormModal):
         # task 6cbd5b48). Keep any existing value around unchanged so older
         # proposals that already had an origin don't silently lose it.
         self._orig_origin = prop.origin if prop else ''
-        self._photo = _MiniPhoto(prop.image_path if prop else '', 200, 140)
+        self._photo = _MiniPhoto(prop.image_b64 if prop else '', 200, 140)
         self.add_widget(self._photo)
         self._f_name  = self.add_field(t('rd.prop_name'),      QLineEdit(prop.name if prop else ''))
         self._f_cat   = self.add_field(t('rd.prop_category'),  QLineEdit(prop.category if prop else ''))
@@ -278,7 +287,7 @@ class _ProposalDialog(FormModal):
             'treatment': self._f_treat.text().strip(),
             'origin':    self._orig_origin,
             'supplier':  self._f_sup.text().strip(),
-            'image_path': self._photo.get_path(),
+            'image_b64': self._photo.get_b64(),
             'notes':     self._f_notes.toPlainText().strip(),
         }
 
@@ -287,7 +296,7 @@ class _TechniqueDialog(FormModal):
     def __init__(self, prop: TechniqueProposal = None, parent=None):
         label = t('rd.edit_technique') if prop else t('rd.add_technique_dlg')
         super().__init__(parent, label, theme=FormModal.LIGHT, min_width=440)
-        self._photo = _MiniPhoto(prop.image_path if prop else '', 200, 140)
+        self._photo = _MiniPhoto(prop.image_b64 if prop else '', 200, 140)
         self.add_widget(self._photo)
         self._f_name     = self.add_field(t('rd.tech_name'),       QLineEdit(prop.name if prop else ''))
         self._f_process  = self.add_field(t('rd.tech_process'),    QLineEdit(prop.process_type if prop else ''))
@@ -310,7 +319,7 @@ class _TechniqueDialog(FormModal):
             'lead_time':    self._f_lead.text().strip(),
             'complexity':   self._f_complex.text().strip(),
             'supplier':     self._f_sup.text().strip(),
-            'image_path':   self._photo.get_path(),
+            'image_b64':    self._photo.get_b64(),
             'notes':        self._f_notes.toPlainText().strip(),
         }
 
@@ -417,9 +426,10 @@ class _CompareDialog(QDialog):
         img.setFixedSize(176, 130)
         img.setAlignment(Qt.AlignCenter)
         img.setStyleSheet(f'background: {_PANEL}; border-radius: 6px;')
-        if prop.image_path and os.path.exists(prop.image_path):
-            pix = QPixmap(prop.image_path).scaled(176, 130, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            img.setPixmap(pix)
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(prop.image_b64)
+        if pix is not None:
+            img.setPixmap(pix.scaled(176, 130, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             img.setText('📷')
             img.setStyleSheet(img.styleSheet() + f' color: {_MUTED}; font-size: 24px;')
@@ -671,10 +681,10 @@ class _ProposalCard(QFrame):
             root.addWidget(note_box)
 
     def _load_image(self):
-        if self._prop.image_path and os.path.exists(self._prop.image_path):
-            pix = QPixmap(self._prop.image_path).scaled(
-                256, 160, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-            )
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._prop.image_b64)
+        if pix is not None:
+            pix = pix.scaled(256, 160, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             self._img.setPixmap(pix)
             self._img.setScaledContents(False)
         else:
@@ -755,13 +765,15 @@ class _TechniqueCard(QFrame):
         root.addLayout(top_row)
 
         # Optional image
-        if self._prop.image_path and os.path.exists(self._prop.image_path):
+        from core.image_utils import b64_to_pixmap
+        _prop_pix = b64_to_pixmap(self._prop.image_b64)
+        if _prop_pix is not None:
             IMG_W, IMG_H = 256, 140
             img_lbl = QLabel()
             img_lbl.setFixedSize(IMG_W, IMG_H)
             img_lbl.setAlignment(Qt.AlignCenter)
             img_lbl.setStyleSheet(f'background: {_PANEL}; border-radius: 8px; border: none;')
-            pix = QPixmap(self._prop.image_path).scaled(
+            pix = _prop_pix.scaled(
                 IMG_W, IMG_H, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
             )
             img_lbl.setPixmap(pix)
@@ -859,9 +871,10 @@ class _SelectionRow(QFrame):
         thumb.setFixedSize(44, 44)
         thumb.setAlignment(Qt.AlignCenter)
         thumb.setStyleSheet(f'background: {_PANEL}; border-radius: 6px; color: {_MUTED}; font-size: 18px;')
-        if prop.image_path and os.path.exists(prop.image_path):
-            pix = QPixmap(prop.image_path).scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            thumb.setPixmap(pix)
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(prop.image_b64)
+        if pix is not None:
+            thumb.setPixmap(pix.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             thumb.setText('📷')
         row.addWidget(thumb)

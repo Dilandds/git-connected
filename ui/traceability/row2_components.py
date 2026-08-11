@@ -5,7 +5,6 @@ from PyQt5.QtWidgets import (
     QFrame, QScrollArea, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPoint
-from PyQt5.QtGui import QPixmap
 from ui.modal_utils import ask_yes_no_dialog
 from .models import TraceComponent, TraceStage, TraceSubStage
 from .shared import (
@@ -153,9 +152,10 @@ class _ComponentsRow(QWidget):
         img = QLabel()
         img.setAlignment(Qt.AlignCenter)
         img.setStyleSheet('background: transparent; border: none;')
-        if comp.image_path:
-            pix = QPixmap(comp.image_path)
-            if not pix.isNull():
+        if comp.image_b64:
+            from core.image_utils import b64_to_pixmap
+            pix = b64_to_pixmap(comp.image_b64)
+            if pix is not None:
                 img.setPixmap(pix.scaled(_IMG_SIZE, _IMG_SIZE,
                                          Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
             else:
@@ -232,7 +232,7 @@ class _ComponentsRow(QWidget):
             return
         new_id = max((c.id for c in self._components), default=0) + 1
         self._components.append(TraceComponent(
-            id=new_id, name=dlg.name, image_path=dlg.image_path,
+            id=new_id, name=dlg.name, image_b64=dlg.image_b64, image_name=dlg.image_name,
             stages=[TraceStage(id=1, number=1,
                                name=t('project.traceability.default_stage_number_name').format(n=1),
                                status='Upcoming',
@@ -248,7 +248,8 @@ class _ComponentsRow(QWidget):
         if result == QDialog.Accepted:
             if dlg.name:
                 comp.name = dlg.name
-            comp.image_path = dlg.image_path
+            comp.image_b64 = dlg.image_b64
+            comp.image_name = dlg.image_name
             self._refresh()
             self.changed.emit()
         elif result == 2:

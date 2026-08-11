@@ -709,6 +709,43 @@ def test_glossary_merge():
     check("next_id bumped past the highest surviving id", merged['next_id'] == 3)
 
 
+def test_assignment_ensure_tab_ids():
+    print("test_assignment_ensure_tab_ids")
+    from ui.assignment_widget import ensure_tab_ids
+
+    # Real ids are preserved untouched.
+    tabs = [{'id': 'real-id', 'image_name': 'a.png'}]
+    check("existing id kept as-is", ensure_tab_ids(tabs)[0]['id'] == 'real-id')
+
+    # A save from before tabs had ids (none present at all) gets a
+    # deterministic positional fallback...
+    legacy = [{'image_name': 'a.png'}, {'image_name': 'b.png'}]
+    result1 = ensure_tab_ids(legacy)
+    check("missing id gets a positional fallback", [t['id'] for t in result1] == ['tab-0', 'tab-1'])
+
+    # ...and, critically, two INDEPENDENT calls on the same legacy data
+    # (standing in for two separate machines loading the same unmigrated
+    # file) must derive the IDENTICAL fallback ids — this is exactly what
+    # keeps core.project_merge from mistaking "the same untouched tab" for
+    # a brand-new id collision between local and remote (which crashed
+    # trying to renumber a string id as if it were numeric).
+    result2 = ensure_tab_ids(legacy)
+    check("two independent calls derive identical fallback ids",
+          [t['id'] for t in result1] == [t['id'] for t in result2])
+
+    # merge_section itself must not choke on an all-legacy scenario once
+    # normalized (this is what ui/project_widget.py's _resolve_save_conflicts
+    # now does to base/local/remote before calling merge_project).
+    base = {'current_tab': 0, 'tabs': ensure_tab_ids(legacy)}
+    local = json.loads(json.dumps(base))
+    local['tabs'][0]['image_name'] = 'renamed.png'
+    remote = json.loads(json.dumps(base))
+    merged, conflicts = merge_section('assignment', base, local, remote)
+    check("no crash and no spurious collision merging an all-legacy assignment section", conflicts == [])
+    check("local's rename kept, legacy tab correctly recognized as the same tab",
+          merged['tabs'][0]['image_name'] == 'renamed.png' and len(merged['tabs']) == 2)
+
+
 def main():
     tests = [
         test_no_conflict_both_sides_add,
@@ -740,6 +777,7 @@ def main():
         test_prototype_merge,
         test_version_comparison_merge,
         test_glossary_merge,
+        test_assignment_ensure_tab_ids,
     ]
     for t in tests:
         t()

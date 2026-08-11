@@ -49,12 +49,12 @@ _FIELD_LABELS = {
     ('project_info', 'number'): 'Project Number',
     ('project_info', 'project_manager'): 'Project Manager',
     ('project_info', 'status'): 'Status',
-    ('project_info', 'photo_path'): 'Project Photo',
+    ('project_info', 'photo_b64'): 'Project Photo',
     ('report', 'project_name'): 'Project Name',
     ('report', 'project_reference'): 'Project Reference',
     ('report', 'project_manager'): 'Project Manager',
-    ('report', 'project_photo_path'): 'Project Photo',
-    ('report', 'logo_path'): 'Logo',
+    ('report', 'project_photo_b64'): 'Project Photo',
+    ('report', 'logo_b64'): 'Logo',
     ('report', 'followup'): 'Follow-up',
     ('report', 'comments'): 'Comments',
     ('report', 'photo_blocks'): 'Photos',
@@ -75,6 +75,8 @@ _FIELD_LABELS = {
     ('timeline', 'project_manager'): 'Project Manager',
     ('traceability', 'name'): 'Name',
     ('traceability', 'status'): 'Status',
+    ('traceability', 'image_b64'): 'Image',
+    ('traceability', 'product_image_b64'): 'Product Image',
     ('drawing_scale', 'unit'): 'Unit',
     ('drawing_scale', 'scale_ratio'): 'Scale Ratio',
     ('technical_overview', 'document'): 'Document',
@@ -82,12 +84,12 @@ _FIELD_LABELS = {
     ('assignment', 'supplier'): 'Supplier',
     ('assignment', 'status'): 'Status',
     ('assignment', 'image_name'): 'Image',
-    ('assignment', 'image_path'): 'Image',
+    ('assignment', 'image_b64'): 'Image',
     ('assignment', 'orientation'): 'Orientation',
     ('rd', 'name'): 'Name',
     ('rd', 'supplier'): 'Supplier',
     ('rd', 'status'): 'Status',
-    ('rd', 'image_path'): 'Image',
+    ('rd', 'image_b64'): 'Image',
     ('rd', 'text'): 'Note',
     ('estimated_cost', 'name'): 'Name',
     ('estimated_cost', 'tasks'): 'Tasks',
@@ -99,10 +101,10 @@ _FIELD_LABELS = {
     ('validation', 'schedule_dates'): 'Schedule Dates',
     ('prototype', 'comments'): 'Comments',
     ('prototype', 'status'): 'Status',
-    ('prototype', 'image_paths'): 'Photos',
-    ('prototype', 'file_paths'): 'Files',
+    ('prototype', 'image_b64s'): 'Photos',
+    ('prototype', 'files'): 'Files',
     ('version_comparison', 'comments'): 'Comments',
-    ('version_comparison', 'photo_paths'): 'Photos',
+    ('version_comparison', 'photo_b64s'): 'Photos',
     ('glossary', 'term'): 'Term',
     ('glossary', 'definition'): 'Definition',
 }
@@ -232,14 +234,20 @@ class MergeConflictDialog(BaseModal):
     @classmethod
     def _needs_generic_buttons(cls, conflict) -> bool:
         """True whenever a value isn't sensible to preview as short text —
-        a whole opaque section, or any conflict whose local_value/
-        remote_value is itself a list/dict/bytes/etc rather than a simple
-        scalar (e.g. technical_overview's document+annotations conflict,
-        or report's photo_blocks/attendees). Deliberately broader than
-        _is_whole_section (which still drives _describe's message wording
-        below) — this only controls whether the buttons try to preview the
-        raw value."""
+        a whole opaque section, any conflict whose local_value/remote_value
+        is itself a list/dict/bytes/etc rather than a simple scalar (e.g.
+        technical_overview's document+annotations conflict, or report's
+        photo_blocks/attendees), or a base64-embedded image/file (every
+        such field across the app is named with a `_b64`/`_b64s` suffix —
+        see core/image_utils.py — a base64 string IS technically a `str`,
+        so without this explicit name check it would slip past the
+        type-based test below and get dumped as raw button text). Deliberately
+        broader than _is_whole_section (which still drives _describe's
+        message wording below) — this only controls whether the buttons
+        try to preview the raw value."""
         if cls._is_whole_section(conflict):
+            return True
+        if conflict.field.endswith('_b64') or conflict.field.endswith('_b64s'):
             return True
         for value in (conflict.local_value, conflict.remote_value):
             if value is not None and not isinstance(value, (str, int, float, bool)):

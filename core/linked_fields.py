@@ -22,12 +22,14 @@ Omitted on purpose:
   merge_dict_fields_prefer_local, which silently auto-resolves a dual-edit
   instead of producing a Conflict) — there's simply never a Conflict on
   this side to fold into, so it stays out of this table.
-- photo_path is omitted entirely: two of its known destinations
-  (traceability's main-component image and extra.product_image_path)
-  have no auto-fill guard at all (ui/traceability/widget.py:174-181,
-  ui/traceability/row1_product_info.py:300,321-330) — they always
-  overwrite, which is a pre-existing traceability-specific bug, not
-  something this table should paper over by folding a field whose
+- photo_b64 (the sidebar's project photo, embedded as base64 like every
+  other image field in the app) is omitted entirely: two of its known
+  destinations (traceability's main-component image and row1's
+  product_image_b64) have no auto-fill guard at all
+  (ui/traceability/widget.py's update_project_info,
+  ui/traceability/row1_product_info.py's update_project_info) — they
+  always overwrite, which is a pre-existing traceability-specific bug,
+  not something this table should paper over by folding a field whose
   "customized independently" signal can't be trusted for every
   destination.
 """

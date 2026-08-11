@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QFileDialog, QLineEdit, QDialog,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QEvent, QPoint
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QIcon
 from ui.styles import make_font
 from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _TOOLTIP_STYLE
 from .shared import _ProgressBar
@@ -40,7 +40,7 @@ class _ProductInfoRow(QFrame):
         super().__init__(parent)
         self._planned_launch     = ''
         self._overall_progress   = 0
-        self._product_image_path = ''
+        self._product_image_b64 = ''
         self._zoom_lbl = None   # lazily-created floating hover-zoom preview
         self.setFixedHeight(152)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
@@ -174,9 +174,10 @@ class _ProductInfoRow(QFrame):
         v.setStyleSheet(f'color: {_BORDER}; background: {_BORDER}; max-width: 1px; border: none;')
         return v
 
-    def _apply_image(self, path: str):
-        pix = QPixmap(path)
-        if not pix.isNull():
+    def _apply_image(self, b64: str):
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(b64)
+        if pix is not None:
             scaled = pix.scaled(_IMG_SIZE, _IMG_SIZE, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             self._img_btn.setIcon(QIcon(scaled))
             self._img_btn.setIconSize(QSize(_IMG_SIZE, _IMG_SIZE))
@@ -205,15 +206,18 @@ class _ProductInfoRow(QFrame):
             self, 'Select Product Image', '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
-            self._product_image_path = path
-            self._apply_image(path)
-            self.changed.emit()
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._product_image_b64 = b64
+                self._apply_image(b64)
+                self.changed.emit()
 
     # ── hover-zoom preview ───────────────────────────────────────────────────
 
     def eventFilter(self, obj, event):
         if obj is self._img_btn:
-            if event.type() == QEvent.Enter and self._product_image_path:
+            if event.type() == QEvent.Enter and self._product_image_b64:
                 self._show_zoom_preview()
             elif event.type() == QEvent.Leave:
                 self._hide_zoom_preview()
@@ -222,8 +226,9 @@ class _ProductInfoRow(QFrame):
     def _show_zoom_preview(self):
         """Float an enlarged copy of the product photo next to the thumbnail
         while the mouse hovers over it."""
-        pix = QPixmap(self._product_image_path)
-        if pix.isNull():
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._product_image_b64)
+        if pix is None:
             return
         scaled = pix.scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         if self._zoom_lbl is None:
@@ -318,27 +323,29 @@ class _ProductInfoRow(QFrame):
         status = info.get('status', '')
         self._set_status_pill(status or '—')
 
-        photo = info.get('photo_path', '')
-        if photo and photo != self._product_image_path:
-            self._product_image_path = photo
+        photo = info.get('photo_b64', '')
+        if photo and photo != self._product_image_b64:
+            self._product_image_b64 = photo
             self._apply_image(photo)
 
     def get_extra_data(self) -> dict:
         return {
-            'planned_launch':     self._planned_launch,
-            'overall_progress':   self._overall_progress,
-            'product_image_path': self._product_image_path,
+            'planned_launch':    self._planned_launch,
+            'overall_progress':  self._overall_progress,
+            'product_image_b64': self._product_image_b64,
         }
 
     def set_extra_data(self, data: dict):
-        self._planned_launch     = data.get('planned_launch', '')
-        self._overall_progress   = data.get('overall_progress', 0)
-        self._product_image_path = data.get('product_image_path', '')
+        from core.image_utils import migrate_path_to_b64
+        data = migrate_path_to_b64(data, 'product_image_path', 'product_image_b64')
+        self._planned_launch    = data.get('planned_launch', '')
+        self._overall_progress  = data.get('overall_progress', 0)
+        self._product_image_b64 = data.get('product_image_b64', '')
         self._set_launch_text(self._planned_launch or '—')
         self._prog_lbl.setText(f'{self._overall_progress} %')
         self._prog_bar.set_value(self._overall_progress)
-        if self._product_image_path:
-            self._apply_image(self._product_image_path)
+        if self._product_image_b64:
+            self._apply_image(self._product_image_b64)
         else:
             # _apply_image was only ever called when truthy — without this,
             # New Project / opening a project with no image left the

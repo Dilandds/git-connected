@@ -3,7 +3,6 @@ Print / PDF-export utility for The Project sections.
 Custom in-app print preview with a formatted document renderer for Brief.
 """
 import math
-import os
 from datetime import date
 from typing import Optional
 
@@ -148,11 +147,10 @@ class _BriefRenderer:
         self._y += h + 10
         return self._y - y0
 
-    def _load_px(self, path: str, max_w: int, max_h: int) -> Optional[QPixmap]:
-        if not path or not os.path.isfile(path):
-            return None
-        pm = QPixmap(path)
-        return None if pm.isNull() else pm.scaled(
+    def _load_px(self, b64: str, max_w: int, max_h: int) -> Optional[QPixmap]:
+        from core.image_utils import b64_to_pixmap
+        pm = b64_to_pixmap(b64)
+        return None if pm is None else pm.scaled(
             max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     # ── Header ────────────────────────────────────────────────────────────────
@@ -209,7 +207,7 @@ class _BriefRenderer:
         start_y = self._y
 
         # Left: product image
-        pm = self._load_px(self._d.get('image_path', ''), img_w, img_h)
+        pm = self._load_px(self._d.get('image_b64', ''), img_w, img_h)
         if pm:
             ox = (img_w - pm.width()) // 2
             oy = (img_h - pm.height()) // 2
@@ -377,20 +375,19 @@ class _BriefRenderer:
             self._y += h + 36
 
         # Photos
-        paths = [p for p in (self._d.get('photo_paths', []) or [])
-                 if p and os.path.isfile(p)]
-        if paths:
+        photos = [b for b in (self._d.get('photo_b64s', []) or []) if b]
+        if photos:
             self._draw_text(self.MX, self._y, self.CW, 14,
                             'REFERENCE IMAGES', self._MUTED, self._f(9),
                             Qt.AlignLeft | Qt.AlignVCenter)
             self._y += 18
-            n    = len(paths)
+            n    = len(photos)
             gap  = 14
             pw   = (self.CW - gap * (n - 1)) // n
             ph   = int(pw * 0.72)
-            for i, path in enumerate(paths):
+            for i, b64 in enumerate(photos):
                 px = self.MX + i * (pw + gap)
-                pm = self._load_px(path, pw, ph)
+                pm = self._load_px(b64, pw, ph)
                 self._rect_fill(px, self._y, pw, ph, self._LIGHT)
                 self._rect_border(px, self._y, pw, ph, self._BORDER)
                 if pm:

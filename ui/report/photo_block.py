@@ -4,9 +4,6 @@ Each block = one large photo + caption + Comments textarea + remove button.
 Blocks flow left-to-right, wrapping to the next row when full.
 """
 import math
-import os
-import tempfile
-import time
 from typing import List, Optional
 
 from PyQt5.QtWidgets import (
@@ -176,9 +173,10 @@ class PhotoBlockWidget(QFrame):
         self._photo_btn.setStyleSheet(_SLOT_EMPTY)
         self._photo_btn.setText('📷\nAdd photo')
         self._photo_btn.clicked.connect(self._upload)
-        if cell.image_path:
-            pix = QPixmap(cell.image_path)
-            if not pix.isNull():
+        if cell.image_b64:
+            from core.image_utils import b64_to_pixmap
+            pix = b64_to_pixmap(cell.image_b64)
+            if pix is not None:
                 self._apply_photo(pix)
         lay.addWidget(self._photo_btn)
 
@@ -214,9 +212,11 @@ class PhotoBlockWidget(QFrame):
         path, _ = QFileDialog.getOpenFileName(
             self, 'Select Photo', '', 'Images (*.png *.jpg *.jpeg *.webp *.heic)')
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._cell.image_path = path
+            from core.image_utils import path_to_b64, b64_to_pixmap
+            b64 = path_to_b64(path)
+            pix = b64_to_pixmap(b64) if b64 else None
+            if pix is not None:
+                self._cell.image_b64 = b64
                 self._apply_photo(pix)
                 self.changed.emit()
 
@@ -235,16 +235,18 @@ class PhotoBlockWidget(QFrame):
         self.changed.emit()
 
     def has_image(self) -> bool:
-        return bool(self._cell.image_path)
+        return bool(self._cell.image_b64)
 
     def set_pixmap(self, pixmap: QPixmap) -> bool:
-        """Save pixmap to a temp file and display it. Used for screenshot drops."""
-        tmp_dir = os.path.join(tempfile.gettempdir(), "ectoform_report_photos")
-        os.makedirs(tmp_dir, exist_ok=True)
-        path = os.path.join(tmp_dir, f"photo_{int(time.time() * 1000)}.png")
-        if not pixmap.save(path, "PNG"):
+        """Embed the pixmap directly and display it. Used for screenshot
+        drops — previously wrote to a temp file (ui.temp dirs get cleared
+        by the OS and never sync across machines either; now the bytes
+        just live in the project data like every other photo here)."""
+        from core.image_utils import pixmap_to_b64
+        b64 = pixmap_to_b64(pixmap)
+        if not b64:
             return False
-        self._cell.image_path = path
+        self._cell.image_b64 = b64
         self._apply_photo(pixmap)
         self.changed.emit()
         return True

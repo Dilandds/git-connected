@@ -173,11 +173,11 @@ class TraceabilityWidget(QWidget):
 
     def update_project_info(self, info: dict):
         self._info_row.update_project_info(info)
-        photo = info.get('photo_path', '')
+        photo = info.get('photo_b64', '')
         if photo:
             main = next((c for c in self._components if c.is_main), None)
-            if main and main.image_path != photo:
-                main.image_path = photo
+            if main and main.image_b64 != photo:
+                main.image_b64 = photo
                 self._comp_row.load_components(self._components, self._current_component)
 
     def update_components_from_brief(self, brief_components: list):
@@ -258,7 +258,7 @@ class TraceabilityWidget(QWidget):
         def _sc(c: TraceComponent) -> dict:
             return {
                 'id': c.id, 'name': c.name,
-                'image_path': c.image_path, 'is_main': c.is_main,
+                'image_b64': c.image_b64, 'image_name': c.image_name, 'is_main': c.is_main,
                 'stages': [_st(s) for s in c.stages],
             }
 
@@ -344,9 +344,12 @@ class TraceabilityWidget(QWidget):
                     name=sd.get('name', 'Stage'), status=sd.get('status', 'Upcoming'),
                     sub_stages=sub_stages,
                 ))
+            from core.image_utils import migrate_path_to_b64
+            cd = migrate_path_to_b64(cd, 'image_path', 'image_b64')
             components.append(TraceComponent(
                 id=cd['id'], name=cd.get('name', 'Component'),
-                image_path=cd.get('image_path', ''), is_main=cd.get('is_main', False),
+                image_b64=cd.get('image_b64', ''), image_name=cd.get('image_name', ''),
+                is_main=cd.get('is_main', False),
                 stages=stages,
             ))
 

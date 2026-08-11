@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QLineEdit, QStackedWidget,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QPixmap
 
 from ui.styles import default_theme
 from i18n import t
@@ -54,8 +53,8 @@ class PrototypeVersion:
     date: str = ''
     status: str = 'in_progress'
     comments: str = ''
-    image_paths: List[str] = field(default_factory=list)
-    file_paths: List[str] = field(default_factory=list)
+    image_b64s: List[str] = field(default_factory=list)
+    files: List[dict] = field(default_factory=list)  # [{'name': str, 'data_b64': str}, ...]
 
 
 # ── Main photo area ────────────────────────────────────────────────────────────
@@ -64,9 +63,9 @@ class _MainPhotoArea(QFrame):
     """Large clickable main photo area."""
     changed = pyqtSignal(str)
 
-    def __init__(self, path: str = '', parent=None):
+    def __init__(self, b64: str = '', parent=None):
         super().__init__(parent)
-        self._path = path
+        self._b64 = b64
         self._build()
 
     def _build(self):
@@ -109,9 +108,10 @@ class _MainPhotoArea(QFrame):
         self._refresh()
 
     def _refresh(self):
-        has_img = bool(self._path and os.path.exists(self._path))
-        if has_img:
-            pix = QPixmap(self._path).scaled(
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._b64)
+        if pix is not None:
+            pix = pix.scaled(
                 max(self.width() - 32, 300), max(self.height() - 60, 300),
                 Qt.KeepAspectRatio, Qt.SmoothTransformation,
             )
@@ -127,12 +127,12 @@ class _MainPhotoArea(QFrame):
         super().resizeEvent(event)
         self._refresh()
 
-    def set_path(self, path: str):
-        self._path = path
+    def set_b64(self, b64: str):
+        self._b64 = b64
         self._refresh()
 
-    def get_path(self) -> str:
-        return self._path
+    def get_b64(self) -> str:
+        return self._b64
 
     def mousePressEvent(self, _event):
         path, _ = QFileDialog.getOpenFileName(
@@ -140,9 +140,12 @@ class _MainPhotoArea(QFrame):
             'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
         )
         if path:
-            self._path = path
-            self._refresh()
-            self.changed.emit(path)
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._b64 = b64
+                self._refresh()
+                self.changed.emit(b64)
 
 
 # ── Thumbnail photo slot ───────────────────────────────────────────────────────
@@ -152,10 +155,10 @@ class _ThumbPhoto(QFrame):
     changed = pyqtSignal(int, str)       # index, path
     remove_requested = pyqtSignal(int)   # index
 
-    def __init__(self, index: int, path: str = '', parent=None):
+    def __init__(self, index: int, b64: str = '', parent=None):
         super().__init__(parent)
         self._index = index
-        self._path = path
+        self._b64 = b64
         self._build()
 
     def _build(self):
@@ -218,9 +221,10 @@ class _ThumbPhoto(QFrame):
         self._refresh()
 
     def _refresh(self):
-        has_img = bool(self._path and os.path.exists(self._path))
-        if has_img:
-            pix = QPixmap(self._path).scaled(
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._b64)
+        if pix is not None:
+            pix = pix.scaled(
                 _THUMB_W - 8, _THUMB_H - 8,
                 Qt.KeepAspectRatio, Qt.SmoothTransformation,
             )
@@ -234,12 +238,12 @@ class _ThumbPhoto(QFrame):
             self._hint_lbl.show()
             self._remove_btn.hide()
 
-    def set_path(self, path: str):
-        self._path = path
+    def set_b64(self, b64: str):
+        self._b64 = b64
         self._refresh()
 
-    def get_path(self) -> str:
-        return self._path
+    def get_b64(self) -> str:
+        return self._b64
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -258,21 +262,25 @@ class _ThumbPhoto(QFrame):
             'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
         )
         if path:
-            self._path = path
-            self._refresh()
-            self.changed.emit(self._index, path)
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._b64 = b64
+                self._refresh()
+                self.changed.emit(self._index, b64)
 
 
 # ── File chip ──────────────────────────────────────────────────────────────────
 
 class _FileChip(QFrame):
-    """Inline chip for an attached file with a remove ×."""
-    remove_requested = pyqtSignal(str)
+    """Inline chip for an attached file with a remove ×. Embedded files
+    have no meaningful "path" to key removal by, so identity is by index
+    in the version's files list instead."""
+    remove_requested = pyqtSignal(int)
 
-    def __init__(self, path: str, parent=None):
+    def __init__(self, index: int, name: str, parent=None):
         super().__init__(parent)
-        self._path = path
-        name = os.path.basename(path)
+        self._index = index
         self.setStyleSheet(f"""
             QFrame {{ background: #f1f5f9; border: 1px solid {_BORDER}; border-radius: 5px; }}
         """)
@@ -286,7 +294,7 @@ class _FileChip(QFrame):
 
         display = name if len(name) <= 30 else name[:27] + '…'
         lbl = QLabel(display)
-        lbl.setToolTip(path)
+        lbl.setToolTip(name)
         lbl.setStyleSheet(f'background: transparent; color: {_TEXT}; font-size: 11px;')
         row.addWidget(lbl, 1)
 
@@ -300,7 +308,7 @@ class _FileChip(QFrame):
             }
             QPushButton:hover { color: #ef4444; }
         """)
-        btn.clicked.connect(lambda: self.remove_requested.emit(self._path))
+        btn.clicked.connect(lambda: self.remove_requested.emit(self._index))
         row.addWidget(btn)
 
 
@@ -381,7 +389,7 @@ class _VersionPanel(QFrame):
         left.setSpacing(12)
 
         self._main_photo = _MainPhotoArea(
-            self._v.image_paths[0] if self._v.image_paths else ''
+            self._v.image_b64s[0] if self._v.image_b64s else ''
         )
         self._main_photo.changed.connect(self._on_main_photo_changed)
         left.addWidget(self._main_photo, 1)
@@ -515,8 +523,8 @@ class _VersionPanel(QFrame):
         root.addLayout(content_row, 1)
 
         # Populate existing gallery photos (index 1+)
-        for i, path in enumerate(self._v.image_paths[1:], start=1):
-            self._add_thumb(i, path)
+        for i, b64 in enumerate(self._v.image_b64s[1:], start=1):
+            self._add_thumb(i, b64)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -538,8 +546,8 @@ class _VersionPanel(QFrame):
             }}
         """)
 
-    def _add_thumb(self, index: int, path: str = ''):
-        thumb = _ThumbPhoto(index, path)
+    def _add_thumb(self, index: int, b64: str = ''):
+        thumb = _ThumbPhoto(index, b64)
         thumb.changed.connect(self._on_thumb_changed)
         thumb.remove_requested.connect(self._on_thumb_removed)
         self._thumb_widgets.append(thumb)
@@ -548,30 +556,30 @@ class _VersionPanel(QFrame):
         self._gallery_lay.insertWidget(pos, thumb)
 
     def _add_photo_slot(self):
-        index = len(self._v.image_paths)
-        self._v.image_paths.append('')
+        index = len(self._v.image_b64s)
+        self._v.image_b64s.append('')
         self._add_thumb(index, '')
         self.changed.emit()
 
     # ── Slots ─────────────────────────────────────────────────────────────────
 
-    def _on_main_photo_changed(self, path: str):
-        if self._v.image_paths:
-            self._v.image_paths[0] = path
+    def _on_main_photo_changed(self, b64: str):
+        if self._v.image_b64s:
+            self._v.image_b64s[0] = b64
         else:
-            self._v.image_paths.append(path)
+            self._v.image_b64s.append(b64)
         self.changed.emit()
 
-    def _on_thumb_changed(self, index: int, path: str):
-        while len(self._v.image_paths) <= index:
-            self._v.image_paths.append('')
-        self._v.image_paths[index] = path
+    def _on_thumb_changed(self, index: int, b64: str):
+        while len(self._v.image_b64s) <= index:
+            self._v.image_b64s.append('')
+        self._v.image_b64s[index] = b64
         self.changed.emit()
 
     def _on_thumb_removed(self, index: int):
         # Remove from data
-        if 0 < index < len(self._v.image_paths):
-            self._v.image_paths.pop(index)
+        if 0 < index < len(self._v.image_b64s):
+            self._v.image_b64s.pop(index)
 
         # Remove from UI
         widget_to_remove = None
@@ -606,15 +614,22 @@ class _VersionPanel(QFrame):
         paths, _ = QFileDialog.getOpenFileNames(
             self, t('proto.select_files'), '', 'All Files (*.*)'
         )
+        from core.image_utils import file_to_b64
+        existing_names = {f['name'] for f in self._v.files}
         for p in paths:
-            if p and p not in self._v.file_paths:
-                self._v.file_paths.append(p)
+            name = os.path.basename(p)
+            if not p or name in existing_names:
+                continue
+            b64 = file_to_b64(p)
+            if b64:
+                self._v.files.append({'name': name, 'data_b64': b64})
+                existing_names.add(name)
         self._refresh_files()
         self.changed.emit()
 
-    def _remove_file(self, path: str):
-        if path in self._v.file_paths:
-            self._v.file_paths.remove(path)
+    def _remove_file(self, index: int):
+        if 0 <= index < len(self._v.files):
+            self._v.files.pop(index)
         self._refresh_files()
         self.changed.emit()
 
@@ -624,9 +639,9 @@ class _VersionPanel(QFrame):
             if w := item.widget():
                 w.setParent(None)
 
-        if self._v.file_paths:
-            for p in self._v.file_paths:
-                chip = _FileChip(p)
+        if self._v.files:
+            for i, entry in enumerate(self._v.files):
+                chip = _FileChip(i, entry.get('name', ''))
                 chip.remove_requested.connect(self._remove_file)
                 self._file_lay.addWidget(chip)
         else:
@@ -883,14 +898,40 @@ class PrototypeWidget(QWidget):
         self._active_id = ''
         self._versions = []
 
+        from core.image_utils import path_to_b64, file_to_b64
         for d in data.get('versions', []):
             try:
-                # Migrate legacy single image_path -> image_paths
-                if 'image_path' in d and d['image_path'] and 'image_paths' not in d:
-                    d = dict(d)
-                    d['image_paths'] = [d.pop('image_path')]
-                elif 'image_path' in d:
-                    d = {k: v for k, v in d.items() if k != 'image_path'}
+                d = dict(d)
+                # Migrate legacy image fields (a single old image_path, or
+                # a pre-embedding image_paths list) -> image_b64s,
+                # best-effort per path (only succeeds for a file that
+                # still exists on THIS machine — same reasoning as every
+                # other image field's migration elsewhere in the app).
+                if 'image_b64s' not in d:
+                    legacy_paths = d.pop('image_paths', None)
+                    if legacy_paths is None:
+                        single = d.pop('image_path', '')
+                        legacy_paths = [single] if single else []
+                    else:
+                        d.pop('image_path', None)
+                    d['image_b64s'] = [b for b in (path_to_b64(p) for p in legacy_paths if p) if b]
+                else:
+                    d.pop('image_paths', None)
+                    d.pop('image_path', None)
+
+                # Same idea for attached files: file_paths (bare paths) -> files
+                # ({'name', 'data_b64'} dicts).
+                if 'files' not in d:
+                    migrated = []
+                    for p in d.pop('file_paths', []) or []:
+                        if not p:
+                            continue
+                        b64 = file_to_b64(p)
+                        if b64:
+                            migrated.append({'name': os.path.basename(p), 'data_b64': b64})
+                    d['files'] = migrated
+                else:
+                    d.pop('file_paths', None)
 
                 v = PrototypeVersion(**d)
                 self._versions.append(v)

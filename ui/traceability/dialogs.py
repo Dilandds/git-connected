@@ -246,7 +246,8 @@ class _EditStageDialog(FormModal):
 class _AddComponentDialog(FormModal):
     def __init__(self, parent=None):
         super().__init__(parent, t('project.traceability.add_comp_title'), theme=FormModal.LIGHT, min_width=300)
-        self._image_path = ''
+        self._image_b64 = ''
+        self._image_name = ''
 
         self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit())
         self.f_name.setPlaceholderText(t('project.traceability.comp_name_ph'))
@@ -272,16 +273,24 @@ class _AddComponentDialog(FormModal):
             self, t('project.traceability.select_image'), '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
-            self._image_path = path
-            self._img_lbl.setText(os.path.basename(path))
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._image_b64 = b64
+                self._image_name = os.path.basename(path)
+                self._img_lbl.setText(self._image_name)
 
     @property
     def name(self) -> str:
         return self.f_name.text().strip()
 
     @property
-    def image_path(self) -> str:
-        return self._image_path
+    def image_b64(self) -> str:
+        return self._image_b64
+
+    @property
+    def image_name(self) -> str:
+        return self._image_name
 
 
 # ── Rename Sub-stage ──────────────────────────────────────────────────────────
@@ -304,13 +313,14 @@ class _RenameSubStageDialog(FormModal):
 class _EditComponentDialog(FormModal):
     def __init__(self, comp: TraceComponent, parent=None):
         super().__init__(parent, t('project.traceability.edit_comp_title'), theme=FormModal.LIGHT, min_width=340)
-        self._image_path = comp.image_path
+        self._image_b64 = comp.image_b64
+        self._image_name = comp.image_name
 
         self.f_name = self.add_field(t('project.traceability.comp_name_field'), QLineEdit(comp.name))
 
         self.add_widget(self._make_label(t('project.traceability.image_optional')))
         img_row = QHBoxLayout()
-        self._img_lbl = QLabel(comp.image_path or t('project.traceability.no_image_set'))
+        self._img_lbl = QLabel(comp.image_name or t('project.traceability.no_image_set'))
         self._img_lbl.setStyleSheet(
             f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;'
         )
@@ -328,13 +338,21 @@ class _EditComponentDialog(FormModal):
             self, t('project.traceability.select_image'), '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
-            self._image_path = path
-            self._img_lbl.setText(path)
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self._image_b64 = b64
+                self._image_name = os.path.basename(path)
+                self._img_lbl.setText(self._image_name)
 
     @property
     def name(self) -> str:
         return self.f_name.text().strip()
 
     @property
-    def image_path(self) -> str:
-        return self._image_path
+    def image_b64(self) -> str:
+        return self._image_b64
+
+    @property
+    def image_name(self) -> str:
+        return self._image_name

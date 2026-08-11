@@ -1,26 +1,14 @@
 """Section 5 — Inspiration / Idea / Direction card."""
-import base64
 from typing import List, Optional
 
 from PyQt5.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFileDialog,
     QApplication,
 )
-from PyQt5.QtCore import Qt, QSize, QPoint, QBuffer, QIODevice
+from PyQt5.QtCore import Qt, QSize, QPoint
 from PyQt5.QtGui import QPixmap, QIcon, QCursor
 
-
-def _pixmap_to_b64(pix: QPixmap) -> str:
-    buf = QBuffer()
-    buf.open(QIODevice.WriteOnly)
-    pix.save(buf, 'PNG')
-    return base64.b64encode(bytes(buf.data())).decode()
-
-
-def _b64_to_pixmap(b64: str) -> QPixmap:
-    pix = QPixmap()
-    pix.loadFromData(base64.b64decode(b64))
-    return pix
+from core.image_utils import pixmap_to_b64 as _pixmap_to_b64, b64_to_pixmap as _b64_to_pixmap
 
 from .shared import (
     _MUTED, _BORDER, _BORDER_L, _ACCENT, _ACCENT_H, _INPUT_BG,
@@ -239,7 +227,7 @@ class InspirationCard(QFrame):
             self._photo_b64s[i] = b64
             if b64:
                 pix = _b64_to_pixmap(b64)
-                if not pix.isNull():
+                if pix is not None:
                     self._apply_photo(i, pix)
                     continue
             self._clear_photo(i)

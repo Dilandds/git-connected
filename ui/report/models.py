@@ -10,8 +10,8 @@ from i18n import t, t_in
 
 @dataclass
 class PhotoCell:
-    caption:    str = ""
-    image_path: str = ""
+    caption:   str = ""
+    image_b64: str = ""
 
 
 @dataclass
@@ -65,7 +65,7 @@ class Report:
     partner_extras:      List[CompanyRow]     = field(default_factory=list)
     attendees:           List[AttendeeColumn] = field(default_factory=list)
     pages:               List[ReportPage]     = field(default_factory=list)
-    project_photo_path:  str  = ""
+    project_photo_b64:   str  = ""
 
     def display_name(self) -> str:
         prefix = "🔒  " if self.locked else ""

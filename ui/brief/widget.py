@@ -189,11 +189,11 @@ class ProjectBriefWidget(QWidget):
             self._s_overview._f_reference.setText('')
             self._last_auto_number = ''
 
-        photo = (info.get('photo_path') or '').strip()
+        photo = (info.get('photo_b64') or '').strip()
         has_image = bool(self._s_overview._image_b64)
         if photo and photo != self._last_auto_photo:
             if not has_image or self._last_auto_photo:
-                self._s_overview.set_image_from_path(photo)
+                self._s_overview.set_image_from_b64(photo)
                 self._last_auto_photo = photo
         elif not photo and self._last_auto_photo:
             self._s_overview.clear_image()

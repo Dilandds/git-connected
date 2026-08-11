@@ -12,7 +12,6 @@ hidden. This avoids any extra OpenGL context or model re-loading.
 """
 from __future__ import annotations
 
-import base64
 import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -293,23 +292,7 @@ def _badge_pixmap(text: str, color: str, size: int = 28) -> QPixmap:
     return pix
 
 
-def _pixmap_to_b64(pix: QPixmap) -> str:
-    from PyQt5.QtCore import QBuffer, QIODevice
-    buf = QBuffer()
-    buf.open(QIODevice.WriteOnly)
-    pix.save(buf, 'PNG')
-    buf.close()
-    return base64.b64encode(bytes(buf.data())).decode()
-
-
-def _b64_to_pixmap(data: str) -> Optional[QPixmap]:
-    try:
-        raw = base64.b64decode(data)
-        pix = QPixmap()
-        pix.loadFromData(raw, 'PNG')
-        return pix if not pix.isNull() else None
-    except Exception:
-        return None
+from core.image_utils import pixmap_to_b64 as _pixmap_to_b64, b64_to_pixmap as _b64_to_pixmap
 
 
 def _vsep() -> QFrame:
@@ -541,7 +524,6 @@ class _ControlPointsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cards: list[_ControlPointCard] = []
-        self._next_id = 1
         self._build_ui()
 
     def _build_ui(self):
@@ -705,8 +687,18 @@ class _ControlPointsPanel(QWidget):
         )
 
         if cp is None:
-            color = _BADGE_PALETTE[(self._next_id - 1) % len(_BADGE_PALETTE)]
-            cp = ControlPoint(id=self._next_id, name='', status='to_check', color=color,
+            # Number/color derive from the current card count, not a
+            # separately-tracked counter — a counter that only ever climbs
+            # (never resets) is exactly what caused new control points to
+            # keep numbering from e.g. 7 after every existing point had
+            # been deleted, while the image's own annotation numbering
+            # (computed fresh from live state, no persisted counter)
+            # correctly restarted at 1. This also matches _renumber(),
+            # which already treats `id` as a pure display position and
+            # reassigns it on every add/delete.
+            number = len(self._cards) + 1
+            color = _BADGE_PALETTE[(number - 1) % len(_BADGE_PALETTE)]
+            cp = ControlPoint(id=number, name='', status='to_check', color=color,
                                annotation_id=annotation_id)
         card = _ControlPointCard(cp, self)
         card.changed.connect(self.changed)
@@ -730,7 +722,6 @@ class _ControlPointsPanel(QWidget):
         )
 
         self._cards.append(card)
-        self._next_id = max(self._next_id, cp.id) + 1
         self._refresh_count()
         self.changed.emit()
         logger.debug('[QC add_point] END  cards=%d', len(self._cards))
@@ -785,7 +776,6 @@ class _ControlPointsPanel(QWidget):
             self._cards_layout.removeWidget(card)
             card.deleteLater()
         self._cards.clear()
-        self._next_id = 1
         for cp in points:
             self._add_point(cp)
 

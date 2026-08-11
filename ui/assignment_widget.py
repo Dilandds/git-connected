@@ -166,6 +166,21 @@ class CardEditDialog(FormModal):
         return self._combo.currentText()
 
 
+def ensure_tab_ids(tabs_data: list) -> list:
+    """Return tabs_data with every item guaranteed an 'id' — a save from
+    before tabs had stable ids won't have one, so it gets a positional
+    fallback ('tab-0', 'tab-1', ...) instead. Deterministic so two
+    independent loads of the SAME unmigrated file derive the identical
+    id — needed both by AssignmentCanvas.set_data (the live widget) and
+    by ui/project_widget.py's save-conflict merge prep, which must apply
+    this to `base`/`remote` too (raw JSON straight off disk, not just the
+    live widget's own data) or an untouched legacy tab looks like a
+    brand-new id collision on every side, tripping
+    core.project_merge's collision renumbering (which assumes numeric
+    ids) instead of being recognized as the same tab."""
+    return [dict(td, id=(td.get('id') or f'tab-{i}')) for i, td in enumerate(tabs_data or [])]
+
+
 # ── Drawing canvas ────────────────────────────────────────────────────────────
 class AssignmentCanvas(QWidget):
     """The interactive paint surface — A4 frame + area cards + bezier arrows."""
@@ -205,7 +220,7 @@ class AssignmentCanvas(QWidget):
         self._id: str = str(uuid.uuid4())
         self._image: Optional[QPixmap] = None
         self._image_name: str = ''
-        self._image_path: str = ''
+        self._image_b64: str = ''
         self._x_btn_rect: Optional[QRectF] = None   # canvas-space hit rect for × button
         self._cards: List[AreaCard] = []
         self._tool: str = 'select'
@@ -741,7 +756,11 @@ class AssignmentCanvas(QWidget):
             x = img.right() + _IMG_GAP
         return x, y
 
-    def _load_pixmap(self, path: str) -> bool:
+    def _decode_image_file(self, path: str) -> Optional[QPixmap]:
+        """Decode any supported source format — including HEIC/HEIF and a
+        PDF's first page — into a QPixmap. Pure: no widget state touched.
+        Once decoded, the result is what gets embedded as base64 from here
+        on, so the original file's format/bytes don't matter again."""
         ext = os.path.splitext(path)[1].lower()
         pix: Optional[QPixmap] = None
 
@@ -773,15 +792,37 @@ class AssignmentCanvas(QWidget):
             except Exception as ex:
                 logger.warning(f'PDF load failed (PyMuPDF not installed?): {ex}')
 
-        if pix and not pix.isNull():
-            self._image = pix
-            self._image_name = os.path.basename(path)
-            self._image_path = path
-            # Size the frame to the image's own aspect ratio so the full
-            # image is shown without being stretched to fit a fixed A4 box
-            self._fit_frame_to_image(pix)
-            return True
-        return False
+        return pix if pix and not pix.isNull() else None
+
+    def _load_pixmap(self, path: str) -> bool:
+        """Decode a file from disk and adopt it as the canvas image,
+        embedding it as base64 immediately — used for a fresh import."""
+        pix = self._decode_image_file(path)
+        if pix is None:
+            return False
+        from core.image_utils import pixmap_to_b64
+        self._apply_image(pix, os.path.basename(path), pixmap_to_b64(pix) or '')
+        return True
+
+    def _apply_image(self, pix: QPixmap, name: str, b64: str):
+        self._image = pix
+        self._image_name = name
+        self._image_b64 = b64
+        # Size the frame to the image's own aspect ratio so the full
+        # image is shown without being stretched to fit a fixed A4 box
+        self._fit_frame_to_image(pix)
+
+    def _restore_image_from_b64(self, b64: str, name: str) -> bool:
+        """Adopt an already-embedded image directly (undo/redo, project
+        load, sidebar auto-fill) — no re-encoding, no disk access."""
+        if not b64:
+            return False
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(b64)
+        if pix is None:
+            return False
+        self._apply_image(pix, name, b64)
+        return True
 
     def _fit_frame_to_image(self, pix: QPixmap):
         """Resize the A4 frame to match the imported image's own aspect
@@ -820,6 +861,16 @@ class AssignmentCanvas(QWidget):
             self.changed.emit()
         self.update()
 
+    def import_b64(self, b64: str, name: str = ''):
+        """Adopt an already-embedded image directly (e.g. the sidebar's
+        auto-filled project photo) — same undo/update wrapping as
+        import_image, but no disk access since the bytes are already in
+        memory and don't need decoding from a source file format."""
+        self._push_undo()
+        if self._restore_image_from_b64(b64, name):
+            self.changed.emit()
+        self.update()
+
     def remove_image(self):
         """Clear the imported product image. Cards/arrows are kept (arrow
         positions are fractions of the A4 frame, not the image itself, so
@@ -829,7 +880,7 @@ class AssignmentCanvas(QWidget):
         self._push_undo()
         self._image = None
         self._image_name = ''
-        self._image_path = ''
+        self._image_b64 = ''
         self.changed.emit()
         self.update()
 
@@ -918,18 +969,18 @@ class AssignmentCanvas(QWidget):
         return {
             'cards': [asdict(c) for c in self._cards],
             'image_name': self._image_name,
-            'image_path': self._image_path,
+            'image_b64': self._image_b64,
             'orientation': self._orientation,
         }
 
     def _restore(self, state: dict):
         self._cards = [AreaCard(**d) for d in state['cards']]
-        self._image_name = state.get('image_name', '')
-        self._image_path = state.get('image_path', '')
-        if self._image_path:
-            self._load_pixmap(self._image_path)
-        else:
+        name = state.get('image_name', '')
+        b64 = state.get('image_b64', '')
+        if not self._restore_image_from_b64(b64, name):
             self._image = None
+            self._image_name = name
+            self._image_b64 = b64
         self._selected_id = None
 
     def _push_undo(self):
@@ -945,7 +996,7 @@ class AssignmentCanvas(QWidget):
             'id': self._id,
             'cards': [asdict(c) for c in self._cards],
             'image_name': self._image_name,
-            'image_path': self._image_path,
+            'image_b64': self._image_b64,
             'orientation': self._orientation,
             'font_family': self._font_family,
             'font_size': self._font_size,
@@ -975,8 +1026,10 @@ class AssignmentCanvas(QWidget):
                 d['arrows'] = arrows
             cards.append(AreaCard(**d))
         self._cards = cards
+        from core.image_utils import migrate_path_to_b64
+        data = migrate_path_to_b64(data, 'image_path', 'image_b64')
         self._image_name = data.get('image_name', '')
-        self._image_path = data.get('image_path', '')
+        self._image_b64 = data.get('image_b64', '')
         self._font_family = data.get('font_family', '')
         self._font_size = data.get('font_size', 13)
 
@@ -992,14 +1045,11 @@ class AssignmentCanvas(QWidget):
                 self._base_w, self._base_h = _CANVAS_W_P, _CANVAS_H_P
             self._apply_zoom_size()
 
-        if self._image_path:
-            self._load_pixmap(self._image_path)
-        else:
-            # _load_pixmap only runs (and reassigns self._image) when
-            # there's a path — without this, loading/new-project data with
-            # no image left the *previous* project's pixmap still painted,
-            # since self._image is a raw attribute here (not a QLabel,
-            # where setText()/clear() would implicitly drop the old pixmap).
+        if not self._restore_image_from_b64(self._image_b64, self._image_name):
+            # Without this, loading/new-project data with no image left the
+            # *previous* project's pixmap still painted, since self._image
+            # is a raw attribute here (not a QLabel, where setText()/clear()
+            # would implicitly drop the old pixmap).
             self._image = None
         self.update()
 
@@ -1417,20 +1467,20 @@ class AssignmentWidget(QWidget):
     def update_project_info(self, info: dict):
         """Copy the sidebar's main project photo into the active canvas as its
         background image, unless the user has already imported a different one."""
-        photo = (info.get('photo_path') or '').strip()
-        current = self._canvas._image_path or ''
+        photo = (info.get('photo_b64') or '').strip()
+        current = self._canvas._image_b64 or ''
         if photo == self._removed_photo:
             return
         if photo and photo != current and current == self._last_auto_photo:
-            self._canvas.import_image(photo)
+            self._canvas.import_b64(photo)
             self._last_auto_photo = photo
         elif photo and not current:
-            self._canvas.import_image(photo)
+            self._canvas.import_b64(photo)
             self._last_auto_photo = photo
 
     def _on_remove_image(self):
-        """Remove the image and remember its path so auto-fill doesn't restore it."""
-        self._removed_photo = self._canvas._image_path or ''
+        """Remove the image and remember it so auto-fill doesn't restore it."""
+        self._removed_photo = self._canvas._image_b64 or ''
         self._canvas.remove_image()
 
     def get_data(self) -> dict:

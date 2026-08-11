@@ -43,7 +43,7 @@ class ReportWidget(QWidget):
         self._next_id      = 2
         self._project_info: dict = {}
         self._logo_pix:  Optional[QPixmap] = None
-        self._logo_path: str = ""
+        self._logo_b64:  str = ""
         self.setStyleSheet(f"background: {_BG};")
         self._build_ui()
         self._rebuild_all()
@@ -203,9 +203,9 @@ class ReportWidget(QWidget):
         screen so it doesn't need to be uploaded twice."""
         return self._logo_pix
 
-    def _set_logo(self, pix: QPixmap, path: str):
-        self._logo_pix  = pix
-        self._logo_path = path
+    def _set_logo(self, pix: QPixmap, b64: str):
+        self._logo_pix = pix
+        self._logo_b64 = b64
         for ed in self._editors:
             ed.refresh_logo()
         self.changed.emit()
@@ -227,7 +227,7 @@ class ReportWidget(QWidget):
 
     def get_data(self) -> dict:
         def _ser_cell(c: PhotoCell) -> dict:
-            return {"caption": c.caption, "image_path": c.image_path}
+            return {"caption": c.caption, "image_b64": c.image_b64}
 
         def _ser_block(b) -> dict:
             return {
@@ -259,21 +259,21 @@ class ReportWidget(QWidget):
                 "partner_extras":  [_ser_extra(e) for e in r.partner_extras],
                 "attendees": [_ser_att(a) for a in r.attendees],
                 "pages": [_ser_page(p) for p in r.pages],
-                "project_photo_path": r.project_photo_path,
+                "project_photo_b64": r.project_photo_b64,
             }
 
         return {
-            "logo_path": self._logo_path,
-            "reports":   [_ser_report(r) for r in self._reports],
+            "logo_b64": self._logo_b64,
+            "reports":  [_ser_report(r) for r in self._reports],
         }
 
     def set_data(self, data: dict):
-        self._logo_path = data.get("logo_path", "")
+        from core.image_utils import migrate_path_to_b64, b64_to_pixmap
+        data = migrate_path_to_b64(data, 'logo_path', 'logo_b64')
+        self._logo_b64 = data.get("logo_b64", "")
         self._logo_pix = None
-        if self._logo_path:
-            pix = QPixmap(self._logo_path)
-            if not pix.isNull():
-                self._logo_pix = pix
+        if self._logo_b64:
+            self._logo_pix = b64_to_pixmap(self._logo_b64)
 
         reports = []
         for rd in data.get("reports", []):
@@ -290,7 +290,8 @@ class ReportWidget(QWidget):
                 partner_3=rd.get("partner_3", ""),
                 partner_extras=[CompanyRow(**e) for e in rd.get("partner_extras", [])],
                 attendees=[AttendeeColumn(**a) for a in rd.get("attendees", [])],
-                project_photo_path=rd.get("project_photo_path", ""),
+                project_photo_b64=migrate_path_to_b64(
+                    rd, 'project_photo_path', 'project_photo_b64')['project_photo_b64'],
             )
             for pd in rd.get("pages", []):
                 page = ReportPage(
@@ -299,8 +300,12 @@ class ReportWidget(QWidget):
                     comments=pd.get("comments", ""),
                 )
                 from .models import PhotoBlock
+
+                def _cell(c: dict) -> PhotoCell:
+                    return PhotoCell(**migrate_path_to_b64(c, 'image_path', 'image_b64'))
+
                 for bd in pd.get("photo_blocks", []):
-                    cells = [PhotoCell(**c) for c in bd.get("photos", [])]
+                    cells = [_cell(c) for c in bd.get("photos", [])]
                     while len(cells) < 6:
                         cells.append(PhotoCell())
                     blk = PhotoBlock(photos=cells, comment=bd.get("comment", ""))
@@ -308,7 +313,7 @@ class ReportWidget(QWidget):
                 # Migrate legacy photo_rows → one block per old row
                 if not page.photo_blocks:
                     for prd in pd.get("photo_rows", []):
-                        old_cells = [PhotoCell(**c) for c in prd.get("photos", [])]
+                        old_cells = [_cell(c) for c in prd.get("photos", [])]
                         cells = old_cells[:6]
                         while len(cells) < 6:
                             cells.append(PhotoCell())

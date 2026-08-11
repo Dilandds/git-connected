@@ -269,9 +269,10 @@ class HeaderSection(QWidget):
         company_col.layout().insertWidget(1, photo_container)
 
         # Now restore the saved photo if any
-        if self._report.project_photo_path:
-            pix2 = QPixmap(self._report.project_photo_path)
-            if not pix2.isNull():
+        if self._report.project_photo_b64:
+            from core.image_utils import b64_to_pixmap
+            pix2 = b64_to_pixmap(self._report.project_photo_b64)
+            if pix2 is not None:
                 self._apply_project_photo(pix2)
 
         gl.addWidget(company_col, 3)
@@ -529,9 +530,11 @@ class HeaderSection(QWidget):
             self, t("project.report.header_select_logo"), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._set_logo(pix, path)
+            from core.image_utils import path_to_b64, b64_to_pixmap
+            b64 = path_to_b64(path)
+            pix = b64_to_pixmap(b64) if b64 else None
+            if pix is not None:
+                self._set_logo(pix, b64)
                 self._apply_logo(pix)
                 self.changed.emit()
 
@@ -548,9 +551,11 @@ class HeaderSection(QWidget):
             self, t("project.report.header_select_photo"), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._report.project_photo_path = path
+            from core.image_utils import path_to_b64, b64_to_pixmap
+            b64 = path_to_b64(path)
+            pix = b64_to_pixmap(b64) if b64 else None
+            if pix is not None:
+                self._report.project_photo_b64 = b64
                 self._apply_project_photo(pix)
                 self.changed.emit()
 
@@ -583,7 +588,7 @@ class HeaderSection(QWidget):
     def _clear_project_photo(self):
         self._project_photo_pix = None
         self._project_photo_scaled_for = QSize()
-        self._report.project_photo_path = ""
+        self._report.project_photo_b64 = ""
         self._project_photo_btn.setIcon(QIcon())
         self._project_photo_btn.setIconSize(QSize(0, 0))
         self._project_photo_btn.setText(t("project.report.header_add_photo"))
@@ -637,13 +642,14 @@ class HeaderSection(QWidget):
 
         # Copy the sidebar's main project photo into the report header photo,
         # same auto-fill-unless-manually-changed pattern as the fields above.
-        photo = (info.get('photo_path') or '').strip()
-        current_photo = self._report.project_photo_path or ''
+        photo = (info.get('photo_b64') or '').strip()
+        current_photo = self._report.project_photo_b64 or ''
         if photo:
             if not current_photo or current_photo == self._last_auto_photo:
-                pix = QPixmap(photo)
-                if not pix.isNull():
-                    self._report.project_photo_path = photo
+                from core.image_utils import b64_to_pixmap
+                pix = b64_to_pixmap(photo)
+                if pix is not None:
+                    self._report.project_photo_b64 = photo
                     self._apply_project_photo(pix)
                     self._last_auto_photo = photo
         elif current_photo and current_photo == self._last_auto_photo:

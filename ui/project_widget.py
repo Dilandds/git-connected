@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QComboBox, QDialog, QScrollArea, QSizePolicy, QSplitter,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QPixmap, QIcon, QFontMetrics
+from PyQt5.QtGui import QIcon, QFontMetrics
 from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 from i18n import t, on_language_changed
@@ -299,7 +299,7 @@ class ProjectNavPanel(QWidget):
         self.setStyleSheet(f'background-color: {_SIDEBAR};')
         self._buttons: dict[str, QPushButton] = {}
         self._on_navigate = None
-        self._photo_path: str = ''
+        self._photo_b64: str = ''
         self._build_ui()
         on_language_changed(self.retranslate)
 
@@ -490,9 +490,11 @@ class ProjectNavPanel(QWidget):
             self, 'Select Project Photo', '', 'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._photo_path = path
+            from core.image_utils import path_to_b64, b64_to_pixmap
+            b64 = path_to_b64(path)
+            pix = b64_to_pixmap(b64) if b64 else None
+            if pix is not None:
+                self._photo_b64 = b64
                 scaled = pix.scaled(
                     self._photo_btn.width(), self._photo_btn.height(),
                     Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
@@ -564,7 +566,7 @@ class ProjectNavPanel(QWidget):
             'start_date':       self._f_start_date.text(),
             'due_date':         self._f_due_date.text(),
             'status':           self._status_combo.currentData() or 'in_progress',
-            'photo_path':       self._photo_path,
+            'photo_b64':        self._photo_b64,
         }
 
     def set_info_data(self, data: dict):
@@ -581,29 +583,37 @@ class ProjectNavPanel(QWidget):
             if self._status_combo.itemData(i) == status:
                 self._status_combo.setCurrentIndex(i)
                 break
-        photo = data.get('photo_path', '')
-        if photo:
-            pix = QPixmap(photo)
-            if not pix.isNull():
-                self._photo_path = photo
-                scaled = pix.scaled(
-                    self._photo_btn.width(), self._photo_btn.height(),
-                    Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-                )
-                self._photo_btn.setIcon(QIcon(scaled))
-                self._photo_btn.setIconSize(self._photo_btn.size())
-                self._photo_btn.setText('')
+        from core.image_utils import path_to_b64, b64_to_pixmap
+        photo_b64 = data.get('photo_b64', '')
+        if not photo_b64 and data.get('photo_path'):
+            # Legacy save from before photos were embedded — best-effort
+            # migrate on load if the file still exists on THIS machine (it
+            # was never portable across machines to begin with, so this
+            # can't recover a photo that only ever lived on someone else's
+            # disk, but it does stop re-saving from silently dropping a
+            # photo that's still right there locally).
+            photo_b64 = path_to_b64(data['photo_path']) or ''
+        pix = b64_to_pixmap(photo_b64) if photo_b64 else None
+        if pix is not None:
+            self._photo_b64 = photo_b64
+            scaled = pix.scaled(
+                self._photo_btn.width(), self._photo_btn.height(),
+                Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+            )
+            self._photo_btn.setIcon(QIcon(scaled))
+            self._photo_btn.setIconSize(self._photo_btn.size())
+            self._photo_btn.setText('')
         else:
             # No photo in the data being loaded (e.g. a brand new project) —
             # clear whatever the previous project's photo left behind instead
             # of leaving it stuck on screen.
-            self._photo_path = ''
+            self._photo_b64 = ''
             self._photo_btn.setIcon(QIcon())
             self._photo_btn.setText(t('project.sidebar.add_photo'))
 
     def retranslate(self):
         """Update all visible labels/buttons when language changes."""
-        if not self._photo_path:
+        if not self._photo_b64:
             self._photo_btn.setText(t('project.sidebar.add_photo'))
         self._f_company.setPlaceholderText(t('project.sidebar.company'))
         self._f_title.setPlaceholderText(t('project.sidebar.title'))
@@ -1414,6 +1424,21 @@ class TheProjectWidget(QWidget):
         base_data['technical_overview'] = _decode(base_data.get('technical_overview'))
         local_data['technical_overview'] = _decode(local_data.get('technical_overview'))
         remote_data['technical_overview'] = _decode(remote_data.get('technical_overview'))
+
+        # assignment tabs need every item to have an 'id' before merging.
+        # local_data's tabs already have one (they come straight from the
+        # live widget), but base/remote are raw JSON off disk — a save
+        # from before tabs had stable ids has none at all there, so two
+        # sides independently deriving the same positional fallback id for
+        # an untouched legacy tab would otherwise look like a brand-new id
+        # collision to the merge engine (which assumes numeric ids for
+        # renumbering) instead of being recognized as the same tab.
+        from ui.assignment_widget import ensure_tab_ids
+        for d in (base_data, local_data, remote_data):
+            assignment = d.get('assignment')
+            if assignment and 'tabs' in assignment:
+                d['assignment'] = dict(assignment)
+                d['assignment']['tabs'] = ensure_tab_ids(assignment['tabs'])
 
         try:
             from core.project_merge import merge_project, field_conflicts_only, fold_linked_conflicts

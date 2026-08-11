@@ -1,25 +1,12 @@
 """Section 1 — Product Overview card."""
-import base64
-
 from PyQt5.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFileDialog, QSizePolicy, QTextEdit,
 )
-from PyQt5.QtCore import Qt, QSize, QBuffer, QIODevice
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon
 
-
-def _pixmap_to_b64(pix: QPixmap) -> str:
-    buf = QBuffer()
-    buf.open(QIODevice.WriteOnly)
-    pix.save(buf, 'PNG')
-    return base64.b64encode(bytes(buf.data())).decode()
-
-
-def _b64_to_pixmap(b64: str) -> QPixmap:
-    pix = QPixmap()
-    pix.loadFromData(base64.b64decode(b64))
-    return pix
+from core.image_utils import path_to_b64, b64_to_pixmap
 from .shared import (
     _MUTED, _INPUT_BG, _BORDER_L, _BORDER, _ACCENT, _TEXT,
     card, section_label, make_input, separator,
@@ -143,10 +130,7 @@ class ProductOverviewCard(QFrame):
             'Images (*.png *.jpg *.jpeg *.webp)'
         )
         if path:
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self._image_b64 = _pixmap_to_b64(pix)
-                self._apply_image(pix)
+            self.set_image_from_path(path)
 
     def _apply_image(self, pix: QPixmap):
         w = self._img_btn.width() or _IMG_W
@@ -165,10 +149,19 @@ class ProductOverviewCard(QFrame):
             getattr(self, attr).setReadOnly(not enabled)
 
     def set_image_from_path(self, path: str):
-        """Load image from disk, embed as base64. Used by sidebar auto-fill."""
-        pix = QPixmap(path)
-        if not pix.isNull():
-            self._image_b64 = _pixmap_to_b64(pix)
+        """Load image from disk, embed as base64. Used for direct uploads
+        and as a backward-compat fallback for pre-embedding saves."""
+        b64 = path_to_b64(path)
+        if b64:
+            self.set_image_from_b64(b64)
+
+    def set_image_from_b64(self, b64: str):
+        """Adopt an already-base64-encoded image directly — used by the
+        sidebar photo auto-fill, which stores base64 too now, so no
+        path/re-encode round-trip is needed."""
+        pix = b64_to_pixmap(b64)
+        if pix is not None:
+            self._image_b64 = b64
             self._apply_image(pix)
 
     def clear_image(self):
@@ -203,7 +196,7 @@ class ProductOverviewCard(QFrame):
                 # on _img_btn was never cleared, only re-set when truthy.
                 self.clear_image()
             return
-        pix = _b64_to_pixmap(b64)
-        if not pix.isNull():
+        pix = b64_to_pixmap(b64)
+        if pix is not None:
             self._image_b64 = b64
             self._apply_image(pix)

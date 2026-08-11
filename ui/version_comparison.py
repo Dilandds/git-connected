@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QMessageBox, QSpinBox, QDialog,
 )
 from PyQt5.QtCore import Qt, QRect, pyqtSignal
-from PyQt5.QtGui import QPixmap, QIcon, QColor, QPainter, QPainterPath, QBrush, QFont
+from PyQt5.QtGui import QIcon, QColor, QPainter, QPainterPath, QBrush, QFont
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import FormModal
 from i18n import t
@@ -74,7 +74,7 @@ _BTN_DELETE = f"""
 class VersionCard:
     id:              int
     star_number:     int       = 0
-    photo_paths:     List[str] = field(default_factory=list)
+    photo_b64s:      List[str] = field(default_factory=list)
     version:         str       = ""
     positive_points: str       = ""
     negative_points: str       = ""
@@ -146,7 +146,7 @@ class PhotoSlot(QPushButton):
 
     def __init__(self, w: int, h: int, parent=None):
         super().__init__(parent)
-        self._path = ""
+        self._b64 = ""
         self._zoom_preview: Optional[QLabel] = None
         self.setFixedSize(w, h)
         self.setCursor(Qt.PointingHandCursor)
@@ -164,13 +164,11 @@ class PhotoSlot(QPushButton):
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
 
-    def set_path(self, path: str):
-        self._path = path
-        if not path:
-            self._set_empty()
-            return
-        pix = QPixmap(path)
-        if pix.isNull():
+    def set_b64(self, b64: str):
+        self._b64 = b64
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(b64)
+        if pix is None:
             self._set_empty()
             return
         self.setIcon(QIcon(pix.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)))
@@ -189,15 +187,19 @@ class PhotoSlot(QPushButton):
             self, t('project.timeline.detail_photo_title'), "", "Images (*.png *.jpg *.jpeg *.webp)"
         )
         if path:
-            self.set_path(path)
-            self.photo_changed.emit(path)
+            from core.image_utils import path_to_b64
+            b64 = path_to_b64(path)
+            if b64:
+                self.set_b64(b64)
+                self.photo_changed.emit(b64)
 
     # ── hover zoom preview ────────────────────────────────────────────────
     def _show_zoom_preview(self):
-        if not self._path:
+        if not self._b64:
             return
-        pix = QPixmap(self._path)
-        if pix.isNull():
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(self._b64)
+        if pix is None:
             return
         self._hide_zoom_preview()
         scaled = pix.scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -303,8 +305,8 @@ class VersionCardWidget(QFrame):
         _PH_W = CARD_W - 60   # 185 px wide
         _PH_H = CARD_W + 10   # 255 px tall  →  clearly portrait
         slot0 = PhotoSlot(_PH_W, _PH_H)
-        if len(self._card.photo_paths) > 0:
-            slot0.set_path(self._card.photo_paths[0])
+        if len(self._card.photo_b64s) > 0:
+            slot0.set_b64(self._card.photo_b64s[0])
         slot0.photo_changed.connect(lambda p: self._on_photo(0, p))
         self._photo_slots.append(slot0)
         ph_row = QHBoxLayout()
@@ -319,8 +321,8 @@ class VersionCardWidget(QFrame):
         sw = (CARD_W - 24) // 2
         for i in (1, 2):
             s = PhotoSlot(sw, 70)
-            if len(self._card.photo_paths) > i:
-                s.set_path(self._card.photo_paths[i])
+            if len(self._card.photo_b64s) > i:
+                s.set_b64(self._card.photo_b64s[i])
             s.photo_changed.connect(lambda p, idx=i: self._on_photo(idx, p))
             self._photo_slots.append(s)
             sec_row.addWidget(s)
@@ -428,10 +430,10 @@ class VersionCardWidget(QFrame):
         toolbar.addWidget(del_btn)
         root.addLayout(toolbar)
 
-    def _on_photo(self, idx: int, path: str):
-        while len(self._card.photo_paths) <= idx:
-            self._card.photo_paths.append("")
-        self._card.photo_paths[idx] = path
+    def _on_photo(self, idx: int, b64: str):
+        while len(self._card.photo_b64s) <= idx:
+            self._card.photo_b64s.append("")
+        self._card.photo_b64s[idx] = b64
         self.changed.emit()
 
     def _edit_star(self):
@@ -624,7 +626,7 @@ class VersionComparisonWidget(QWidget):
         def _ser(c: VersionCard) -> dict:
             return {
                 "id": c.id, "star_number": c.star_number,
-                "photo_paths": c.photo_paths,
+                "photo_b64s": c.photo_b64s,
                 "version": c.version,
                 "positive_points": c.positive_points,
                 "negative_points": c.negative_points,
@@ -634,13 +636,19 @@ class VersionComparisonWidget(QWidget):
         return {"next_id": self._next_id, "cards": [_ser(c) for c in self._cards]}
 
     def set_data(self, data: dict):
+        from core.image_utils import path_to_b64
         self._next_id = data.get("next_id", 1)
         self._cards = []
         for cd in data.get("cards", []):
+            photo_b64s = cd.get("photo_b64s")
+            if photo_b64s is None:
+                # Legacy save from before photos were embedded — best-effort
+                # migrate whatever paths still exist on THIS machine.
+                photo_b64s = [b for b in (path_to_b64(p) for p in cd.get("photo_paths", []) if p) if b]
             self._cards.append(VersionCard(
                 id=cd["id"],
                 star_number=cd.get("star_number", 0),
-                photo_paths=cd.get("photo_paths", []),
+                photo_b64s=photo_b64s,
                 version=cd.get("version", ""),
                 positive_points=cd.get("positive_points", ""),
                 negative_points=cd.get("negative_points", ""),

@@ -55,6 +55,7 @@ class TraceStage:
 class TraceComponent:
     id:         int
     name:       str              = 'Component'
-    image_path: str              = ''
+    image_b64:  str              = ''
+    image_name: str              = ''  # display-only filename, not used to load anything
     is_main:    bool             = False
     stages:     List[TraceStage] = field(default_factory=list)
