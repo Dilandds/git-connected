@@ -519,11 +519,22 @@ class _ControlPointCard(QWidget):
 # ── _ControlPointsPanel ───────────────────────────────────────────────────────
 
 class _ControlPointsPanel(QWidget):
+    """Shows control points for whichever inspection image is currently
+    selected — never every image's points at once, and always numbered
+    1..N within that image, per the explicit design decision that a photo's
+    control points are only meaningful in the context of that photo.
+    Control points created without an image attached (legacy data only —
+    the live UI has no way to add one without clicking a photo) are shown
+    always, regardless of which image is selected, under their own
+    "General" heading, since they were never scoped to a single photo."""
     changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._cards: list[_ControlPointCard] = []
+        self._cards: list[_ControlPointCard] = []            # image-scoped cards, currently displayed
+        self._general_cards: list[_ControlPointCard] = []    # always-visible, unscoped cards
+        self._current_points: Optional[list] = None          # live reference to the active image's control_points list
+        self._general_points: list = []                      # live reference to the general/unscoped list
         self._build_ui()
 
     def _build_ui(self):
@@ -591,6 +602,24 @@ class _ControlPointsPanel(QWidget):
         self._cards_layout = QVBoxLayout(self._cards_container)
         self._cards_layout.setContentsMargins(0, 4, 8, 4)
         self._cards_layout.setSpacing(8)
+
+        self._no_image_lbl = QLabel(t('quality_control.no_image_selected'))
+        self._no_image_lbl.setWordWrap(True)
+        self._no_image_lbl.setStyleSheet(
+            f'color: {_MUTED}; font-size: 12px; font-style: italic; '
+            f'background: transparent; border: none; padding: 4px 0;'
+        )
+        self._no_image_lbl.setVisible(False)
+        self._cards_layout.addWidget(self._no_image_lbl)
+
+        self._general_sep_lbl = QLabel(t('quality_control.general_points_title'))
+        self._general_sep_lbl.setStyleSheet(
+            f'color: {_MUTED}; font-size: 11px; font-weight: 600; '
+            f'background: transparent; border: none; padding: 2px 0;'
+        )
+        self._general_sep_lbl.setVisible(False)
+        self._cards_layout.addWidget(self._general_sep_lbl)
+
         self._cards_layout.addStretch()
 
         scroll.setWidget(self._cards_container)
@@ -674,110 +703,84 @@ class _ControlPointsPanel(QWidget):
         self._instr_card.setVisible(visible)
         self._help_btn.setChecked(visible)
 
-    def _add_point(self, cp: Optional[ControlPoint] = None, annotation_id: Optional[int] = None):
-        from PyQt5.QtWidgets import QApplication as _QApp
-        _app = _QApp.instance()
-        _aw = _app.activeWindow()
-        _fw = _app.focusWidget()
-        logger.debug(
-            '[QC add_point] START  activeWindow=%s  focusWidget=%s  cards=%d',
-            type(_aw).__name__ if _aw else None,
-            type(_fw).__name__ if _fw else None,
-            len(self._cards),
-        )
+    def show_for_image(self, image: Optional[dict]):
+        """Display `image`'s own control_points (numbered 1..N, scoped to
+        just this photo) — or, when `image` is None (3D mode / nothing
+        selected), no per-image points at all. Always called with a live
+        reference so edits/deletes made here write straight back into the
+        image dict `_QCLeftPanel` owns — no separate sync step needed."""
+        self._current_points = image['control_points'] if image is not None else None
+        self._rebuild()
 
-        if cp is None:
-            # Number/color derive from the current card count, not a
-            # separately-tracked counter — a counter that only ever climbs
-            # (never resets) is exactly what caused new control points to
-            # keep numbering from e.g. 7 after every existing point had
-            # been deleted, while the image's own annotation numbering
-            # (computed fresh from live state, no persisted counter)
-            # correctly restarted at 1. This also matches _renumber(),
-            # which already treats `id` as a pure display position and
-            # reassigns it on every add/delete.
-            number = len(self._cards) + 1
-            color = _BADGE_PALETTE[(number - 1) % len(_BADGE_PALETTE)]
-            cp = ControlPoint(id=number, name='', status='to_check', color=color,
-                               annotation_id=annotation_id)
-        card = _ControlPointCard(cp, self)
-        card.changed.connect(self.changed)
-        card.delete_requested.connect(self._delete_card)
-        idx = self._cards_layout.count() - 1
+    def set_general_points(self, points: list):
+        """Hand over the live list of control points not scoped to any
+        image (legacy data only — see class docstring). Always shown,
+        independent of which image is currently selected."""
+        self._general_points = points
+        self._rebuild()
 
-        logger.debug('[QC add_point] PRE-INSERT  idx=%d', idx)
-        self._cards_layout.insertWidget(idx, card)
+    def _clear_group(self, cards: list):
+        for card in cards:
+            self._cards_layout.removeWidget(card)
+            card.deleteLater()
+        cards.clear()
 
-        _aw2 = _app.activeWindow()
-        _fw2 = _app.focusWidget()
-        _top = self.window()
-        logger.debug(
-            '[QC add_point] POST-INSERT  activeWindow=%s  focusWidget=%s'
-            '  fullscreen=%s  windowActive=%s  windowFlags=0x%x',
-            type(_aw2).__name__ if _aw2 else None,
-            type(_fw2).__name__ if _fw2 else None,
-            _top.isFullScreen(),
-            _top.isActiveWindow(),
-            int(_top.windowFlags()),
-        )
+    def _rebuild(self):
+        self._clear_group(self._cards)
+        self._clear_group(self._general_cards)
 
-        self._cards.append(card)
+        self._no_image_lbl.setVisible(self._current_points is None)
+        self._general_sep_lbl.setVisible(bool(self._general_points))
+
+        stretch_idx = self._cards_layout.count() - 1
+        for cp in self._general_points:
+            card = _ControlPointCard(cp, self)
+            card.changed.connect(self.changed)
+            card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=True))
+            self._cards_layout.insertWidget(stretch_idx, card)
+            self._general_cards.append(card)
+            stretch_idx += 1
+
+        if self._current_points is not None:
+            for cp in self._current_points:
+                card = _ControlPointCard(cp, self)
+                card.changed.connect(self.changed)
+                card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=False))
+                self._cards_layout.insertWidget(stretch_idx, card)
+                self._cards.append(card)
+                stretch_idx += 1
+
+        self._renumber_group(self._general_cards)
+        self._renumber_group(self._cards)
         self._refresh_count()
-        self.changed.emit()
-        logger.debug('[QC add_point] END  cards=%d', len(self._cards))
 
-    def _delete_card(self, cp_id: int):
-        for card in self._cards:
+    def _delete_point(self, cp_id: int, general: bool):
+        points = self._general_points if general else (self._current_points or [])
+        cards = self._general_cards if general else self._cards
+        for card in list(cards):
             if card.get_data().id == cp_id:
                 self._cards_layout.removeWidget(card)
                 card.deleteLater()
-                self._cards.remove(card)
+                cards.remove(card)
                 break
-        self._renumber()
+        for cp in list(points):
+            if cp.id == cp_id:
+                points.remove(cp)
+                break
+        self._renumber_group(cards)
         self._refresh_count()
         self.changed.emit()
 
-    def _renumber(self):
-        for i, card in enumerate(self._cards, 1):
+    @staticmethod
+    def _renumber_group(cards: list):
+        # card.set_number() mutates the same ControlPoint object the owning
+        # list (self._cards/_general_points) holds by reference, so the
+        # list's `id` fields stay in sync with no separate write-back step.
+        for i, card in enumerate(cards, 1):
             card.set_number(i)
 
-    def remove_points_for_removed_annotations(self, first: int, count: int):
-        """Drop any control point auto-linked (via annotation_id) to one of
-        the `count` annotations starting at 1-based global number `first` —
-        called when an inspection image carrying those annotations is
-        deleted, so its control points don't stick around pointing at
-        annotations that no longer exist. Every remaining point whose
-        annotation_id comes after the removed range is shifted down by
-        `count` too, since deleting an earlier image renumbers every later
-        image's annotations (see _QCLeftPanel._delete_inspection_image)."""
-        last = first + count - 1
-        for card in list(self._cards):
-            cp = card.get_data()
-            if cp.annotation_id is not None and first <= cp.annotation_id <= last:
-                self._cards_layout.removeWidget(card)
-                card.deleteLater()
-                self._cards.remove(card)
-        for card in self._cards:
-            cp = card.get_data()
-            if cp.annotation_id is not None and cp.annotation_id > last:
-                cp.annotation_id -= count
-        self._renumber()
-        self._refresh_count()
-        self.changed.emit()
-
     def _refresh_count(self):
-        self._count_lbl.setText(str(len(self._cards)))
-
-    def get_control_points(self) -> List[ControlPoint]:
-        return [c.get_data() for c in self._cards]
-
-    def set_control_points(self, points: List[ControlPoint]):
-        for card in self._cards:
-            self._cards_layout.removeWidget(card)
-            card.deleteLater()
-        self._cards.clear()
-        for cp in points:
-            self._add_point(cp)
+        self._count_lbl.setText(str(len(self._cards) + len(self._general_cards)))
 
 
 # ── Image annotation view ────────────────────────────────────────────────────
@@ -795,8 +798,7 @@ class _ImageAnnotationView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
-        self._annotations: list = []       # [(dot_xf, dot_yf, badge_xf, badge_yf), ...]
-        self._annotation_offset: int = 0   # number of points placed on earlier images
+        self._annotations: list = []       # [(dot_xf, dot_yf, badge_xf, badge_yf), ...] — scoped to the current image only
         self._pending_dot: Optional[tuple] = None   # (x_frac, y_frac) after first click
         self._mouse_pos = None             # QPoint — live preview target
         self._zoom = 1.0                   # 1.0 = fit to view, up to 4.0
@@ -821,9 +823,8 @@ class _ImageAnnotationView(QWidget):
         self._pan = QPointF(0, 0)
         self.update()
 
-    def set_annotations(self, annotations: list, offset: int = 0):
+    def set_annotations(self, annotations: list):
         self._annotations = list(annotations)
-        self._annotation_offset = offset
         self._pending_dot = None
         self.update()
 
@@ -959,7 +960,7 @@ class _ImageAnnotationView(QWidget):
                 my = r.y() + int(dot_yf   * r.height())
                 bx = r.x() + int(badge_xf * r.width())
                 by = r.y() + int(badge_yf * r.height())
-                color = QColor(_BADGE_PALETTE[(i + self._annotation_offset) % len(_BADGE_PALETTE)])
+                color = QColor(_BADGE_PALETTE[i % len(_BADGE_PALETTE)])
 
                 # Leader line
                 p.setPen(QPen(color, 1.5, Qt.SolidLine))
@@ -984,12 +985,12 @@ class _ImageAnnotationView(QWidget):
                 p.drawText(
                     QRect(int(bx - BADGE_R), int(by - BADGE_R),
                           BADGE_R * 2, BADGE_R * 2),
-                    Qt.AlignCenter, str(i + 1 + self._annotation_offset)
+                    Qt.AlignCenter, str(i + 1)
                 )
 
             # Draw pending first click: dot + dashed preview line to cursor
             if self._pending_dot is not None:
-                next_color = QColor(_BADGE_PALETTE[(len(self._annotations) + self._annotation_offset) % len(_BADGE_PALETTE)])
+                next_color = QColor(_BADGE_PALETTE[len(self._annotations) % len(_BADGE_PALETTE)])
                 mx = r.x() + int(self._pending_dot[0] * r.width())
                 my = r.y() + int(self._pending_dot[1] * r.height())
 
@@ -1196,13 +1197,11 @@ class _QCLeftPanel(QWidget):
     changed                = pyqtSignal()
     fullscreen_requested   = pyqtSignal(bool)
     model_selected         = pyqtSignal(int)
-    annotation_added       = pyqtSignal(int)
-    # Emitted when an inspection image is deleted, carrying the 1-based
-    # global annotation number range that image's dots occupied (first,
-    # count) — annotation numbers are global across all images (see
-    # _on_image_point_added's `offset` scheme), so removing an earlier
-    # image also shifts every later image's numbers down by `count`.
-    annotations_removed    = pyqtSignal(int, int)
+    # Emitted whenever the active inspection image changes — carries the
+    # image dict (see _images below) or None for 3D mode / nothing
+    # selected. The control points panel uses this to show only the
+    # currently-viewed photo's own points, never every photo's at once.
+    image_activated        = pyqtSignal(object)
     model_remove_requested = pyqtSignal(object)  # carries the viewer_widget to remove
     upload_requested       = pyqtSignal()         # user clicked "No model loaded" placeholder
 
@@ -1211,8 +1210,17 @@ class _QCLeftPanel(QWidget):
         self._viewer_ref         = None
         self._orig_stacked       = None
         self._orig_idx           = -1
-        self._inspection_images: list[str]        = []   # base64 PNGs
-        self._image_annotations: list[list]       = []   # per-image [(x_frac, y_frac), ...]
+        # Each inspection image owns its own annotations + control points —
+        # {'id': int, 'image_b64': str, 'annotations': [(x,y,x,y), ...], 'control_points': [ControlPoint, ...]}.
+        # A stable `id` (never reassigned, unlike a control point's own `id`
+        # which is a pure display position) is what lets the merge engine
+        # treat each photo as its own item instead of comparing the whole
+        # list as one opaque blob — see core/project_merge.py.
+        self._images: list[dict]                  = []
+        self._next_img_id: int                     = 1
+        # Control points not tied to any photo — legacy data only, see
+        # _ControlPointsPanel's docstring.
+        self._general_points: list                 = []
         self._active_img_idx: int                 = -1   # -1 = 3D mode
         self._thumb_cards: list                   = []   # _InspThumbCard instances
         self._model_pills: list                   = []
@@ -1574,6 +1582,7 @@ class _QCLeftPanel(QWidget):
         self._mode_stack.setCurrentIndex(0)
         for card in self._thumb_cards:
             card.set_active(False)
+        self.image_activated.emit(None)
         if hasattr(self, '_snap_btn'):
             self._snap_btn.setVisible(True)
         if hasattr(self, '_back_3d_btn'):
@@ -1598,17 +1607,17 @@ class _QCLeftPanel(QWidget):
 
     def _show_image(self, idx: int):
         """Switch viewer area to display inspection image at idx for annotation."""
-        if idx < 0 or idx >= len(self._inspection_images):
+        if idx < 0 or idx >= len(self._images):
             return
-        pix = _b64_to_pixmap(self._inspection_images[idx])
+        img = self._images[idx]
+        pix = _b64_to_pixmap(img['image_b64'])
         if pix is None:
             return
         self._active_img_idx = idx
         self._img_view.set_image(pix)
-        annots = self._image_annotations[idx] if idx < len(self._image_annotations) else []
-        offset = sum(len(self._image_annotations[i]) for i in range(idx))
-        self._img_view.set_annotations(annots, offset)
+        self._img_view.set_annotations(img['annotations'])
         self._mode_stack.setCurrentIndex(1)
+        self.image_activated.emit(img)
         for i, card in enumerate(self._thumb_cards):
             card.set_active(i == idx)
         if hasattr(self, '_snap_btn'):
@@ -1627,15 +1636,23 @@ class _QCLeftPanel(QWidget):
 
     def _on_image_point_added(self, dot_xf: float, dot_yf: float,
                                badge_xf: float, badge_yf: float):
-        """Store a completed two-click annotation on the currently displayed image."""
+        """Store a completed two-click annotation on the currently displayed
+        image, and auto-add a matching control point — numbered from 1
+        within this image alone, never continuing a count from earlier
+        photos (that continuous-count scheme was the root cause of control
+        points drifting out of sync with their image's own dot numbers)."""
         idx = self._active_img_idx
-        if idx < 0 or idx >= len(self._image_annotations):
+        if idx < 0 or idx >= len(self._images):
             return
-        self._image_annotations[idx].append((dot_xf, dot_yf, badge_xf, badge_yf))
-        offset = sum(len(self._image_annotations[i]) for i in range(idx))
-        self._img_view.set_annotations(self._image_annotations[idx], offset)
-        number = offset + len(self._image_annotations[idx])
-        self.annotation_added.emit(number)
+        img = self._images[idx]
+        img['annotations'].append((dot_xf, dot_yf, badge_xf, badge_yf))
+        self._img_view.set_annotations(img['annotations'])
+        number = len(img['annotations'])
+        color = _BADGE_PALETTE[(number - 1) % len(_BADGE_PALETTE)]
+        img['control_points'].append(
+            ControlPoint(id=number, name='', status='to_check', color=color, annotation_id=number)
+        )
+        self.image_activated.emit(img)
         self.changed.emit()
 
     # ── Camera / interaction actions ──────────────────────────────────────────
@@ -1691,10 +1708,13 @@ class _QCLeftPanel(QWidget):
                 self._add_inspection_image(pix)
 
     def _add_inspection_image(self, pix: QPixmap):
-        b64 = _pixmap_to_b64(pix)
-        self._inspection_images.append(b64)
-        self._image_annotations.append([])
-        self._insert_thumb_card(len(self._inspection_images) - 1, pix)
+        img = {
+            'id': self._next_img_id, 'image_b64': _pixmap_to_b64(pix),
+            'annotations': [], 'control_points': [],
+        }
+        self._next_img_id += 1
+        self._images.append(img)
+        self._insert_thumb_card(len(self._images) - 1, pix)
         self.changed.emit()
 
     def _insert_thumb_card(self, idx: int, pix: QPixmap):
@@ -1706,32 +1726,31 @@ class _QCLeftPanel(QWidget):
         self._insp_layout.insertWidget(idx, card)
 
     def _delete_inspection_image(self, idx: int):
-        if idx < 0 or idx >= len(self._inspection_images):
+        if idx < 0 or idx >= len(self._images):
             return
-        offset = sum(len(self._image_annotations[i]) for i in range(idx))
-        removed_count = len(self._image_annotations[idx])
-        self._inspection_images.pop(idx)
-        self._image_annotations.pop(idx)
+        self._images.pop(idx)
+        # Deleting an image takes its own annotations + control points with
+        # it in one step — they live inside the same dict, so there's no
+        # separate index/offset bookkeeping to keep in sync (the previous
+        # global-numbering scheme needed exactly that, and drifting out of
+        # sync there is what caused points/photos to appear to vanish or
+        # reappear on their own).
         if self._active_img_idx == idx:
             self._show_3d()
         elif self._active_img_idx > idx:
             self._active_img_idx -= 1
         self._rebuild_insp_strip()
-        if removed_count:
-            # 1-based, matching the annotation_id values _on_image_point_added
-            # hands out (offset + len(...) after appending).
-            self.annotations_removed.emit(offset + 1, removed_count)
         self.changed.emit()
 
     def _rebuild_insp_strip(self):
-        """Clear all cards and rebuild from _inspection_images. Stretch stays at end."""
+        """Clear all cards and rebuild from _images. Stretch stays at end."""
         self._thumb_cards.clear()
         while self._insp_layout.count() > 1:
             item = self._insp_layout.takeAt(0)
             if item and item.widget():
                 item.widget().deleteLater()
-        for i, b64 in enumerate(self._inspection_images):
-            pix = _b64_to_pixmap(b64)
+        for i, img in enumerate(self._images):
+            pix = _b64_to_pixmap(img['image_b64'])
             if pix:
                 self._insert_thumb_card(i, pix)
         # Restore active highlight
@@ -1845,9 +1864,19 @@ class _QCLeftPanel(QWidget):
             'inspection_date': self._date_edit.date().toString('yyyy-MM-dd'),
             'inspected_by': self._inspected_by.text(),
             'comments': self._comments.toPlainText(),
-            'inspection_images': self._inspection_images,
-            'image_annotations': self._image_annotations,
+            'images': [
+                {
+                    'id': img['id'], 'image_b64': img['image_b64'],
+                    'annotations': [list(a) for a in img['annotations']],
+                    'control_points': [cp.to_dict() for cp in img['control_points']],
+                }
+                for img in self._images
+            ],
+            'general_control_points': [cp.to_dict() for cp in self._general_points],
         }
+
+    def get_general_points(self) -> list:
+        return self._general_points
 
     def set_data(self, d: dict):
         dt = QDate.fromString(d.get('inspection_date', ''), 'yyyy-MM-dd')
@@ -1857,15 +1886,30 @@ class _QCLeftPanel(QWidget):
         # Always reassign + rebuild, even when empty — this used to only
         # run `if images:`, so New Project / opening a project with no
         # inspection images left the previous project's photos still shown
-        # in the strip.
-        images = d.get('inspection_images', [])
-        self._inspection_images = list(images)
-        annots = d.get('image_annotations', [])
-        self._image_annotations = [
-            list(annots[i]) if i < len(annots) else []
-            for i in range(len(images))
-        ]
+        # in the strip. `d` is expected to already be in the current
+        # {'images': [...]} shape — QualityControlWidget.set_data migrates
+        # any legacy {'inspection_images', 'image_annotations', 'control_points'}
+        # save before calling here.
+        images = d.get('images', [])
+        self._images = []
+        max_id = 0
+        for img in images:
+            cps = [ControlPoint.from_dict(c) for c in img.get('control_points', [])]
+            img_id = img.get('id', 0)
+            self._images.append({
+                'id': img_id, 'image_b64': img.get('image_b64', ''),
+                'annotations': [tuple(a) for a in img.get('annotations', [])],
+                'control_points': cps,
+            })
+            max_id = max(max_id, img_id)
+        self._next_img_id = max_id + 1
+        self._general_points = [ControlPoint.from_dict(c) for c in d.get('general_control_points', [])]
         self._rebuild_insp_strip()
+        # Never leave a stale image (from whatever project was open before)
+        # on screen after a full data reload — always land back on 3D mode,
+        # which also tells the control points panel to drop any per-image
+        # cards it was showing for the previous project's photo.
+        self._show_3d()
 
 
 # ── _CompanyInfoPanel ─────────────────────────────────────────────────────────
@@ -2148,15 +2192,10 @@ class QualityControlWidget(QWidget):
         self._left_panel.model_selected.connect(self._on_model_selected)
         self._left_panel.model_remove_requested.connect(self.model_remove_requested)
         self._left_panel.upload_requested.connect(self.upload_requested)
-        # Clicking on an image auto-adds a matching control point in the center panel
-        self._left_panel.annotation_added.connect(
-            lambda n: self._center_panel._add_point(annotation_id=n)
-        )
-        # Deleting an inspection image must take its control points with it,
-        # not leave them behind pointing at annotations that no longer exist.
-        self._left_panel.annotations_removed.connect(
-            self._center_panel.remove_points_for_removed_annotations
-        )
+        # Switching the active inspection image (including going back to 3D,
+        # or a newly-added point) tells the center panel to show only that
+        # image's own control points — never every photo's at once.
+        self._left_panel.image_activated.connect(self._center_panel.show_for_image)
 
         self._sep_lc = _vsep()
         self._sep_cr = _vsep()
@@ -2264,11 +2303,52 @@ class QualityControlWidget(QWidget):
         d = {}
         d.update(self._left_panel.get_data())
         d.update(self._right_panel.get_data())
-        d['control_points'] = [cp.to_dict() for cp in self._center_panel.get_control_points()]
         return d
 
     def set_data(self, d: dict):
+        d = self._migrate_legacy_data(d)
         self._left_panel.set_data(d)
         self._right_panel.set_data(d)
-        cps = [ControlPoint.from_dict(c) for c in d.get('control_points', [])]
-        self._center_panel.set_control_points(cps)
+        self._center_panel.set_general_points(self._left_panel.get_general_points())
+
+    @staticmethod
+    def _migrate_legacy_data(d: dict) -> dict:
+        """Upgrade a pre-per-image save — flat 'inspection_images' +
+        'image_annotations' lists, plus one 'control_points' list numbered
+        continuously across every photo — into the current {'images': [...]}
+        shape, where each photo owns its own annotations and control points.
+        Legacy control points are matched to the photo whose global
+        annotation-number range they fell into, using the same offset
+        arithmetic the old global-numbering scheme itself used to hand out
+        annotation_id values. Ones with no annotation_id (never produced by
+        the live UI — only ever seen in synthetic seed data) become
+        'general_control_points' rather than being silently dropped."""
+        if 'images' in d:
+            return d
+        old_images = d.get('inspection_images', [])
+        old_annots = d.get('image_annotations', [])
+        old_cps = d.get('control_points', [])
+        images = []
+        matched = [False] * len(old_cps)
+        offset = 0
+        for i, b64 in enumerate(old_images):
+            annots = old_annots[i] if i < len(old_annots) else []
+            count = len(annots)
+            cps = []
+            for j, cp in enumerate(old_cps):
+                aid = cp.get('annotation_id')
+                if aid is not None and offset < aid <= offset + count:
+                    matched[j] = True
+                    local_num = aid - offset
+                    cps.append({**cp, 'id': local_num, 'annotation_id': local_num})
+            images.append({
+                'id': i + 1, 'image_b64': b64,
+                'annotations': [list(a) for a in annots],
+                'control_points': cps,
+            })
+            offset += count
+        general = [cp for j, cp in enumerate(old_cps) if not matched[j]]
+        d = dict(d)
+        d['images'] = images
+        d['general_control_points'] = general
+        return d

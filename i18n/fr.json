@@ -1266,6 +1266,8 @@
   },
   "quality_control": {
     "control_points_title": "Points de contrôle",
+    "no_image_selected": "Sélectionnez une image d'inspection ci-dessous pour voir et ajouter ses points de contrôle.",
+    "general_points_title": "Général",
     "card": {
       "color_tooltip": "Cliquer pour changer la couleur",
       "name_placeholder": "Nom du point de contrôle...",

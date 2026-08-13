@@ -1266,6 +1266,8 @@
   },
   "quality_control": {
     "control_points_title": "Control Points",
+    "no_image_selected": "Select an inspection image below to view and add its control points.",
+    "general_points_title": "General",
     "card": {
       "color_tooltip": "Click to change color",
       "name_placeholder": "Control point name...",

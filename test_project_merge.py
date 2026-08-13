@@ -277,33 +277,68 @@ def test_quality_control_merge():
     print("test_quality_control_merge")
     base = {
         'inspection_date': '2026-01-01', 'inspected_by': '', 'comments': '',
-        'inspection_images': [], 'image_annotations': [],
+        'images': [
+            {'id': 1, 'image_b64': 'imgA', 'annotations': [[0.1, 0.1, 0.2, 0.2]],
+             'control_points': [{'id': 1, 'name': 'CP1', 'status': 'to_check',
+                                  'comment': '', 'annotation_id': 1, 'color': ''}]},
+        ],
+        'general_control_points': [],
         'logo_data': '', 'designation': 'Original', 'reference_number': '',
         'manufacturer': '', 'inspection_due_date': '', 'overall_status': '',
-        'waived_by': '', 'control_points': [{'id': 1, 'name': 'CP1', 'status': 'to_check',
-                                              'comment': '', 'annotation_id': None, 'color': ''}],
+        'waived_by': '',
     }
-    local = dict(base)
+    local = json.loads(json.dumps(base))
     local['inspected_by'] = 'Alice'
-    local['control_points'] = base['control_points'] + [
-        {'id': 2, 'name': 'CP2 local', 'status': 'to_check', 'comment': '', 'annotation_id': None, 'color': ''}
-    ]
-    remote = dict(base)
+    local['images'][0]['control_points'].append(
+        {'id': 2, 'name': 'CP2 local', 'status': 'to_check', 'comment': '', 'annotation_id': 2, 'color': ''}
+    )
+    remote = json.loads(json.dumps(base))
     remote['reference_number'] = 'REF-99'
 
     merged, conflicts = merge_section('quality_control', base, local, remote)
     check("no conflicts (different fields changed)", conflicts == [])
     check("local's inspected_by kept", merged['inspected_by'] == 'Alice')
     check("remote's reference_number kept", merged['reference_number'] == 'REF-99')
-    check("both control points present", {cp['id'] for cp in merged['control_points']} == {1, 2})
+    check("both control points present on the shared image",
+          {cp['id'] for cp in merged['images'][0]['control_points']} == {1, 2})
 
     # same field, different values -> real conflict
-    remote2 = dict(base)
+    remote2 = json.loads(json.dumps(base))
     remote2['designation'] = 'Remote designation'
-    local2 = dict(base)
+    local2 = json.loads(json.dumps(base))
     local2['designation'] = 'Local designation'
     merged2, conflicts2 = merge_section('quality_control', base, local2, remote2)
     check("designation conflict detected", len(conflicts2) == 1 and conflicts2[0].field == 'designation')
+
+    # ── the actual reported bug: one side takes a new photo, the other
+    # deletes a different existing photo, at the same time. With the old
+    # whole-list-as-one-opaque-value merge this either lost the new photo
+    # or resurrected the deleted one, whichever side wasn't picked. Each
+    # photo now has its own stable id, so both edits should apply cleanly
+    # with zero interactive conflicts.
+    base3 = {
+        'inspection_date': '', 'inspected_by': '', 'comments': '',
+        'images': [
+            {'id': 1, 'image_b64': 'imgA', 'annotations': [], 'control_points': []},
+            {'id': 2, 'image_b64': 'imgB', 'annotations': [], 'control_points': []},
+        ],
+        'general_control_points': [],
+        'logo_data': '', 'designation': '', 'reference_number': '',
+        'manufacturer': '', 'inspection_due_date': '', 'overall_status': '', 'waived_by': '',
+    }
+    local3 = json.loads(json.dumps(base3))
+    local3['images'].append(  # took a new photo
+        {'id': 3, 'image_b64': 'imgC-new', 'annotations': [], 'control_points': []}
+    )
+    remote3 = json.loads(json.dumps(base3))
+    remote3['images'].pop(1)  # deleted image id=2
+
+    merged3, conflicts3 = merge_section('quality_control', base3, local3, remote3)
+    merged_ids = {img['id'] for img in merged3['images']}
+    check("no interactive conflict from the simultaneous add + unrelated delete", conflicts3 == [])
+    check("local's newly-taken photo did not vanish", 3 in merged_ids)
+    check("remote's deleted photo did not come back", 2 not in merged_ids)
+    check("untouched photo survived", 1 in merged_ids)
 
 
 def test_brief_merge():

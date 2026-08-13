@@ -470,18 +470,47 @@ def _merge_viewer_tabs(base, local, remote):
 
 def _merge_quality_control(base, local, remote):
     base, local, remote = base or {}, local or {}, remote or {}
-    # inspection_images/image_annotations have no id field — left un-skipped,
-    # they fall through merge_dict_fields' generic opaque-list handling
-    # (same treatment as report's photo_blocks: whole-list-replace-if-only-
-    # one-side-changed, conflict only if both changed it differently).
-    skip = ('control_points',)
-    merged, conflicts = merge_dict_fields(base, local, remote, section='quality_control', path=(), skip_keys=skip)
-    control_points, cp_conflicts = merge_list_by_id(
-        base.get('control_points', []), local.get('control_points', []), remote.get('control_points', []),
-        id_key='id', section='quality_control', path=('control_points',),
+    # `images` used to be two parallel id-less lists (inspection_images +
+    # image_annotations) merged as one opaque whole-list value — so a
+    # genuine simultaneous edit (one side takes a new photo, the other
+    # deletes a different one) produced a single conflict on the *entire*
+    # list, and picking either side threw away the other side's change
+    # completely: a newly-taken photo could vanish, or a deleted photo
+    # could come back. Each photo now carries a stable `id` (assigned once,
+    # never reassigned — unlike a control point's own `id`, which is a
+    # pure display position), so it merges per-item like every other
+    # id-keyed section instead of as one opaque blob.
+    def _merge_image_item(b, l, r, path, path_labels=()):
+        skip = ('control_points',)
+        merged, conflicts = merge_dict_fields(b, l, r, section='quality_control', path=path,
+                                               path_labels=path_labels, skip_keys=skip)
+        points, point_conflicts = merge_list_by_id(
+            b.get('control_points', []), l.get('control_points', []), r.get('control_points', []),
+            id_key='id', section='quality_control', path=path + ('control_points',), path_labels=path_labels,
+        )
+        merged['control_points'] = points
+        conflicts += point_conflicts
+        return merged, conflicts
+
+    images, image_conflicts = merge_nested_by_path(
+        base.get('images', []), local.get('images', []), remote.get('images', []),
+        id_key='id', section='quality_control', path=('images',), item_merger=_merge_image_item,
     )
-    merged['control_points'] = control_points
-    conflicts += cp_conflicts
+
+    # general_control_points has no id field of its own scope beyond the
+    # same locally-scoped display-position ids as per-image ones — merge
+    # the same way.
+    general_points, general_conflicts = merge_list_by_id(
+        base.get('general_control_points', []), local.get('general_control_points', []),
+        remote.get('general_control_points', []),
+        id_key='id', section='quality_control', path=('general_control_points',),
+    )
+
+    skip = ('images', 'general_control_points')
+    merged, conflicts = merge_dict_fields(base, local, remote, section='quality_control', path=(), skip_keys=skip)
+    merged['images'] = images
+    merged['general_control_points'] = general_points
+    conflicts += image_conflicts + general_conflicts
     return merged, conflicts
 
 
