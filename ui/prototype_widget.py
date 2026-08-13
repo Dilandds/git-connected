@@ -105,6 +105,23 @@ class _MainPhotoArea(QFrame):
         )
         lay.addWidget(self._hint_lbl)
 
+        # Remove button (top-right corner overlay) — must be parented to
+        # self, same reasoning as _ThumbPhoto's identical button: an
+        # unparented QPushButton.move()/.show() pops an independent
+        # floating OS window instead of overlaying this widget.
+        self._remove_btn = QPushButton('×', self)
+        self._remove_btn.setFixedSize(22, 22)
+        self._remove_btn.setCursor(Qt.PointingHandCursor)
+        self._remove_btn.hide()
+        self._remove_btn.setStyleSheet("""
+            QPushButton {
+                background: #ef4444; color: white; border: none;
+                border-radius: 11px; font-size: 14px; font-weight: bold; padding: 0;
+            }
+            QPushButton:hover { background: #dc2626; }
+        """)
+        self._remove_btn.clicked.connect(self._on_remove_clicked)
+
         self._refresh()
 
     def _refresh(self):
@@ -118,10 +135,14 @@ class _MainPhotoArea(QFrame):
             self._img_lbl.setPixmap(pix)
             self._icon_lbl.hide()
             self._hint_lbl.setText(t('proto.click_to_change'))
+            self._remove_btn.show()
+            self._remove_btn.move(self.width() - 30, 8)
+            self._remove_btn.raise_()
         else:
             self._img_lbl.clear()
             self._icon_lbl.show()
             self._hint_lbl.setText(t('proto.click_to_add_photo'))
+            self._remove_btn.hide()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -133,6 +154,11 @@ class _MainPhotoArea(QFrame):
 
     def get_b64(self) -> str:
         return self._b64
+
+    def _on_remove_clicked(self):
+        self._b64 = ''
+        self._refresh()
+        self.changed.emit('')
 
     def mousePressEvent(self, _event):
         path, _ = QFileDialog.getOpenFileName(

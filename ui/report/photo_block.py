@@ -28,9 +28,7 @@ _BLOCK_H = (
     _INNER_PAD      # top
     + _PHOTO_H      # photo
     + 10            # gap
-    + 18            # "Comments" label
-    + 4             # gap
-    + 68            # comment textarea
+    + 68            # comment textarea (placeholder text doubles as the label)
     + _INNER_PAD    # bottom
 )
 
@@ -66,7 +64,6 @@ _COMMENT_STYLE = f"""
     }}
     QTextEdit:focus {{ border-color: {_ACCENT}; background: #ffffff; }}
 """
-_LBL_STYLE = f"color: {_MUTED}; font-size: 13px; font-weight: 600; background: transparent; border: none;"
 _REMOVE_STYLE = f"""
     QPushButton {{
         background: #ef4444; color: #ffffff;
@@ -182,14 +179,8 @@ class PhotoBlockWidget(QFrame):
 
         lay.addSpacing(10)
 
-        # Comments label
-        lbl = QLabel('Comments')
-        lbl.setStyleSheet(_LBL_STYLE)
-        lay.addWidget(lbl)
-
-        lay.addSpacing(4)
-
-        # Comments textarea
+        # Comments textarea — placeholder text already says "Comments...",
+        # a separate label above it was just repeating the same word twice.
         self._comment = QTextEdit()
         self._comment.setPlaceholderText('Comments...')
         self._comment.setStyleSheet(_COMMENT_STYLE)

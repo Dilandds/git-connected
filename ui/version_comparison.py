@@ -150,6 +150,25 @@ class PhotoSlot(QPushButton):
         self._zoom_preview: Optional[QLabel] = None
         self.setFixedSize(w, h)
         self.setCursor(Qt.PointingHandCursor)
+
+        # Remove button (top-right corner overlay), only shown once a photo
+        # is set — must be parented to self so it overlays this button
+        # instead of popping an independent floating window. Built before
+        # _set_empty() below, which references it to start hidden.
+        self._remove_btn = QPushButton('×', self)
+        self._remove_btn.setFixedSize(18, 18)
+        self._remove_btn.setCursor(Qt.PointingHandCursor)
+        self._remove_btn.hide()
+        self._remove_btn.setStyleSheet("""
+            QPushButton {
+                background: #ef4444; color: white; border: none;
+                border-radius: 9px; font-size: 12px; font-weight: bold; padding: 0;
+            }
+            QPushButton:hover { background: #dc2626; }
+        """)
+        self._remove_btn.clicked.connect(self._on_remove_clicked)
+        self._remove_btn.move(w - 22, 4)
+
         self._set_empty()
         self.clicked.connect(self._upload)
 
@@ -163,6 +182,7 @@ class PhotoSlot(QPushButton):
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; color: {_ACCENT}; }}
         """)
+        self._remove_btn.hide()
 
     def set_b64(self, b64: str):
         self._b64 = b64
@@ -180,6 +200,13 @@ class PhotoSlot(QPushButton):
             }}
             QPushButton:hover {{ border-color: {_ACCENT}; }}
         """)
+        self._remove_btn.show()
+        self._remove_btn.raise_()
+
+    def _on_remove_clicked(self):
+        self._hide_zoom_preview()
+        self.set_b64('')
+        self.photo_changed.emit('')
 
     def _upload(self):
         self._hide_zoom_preview()
