@@ -464,8 +464,170 @@ def _merge_report(base, local, remote):
     return result, conflicts
 
 
+def _normalize_viewer_tab_for_compare(item: Optional[dict]) -> Optional[dict]:
+    """Comparison-only view of a decoded viewer-tab entry: annotation
+    image_paths and any texture-map path reduced to their bare filename.
+    import_ecto() resolves both to absolute paths under a fresh temp-
+    extraction directory on every decode (see core/ecto_format.py), so
+    comparing them directly would make an untouched tab look "different"
+    on every single merge — same class of non-determinism as
+    technical_overview's annotations, one level deeper. Pure string
+    manipulation, not I/O. Excludes `id` and `bundle_b64` — a tab's
+    identity and its non-deterministic raw zip bytes are never part of
+    "did this tab's content actually change"."""
+    if not item:
+        return item
+    out = {k: v for k, v in item.items() if k not in ('id', 'bundle_b64')}
+    annotations = []
+    for ann in out.get('annotations') or []:
+        a = dict(ann)
+        a['image_paths'] = [os.path.basename(p) for p in a.get('image_paths', [])]
+        annotations.append(a)
+    out['annotations'] = annotations
+    texture = out.get('texture_data')
+    if texture:
+        texture = dict(texture)
+        albedo = texture.get('albedo_map_path')
+        if albedo:
+            texture['albedo_map_path'] = os.path.basename(albedo)
+        parts = texture.get('parts_textures')
+        if parts:
+            new_parts = []
+            for pt in parts:
+                pt = dict(pt)
+                p = pt.get('albedo_map_path')
+                if p:
+                    pt['albedo_map_path'] = os.path.basename(p)
+                new_parts.append(pt)
+            texture['parts_textures'] = new_parts
+        out['texture_data'] = texture
+    return out
+
+
 def _merge_viewer_tabs(base, local, remote):
-    return merge_list_add_only(local, remote), []
+    """3D model tabs are atomic — no sub-merging. A tab's annotations,
+    drawings, render/texture state and model itself are never compared or
+    merged field by field; the whole tab is one opaque unit, per explicit
+    product decision. Unlike every other id-keyed list in this module,
+    delete-vs-edit on the SAME tab id is deliberately NOT auto-resolved in
+    favor of the edit — it surfaces the same interactive conflict as a
+    genuine dual edit, since a 3D model carrying new annotations/drawings
+    is exactly the kind of work an abandoned-lock scenario shouldn't
+    silently decide about on the user's behalf. A brand-new tab on either
+    side (non-colliding id) just gets added; a tab deleted on one side and
+    left untouched on the other since `base` is still a clean, silent
+    delete — only a real divergence on the same id ever prompts.
+
+    Expects entries already decoded to a comparison-friendly structural
+    shape by the caller (ui/project_widget.py's _decode_viewer_tab) —
+    each dict carries 'id' + 'bundle_b64' (kept verbatim, reused wholesale
+    by whichever side wins — never itself compared) plus the decoded
+    'tab_name'/'annotations'/'drawings'/'texture_data'/model fields. This
+    module stays I/O-free, same reasoning as _merge_technical_overview."""
+    base = base or []
+    local = local or []
+    remote = remote or []
+    base_by_id = _index_by_id(base, 'id')
+    local_by_id = _index_by_id(local, 'id')
+    remote_by_id = _index_by_id(remote, 'id')
+
+    local_new = set(local_by_id) - set(base_by_id)
+    remote_new = set(remote_by_id) - set(base_by_id)
+    colliding = detect_id_collision(local_new, remote_new)
+    if colliding:
+        all_ids = set(base_by_id) | set(local_by_id) | set(remote_by_id)
+        remote = _renumber_collisions(remote, colliding, all_ids, 'id')
+        remote_by_id = _index_by_id(remote, 'id')
+
+    def _make_conflict(path, path_labels, local_value, remote_value, target_list, item):
+        conflict = Conflict('viewer_tabs', path, 'content', local_value=local_value,
+                             remote_value=remote_value, path_labels=path_labels)
+
+        def _resolve(v, _item=item, _out=target_list):
+            if v is None:
+                for i, x in enumerate(_out):
+                    if x is _item:
+                        _out.pop(i)
+                        break
+            else:
+                _item.clear()
+                _item.update(v)
+        conflict.resolve = _resolve
+        return conflict
+
+    conflicts: List[Conflict] = []
+    merged: List[dict] = []
+    seen = set()
+
+    def _order():
+        for item in local:
+            iid = item.get('id')
+            if iid is not None and iid not in seen:
+                seen.add(iid)
+                yield iid
+        for item in remote:
+            iid = item.get('id')
+            if iid is not None and iid not in seen:
+                seen.add(iid)
+                yield iid
+
+    for tab_id in _order():
+        in_base, in_local, in_remote = tab_id in base_by_id, tab_id in local_by_id, tab_id in remote_by_id
+        item_path = ('viewer_tabs', tab_id)
+
+        if in_base and not in_local and not in_remote:
+            continue  # deleted on both sides
+
+        if not in_base and in_local and not in_remote:
+            merged.append(local_by_id[tab_id])
+            continue
+
+        if not in_base and not in_local and in_remote:
+            merged.append(remote_by_id[tab_id])
+            continue
+
+        b_item = base_by_id.get(tab_id)
+        b_content = _normalize_viewer_tab_for_compare(b_item)
+
+        if in_base and not in_local and in_remote:
+            r_item = remote_by_id[tab_id]
+            if _normalize_viewer_tab_for_compare(r_item) == b_content:
+                continue  # remote never touched it since base -> clean delete
+            label = r_item.get('tab_name') or f'#{tab_id}'
+            item = dict(r_item)
+            conflicts.append(_make_conflict(item_path, (label,), None, r_item, merged, item))
+            merged.append(item)
+            continue
+
+        if in_base and in_local and not in_remote:
+            l_item = local_by_id[tab_id]
+            if _normalize_viewer_tab_for_compare(l_item) == b_content:
+                continue  # local never touched it since base -> clean delete
+            label = l_item.get('tab_name') or f'#{tab_id}'
+            item = dict(l_item)
+            conflicts.append(_make_conflict(item_path, (label,), l_item, None, merged, item))
+            merged.append(item)
+            continue
+
+        # present on both local and remote (possibly base too)
+        l_item, r_item = local_by_id[tab_id], remote_by_id[tab_id]
+        l_content = _normalize_viewer_tab_for_compare(l_item)
+        r_content = _normalize_viewer_tab_for_compare(r_item)
+        if l_content == r_content:
+            merged.append(l_item)
+            continue
+        if l_content == b_content:
+            merged.append(r_item)  # only remote changed it
+            continue
+        if r_content == b_content:
+            merged.append(l_item)  # only local changed it
+            continue
+        label = l_item.get('tab_name') or r_item.get('tab_name') or f'#{tab_id}'
+        item = dict(l_item)
+        conflicts.append(_make_conflict(item_path, (label,), l_item, r_item, merged, item))
+        merged.append(item)
+
+    return merged, conflicts
 
 
 def _merge_quality_control(base, local, remote):

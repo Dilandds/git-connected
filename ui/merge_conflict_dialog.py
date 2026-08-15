@@ -86,6 +86,7 @@ _FIELD_LABELS = {
     ('drawing_scale', 'unit'): 'Unit',
     ('drawing_scale', 'scale_ratio'): 'Scale Ratio',
     ('technical_overview', 'document'): 'Document',
+    ('viewer_tabs', 'content'): 'Model Tab',
     ('assignment', 'title'): 'Card Title',
     ('assignment', 'supplier'): 'Supplier',
     ('assignment', 'status'): 'Status',

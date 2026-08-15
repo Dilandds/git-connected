@@ -161,6 +161,70 @@ def test_viewer_tabs_add_only():
     check("both tab names present", {t['tab_name'] for t in merged} == {'a.stl', 'b.stl'})
 
 
+def test_viewer_tabs_merge():
+    print("test_viewer_tabs_merge")
+
+    def _tab(tid, name='model.stl', annotations=None, drawings=None, b64='AAA'):
+        return {
+            'id': tid, 'bundle_b64': b64, 'tab_name': name,
+            'model_bytes': b'mesh-bytes', 'model_ext': '.stl',
+            'annotations': annotations or [], 'drawings': drawings or [],
+            'texture_data': None,
+        }
+
+    # New tab added on each side (different ids) -> both survive, no conflict
+    base = [_tab('t1')]
+    local = [_tab('t1'), _tab('t2', name='new-local.stl')]
+    remote = [_tab('t1'), _tab('t3', name='new-remote.stl')]
+    merged, conflicts = merge_section('viewer_tabs', base, local, remote)
+    check("independent new tabs on both sides -> no conflict", conflicts == [])
+    check("all three tabs present", {t['id'] for t in merged} == {'t1', 't2', 't3'})
+
+    # Deleted on one side, untouched on the other -> clean silent delete
+    base2 = [_tab('t1'), _tab('t2')]
+    local2 = [_tab('t1')]          # t2 deleted locally
+    remote2 = [_tab('t1'), _tab('t2')]  # remote never touched t2
+    merged2, conflicts2 = merge_section('viewer_tabs', base2, local2, remote2)
+    check("clean delete: untouched deleted tab produces no conflict", conflicts2 == [])
+    check("clean delete: tab actually removed", {t['id'] for t in merged2} == {'t1'})
+
+    # Deleted on one side, WORKED ON (edited) on the other -> must be an
+    # interactive conflict, not a silent "edit wins" like every other
+    # section — this is the explicit product decision for 3D tabs.
+    base3 = [_tab('t1')]
+    local3 = []  # deleted locally
+    remote3 = [_tab('t1', annotations=[{'id': 1, 'point': [0, 0, 0], 'image_paths': []}])]  # annotated remotely
+    merged3, conflicts3 = merge_section('viewer_tabs', base3, local3, remote3)
+    check("delete-vs-edit on the SAME tab produces an interactive conflict "
+          "(not silently auto-resolved)", len(conflicts3) == 1)
+    check("conflict correctly identifies local side as the delete",
+          conflicts3[0].local_value is None and conflicts3[0].remote_value is not None)
+
+    # Resolving "keep theirs" (the edited version) must restore the tab
+    conflicts3[0].resolve(conflicts3[0].remote_value)
+    check("resolving to the edited side keeps the tab with its annotation",
+          any(t['id'] == 't1' and t['annotations'] for t in merged3))
+
+    # Both sides genuinely worked on the same tab differently -> one conflict
+    base4 = [_tab('t1')]
+    local4 = [_tab('t1', annotations=[{'id': 1, 'point': [1, 1, 1], 'image_paths': []}])]
+    remote4 = [_tab('t1', drawings=[{'id': 1, 'stroke': [[0, 0]]}])]
+    merged4, conflicts4 = merge_section('viewer_tabs', base4, local4, remote4)
+    check("genuine dual edit on the same tab -> exactly one conflict", len(conflicts4) == 1)
+    check("dual-edit conflict is scoped to this one tab, not the whole list",
+          len(merged4) == 1)
+
+    # Identical structural content on both sides (e.g. bundle_b64 differs
+    # only from non-deterministic re-zipping, already normalized away by
+    # decode) -> no false-positive conflict.
+    base5 = [_tab('t1')]
+    local5 = [_tab('t1', b64='BBB')]   # different raw bytes, same content
+    remote5 = [_tab('t1', b64='CCC')]  # different raw bytes again, same content
+    merged5, conflicts5 = merge_section('viewer_tabs', base5, local5, remote5)
+    check("untouched content with different (non-deterministic) bundle_b64 "
+          "causes no false-positive conflict", conflicts5 == [])
+
+
 def test_whole_section_replace_if_differs():
     print("test_whole_section_replace_if_differs")
     base = {'file_name': 'doc.pdf', 'state': {'unit': 'cm'}}
@@ -791,6 +855,7 @@ def main():
         test_traceability_current_component_index_repair,
         test_project_info_field_merge,
         test_viewer_tabs_add_only,
+        test_viewer_tabs_merge,
         test_whole_section_replace_if_differs,
         test_report_id_less_sublists,
         test_resolve_callback_writes_into_merged_result,

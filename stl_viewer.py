@@ -3,6 +3,7 @@ Main ECTOFORM Window with minimalistic UI and multi-tab support.
 """
 import os
 import sys
+import uuid
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Any
@@ -126,6 +127,8 @@ class TabState:
     loaded_via_conversion: bool = False  # True when file was loaded via Convert File flow
     is_2d_model: bool = False  # True when current model is 2D geometry
     thumbnail: Any = None  # QPixmap thumbnail for the Overview tab
+    reader_mode: bool = False  # True when this tab's annotations are view-only (see _load_ecto_file)
+    tab_id: Optional[str] = None  # stable identity across save/restore — see core/project_merge.py's viewer_tabs merger
 
 
 # ── Background thread: runs screencapture -i and emits result ─────────────────
@@ -1141,7 +1144,8 @@ class STLViewerWindow(QMainWindow):
     def _create_new_tab(self, file_path: str = None) -> int:
         """Create a new tab with its own viewer and annotation panel. Returns tab index."""
         tab = TabState()
-        
+        tab.tab_id = uuid.uuid4().hex
+
         # Create viewer widget
         try:
             if not USE_OFFSCREEN:
@@ -1311,6 +1315,11 @@ class STLViewerWindow(QMainWindow):
 
         has_file = tab.file_path is not None
         self.toolbar.set_stl_loaded(has_file)
+        # set_stl_loaded() unconditionally re-enables the annotation button —
+        # reapply this tab's own reader-mode gate on top of it, otherwise
+        # switching tabs (including jumping back from the Overview grid)
+        # silently undoes reader mode and lets a viewer add new annotations.
+        self.toolbar.set_reader_mode(tab.reader_mode)
         if has_file:
             self.toolbar.set_loaded_filename(tab.filename)
             self.setWindowTitle(f"LYNS - {tab.filename}")
@@ -2148,7 +2157,7 @@ class STLViewerWindow(QMainWindow):
                 self._create_new_tab()
             self._load_file_into_current_tab(file_path, from_conversion=False)
 
-    def _restore_viewer_tab_from_project(self, tmp_path: str, original_name: str):
+    def _restore_viewer_tab_from_project(self, tmp_path: str, original_name: str, tab_id: str = ''):
         """Open a viewer tab restored from a saved project's .lyns bundle.
 
         The bundle is written to a randomly-named temp file, so unlike
@@ -2156,12 +2165,26 @@ class STLViewerWindow(QMainWindow):
         path itself — it would show up as e.g. "tmpvl4chzig.ecto" instead of
         the model's real name (e.g. "test.stl"). Pass the original name through
         explicitly instead.
+
+        tab_id — this tab's stable identity from the save file (see
+        core/project_merge.py's viewer_tabs merger). Carried through onto
+        the restored TabState so the NEXT save reuses the same id instead
+        of minting a new one, which is what lets the merge engine recognize
+        this as "the same tab, possibly edited" across two devices/sessions
+        rather than treating every reload as a brand-new tab. Empty for
+        saves written before tabs had stable ids — falls back to a fresh
+        one, same as any other genuinely-new tab.
         """
         import os
         if not os.path.exists(tmp_path):
             return
         self._switch_mode("3d")
-        self._load_ecto_file(tmp_path, display_name_override=original_name)
+        # force_editable=True — this bundle is the project's own tab, being
+        # restored on whichever device opened the project, never a file
+        # someone shared with this user (see _load_ecto_file's docstring).
+        self._load_ecto_file(tmp_path, display_name_override=original_name, force_editable=True)
+        if self._current_tab is not None:
+            self._current_tab.tab_id = tab_id or uuid.uuid4().hex
 
     def _restore_technical_overview_from_project(self, tmp_path: str):
         """Restore the Technical Overview workspace from a saved project's
@@ -3774,15 +3797,27 @@ class STLViewerWindow(QMainWindow):
         logger.info("save_current_annotations: Annotations will be saved on export")
         return True
     
-    def _load_ecto_file(self, ecto_path: str, display_name_override: Optional[str] = None):
+    def _load_ecto_file(self, ecto_path: str, display_name_override: Optional[str] = None,
+                         force_editable: bool = False):
         """Load an .ecto bundle file.
 
         display_name_override — when the bundle was written to a temp path
         (project-tab restore), use this instead of deriving a name from
         ecto_path, whose stem is a meaningless random temp filename.
+
+        force_editable — used by project-tab restore (see
+        _restore_viewer_tab_from_project). import_ecto()'s sender/reader
+        check is based on core/creator_registry.py, a registry file kept
+        in this machine's local app-data folder — it can never recognize a
+        token minted on a different device, even one you own. That's fine
+        for the genuine "someone emailed me a .ecto" case, but a project's
+        own viewer tabs aren't shared with anyone; they're just this
+        session's save/restore format for its own tabs. Without this
+        override, reopening your own project on a second device always
+        landed every tab in read-only "Reader Mode" for no real reason.
         """
         logger.info(f"_load_ecto_file: Loading .ecto file: {ecto_path}")
-        
+
         try:
             from core.ecto_format import EctoFormat
 
@@ -3792,7 +3827,9 @@ class STLViewerWindow(QMainWindow):
                 return
             
             model_path, annotations, reader_mode, temp_dir, drawings, texture_data = EctoFormat.import_ecto(ecto_path)
-            
+            if force_editable:
+                reader_mode = False
+
             if model_path is None:
                 show_error_dialog(
                     self,
@@ -3838,6 +3875,7 @@ class STLViewerWindow(QMainWindow):
             if tab:
                 tab.file_path = ecto_path
                 tab.filename = display_name
+                tab.reader_mode = reader_mode
                 self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption(display_name))
 
             self.setWindowTitle(f"LYNS - {display_name}")

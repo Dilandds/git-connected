@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple, Type
@@ -691,7 +692,7 @@ class TheProjectWidget(QWidget):
     """Main container for The Project tab."""
 
     open_in_viewer         = pyqtSignal(str)
-    restore_viewer_tab     = pyqtSignal(str, str)  # temp bundle path, original tab name
+    restore_viewer_tab     = pyqtSignal(str, str, str)  # temp bundle path, original tab name, tab id ('' if none)
     clear_viewer_tabs      = pyqtSignal()  # close whatever's open before restoring a loaded project's tabs
     qc_model_remove_requested = pyqtSignal(object)
     qc_upload_requested    = pyqtSignal()
@@ -1425,6 +1426,21 @@ class TheProjectWidget(QWidget):
         local_data['technical_overview'] = _decode(local_data.get('technical_overview'))
         remote_data['technical_overview'] = _decode(remote_data.get('technical_overview'))
 
+        # viewer_tabs (the 3D model tabs) have the exact same non-determinism
+        # problem — each tab is its own re-zipped .lyns bundle — plus each
+        # tab needs its own decode so the merge can tell "same tab, edited"
+        # apart from "different tab" (see core/project_merge.py's
+        # _merge_viewer_tabs). Re-encoding isn't needed afterward: whichever
+        # side wins keeps its own already-encoded bundle_b64 verbatim.
+        def _decode_tabs(entries):
+            structural, tab_temp_dirs = self._decode_viewer_tabs(entries)
+            temp_dirs.extend(tab_temp_dirs)
+            return structural
+
+        base_data['viewer_tabs'] = _decode_tabs(base_data.get('viewer_tabs'))
+        local_data['viewer_tabs'] = _decode_tabs(local_data.get('viewer_tabs'))
+        remote_data['viewer_tabs'] = _decode_tabs(remote_data.get('viewer_tabs'))
+
         # assignment tabs need every item to have an 'id' before merging.
         # local_data's tabs already have one (they come straight from the
         # live widget), but base/remote are raw JSON off disk — a save
@@ -1457,6 +1473,13 @@ class TheProjectWidget(QWidget):
                 dlg.apply_resolutions()
 
             merged['technical_overview'] = self._encode_technical_overview(merged.get('technical_overview'))
+            # Strip the decode-only fields back down to the saved shape —
+            # no re-encoding needed, since bundle_b64 was carried through
+            # unchanged on whichever side won each tab.
+            merged['viewer_tabs'] = [
+                {'id': tab['id'], 'tab_name': tab.get('tab_name', ''), 'bundle_b64': tab['bundle_b64']}
+                for tab in merged.get('viewer_tabs', [])
+            ]
         finally:
             import shutil
             for d in temp_dirs:
@@ -1543,6 +1566,68 @@ class TheProjectWidget(QWidget):
                 except OSError:
                     pass
 
+    def _decode_viewer_tabs(self, entries: Optional[list]) -> Tuple[list, list]:
+        """Decode a saved viewer_tabs list into comparison-friendly
+        structural entries for _merge_viewer_tabs. Returns (structural_list,
+        temp_dirs) — each entry's temp_dir (holding its extracted model/
+        images) must stay alive until after the save finishes, since the
+        decoded dict's annotation image_paths/texture paths point into it."""
+        structural = []
+        temp_dirs = []
+        for entry in entries or []:
+            item, temp_dir = self._decode_viewer_tab(entry)
+            if item is not None:
+                structural.append(item)
+            if temp_dir:
+                temp_dirs.append(temp_dir)
+        return structural, temp_dirs
+
+    def _decode_viewer_tab(self, entry: Optional[dict]) -> Tuple[Optional[dict], Optional[str]]:
+        """Decode one saved viewer_tabs entry ({'id', 'tab_name',
+        'bundle_b64'}) into a structural dict for merge comparison. 'id'
+        and 'bundle_b64' are kept verbatim — bundle_b64 is reused wholesale
+        by whichever side wins a conflict, never re-encoded or itself
+        compared (see core/project_merge.py's _merge_viewer_tabs); every
+        other field is decoded from the bundle so comparison judges real
+        content instead of the zip's own non-deterministic bytes. A
+        pre-this-change entry with no 'id' gets a fresh one — it can't
+        recover a "true" cross-device identity it never had, so it's
+        merged once as if it were a brand-new tab (no data lost, worst
+        case a harmless one-time duplicate, same fallback used for other
+        legacy id-less lists elsewhere in this file). Returns (None, None)
+        for an entry that can't be decoded at all."""
+        if not entry or not entry.get('bundle_b64'):
+            return None, None
+        from core.ecto_format import EctoFormat
+        fd, tmp_ecto = tempfile.mkstemp(suffix='.lyns')
+        os.close(fd)
+        try:
+            Path(tmp_ecto).write_bytes(base64.b64decode(entry['bundle_b64']))
+            model_path, annotations, _reader_mode, temp_dir_or_err, drawings, texture_data = \
+                EctoFormat.import_ecto(tmp_ecto)
+            if model_path is None:
+                logger.warning(f'_decode_viewer_tab: could not decode '
+                                f'"{entry.get("tab_name")}": {temp_dir_or_err}')
+                return None, None
+            return {
+                'id': entry.get('id') or uuid.uuid4().hex,
+                'bundle_b64': entry['bundle_b64'],
+                'tab_name': entry.get('tab_name', ''),
+                'model_bytes': Path(model_path).read_bytes(),
+                'model_ext': os.path.splitext(model_path)[1],
+                'annotations': annotations or [],
+                'drawings': drawings or [],
+                'texture_data': texture_data,
+            }, temp_dir_or_err
+        except Exception as e:
+            logger.warning(f'_decode_viewer_tab: could not decode "{entry.get("tab_name")}": {e}')
+            return None, None
+        finally:
+            try:
+                os.remove(tmp_ecto)
+            except OSError:
+                pass
+
     def _apply_merged_data_to_screens(self, merged: dict) -> None:
         self._nav.set_info_data(merged.get('project_info', {}))
         for key, _ in _NAV_ITEMS:
@@ -1606,7 +1691,17 @@ class TheProjectWidget(QWidget):
                         except ImportError:
                             pass
                     bundle_bytes = Path(tmp_path).read_bytes()
+                    # id — assigned once when the tab was created (see
+                    # stl_viewer.py's _create_new_tab), never reassigned —
+                    # is what lets the merge engine recognize "this is the
+                    # same tab, edited" across two devices instead of only
+                    # ever being able to compare the whole viewer_tabs list
+                    # as one opaque blob. Fall back to a fresh id for the
+                    # rare case a tab somehow has none (shouldn't happen on
+                    # a live session, but never write an id-less entry).
+                    tab_id = getattr(tab, 'tab_id', None) or uuid.uuid4().hex
                     result.append({
+                        'id': tab_id,
                         'tab_name': tab_name,
                         'bundle_b64': base64.b64encode(bundle_bytes).decode(),
                     })
@@ -1743,11 +1838,12 @@ class TheProjectWidget(QWidget):
             if not b64:
                 continue
             tab_name = entry.get('tab_name', 'model.lyns')
+            tab_id = entry.get('id') or ''  # '' for saves from before tabs had stable ids
             fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
             os.close(fd)
             try:
                 Path(tmp_path).write_bytes(base64.b64decode(b64))
-                self.restore_viewer_tab.emit(tmp_path, tab_name)
+                self.restore_viewer_tab.emit(tmp_path, tab_name, tab_id)
             except Exception as e:
                 logger.warning(f'_restore_viewer_tabs: could not restore "{tab_name}": {e}')
             finally:
