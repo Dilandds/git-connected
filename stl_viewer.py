@@ -4001,6 +4001,20 @@ class STLViewerWindow(QMainWindow):
                 vw.restore_draw_strokes(drawings)
                 logger.info(f"_load_ecto_file: Restored {len(drawings)} drawing strokes")
             
+            # Restore visual style (solid/wireframe/shaded) BEFORE any
+            # material/texture preset below — set_render_mode() blindly
+            # overwrites every part's .material with a plain generic one
+            # (see viewer_widget_pygfx.py), so calling it AFTER restoring
+            # per-part leather/color/image presets would wipe every one of
+            # them out again, leaving the model visually untextured even
+            # though the presets were genuinely applied a moment earlier
+            # (this was exactly backwards before — the visible symptom was
+            # "materials not showing" after reopening a saved project).
+            # Also syncs the toolbar's own icon/state to match.
+            saved_render_mode = texture_data.get('render_mode') if texture_data else None
+            if saved_render_mode:
+                self.toolbar._set_render_mode(saved_render_mode)
+
             # Restore material/texture if saved in bundle
             if texture_data and vw and hasattr(vw, '_apply_material_preset_to_mesh'):
                 try:
@@ -4028,26 +4042,6 @@ class STLViewerWindow(QMainWindow):
                         )
                 except Exception as tex_err:
                     logger.warning(f"_load_ecto_file: Failed to restore texture: {tex_err}")
-
-            # Restore visual style (solid/wireframe/shaded) — saved
-            # alongside texture_data since it lives on the viewer widget
-            # independent of any material preset. Overrides the earlier
-            # "match toolbar default" call above so a tab saved as
-            # wireframe reopens as wireframe instead of resetting to
-            # whatever style happens to currently be selected in the
-            # toolbar. Also syncs the toolbar's own icon/state so it
-            # doesn't show a stale style right after load.
-            saved_render_mode = texture_data.get('render_mode') if texture_data else None
-            logger.info(f"_load_ecto_file: texture_data present={texture_data is not None}, "
-                        f"saved_render_mode={saved_render_mode!r}")
-            if saved_render_mode:
-                # Toolbar._set_render_mode() updates its own icon/state and
-                # emits render_mode_changed, which is wired (see __init__)
-                # to this window's _set_render_mode() — one call keeps the
-                # toolbar and the viewer in sync instead of applying twice.
-                self.toolbar._set_render_mode(saved_render_mode)
-                logger.info(f"_load_ecto_file: after restore, vw._render_mode="
-                            f"{getattr(vw, '_render_mode', None)!r}")
 
             # Restore screenshots into this tab's own list, and refresh the
             # shared screenshot panel since this tab is the active one.
