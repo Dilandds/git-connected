@@ -145,6 +145,14 @@ class ProjectBriefWidget(QWidget):
         for section in self._all_sections():
             section.set_edit_mode(enabled)
 
+    def set_read_only(self, read_only: bool):
+        """Reuses the section cards' set_edit_mode machinery (originally
+        built for the since-removed in-page Edit/Save Brief toggle, but
+        still fully wired) — every section disables its own fields at the
+        control level, never the scroll area, so scrolling stays usable in
+        read-only mode."""
+        self._set_edit_mode(not read_only)
+
     def _all_sections(self):
         return (
             self._s_overview, self._s_techniques, self._s_targets,

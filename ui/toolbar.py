@@ -513,9 +513,17 @@ class ToolbarButton(QPushButton):
         self.text_label.setStyleSheet(_toolbar_label_style('#888888', self._label_font_size))
     
     def set_active(self, active):
-        """Set the active state of the button."""
+        """Set the active state of the button. Must respect the current
+        enabled/disabled look — _apply_default_style() ignores isEnabled(),
+        so calling this on a disabled button (e.g. render_mode_btn's icon
+        updating while read-only, from a saved project restoring its
+        render mode) used to silently restyle it back to looking clickable
+        even though clicks were still blocked."""
         self._is_active = active
-        self._apply_default_style()
+        if self.isEnabled():
+            self._apply_default_style()
+        else:
+            self._apply_disabled_style()
     
     def set_label(self, text):
         """Update the button label text."""
