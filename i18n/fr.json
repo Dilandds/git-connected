@@ -495,6 +495,7 @@
       "open": "📂 Ouvrir projet",
       "save": "💾 Enregistrer Projet",
       "save_as": "💾 Enregistrer sous...",
+      "version_history": "🕘 Historique des versions",
       "print": "🖨  Imprimer",
       "password": "🔓  Mot de passe",
       "protected": "🔒  Protégé",
@@ -508,6 +509,16 @@
       "tip_password": "Définir ou supprimer la protection par mot de passe",
       "tip_protected": "Projet protégé par mot de passe — cliquer pour modifier ou supprimer",
       "tip_unlocked": "Définir un mot de passe pour protéger ce projet"
+    },
+    "version_history": {
+      "title": "Historique des versions",
+      "subtitle": "Instantanés locaux enregistrés automatiquement avant chaque écrasement — choisissez-en un à restaurer. La restauration conserve toujours un instantané de la version actuelle, donc cela ne fait jamais perdre de données.",
+      "empty": "Aucun instantané pour l'instant — ils sont créés automatiquement à chaque enregistrement.",
+      "restore": "Restaurer la sélection",
+      "close": "Fermer",
+      "confirm_title": "Restaurer cette version ?",
+      "confirm_body": "Cela remplace le fichier projet actuel par l'instantané sélectionné. La version actuelle sera elle-même archivée d'abord, vous pourrez donc toujours annuler cette action.",
+      "restore_failed": "Impossible de restaurer l'instantané sélectionné."
     },
     "sidebar": {
       "add_photo": "+Ajouter photo",
@@ -551,6 +562,8 @@
       "lock_active_title": "Projet en cours d'édition",
       "lock_active_body": "{user} est en train de modifier ce projet (ouvert à {time}). Vous pouvez l'ouvrir en lecture seule et réessayer plus tard.",
       "lock_read_only": "Ouvrir en lecture seule",
+      "lock_taken_title": "Édition reprise ailleurs",
+      "lock_taken_body": "Un autre appareil a repris l'édition de ce projet, pensant que cette session était devenue inactive. Pour éviter des enregistrements en conflit, cette session est passée en lecture seule — vos modifications actuelles sont conservées mais ne seront plus enregistrées automatiquement. Utilisez « Enregistrer sous » pour en garder une copie, ou rouvrez le projet pour obtenir la dernière version.",
       "read_only_title": "Lecture seule",
       "read_only_body": "Ce projet a été ouvert en lecture seule car une autre personne l'a actuellement ouvert pour modification. Rouvrez-le une fois qu'elle l'aura fermé pour apporter des modifications.",
       "conflict_title": "Une autre personne a aussi modifié ce projet",

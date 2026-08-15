@@ -380,6 +380,7 @@ class STLViewerWindow(QMainWindow):
         _file_menu.addAction(t('project.topbar.open'), lambda: self.project_widget._on_open_project())
         _file_menu.addAction(t('project.topbar.save'), lambda: self.project_widget._on_save_project())
         _file_menu.addAction(t('project.topbar.save_as'), lambda: self.project_widget._on_save_project_as())
+        _file_menu.addAction(t('project.topbar.version_history'), lambda: self.project_widget._show_version_history())
         _file_menu.addSeparator()
         _file_menu.addAction(t('project.topbar.password'), lambda: self.project_widget._on_password_btn())
         self._mode_file_btn.setMenu(_file_menu)
@@ -958,7 +959,8 @@ class STLViewerWindow(QMainWindow):
         if _file_menu is not None:
             _actions = _file_menu.actions()
             _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
-                       'project.topbar.save_as', None, 'project.topbar.password')
+                       'project.topbar.save_as', 'project.topbar.version_history', None,
+                       'project.topbar.password')
             for _act, _key in zip(_actions, _labels):
                 if _key:
                     _act.setText(t(_key))

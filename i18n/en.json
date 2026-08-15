@@ -495,6 +495,7 @@
       "open": "📂 Open Project",
       "save": "💾 Save Project",
       "save_as": "💾 Save Project As",
+      "version_history": "🕘 Version History",
       "print": "🖨  Print",
       "password": "🔓  Password",
       "protected": "🔒  Protected",
@@ -508,6 +509,16 @@
       "tip_password": "Set or remove project password protection",
       "tip_protected": "Project is password-protected — click to change or remove",
       "tip_unlocked": "Set a password to protect this project"
+    },
+    "version_history": {
+      "title": "Version History",
+      "subtitle": "Local snapshots saved automatically before each overwrite — pick one to restore. Restoring always keeps a snapshot of the current file too, so it's never a way to lose data.",
+      "empty": "No earlier snapshots yet — they're created automatically as you save.",
+      "restore": "Restore Selected",
+      "close": "Close",
+      "confirm_title": "Restore This Version?",
+      "confirm_body": "This replaces the current project file with the selected snapshot. The current version will itself be archived first, so you can always undo this.",
+      "restore_failed": "Could not restore the selected snapshot."
     },
     "sidebar": {
       "add_photo": "+Add photo",
@@ -551,6 +562,8 @@
       "lock_active_title": "Project Currently Being Edited",
       "lock_active_body": "{user} is currently editing this project (opened at {time}). You can open it in read-only mode and try again later.",
       "lock_read_only": "Open Read-Only",
+      "lock_taken_title": "Editing Taken Over Elsewhere",
+      "lock_taken_body": "Another device took over editing this project, believing this session had gone stale. To avoid conflicting saves, this session has switched to read-only — your current edits are safe but won't be saved automatically. Use \"Save As\" to keep a copy, or reopen the project to get the latest version.",
       "read_only_title": "Read-Only",
       "read_only_body": "This project was opened read-only because someone else currently has it open for editing. Reopen it once they've closed it to make changes.",
       "conflict_title": "Someone Else Also Changed This Project",

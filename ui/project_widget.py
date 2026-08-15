@@ -1341,6 +1341,24 @@ class TheProjectWidget(QWidget):
                 from ui.modal_utils import show_message_dialog
                 show_message_dialog(self, t('project.msg.save_success_title'), t('project.msg.save_success_body'))
 
+    def _show_version_history(self):
+        """Open the local version-history browser for the current project
+        file (see core/version_history.py) — a manual, on-demand recovery
+        net independent of whatever folder-sharing mechanism is in play."""
+        if not self._project_path:
+            QMessageBox.information(self, t('project.version_history.title'),
+                                     t('project.topbar.no_project'))
+            return
+        if self._read_only:
+            self._warn_read_only()
+            return
+        from ui.version_history_dialog import VersionHistoryDialog
+        dlg = VersionHistoryDialog(self, self._project_path)
+        if dlg.exec_() == QDialog.Accepted and dlg.restored:
+            # Reload so the live UI reflects the restored content instead
+            # of quietly diverging from what's now on disk.
+            self._load_project(self._project_path)
+
     def _gather_live_data(self) -> dict:
         """Snapshot every section's current data straight from the live
         widgets — the same shape _save_project writes to disk, minus the
@@ -1401,6 +1419,16 @@ class TheProjectWidget(QWidget):
         final_data = self._resolve_save_conflicts(path, data)
         if final_data is None:
             return False  # user cancelled the conflict-resolution prompt — nothing written
+
+        # Archive whatever's currently on disk before overwriting it — a
+        # manual, on-demand recovery net independent of whatever folder-
+        # sharing mechanism is in play (see core/version_history.py). Not
+        # tied to _resolve_save_conflicts's own merge — this protects
+        # against anything that could still go wrong outside the app's
+        # view (e.g. a sync tool overwriting the file with a version this
+        # session never got to compare against).
+        from core.version_history import snapshot_before_overwrite
+        snapshot_before_overwrite(path)
 
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(final_data, f, indent=2, ensure_ascii=False)
@@ -2272,7 +2300,11 @@ class TheProjectWidget(QWidget):
         self._autosave_timer.start()
 
     def _autosave(self):
-        if self._project_path and self._unsaved_changes:
+        # Must not bypass the read-only guard that _on_save_project/_on_save_project_as
+        # enforce explicitly — without this check, a project opened read-only
+        # (or switched to read-only by _handle_lock_taken_over) could still
+        # get silently written to disk the next time this timer fires.
+        if self._project_path and self._unsaved_changes and not self._read_only:
             try:
                 self._save_project(self._project_path)
                 logger.debug('Autosaved project')
@@ -2294,9 +2326,38 @@ class TheProjectWidget(QWidget):
         self._lock_heartbeat_timer.start()
 
     def _lock_heartbeat(self):
-        if self._project_path and not self._read_only:
-            from core.file_lock import refresh_lock
+        if not self._project_path or self._read_only:
+            return
+        from core.file_lock import check_lock_status, refresh_lock, acquire_lock, OWN, FREE
+        status = check_lock_status(self._project_path)
+        if status == OWN:
             refresh_lock(self._project_path)
+        elif status == FREE:
+            # The sidecar lock vanished from under us (e.g. a hiccup on a
+            # network share) — silently reclaim it rather than treating an
+            # empty lock as a takeover by someone else.
+            acquire_lock(self._project_path)
+        else:
+            # Someone else force-overrode our lock as "abandoned" (stale
+            # heartbeat) while this session was, in fact, still active. If we
+            # kept autosaving, both sessions would be writing their own
+            # divergent copy of the same shared file at once — exactly the
+            # setup that produces unresolvable split copies on file-sync
+            # tools (e.g. Syncthing's *.sync-conflict-* files) instead of an
+            # in-app merge, since neither side's write can see the other's
+            # before it lands. Switch to read-only immediately so this
+            # session stops writing; the in-memory edits are untouched and
+            # can still be saved elsewhere via Save As.
+            self._handle_lock_taken_over()
+
+    def _handle_lock_taken_over(self):
+        if self._read_only:
+            return
+        self._read_only = True
+        self._update_read_only_ui()
+        from ui.modal_utils import show_message_dialog
+        show_message_dialog(self, t('project.msg.lock_taken_title'), t('project.msg.lock_taken_body'))
+        logger.warning(f'Lock for {self._project_path} was taken over by another session — switched to read-only')
 
     def release_lock(self):
         """Release this session's lock on whatever project is currently
