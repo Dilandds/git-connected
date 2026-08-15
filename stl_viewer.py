@@ -682,6 +682,7 @@ class STLViewerWindow(QMainWindow):
         self.project_widget.open_in_viewer.connect(self._open_file_from_project)
         self.project_widget.restore_viewer_tab.connect(self._restore_viewer_tab_from_project)
         self.project_widget.clear_viewer_tabs.connect(self._clear_all_viewer_tabs)
+        self.project_widget.viewer_tabs_sync_requested.connect(self._push_viewers_to_project)
         self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
         self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
         self.project_widget.project_info_changed.connect(self.technical_sidebar.update_project_info)

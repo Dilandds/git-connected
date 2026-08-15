@@ -699,6 +699,17 @@ class TheProjectWidget(QWidget):
     project_info_changed   = pyqtSignal(dict)  # sidebar info, for widgets outside The Project (e.g. Technical Overview)
     restore_technical_overview = pyqtSignal(str)  # temp .ecto bundle path
     restore_drawing_scale = pyqtSignal(str, object)  # temp source-file path, state dict
+    # Emitted at the very start of every save, before _bundle_viewer_tabs()
+    # reads self._viewer_tabs — that list is only ever a snapshot the main
+    # window pushed in (set_viewer_tabs), refreshed on mode-switches/tab
+    # changes/file loads, but NOT on every single edit (e.g. adding an
+    # annotation to an already-open tab, or opening a project without ever
+    # visiting this screen). Saving via the File menu or this screen's own
+    # Save button without an intervening refresh silently bundled whatever
+    # stale (possibly empty) list was last pushed — up to and including
+    # losing 3D tabs from the save entirely. The main window connects this
+    # to its own _push_viewers_to_project so every save starts fresh.
+    viewer_tabs_sync_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1323,6 +1334,9 @@ class TheProjectWidget(QWidget):
         """Write the project to `path`. Returns False without writing
         anything if the user cancelled a conflict-resolution prompt along
         the way — callers must check this before reporting success."""
+        # Must happen before self._viewer_tabs is read below (via
+        # _bundle_viewer_tabs) — see viewer_tabs_sync_requested's docstring.
+        self.viewer_tabs_sync_requested.emit()
         now = datetime.now(timezone.utc).isoformat()
         user = get_display_name()
         if self._created_by is None:
