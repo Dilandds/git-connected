@@ -4038,12 +4038,16 @@ class STLViewerWindow(QMainWindow):
             # toolbar. Also syncs the toolbar's own icon/state so it
             # doesn't show a stale style right after load.
             saved_render_mode = texture_data.get('render_mode') if texture_data else None
+            logger.info(f"_load_ecto_file: texture_data present={texture_data is not None}, "
+                        f"saved_render_mode={saved_render_mode!r}")
             if saved_render_mode:
                 # Toolbar._set_render_mode() updates its own icon/state and
                 # emits render_mode_changed, which is wired (see __init__)
                 # to this window's _set_render_mode() — one call keeps the
                 # toolbar and the viewer in sync instead of applying twice.
                 self.toolbar._set_render_mode(saved_render_mode)
+                logger.info(f"_load_ecto_file: after restore, vw._render_mode="
+                            f"{getattr(vw, '_render_mode', None)!r}")
 
             # Restore screenshots into this tab's own list, and refresh the
             # shared screenshot panel since this tab is the active one.

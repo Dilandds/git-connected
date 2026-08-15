@@ -1944,25 +1944,32 @@ class SidebarPanel(QWidget):
         return []
 
     def _get_texture_data(self):
-        """Get current material/texture preset data from the viewer widget for .ecto export."""
-        # Use direct reference to main window (set by stl_viewer.py)
+        """Get current material/texture preset data (plus visual style —
+        solid/wireframe/shaded, which lives on the viewer widget independent
+        of any material preset — see project_widget.py's _bundle_viewer_tabs
+        for the same fold-in) from the viewer widget for .ecto export."""
+        vw = None
         main_win = getattr(self, '_main_window', None)
         if main_win is not None:
             vw = getattr(main_win, 'viewer_widget', None)
-            if vw is not None and hasattr(vw, 'get_texture_data'):
-                data = vw.get_texture_data()
-                logger.info(f"_get_texture_data: Got texture data: {data is not None}")
-                return data
-        # Fallback: walk parent chain
-        parent = self.parent()
-        while parent is not None:
-            if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
-                vw = parent.viewer_widget
-                if hasattr(vw, 'get_texture_data'):
-                    return vw.get_texture_data()
-            parent = parent.parent()
-        logger.warning("_get_texture_data: Could not find viewer widget")
-        return None
+        if vw is None:
+            # Fallback: walk parent chain
+            parent = self.parent()
+            while parent is not None:
+                if hasattr(parent, 'viewer_widget') and parent.viewer_widget is not None:
+                    vw = parent.viewer_widget
+                    break
+                parent = parent.parent()
+        if vw is None:
+            logger.warning("_get_texture_data: Could not find viewer widget")
+            return None
+        data = vw.get_texture_data() if hasattr(vw, 'get_texture_data') else None
+        render_mode = getattr(vw, '_render_mode', None)
+        if render_mode:
+            data = dict(data) if data else {}
+            data['render_mode'] = render_mode
+        logger.info(f"_get_texture_data: Got texture data: {data is not None}")
+        return data
 
     def reset_all_data(self):
         """Reset all data displays to initial state."""

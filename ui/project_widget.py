@@ -1816,6 +1816,8 @@ class TheProjectWidget(QWidget):
             if render_mode:
                 texture_data = dict(texture_data) if texture_data else {}
                 texture_data['render_mode'] = render_mode
+            logger.info(f'_bundle_viewer_tabs: tab "{tab.filename or "?"}" bundling render_mode={render_mode!r} '
+                        f'(has vw={vw is not None}, vw._render_mode present={hasattr(vw, "_render_mode") if vw is not None else False})')
             # Write each captured screenshot's QPixmap out to a temp PNG so
             # EctoFormat.export can copy it into the bundle like annotation
             # images — tab.screenshots only holds in-memory pixmaps.
