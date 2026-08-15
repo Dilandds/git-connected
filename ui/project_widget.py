@@ -1512,13 +1512,27 @@ class TheProjectWidget(QWidget):
                 dlg.apply_resolutions()
 
             merged['technical_overview'] = self._encode_technical_overview(merged.get('technical_overview'))
-            # Strip the decode-only fields back down to the saved shape —
-            # no re-encoding needed, since bundle_b64 was carried through
-            # unchanged on whichever side won each tab.
-            merged['viewer_tabs'] = [
-                {'id': tab['id'], 'tab_name': tab.get('tab_name', ''), 'bundle_b64': tab['bundle_b64']}
-                for tab in merged.get('viewer_tabs', [])
-            ]
+            # Strip the decode-only fields back down to the saved shape.
+            # Most tabs carry their bundle_b64 through unchanged (untouched
+            # or single-sided-changed — see _merge_viewer_tabs), reused as
+            # -is. A tab _merge_viewer_tab_content had to combine fields
+            # from both sides of a genuine dual edit has no bundle_b64 at
+            # this point (cleared to None as a "needs re-encoding" signal)
+            # — encode a fresh one from its merged structural content.
+            new_viewer_tabs = []
+            for tab in merged.get('viewer_tabs', []):
+                bundle_b64 = tab.get('bundle_b64')
+                if not bundle_b64:
+                    encoded = self._encode_viewer_tab(tab)
+                    bundle_b64 = (encoded or {}).get('bundle_b64', '')
+                    if not bundle_b64:
+                        logger.warning(f'_resolve_save_conflicts: could not re-encode '
+                                        f'tab "{tab.get("tab_name")}" after merge — dropping it')
+                        continue
+                new_viewer_tabs.append(
+                    {'id': tab['id'], 'tab_name': tab.get('tab_name', ''), 'bundle_b64': bundle_b64}
+                )
+            merged['viewer_tabs'] = new_viewer_tabs
         finally:
             import shutil
             for d in temp_dirs:
@@ -1621,6 +1635,62 @@ class TheProjectWidget(QWidget):
                 except OSError:
                     pass
 
+    def _encode_viewer_tab(self, structural: dict) -> Optional[dict]:
+        """Re-encode a merged viewer-tab structural dict into a real
+        .lyns bundle. Only needed when core/project_merge.py's
+        _merge_viewer_tab_content combined fields from both sides of a
+        genuine dual edit (signaled by a missing 'bundle_b64') — a tab
+        that passed through untouched or single-sided-changed already
+        carries a real bundle_b64 and never reaches this. Screenshot
+        entries still point at their original decode temp dir's
+        image_path (kept alive by the caller until after this runs)."""
+        if not structural or not structural.get('model_bytes'):
+            return None
+        import pyvista as pv
+        from core.ecto_format import EctoFormat
+        fd, tmp_model = tempfile.mkstemp(suffix=structural.get('model_ext') or '.stl')
+        os.write(fd, structural['model_bytes'])
+        os.close(fd)
+        fd2, tmp_ecto = tempfile.mkstemp(suffix='.lyns')
+        os.close(fd2)
+        try:
+            mesh = pv.read(tmp_model)
+            screenshots_payload = [
+                {'path': s['image_path'], 'timestamp': s.get('timestamp', ''), 'id': s.get('id')}
+                for s in (structural.get('screenshots') or [])
+                if s.get('image_path') and os.path.exists(s['image_path'])
+            ]
+            success, _, creator_token = EctoFormat.export(
+                mesh=mesh,
+                annotations=structural.get('annotations') or [],
+                output_path=tmp_ecto,
+                source_format=(structural.get('model_ext') or '.stl').lstrip('.') or 'stl',
+                original_filename=structural.get('tab_name') or 'model.stl',
+                drawings=structural.get('drawings') or [],
+                texture_data=structural.get('texture_data'),
+                reader_mode=False,
+                screenshots=screenshots_payload,
+            )
+            if not success:
+                logger.warning('_encode_viewer_tab: export failed')
+                return None
+            if creator_token:
+                try:
+                    from core.creator_registry import register_creator_token
+                    register_creator_token(creator_token)
+                except ImportError:
+                    pass
+            return {'bundle_b64': base64.b64encode(Path(tmp_ecto).read_bytes()).decode()}
+        except Exception as e:
+            logger.warning(f'_encode_viewer_tab: could not re-encode: {e}')
+            return None
+        finally:
+            for p in (tmp_model, tmp_ecto):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
     def _decode_viewer_tabs(self, entries: Optional[list]) -> Tuple[list, list]:
         """Decode a saved viewer_tabs list into comparison-friendly
         structural entries for _merge_viewer_tabs. Returns (structural_list,
@@ -1658,12 +1728,29 @@ class TheProjectWidget(QWidget):
         os.close(fd)
         try:
             Path(tmp_ecto).write_bytes(base64.b64decode(entry['bundle_b64']))
-            model_path, annotations, _reader_mode, temp_dir_or_err, drawings, texture_data = \
+            model_path, annotations, _reader_mode, temp_dir_or_err, drawings, texture_data, screenshots = \
                 EctoFormat.import_ecto(tmp_ecto)
             if model_path is None:
                 logger.warning(f'_decode_viewer_tab: could not decode '
                                 f'"{entry.get("tab_name")}": {temp_dir_or_err}')
                 return None, None
+            # Read each screenshot's actual bytes into memory so
+            # core/project_merge.py can compare real content (deterministic,
+            # already in memory) instead of the volatile temp-extraction
+            # path — same reasoning as model_bytes below. A legacy
+            # screenshot with no 'id' (pre-this-change) gets a fresh one,
+            # merged once as if it were brand new (no data lost).
+            decoded_screenshots = []
+            for shot in (screenshots or []):
+                try:
+                    decoded_screenshots.append({
+                        'id': shot.get('id') or uuid.uuid4().hex,
+                        'image_path': shot['image_path'],
+                        'image_bytes': Path(shot['image_path']).read_bytes(),
+                        'timestamp': shot.get('timestamp', ''),
+                    })
+                except Exception as e:
+                    logger.warning(f'_decode_viewer_tab: could not read screenshot bytes: {e}')
             return {
                 'id': entry.get('id') or uuid.uuid4().hex,
                 'bundle_b64': entry['bundle_b64'],
@@ -1673,6 +1760,7 @@ class TheProjectWidget(QWidget):
                 'annotations': annotations or [],
                 'drawings': drawings or [],
                 'texture_data': texture_data,
+                'screenshots': decoded_screenshots,
             }, temp_dir_or_err
         except Exception as e:
             logger.warning(f'_decode_viewer_tab: could not decode "{entry.get("tab_name")}": {e}')
@@ -1718,6 +1806,32 @@ class TheProjectWidget(QWidget):
                     texture_data = vw.get_texture_data()
                 except Exception:
                     pass
+            # Visual style (solid/wireframe/shaded) lives on the viewer
+            # widget itself, independent of any material/texture preset —
+            # fold it into the same texture.json bundle entry (piggybacking
+            # on the already-round-tripped 'material' blob) rather than
+            # adding a new top-level bundle key, so it's never lost even
+            # when there's no material preset to otherwise trigger one.
+            render_mode = getattr(vw, '_render_mode', None) if vw is not None else None
+            if render_mode:
+                texture_data = dict(texture_data) if texture_data else {}
+                texture_data['render_mode'] = render_mode
+            # Write each captured screenshot's QPixmap out to a temp PNG so
+            # EctoFormat.export can copy it into the bundle like annotation
+            # images — tab.screenshots only holds in-memory pixmaps.
+            screenshots_payload = []
+            tmp_screenshot_files = []
+            for pixmap, ts, sid in (getattr(tab, 'screenshots', None) or []):
+                try:
+                    fd_s, tmp_shot_path = tempfile.mkstemp(suffix='.png')
+                    os.close(fd_s)
+                    if pixmap is not None and not pixmap.isNull() and pixmap.save(tmp_shot_path, 'PNG'):
+                        screenshots_payload.append({'path': tmp_shot_path, 'timestamp': ts, 'id': sid})
+                        tmp_screenshot_files.append(tmp_shot_path)
+                    else:
+                        os.remove(tmp_shot_path)
+                except Exception as e:
+                    logger.warning(f'_bundle_viewer_tabs: could not stage screenshot: {e}')
             tab_name = tab.filename or 'model.stl'
             fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
             os.close(fd)
@@ -1731,6 +1845,7 @@ class TheProjectWidget(QWidget):
                     drawings=drawings,
                     texture_data=texture_data,
                     reader_mode=False,
+                    screenshots=screenshots_payload,
                 )
                 if success:
                     # This bundle is just this session's own storage format for
@@ -1769,6 +1884,11 @@ class TheProjectWidget(QWidget):
                     os.remove(tmp_path)
                 except OSError:
                     pass
+                for shot_path in tmp_screenshot_files:
+                    try:
+                        os.remove(shot_path)
+                    except OSError:
+                        pass
         return result
 
     def _bundle_technical_overview(self) -> Optional[dict]:

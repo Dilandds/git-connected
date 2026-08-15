@@ -6,6 +6,7 @@ The .ecto format is a ZIP-based bundle containing:
 - model.{format}: The 3D geometry (STL, OBJ, etc.)
 - annotations.json: Annotation data with reader_mode flag
 - images/: Folder with attached photos
+- screenshots.json / screenshots/: Optional captured viewer screenshots
 """
 import json
 import logging
@@ -74,7 +75,8 @@ class EctoFormat:
                source_format: str = 'stl', original_filename: str = None,
                drawings: Optional[List[dict]] = None,
                texture_data: Optional[Dict[str, Any]] = None,
-               reader_mode: bool = True) -> Tuple[bool, str, Optional[str]]:
+               reader_mode: bool = True,
+               screenshots: Optional[List[dict]] = None) -> Tuple[bool, str, Optional[str]]:
         """Create an .ecto bundle containing the model, annotations, images, and drawings.
 
         Args:
@@ -88,6 +90,13 @@ class EctoFormat:
                 for genuine share/export-to-reader flows. Pass False for bundles
                 used purely as internal storage for the *same* editable session
                 (e.g. project-file save/reload) — those should stay editable.
+            screenshots: Optional list of {'path': <file on disk>, 'timestamp': str,
+                'id': str} for screenshots captured against this tab's model.
+                'id' is a stable per-screenshot identity assigned once at
+                capture (see ui/screenshot_panel.py) — used to name the file
+                inside the bundle so an untouched screenshot re-zips
+                identically every time, and to merge screenshots per-item
+                instead of as one opaque list (see core/project_merge.py).
 
         Returns:
             tuple: (success: bool, message_or_path: str, creator_token: str|None)
@@ -208,6 +217,38 @@ class EctoFormat:
                         json.dump({'version': '1.0', 'material': texture_json_data}, f, indent=2, ensure_ascii=False)
                     logger.info(f"export: Created texture.json (has_texture_image={has_texture})")
 
+            # 5b. Bundle screenshots if present
+            screenshots_data = screenshots or []
+            processed_screenshots = []
+            if screenshots_data:
+                screenshots_dir = os.path.join(temp_dir, 'screenshots')
+                for i, shot in enumerate(screenshots_data):
+                    src_path = shot.get('path')
+                    if src_path and os.path.exists(src_path):
+                        os.makedirs(screenshots_dir, exist_ok=True)
+                        # Filename keyed on the screenshot's own stable id
+                        # (not position) so an untouched screenshot re-zips
+                        # to the same bundle path every time, even if other
+                        # screenshots were added/removed/reordered around it.
+                        shot_id = shot.get('id') or str(i + 1)
+                        new_filename = f"screenshot_{shot_id}.png"
+                        new_path = os.path.join(screenshots_dir, new_filename)
+                        try:
+                            shutil.copy2(src_path, new_path)
+                            processed_screenshots.append({
+                                'id': shot_id,
+                                'image_path': f"screenshots/{new_filename}",
+                                'timestamp': shot.get('timestamp', ''),
+                            })
+                            logger.info(f"export: Copied screenshot to {new_path}")
+                        except Exception as e:
+                            logger.warning(f"export: Failed to copy screenshot {src_path}: {e}")
+                if processed_screenshots:
+                    screenshots_json_path = os.path.join(temp_dir, 'screenshots.json')
+                    with open(screenshots_json_path, 'w', encoding='utf-8') as f:
+                        json.dump({'version': '1.0', 'items': processed_screenshots}, f, indent=2, ensure_ascii=False)
+                    logger.info(f"export: Created screenshots.json with {len(processed_screenshots)} screenshots")
+
             # 6. Create manifest.json (creator_token identifies sender for reopen-as-editor)
             from core.edition import is_education, WATERMARK_TEXT
             manifest = {
@@ -223,6 +264,7 @@ class EctoFormat:
                 'has_images': has_images,
                 'drawing_count': len(drawings_data),
                 'has_texture': has_texture,
+                'screenshot_count': len(processed_screenshots),
             }
             if is_education():
                 manifest['edition'] = 'education'
@@ -256,6 +298,13 @@ class EctoFormat:
                         for tex_file in os.listdir(textures_dir):
                             tex_path = os.path.join(textures_dir, tex_file)
                             zf.write(tex_path, f'textures/{tex_file}')
+                # Add screenshots if any
+                if processed_screenshots:
+                    zf.write(screenshots_json_path, 'screenshots.json')
+                    if os.path.exists(screenshots_dir):
+                        for shot_file in os.listdir(screenshots_dir):
+                            shot_path = os.path.join(screenshots_dir, shot_file)
+                            zf.write(shot_path, f'screenshots/{shot_file}')
             
             logger.info(f"export: Created .ecto bundle at {output_path}")
             return True, output_path, creator_token
@@ -276,16 +325,17 @@ class EctoFormat:
     @staticmethod
     def import_ecto(ecto_path: str):
         """Open an .ecto bundle and extract its contents.
-        
+
         Returns:
-            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings, texture_data)
-                   On failure: (None, None, False, error_message, None, None)
+            tuple: (model_path, annotations, reader_mode, temp_dir_or_error, drawings, texture_data, screenshots)
+                   screenshots is a list of {'image_path': <abs path in temp_dir>, 'timestamp': str}.
+                   On failure: (None, None, False, error_message, None, None, None)
         """
         if not os.path.exists(ecto_path):
-            return None, None, False, f"File not found: {ecto_path}", None, None
-        
+            return None, None, False, f"File not found: {ecto_path}", None, None, None
+
         if not EctoFormat.is_ecto_file(ecto_path):
-            return None, None, False, "Invalid .ecto file format", None, None
+            return None, None, False, "Invalid .ecto file format", None, None, None
         
         temp_dir = None
         try:
@@ -307,7 +357,7 @@ class EctoFormat:
             model_path = os.path.join(temp_dir, model_filename)
             
             if not os.path.exists(model_path):
-                return None, None, False, f"Model file not found in bundle: {model_filename}", None, None
+                return None, None, False, f"Model file not found in bundle: {model_filename}", None, None, None
             
             # Sender vs reader: if creator_token is in local registry, this machine created the file
             creator_token = manifest.get('creator_token')
@@ -384,14 +434,35 @@ class EctoFormat:
                     logger.info(f"import_ecto: Loaded texture data (image_file={texture_data.get('image_file', False)})")
                 except Exception as e:
                     logger.warning(f"import_ecto: Could not read texture.json: {e}")
-            
+
+            # Read screenshots (optional)
+            screenshots = []
+            screenshots_json_path = os.path.join(temp_dir, 'screenshots.json')
+            if os.path.exists(screenshots_json_path):
+                try:
+                    with open(screenshots_json_path, 'r', encoding='utf-8') as f:
+                        screenshots_json = json.load(f)
+                    for item in screenshots_json.get('items', []):
+                        rel_path = item.get('image_path', '')
+                        if rel_path and not os.path.isabs(rel_path):
+                            abs_path = os.path.join(temp_dir, rel_path)
+                            if os.path.exists(abs_path):
+                                screenshots.append({
+                                    'id': item.get('id') or '',
+                                    'image_path': abs_path,
+                                    'timestamp': item.get('timestamp', ''),
+                                })
+                    logger.info(f"import_ecto: Loaded {len(screenshots)} screenshots")
+                except Exception as e:
+                    logger.warning(f"import_ecto: Could not read screenshots.json: {e}")
+
             logger.info(f"import_ecto: Successfully extracted. Model: {model_path}, "
                        f"Annotations: {len(annotations) if annotations else 0}, "
                        f"Drawings: {len(drawings)}, Reader mode: {reader_mode}, "
-                       f"Has texture: {texture_data is not None}")
-            
-            return model_path, annotations, reader_mode, temp_dir, drawings, texture_data
-            
+                       f"Has texture: {texture_data is not None}, Screenshots: {len(screenshots)}")
+
+            return model_path, annotations, reader_mode, temp_dir, drawings, texture_data, screenshots
+
         except Exception as e:
             logger.error(f"import_ecto: Failed to import .ecto file: {e}", exc_info=True)
             # Cleanup on failure
@@ -400,7 +471,7 @@ class EctoFormat:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            return None, None, False, str(e), None, None
+            return None, None, False, str(e), None, None, None
     
     @staticmethod
     def get_manifest(ecto_path: str) -> Optional[Dict[str, Any]]:

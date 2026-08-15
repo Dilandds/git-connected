@@ -3,6 +3,7 @@ Screenshot panel — displays captured screenshots in a 2-column grid with Delet
 """
 import logging
 import sys
+import uuid
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -362,7 +363,7 @@ class ScreenshotPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.screenshots = []  # list of (QPixmap, timestamp_str)
+        self.screenshots = []  # list of (QPixmap, timestamp_str, id) — id is stable across edits, assigned once at capture (see add_screenshot); used by core/project_merge.py to merge screenshots per-item across machines
         self.cards = []        # list of ScreenshotCard widgets
         self.setMinimumWidth(280)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
@@ -555,7 +556,7 @@ class ScreenshotPanel(QWidget):
     def add_screenshot(self, pixmap: QPixmap):
         """Add a captured screenshot to the panel."""
         ts = datetime.now().strftime("%H:%M:%S")
-        self.screenshots.append((pixmap, ts))
+        self.screenshots.append((pixmap, ts, uuid.uuid4().hex))
         idx = len(self.screenshots) - 1
 
         card = ScreenshotCard(idx, pixmap, ts)
@@ -581,7 +582,7 @@ class ScreenshotPanel(QWidget):
         caller can finalize it via complete_pending_card() once the pixmap is ready."""
         ts = datetime.now().strftime("%H:%M:%S")
         # Reserve a slot in screenshots with a null pixmap; index stays stable.
-        self.screenshots.append((QPixmap(), ts))
+        self.screenshots.append((QPixmap(), ts, uuid.uuid4().hex))
         idx = len(self.screenshots) - 1
         card = ScreenshotCard(idx, None, ts)
         card.delete_requested.connect(self._on_delete)
@@ -605,9 +606,38 @@ class ScreenshotPanel(QWidget):
             idx = self.cards.index(card)
         except ValueError:
             return
-        ts = self.screenshots[idx][1]
-        self.screenshots[idx] = (pixmap, ts)
+        ts, sid = self.screenshots[idx][1], self.screenshots[idx][2]
+        self.screenshots[idx] = (pixmap, ts, sid)
         card.set_pixmap(pixmap)
+
+    def set_screenshots(self, items: list):
+        """Replace all screenshots with the given (pixmap, timestamp, id)
+        tuples. Used when switching tabs — this panel widget is shared
+        across all tabs, but each tab now keeps its own screenshot list
+        (see stl_viewer.py's _save_current_tab_state / _on_tab_changed)."""
+        for card in self.cards:
+            self.grid_layout.removeWidget(card)
+            card.deleteLater()
+        self.cards.clear()
+        self.screenshots.clear()
+
+        for pixmap, ts, sid in items or []:
+            self.screenshots.append((pixmap, ts, sid))
+            idx = len(self.screenshots) - 1
+            card = ScreenshotCard(idx, pixmap, ts)
+            card.delete_requested.connect(self._on_delete)
+            card.save_requested.connect(self._on_save)
+            card.save_to_report_requested.connect(self._on_save_to_report)
+            self.cards.append(card)
+            row = idx // GRID_COLUMNS
+            col = idx % GRID_COLUMNS
+            self.grid_layout.addWidget(card, row, col)
+
+        self._apply_card_widths()
+        self.clear_btn.setVisible(len(self.screenshots) > 0)
+        _show_hint = len(self.screenshots) == 0
+        self.instruction.setVisible(_show_hint)
+        self._screenshot_banner_divider.setVisible(_show_hint)
 
     def clear_all(self):
         """Remove all screenshots."""
@@ -644,7 +674,7 @@ class ScreenshotPanel(QWidget):
     def _on_save(self, index: int):
         if index < 0 or index >= len(self.screenshots):
             return
-        pixmap, _ = self.screenshots[index]
+        pixmap, _, _ = self.screenshots[index]
         # Open editor so user can annotate before saving
         title = f"Image {index + 1}"
         if index < len(self.cards):
@@ -660,15 +690,15 @@ class ScreenshotPanel(QWidget):
                 self.cards[index]._rebuild_thumb_source()
                 self.cards[index]._update_thumbnail()
             if index < len(self.screenshots):
-                ts = self.screenshots[index][1]
-                self.screenshots[index] = (result_pixmap, ts)
+                ts, sid = self.screenshots[index][1], self.screenshots[index][2]
+                self.screenshots[index] = (result_pixmap, ts, sid)
 
         editor.pixmap_updated.connect(_do_save)
         editor.exec_()
 
     def _on_save_to_report(self, index: int):
         if 0 <= index < len(self.screenshots):
-            pixmap, _ = self.screenshots[index]
+            pixmap, _, _ = self.screenshots[index]
             if pixmap and not pixmap.isNull():
                 self.save_to_report.emit(pixmap)
 

@@ -466,15 +466,15 @@ def _merge_report(base, local, remote):
 
 def _normalize_viewer_tab_for_compare(item: Optional[dict]) -> Optional[dict]:
     """Comparison-only view of a decoded viewer-tab entry: annotation
-    image_paths and any texture-map path reduced to their bare filename.
-    import_ecto() resolves both to absolute paths under a fresh temp-
-    extraction directory on every decode (see core/ecto_format.py), so
-    comparing them directly would make an untouched tab look "different"
-    on every single merge — same class of non-determinism as
-    technical_overview's annotations, one level deeper. Pure string
-    manipulation, not I/O. Excludes `id` and `bundle_b64` — a tab's
-    identity and its non-deterministic raw zip bytes are never part of
-    "did this tab's content actually change"."""
+    image_paths, any texture-map path, and screenshot image_paths reduced
+    to their bare filename. import_ecto() resolves all of these to
+    absolute paths under a fresh temp-extraction directory on every decode
+    (see core/ecto_format.py), so comparing them directly would make an
+    untouched tab look "different" on every single merge — same class of
+    non-determinism as technical_overview's annotations, one level deeper.
+    Pure string manipulation, not I/O. Excludes `id` and `bundle_b64` — a
+    tab's identity and its non-deterministic raw zip bytes are never part
+    of "did this tab's content actually change"."""
     if not item:
         return item
     out = {k: v for k, v in item.items() if k not in ('id', 'bundle_b64')}
@@ -484,46 +484,178 @@ def _normalize_viewer_tab_for_compare(item: Optional[dict]) -> Optional[dict]:
         a['image_paths'] = [os.path.basename(p) for p in a.get('image_paths', [])]
         annotations.append(a)
     out['annotations'] = annotations
-    texture = out.get('texture_data')
-    if texture:
-        texture = dict(texture)
-        albedo = texture.get('albedo_map_path')
-        if albedo:
-            texture['albedo_map_path'] = os.path.basename(albedo)
-        parts = texture.get('parts_textures')
-        if parts:
-            new_parts = []
-            for pt in parts:
-                pt = dict(pt)
-                p = pt.get('albedo_map_path')
-                if p:
-                    pt['albedo_map_path'] = os.path.basename(p)
-                new_parts.append(pt)
-            texture['parts_textures'] = new_parts
-        out['texture_data'] = texture
+    out['texture_data'] = _normalize_texture_for_compare(out.get('texture_data'))
+    screenshots = out.get('screenshots')
+    if screenshots:
+        # image_path is a volatile temp-extraction path re-resolved on
+        # every decode, not user data — image_bytes (the real content) and
+        # id/timestamp are what actually identify "did this change".
+        out['screenshots'] = [
+            {k: v for k, v in s.items() if k != 'image_path'}
+            for s in screenshots
+        ]
     return out
 
 
+def _normalize_texture_for_compare(texture: Optional[dict]) -> Optional[dict]:
+    """Comparison-only view of a viewer-tab's render/material blob: any
+    texture-map path reduced to its bare filename. import_ecto() resolves
+    these to absolute paths under a fresh temp-extraction directory on
+    every decode, so comparing them directly would make an unchanged
+    material look "different" on every single merge. Pure string
+    manipulation, not I/O."""
+    if not texture:
+        return texture
+    texture = dict(texture)
+    albedo = texture.get('albedo_map_path')
+    if albedo:
+        texture['albedo_map_path'] = os.path.basename(albedo)
+    parts = texture.get('parts_textures')
+    if parts:
+        new_parts = []
+        for pt in parts:
+            pt = dict(pt)
+            p = pt.get('albedo_map_path')
+            if p:
+                pt['albedo_map_path'] = os.path.basename(p)
+            new_parts.append(pt)
+        texture['parts_textures'] = new_parts
+    return texture
+
+
+def _merge_normalized_field(base_v, local_v, remote_v, field_name: str, path: tuple,
+                             path_labels: tuple, target: dict, target_key: str,
+                             normalize: Callable[[Any], Any]) -> List[Conflict]:
+    """Like _merge_scalar, but compares a normalized (comparison-only)
+    view of each side instead of the raw value — for fields whose real
+    value carries non-deterministic noise (e.g. temp-extraction paths)
+    that would otherwise make an untouched field look "changed" on every
+    decode. The real (non-normalized) value is always what gets stored/
+    resolved, never the normalized view."""
+    if normalize(local_v) == normalize(remote_v):
+        target[target_key] = local_v
+        return []
+    if normalize(local_v) == normalize(base_v):
+        target[target_key] = remote_v
+        return []
+    if normalize(remote_v) == normalize(base_v):
+        target[target_key] = local_v
+        return []
+    conflict = Conflict('viewer_tabs', path, field_name, local_value=local_v,
+                         remote_value=remote_v, path_labels=path_labels)
+    conflict.resolve = lambda v, _t=target, _k=target_key: _t.__setitem__(_k, v)
+    target[target_key] = local_v  # placeholder until resolved
+    return [conflict]
+
+
+def _merge_screenshot_item(b, l, r, path, path_labels):
+    """Merge one screenshot (matched by id) field by field. image_path is
+    skipped — it's a volatile temp-extraction path re-resolved on every
+    decode, not user data, so it's never compared; the merged item just
+    keeps whichever side's own path resolves to real content. In practice
+    only image_bytes can ever actually differ, since id is assigned once
+    at capture (see ui/screenshot_panel.py) and timestamp is never edited
+    afterward."""
+    merged_item, conflicts = merge_dict_fields(
+        b, l, r, section='viewer_tabs', path=path, path_labels=path_labels,
+        skip_keys=('image_path',),
+    )
+    merged_item['image_path'] = l.get('image_path') or r.get('image_path') or b.get('image_path')
+    return merged_item, conflicts
+
+
+def _merge_viewer_tab_content(base_item: Optional[dict], local_item: dict, remote_item: dict,
+                               item_path: tuple, item_path_labels: tuple) -> Tuple[dict, List[Conflict]]:
+    """Decompose one tab's content into independently-mergeable pieces,
+    once whole-tab comparison (in _merge_viewer_tabs) has found it
+    diverged on both sides — replacing the old all-or-nothing "keep mine
+    or keep theirs for the entire tab" choice with several narrower ones,
+    so unrelated changes on each side (e.g. one side adds a screenshot,
+    the other switches to wireframe) combine automatically instead of
+    forcing a discard of one side's work.
+
+    - Screenshots have a stable per-item id (assigned once at capture —
+      see ui/screenshot_panel.py) -> merged per item like every other
+      id-keyed list in this module: independent adds/deletes are silent,
+      only the SAME screenshot edited differently on both sides prompts.
+    - Annotations, Drawings, and Render/texture have no such natural
+      per-item identity worth tracking here — each is compared as one
+      whole field (did its content change since base, or not); a
+      conflict fires only if both sides changed that whole field
+      differently, without inspecting what changed inside it (e.g. which
+      stroke or which material slider). Per explicit product decision,
+      that level of detail isn't worth the complexity for how rarely two
+      sides touch the exact same tab's rendering/drawings at once.
+    - Model file + tab name are merged the same coarse, field-by-field way.
+
+    Returns (merged_dict, conflicts). merged_dict has no 'bundle_b64' —
+    the caller (ui/project_widget.py) re-encodes a fresh bundle from it,
+    since the result may combine fields that never coexisted together in
+    either side's own already-encoded bundle. This module stays I/O-free:
+    every input here is already-decoded structural data."""
+    b, l, r = base_item or {}, local_item, remote_item
+    merged: Dict[str, Any] = {}
+    conflicts: List[Conflict] = []
+
+    coarse, coarse_conflicts = merge_dict_fields(
+        {'tab_name': b.get('tab_name'), 'model_bytes': b.get('model_bytes'),
+         'model_ext': b.get('model_ext'), 'drawings': b.get('drawings')},
+        {'tab_name': l.get('tab_name'), 'model_bytes': l.get('model_bytes'),
+         'model_ext': l.get('model_ext'), 'drawings': l.get('drawings')},
+        {'tab_name': r.get('tab_name'), 'model_bytes': r.get('model_bytes'),
+         'model_ext': r.get('model_ext'), 'drawings': r.get('drawings')},
+        section='viewer_tabs', path=item_path, path_labels=item_path_labels,
+    )
+    merged.update(coarse)
+    conflicts.extend(coarse_conflicts)
+
+    conflicts.extend(_merge_normalized_field(
+        b.get('annotations') or [], l.get('annotations') or [], r.get('annotations') or [],
+        'annotations', item_path, item_path_labels, merged, 'annotations',
+        _normalize_annotations_for_compare,
+    ))
+
+    conflicts.extend(_merge_normalized_field(
+        b.get('texture_data'), l.get('texture_data'), r.get('texture_data'),
+        'render', item_path, item_path_labels, merged, 'texture_data',
+        _normalize_texture_for_compare,
+    ))
+
+    screenshots, shot_conflicts = merge_nested_by_path(
+        b.get('screenshots') or [], l.get('screenshots') or [], r.get('screenshots') or [],
+        id_key='id', item_merger=_merge_screenshot_item,
+        section='viewer_tabs', path=item_path + ('screenshots',), path_labels=item_path_labels,
+    )
+    merged['screenshots'] = screenshots
+    conflicts.extend(shot_conflicts)
+
+    return merged, conflicts
+
+
 def _merge_viewer_tabs(base, local, remote):
-    """3D model tabs are atomic — no sub-merging. A tab's annotations,
-    drawings, render/texture state and model itself are never compared or
-    merged field by field; the whole tab is one opaque unit, per explicit
-    product decision. Unlike every other id-keyed list in this module,
-    delete-vs-edit on the SAME tab id is deliberately NOT auto-resolved in
-    favor of the edit — it surfaces the same interactive conflict as a
-    genuine dual edit, since a 3D model carrying new annotations/drawings
-    is exactly the kind of work an abandoned-lock scenario shouldn't
-    silently decide about on the user's behalf. A brand-new tab on either
-    side (non-colliding id) just gets added; a tab deleted on one side and
-    left untouched on the other since `base` is still a clean, silent
-    delete — only a real divergence on the same id ever prompts.
+    """Whether a tab exists at all (added/deleted) is still handled at the
+    whole-tab level here — including the deliberate deviation from every
+    other id-keyed list in this module: delete-vs-edit on the SAME tab id
+    is NOT auto-resolved in favor of the edit, it surfaces an interactive
+    conflict, since a 3D model carrying new work is exactly the kind of
+    thing an abandoned-lock scenario shouldn't silently decide about on
+    the user's behalf. A brand-new tab on either side (non-colliding id)
+    just gets added; a tab deleted on one side and left untouched on the
+    other since `base` is a clean, silent delete.
+
+    When a tab exists on both sides and its content genuinely diverges,
+    the choice is no longer all-or-nothing for the whole tab — see
+    _merge_viewer_tab_content for the per-field/per-screenshot breakdown.
 
     Expects entries already decoded to a comparison-friendly structural
     shape by the caller (ui/project_widget.py's _decode_viewer_tab) —
-    each dict carries 'id' + 'bundle_b64' (kept verbatim, reused wholesale
-    by whichever side wins — never itself compared) plus the decoded
-    'tab_name'/'annotations'/'drawings'/'texture_data'/model fields. This
-    module stays I/O-free, same reasoning as _merge_technical_overview."""
+    each dict carries 'id' + 'bundle_b64' (kept verbatim when a tab passes
+    through untouched or single-sided-changed; None when this function
+    had to combine fields from both sides, signaling the caller to
+    re-encode a fresh bundle) plus the decoded
+    'tab_name'/'annotations'/'drawings'/'texture_data'/'screenshots'/model
+    fields. This module stays I/O-free, same reasoning as
+    _merge_technical_overview."""
     base = base or []
     local = local or []
     remote = remote or []
@@ -622,10 +754,16 @@ def _merge_viewer_tabs(base, local, remote):
         if r_content == b_content:
             merged.append(l_item)  # only local changed it
             continue
+
+        # Genuine dual divergence — decompose instead of forcing an
+        # all-or-nothing pick for the whole tab.
         label = l_item.get('tab_name') or r_item.get('tab_name') or f'#{tab_id}'
-        item = dict(l_item)
-        conflicts.append(_make_conflict(item_path, (label,), l_item, r_item, merged, item))
-        merged.append(item)
+        item_path_labels = (label,)
+        content, content_conflicts = _merge_viewer_tab_content(b_item, l_item, r_item, item_path, item_path_labels)
+        content['id'] = tab_id
+        content['bundle_b64'] = None  # needs re-encoding — see ui/project_widget.py
+        conflicts.extend(content_conflicts)
+        merged.append(content)
 
     return merged, conflicts
 

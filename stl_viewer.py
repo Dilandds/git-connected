@@ -129,6 +129,7 @@ class TabState:
     thumbnail: Any = None  # QPixmap thumbnail for the Overview tab
     reader_mode: bool = False  # True when this tab's annotations are view-only (see _load_ecto_file)
     tab_id: Optional[str] = None  # stable identity across save/restore — see core/project_merge.py's viewer_tabs merger
+    screenshots: list = field(default_factory=list)  # [(QPixmap, timestamp_str), ...] — screenshot_panel is one shared widget, swapped per tab on switch (see _save_current_tab_state / _on_tab_changed)
 
 
 # ── Background thread: runs screencapture -i and emits result ─────────────────
@@ -1221,6 +1222,10 @@ class STLViewerWindow(QMainWindow):
         """Send all loaded (label, viewer_widget) pairs and tab states to the project widget."""
         if not hasattr(self, 'project_widget'):
             return
+        # Sync the active tab's own state (mode flags + screenshots) before
+        # reading self.tabs — screenshot_panel is one shared widget, so the
+        # current tab's screenshots only land on the TabState itself here.
+        self._save_current_tab_state()
         viewers = [
             (t.filename, t.viewer_widget)
             for t in self.tabs
@@ -1267,7 +1272,12 @@ class STLViewerWindow(QMainWindow):
         # Switch to new tab
         self.current_tab_index = index
         tab = self.tabs[index]
-        
+
+        # screenshot_panel is one shared widget across all tabs — swap its
+        # visible content to this tab's own screenshots (captured earlier
+        # this session or restored from the saved project).
+        self.screenshot_panel.set_screenshots(tab.screenshots)
+
         # Show correct viewer, annotation panel, arrow panel, and parts panel
         self.viewer_stack.setCurrentWidget(tab.viewer_widget)
         self.annotation_stack.setCurrentWidget(tab.annotation_panel)
@@ -1744,6 +1754,7 @@ class STLViewerWindow(QMainWindow):
         tab.screenshot_mode_active = self.toolbar.screenshot_mode_enabled
         tab.texture_mode_active = getattr(self.toolbar, 'texture_mode_enabled', False)
         tab.draw_mode_active = self.toolbar.draw_mode_enabled
+        tab.screenshots = list(self.screenshot_panel.screenshots)
 
     def _on_tab_close_requested(self, index: int):
         """Handle tab close button click."""
@@ -2081,6 +2092,7 @@ class STLViewerWindow(QMainWindow):
             tab.sidebar_data = None
             tab.mesh = None
             tab.annotations_exported = False
+            tab.screenshots = []
             self.tab_bar.setTabText(self.current_tab_index, _ecto_tab_caption("Untitled"))
         
         logger.info("_clear_current_model: Model and all data cleared")
@@ -3890,7 +3902,7 @@ class STLViewerWindow(QMainWindow):
                 self._load_technical_ecto(ecto_path)
                 return
             
-            model_path, annotations, reader_mode, temp_dir, drawings, texture_data = EctoFormat.import_ecto(ecto_path)
+            model_path, annotations, reader_mode, temp_dir, drawings, texture_data, screenshots = EctoFormat.import_ecto(ecto_path)
             if force_editable:
                 reader_mode = False
 
@@ -4016,7 +4028,40 @@ class STLViewerWindow(QMainWindow):
                         )
                 except Exception as tex_err:
                     logger.warning(f"_load_ecto_file: Failed to restore texture: {tex_err}")
-            
+
+            # Restore visual style (solid/wireframe/shaded) — saved
+            # alongside texture_data since it lives on the viewer widget
+            # independent of any material preset. Overrides the earlier
+            # "match toolbar default" call above so a tab saved as
+            # wireframe reopens as wireframe instead of resetting to
+            # whatever style happens to currently be selected in the
+            # toolbar. Also syncs the toolbar's own icon/state so it
+            # doesn't show a stale style right after load.
+            saved_render_mode = texture_data.get('render_mode') if texture_data else None
+            if saved_render_mode:
+                # Toolbar._set_render_mode() updates its own icon/state and
+                # emits render_mode_changed, which is wired (see __init__)
+                # to this window's _set_render_mode() — one call keeps the
+                # toolbar and the viewer in sync instead of applying twice.
+                self.toolbar._set_render_mode(saved_render_mode)
+
+            # Restore screenshots into this tab's own list, and refresh the
+            # shared screenshot panel since this tab is the active one.
+            if tab is not None:
+                from PyQt5.QtGui import QPixmap as _QPixmap
+                restored_shots = []
+                for shot in (screenshots or []):
+                    try:
+                        pix = _QPixmap(shot['image_path'])
+                        if not pix.isNull():
+                            restored_shots.append((pix, shot.get('timestamp', ''), shot.get('id') or uuid.uuid4().hex))
+                    except Exception:
+                        pass
+                tab.screenshots = restored_shots
+                self.screenshot_panel.set_screenshots(tab.screenshots)
+                if restored_shots:
+                    logger.info(f"_load_ecto_file: Restored {len(restored_shots)} screenshots")
+
             logger.info(f"_load_ecto_file: Successfully loaded .ecto file")
             
         except Exception as e:

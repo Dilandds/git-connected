@@ -164,12 +164,12 @@ def test_viewer_tabs_add_only():
 def test_viewer_tabs_merge():
     print("test_viewer_tabs_merge")
 
-    def _tab(tid, name='model.stl', annotations=None, drawings=None, b64='AAA'):
+    def _tab(tid, name='model.stl', annotations=None, drawings=None, b64='AAA', screenshots=None):
         return {
             'id': tid, 'bundle_b64': b64, 'tab_name': name,
             'model_bytes': b'mesh-bytes', 'model_ext': '.stl',
             'annotations': annotations or [], 'drawings': drawings or [],
-            'texture_data': None,
+            'texture_data': None, 'screenshots': screenshots or [],
         }
 
     # New tab added on each side (different ids) -> both survive, no conflict
@@ -205,14 +205,43 @@ def test_viewer_tabs_merge():
     check("resolving to the edited side keeps the tab with its annotation",
           any(t['id'] == 't1' and t['annotations'] for t in merged3))
 
-    # Both sides genuinely worked on the same tab differently -> one conflict
+    # Both sides worked on the SAME tab but touched DIFFERENT things
+    # (local annotated, remote drew) -> no longer an all-or-nothing pick;
+    # both changes combine automatically since they don't overlap.
     base4 = [_tab('t1')]
     local4 = [_tab('t1', annotations=[{'id': 1, 'point': [1, 1, 1], 'image_paths': []}])]
     remote4 = [_tab('t1', drawings=[{'id': 1, 'stroke': [[0, 0]]}])]
     merged4, conflicts4 = merge_section('viewer_tabs', base4, local4, remote4)
-    check("genuine dual edit on the same tab -> exactly one conflict", len(conflicts4) == 1)
-    check("dual-edit conflict is scoped to this one tab, not the whole list",
-          len(merged4) == 1)
+    check("unrelated changes on the same tab (annotate vs draw) merge with no conflict",
+          conflicts4 == [])
+    check("local's annotation survived", merged4[0]['annotations'] == local4[0]['annotations'])
+    check("remote's drawing survived", merged4[0]['drawings'] == remote4[0]['drawings'])
+    check("combined tab needs re-encoding (bundle_b64 cleared, not reused wholesale)",
+          merged4[0]['bundle_b64'] is None)
+
+    # Both sides changed the SAME field (drawings) differently -> exactly
+    # one conflict, scoped to that field only.
+    base4b = [_tab('t1')]
+    local4b = [_tab('t1', drawings=[{'id': 1, 'stroke': [[0, 0]]}])]
+    remote4b = [_tab('t1', drawings=[{'id': 1, 'stroke': [[9, 9]]}])]
+    merged4b, conflicts4b = merge_section('viewer_tabs', base4b, local4b, remote4b)
+    check("dual edit on the SAME field -> exactly one conflict", len(conflicts4b) == 1)
+    check("conflict is scoped to the 'drawings' field, not the whole tab",
+          conflicts4b[0].field == 'drawings')
+
+    # Render mode changed differently on both sides -> one conflict scoped
+    # to 'render', independent of everything else in the tab.
+    base4c = [_tab('t1')]
+    local4c = [_tab('t1')]
+    remote4c = [_tab('t1')]
+    local4c[0]['texture_data'] = {'render_mode': 'wireframe'}
+    remote4c[0]['texture_data'] = {'render_mode': 'solid'}
+    merged4c, conflicts4c = merge_section('viewer_tabs', base4c, local4c, remote4c)
+    check("dual render-mode change -> exactly one conflict scoped to 'render'",
+          len(conflicts4c) == 1 and conflicts4c[0].field == 'render')
+    conflicts4c[0].resolve(remote4c[0]['texture_data'])
+    check("resolving 'keep theirs' applies remote's render mode",
+          merged4c[0]['texture_data']['render_mode'] == 'solid')
 
     # Identical structural content on both sides (e.g. bundle_b64 differs
     # only from non-deterministic re-zipping, already normalized away by
@@ -223,6 +252,61 @@ def test_viewer_tabs_merge():
     merged5, conflicts5 = merge_section('viewer_tabs', base5, local5, remote5)
     check("untouched content with different (non-deterministic) bundle_b64 "
           "causes no false-positive conflict", conflicts5 == [])
+
+    # Screenshots are decoded to fresh absolute temp paths on every decode
+    # (see core/ecto_format.py's import_ecto) — identical screenshot
+    # content re-exported independently on both sides must not conflict.
+    shots_a = [{'image_path': '/tmp/x1/screenshots/screenshot_1.png', 'timestamp': '10:00:00'}]
+    shots_b = [{'image_path': '/tmp/x2/screenshots/screenshot_1.png', 'timestamp': '10:00:00'}]
+    base6 = [_tab('t1', screenshots=shots_a)]
+    local6 = [_tab('t1', b64='DDD', screenshots=shots_a)]
+    remote6 = [_tab('t1', b64='EEE', screenshots=shots_b)]
+    merged6, conflicts6 = merge_section('viewer_tabs', base6, local6, remote6)
+    check("identical screenshot content under different temp-dir paths "
+          "causes no false-positive conflict", conflicts6 == [])
+
+    # Deleted on one side, a screenshot added on the other -> counts as
+    # "worked on" like annotations/drawings -> interactive conflict.
+    base7 = [_tab('t1')]
+    local7 = []  # deleted locally
+    remote7 = [_tab('t1', screenshots=[{'image_path': '/tmp/y/screenshot_1.png', 'timestamp': '11:00:00'}])]
+    merged7, conflicts7 = merge_section('viewer_tabs', base7, local7, remote7)
+    check("delete-vs-added-screenshot on the SAME tab produces an interactive "
+          "conflict, same as annotations/drawings", len(conflicts7) == 1)
+
+    # Screenshots have a stable id (assigned once at capture) -> two
+    # independent adds on the same tab merge cleanly, no conflict.
+    base8 = [_tab('t1')]
+    local8 = [_tab('t1', screenshots=[
+        {'id': 's1', 'image_path': '/tmp/a.png', 'image_bytes': b'AAA', 'timestamp': '10:00:00'},
+    ])]
+    remote8 = [_tab('t1', screenshots=[
+        {'id': 's2', 'image_path': '/tmp/b.png', 'image_bytes': b'BBB', 'timestamp': '10:05:00'},
+    ])]
+    merged8, conflicts8 = merge_section('viewer_tabs', base8, local8, remote8)
+    check("independent screenshots added on both sides -> no conflict", conflicts8 == [])
+    check("both screenshots present", {s['id'] for s in merged8[0]['screenshots']} == {'s1', 's2'})
+
+    # Same screenshot id edited differently on both sides (e.g. re-annotated
+    # via the screenshot editor with different results) -> one conflict,
+    # scoped to that screenshot, not the whole tab.
+    base9 = [_tab('t1', screenshots=[
+        {'id': 's1', 'image_path': '/tmp/a.png', 'image_bytes': b'ORIG', 'timestamp': '10:00:00'},
+    ])]
+    local9 = [_tab('t1', screenshots=[
+        {'id': 's1', 'image_path': '/tmp/a2.png', 'image_bytes': b'LOCAL-EDIT', 'timestamp': '10:00:00'},
+    ])]
+    remote9 = [_tab('t1', screenshots=[
+        {'id': 's1', 'image_path': '/tmp/a3.png', 'image_bytes': b'REMOTE-EDIT', 'timestamp': '10:00:00'},
+    ])]
+    merged9, conflicts9 = merge_section('viewer_tabs', base9, local9, remote9)
+    check("same screenshot id edited differently on both sides -> exactly one conflict",
+          len(conflicts9) == 1)
+    check("screenshot conflict is scoped to 'image_bytes', not the whole tab",
+          conflicts9[0].field == 'image_bytes')
+    conflicts9[0].resolve(b'LOCAL-EDIT')
+    check("resolving the screenshot conflict updates just that screenshot",
+          merged9[0]['screenshots'][0]['image_bytes'] == b'LOCAL-EDIT')
 
 
 def test_whole_section_replace_if_differs():
