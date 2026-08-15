@@ -698,7 +698,7 @@ class TheProjectWidget(QWidget):
     qc_upload_requested    = pyqtSignal()
     project_info_changed   = pyqtSignal(dict)  # sidebar info, for widgets outside The Project (e.g. Technical Overview)
     restore_technical_overview = pyqtSignal(str)  # temp .ecto bundle path
-    restore_drawing_scale = pyqtSignal(str, object)  # temp source-file path, state dict
+    restore_drawing_scale = pyqtSignal(str, object, str)  # temp source-file path, state dict, original file name
     # Emitted at the very start of every save, before _bundle_viewer_tabs()
     # reads self._viewer_tabs — that list is only ever a snapshot the main
     # window pushed in (set_viewer_tabs), refreshed on mode-switches/tab
@@ -753,7 +753,6 @@ class TheProjectWidget(QWidget):
         self._build_ui()
         self._setup_autosave()
         self._setup_lock_heartbeat()
-        self._setup_remote_change_check()
         on_language_changed(self._on_language_changed)
 
     # ── construction ──────────────────────────────────────────────────────────
@@ -1347,9 +1346,7 @@ class TheProjectWidget(QWidget):
         widgets — the same shape _save_project writes to disk, minus the
         envelope/bookkeeping fields (created_by, last_saved_by/at, ...),
         which are the caller's responsibility to stamp (merge_project
-        ignores them entirely — see its docstring). Shared by _save_project
-        and _check_for_remote_changes (the periodic background refresh),
-        so both feed the merge engine identically-shaped "local" data."""
+        ignores them entirely — see its docstring)."""
         # Must happen before self._viewer_tabs is read below (via
         # _bundle_viewer_tabs) — see viewer_tabs_sync_requested's docstring.
         self.viewer_tabs_sync_requested.emit()
@@ -1852,8 +1849,15 @@ class TheProjectWidget(QWidget):
         except OSError as e:
             logger.warning(f'_bundle_drawing_scale: could not read source file: {e}')
             return None
+        # get_source_filename(), NOT basename(src_path) — after a project
+        # restore, src_path points at a randomly-named temp copy (ScaleCanvas
+        # re-reads from it, but it was never the file's real name), which
+        # made file_name mint a fresh garbage value on every single save —
+        # looking like a genuine edit (and a merge conflict) even though
+        # nothing was ever touched.
+        file_name = sc.get_source_filename() if hasattr(sc, 'get_source_filename') else None
         return {
-            'file_name': os.path.basename(src_path),
+            'file_name': file_name or os.path.basename(src_path),
             'file_ext': Path(src_path).suffix.lower(),
             'file_b64': base64.b64encode(file_bytes).decode(),
             'state': sc.get_state(),
@@ -1881,7 +1885,7 @@ class TheProjectWidget(QWidget):
         os.close(fd)
         try:
             Path(tmp_path).write_bytes(base64.b64decode(b64))
-            self.restore_drawing_scale.emit(tmp_path, entry.get('state', {}))
+            self.restore_drawing_scale.emit(tmp_path, entry.get('state', {}), entry.get('file_name', ''))
         except Exception as e:
             logger.warning(f'_restore_drawing_scale: could not restore: {e}')
             try:
@@ -2155,78 +2159,6 @@ class TheProjectWidget(QWidget):
 
     def mark_unsaved(self):
         self._unsaved_changes = True
-
-    # ── background remote-change check ──────────────────────────────────────
-
-    def _setup_remote_change_check(self):
-        """Notice another machine's save even when this session isn't
-        saving anything itself. Autosave (above) only fires when THIS
-        session has unsaved edits — a session that's just reading or
-        annotating with nothing pending of its own would otherwise never
-        find out the file changed until it happened to save or was closed
-        and reopened. Runs independently on its own timer for exactly that
-        gap; harmless overlap with autosave the rest of the time."""
-        self._remote_check_timer = QTimer(self)
-        self._remote_check_timer.setInterval(90_000)
-        self._remote_check_timer.timeout.connect(self._check_for_remote_changes)
-        self._remote_check_timer.start()
-
-    def _interaction_in_progress(self) -> bool:
-        """True while it would be disruptive to pop a merge-conflict dialog
-        out of nowhere — a modal already open, or a mouse button currently
-        held (mid-drag/rotate, or between the two clicks of a leader-line
-        annotation placement). The check just retries on its next tick;
-        nothing is lost by waiting."""
-        from PyQt5.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is None:
-            return False
-        if app.activeModalWidget() is not None:
-            return True
-        if app.mouseButtons() != Qt.NoButton:
-            return True
-        return False
-
-    def _check_for_remote_changes(self):
-        """Quietly pick up another machine's save with no local action
-        needed. If this session has no unsaved edits of its own, there can
-        never be a real conflict — merging is just "adopt whatever remote
-        has" — so this only ever interactively prompts when this session
-        *also* has pending edits that genuinely diverge from remote's,
-        same as a real save would. Never writes to disk itself (see
-        _setup_remote_change_check's docstring on the recommended
-        no-auto-save default) — only refreshes the live screens/3D tabs
-        and this session's merge base, so the next real save (autosave or
-        manual) has nothing left to reconcile."""
-        if not self._project_path or self._loaded_snapshot is None:
-            return
-        if not os.path.exists(self._project_path):
-            return
-        try:
-            with open(self._project_path, 'r', encoding='utf-8') as f:
-                remote_data = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return
-        if remote_data == self._loaded_snapshot:
-            return  # nothing changed remotely — cheap common case, no merge work
-        if self._interaction_in_progress():
-            return  # try again next tick
-        local_data = self._gather_live_data()
-        # This is a background refresh, not a real save — carry the
-        # envelope through as-is rather than stamping a "last saved by/at"
-        # claim this session isn't actually making.
-        for key in ('file_type', 'version', 'created_by', 'created_at',
-                    'last_saved_by', 'last_saved_at', 'password_hash'):
-            if key in self._loaded_snapshot:
-                local_data[key] = self._loaded_snapshot[key]
-        try:
-            merged = self._resolve_save_conflicts(self._project_path, local_data)
-        except Exception as e:
-            logger.warning(f'_check_for_remote_changes: merge failed: {e}')
-            return
-        if merged is not None:
-            self._loaded_snapshot = merged
-            logger.debug('_check_for_remote_changes: picked up remote changes')
 
     # ── file lock ─────────────────────────────────────────────────────────────
 

@@ -2263,7 +2263,7 @@ class STLViewerWindow(QMainWindow):
             self.technical_sidebar.set_metadata(metadata)
         self._tech_ecto_temp_dir = temp_dir
 
-    def _restore_drawing_scale_from_project(self, tmp_path: str, state: dict):
+    def _restore_drawing_scale_from_project(self, tmp_path: str, state: dict, file_name: str = ''):
         """Restore the Drawing Scale workspace from a saved project's
         embedded source file + calibration/shapes state.
 
@@ -2272,6 +2272,10 @@ class STLViewerWindow(QMainWindow):
         throwaway storage), so we take ownership of it here instead of the
         caller deleting it — cleaned up on app close alongside
         _tech_ecto_temp_dir, and any previous one is cleaned up now.
+
+        file_name — the file's real name, passed through as load_file's
+        display_name so ScaleCanvas doesn't mistake tmp_path's randomly
+        generated basename for it (see ScaleCanvas.get_source_filename).
         """
         if not os.path.exists(tmp_path):
             return
@@ -2282,7 +2286,7 @@ class STLViewerWindow(QMainWindow):
             except OSError:
                 pass
         self._scale_temp_path = tmp_path
-        self.scale_canvas.load_file(tmp_path)
+        self.scale_canvas.load_file(tmp_path, display_name=file_name or None)
         self.scale_canvas.set_state(state)
         self.scale_sidebar.set_state(
             unit=state.get('unit', 'cm'),

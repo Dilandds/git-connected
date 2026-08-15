@@ -125,7 +125,8 @@ class ScaleCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
-        self._source_path: Optional[str] = None  # original file path
+        self._source_path: Optional[str] = None  # readable file location (may be a temp copy after project restore)
+        self._source_filename: Optional[str] = None  # meaningful display/save name — see get_source_filename()
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._panning = False
@@ -194,9 +195,14 @@ class ScaleCanvas(QWidget):
 
     # ---- public API ----
 
-    def set_image(self, pixmap: QPixmap, source_path: str = None):
+    def set_image(self, pixmap: QPixmap, source_path: str = None, source_filename: str = None):
         self._pixmap = pixmap
         self._source_path = source_path
+        # Falls back to the path's own basename — correct for a genuine
+        # upload, where the path IS the meaningful name. A project restore
+        # passes source_filename explicitly instead, since there source_path
+        # is a randomly-named temp copy (see get_source_filename()).
+        self._source_filename = source_filename or (os.path.basename(source_path) if source_path else None)
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
         self._measurements.clear()
@@ -212,6 +218,7 @@ class ScaleCanvas(QWidget):
         """Remove the loaded drawing and reset calibration, ruler, measurements, and refs."""
         self._pixmap = None
         self._source_path = None
+        self._source_filename = None
         self._static_border_rect = None
         self._measurements.clear()
         self._pending_point = None
@@ -363,22 +370,37 @@ class ScaleCanvas(QWidget):
     def has_image(self) -> bool:
         return self._pixmap is not None and not self._pixmap.isNull()
 
-    def load_file(self, path: str):
-        """Load a PDF or image file."""
+    def load_file(self, path: str, display_name: str = None):
+        """Load a PDF or image file. `display_name` — the meaningful name to
+        remember for save/merge purposes (see get_source_filename()) when
+        `path` itself isn't it — e.g. restoring a project loads from a
+        randomly-named temp copy, but the file's real name is whatever was
+        saved alongside it. Defaults to basename(path), correct for a
+        genuine user upload."""
         ext = os.path.splitext(path)[1].lower()
         if ext in _PDF_EXTS:
-            self._load_pdf(path)
+            self._load_pdf(path, display_name=display_name)
         elif ext in _IMAGE_EXTS:
             pix = QPixmap(path)
             if not pix.isNull():
-                self.set_image(pix, source_path=path)
+                self.set_image(pix, source_path=path, source_filename=display_name)
                 self.file_loaded.emit(path)
         else:
             logger.warning(f"Unsupported file type: {ext}")
 
     def get_source_path(self) -> Optional[str]:
-        """Return the original file path last passed to load_file/set_image, if any."""
+        """Return the (possibly temporary) file path last passed to
+        load_file/set_image, if any — where to actually read the bytes
+        from. For the meaningful name to save/display, see
+        get_source_filename()."""
         return self._source_path
+
+    def get_source_filename(self) -> Optional[str]:
+        """Return the meaningful original filename for save/merge purposes
+        — NOT necessarily basename(get_source_path()), which after a
+        project restore is a randomly-named temp copy, not the file's real
+        name (see load_file's display_name)."""
+        return self._source_filename
 
     def get_state(self) -> dict:
         """Serialize calibration, borders, reference lines, measurements, and
@@ -650,7 +672,7 @@ class ScaleCanvas(QWidget):
 
     # ---- PDF loading ----
 
-    def _load_pdf(self, path: str):
+    def _load_pdf(self, path: str, display_name: str = None):
         try:
             import fitz
             doc = fitz.open(path)
@@ -664,7 +686,7 @@ class ScaleCanvas(QWidget):
             qpix = QPixmap()
             qpix.loadFromData(img_data, "PNG")
             if not qpix.isNull():
-                self.set_image(qpix, source_path=path)
+                self.set_image(qpix, source_path=path, source_filename=display_name)
                 self.file_loaded.emit(path)
         except Exception as e:
             logger.error(f"Failed to load PDF: {e}")
