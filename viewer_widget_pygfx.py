@@ -5254,8 +5254,11 @@ class STLViewerWidget(QWidget):
                 target_env_intensity = base_env * brightness_factor
                 env_tone = self._resolve_env_tone(preset_data)
 
-                # BUG: Recreate material from scratch when shine changes on non-metallic presets
-                # This drops texture maps (albedo, normal, roughness) causing leather to reset
+                # Recreating the material from scratch when shine changes on
+                # non-metallic presets used to drop its texture maps (albedo/
+                # normal/roughness) — a flat color where leather/marble/image
+                # textures used to be. Carry the existing maps over onto the
+                # new material so a shine-slider tweak can't strip them.
                 base_metalness = preset_data.get("metalness", 0.0)
                 if shine is not None and base_metalness < 0.5:
                     color = preset_data.get("color", "#8B4513")
@@ -5264,6 +5267,13 @@ class STLViewerWidget(QWidget):
                         roughness=float(target_roughness),
                         metalness=float(target_metalness),
                     )
+                    for map_attr in ('map', 'normal_map', 'roughness_map'):
+                        existing_map = getattr(mat, map_attr, None)
+                        if existing_map is not None:
+                            setattr(new_mat, map_attr, existing_map)
+                    existing_normal_scale = getattr(mat, 'normal_scale', None)
+                    if existing_normal_scale is not None:
+                        new_mat.normal_scale = existing_normal_scale
                     env_tex = self._create_studio_env_map(tone=env_tone)
                     if env_tex is not None:
                         new_mat.env_map = env_tex
