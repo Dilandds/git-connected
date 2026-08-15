@@ -239,6 +239,11 @@ class STLViewerWindow(QMainWindow):
         self.tabs: List[TabState] = []
         self.current_tab_index: int = -1
 
+        # Mirrors project_widget's read-only state (see
+        # ui.project_widget.TheProjectWidget.read_only_changed) — set True
+        # while someone else's lock is active/took over.
+        self._read_only = False
+
         # Desktop snip state
         self._snip_thread  = None
         self._snip_trigger = None   # floating "Snip" button shown while in screenshot mode
@@ -689,6 +694,7 @@ class STLViewerWindow(QMainWindow):
         self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
         self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
         self.project_widget.project_info_changed.connect(self.technical_sidebar.update_project_info)
+        self.project_widget.read_only_changed.connect(self._on_project_read_only_changed)
         self.project_widget.set_technical_overview_refs(self.technical_overview, self.technical_sidebar)
         self.project_widget.restore_technical_overview.connect(self._restore_technical_overview_from_project)
         self.project_widget.set_scale_refs(self.scale_canvas, self.scale_sidebar)
@@ -3745,8 +3751,21 @@ class STLViewerWindow(QMainWindow):
             super().keyPressEvent(event)
 
     
+    def _on_project_read_only_changed(self, read_only: bool):
+        """Mirror project_widget's read-only state into the 3D viewer:
+        grey out annotate/draw/render-style and block adding new 3D files
+        (see TheProjectWidget.read_only_changed's docstring for why)."""
+        self._read_only = read_only
+        self.toolbar.set_read_only(read_only)
+
     def upload_stl_file(self):
         """Open file dialog and load selected 3D or .ecto file."""
+        if getattr(self, '_read_only', False):
+            # Reached via either the "+" tab or Quality Control's own Upload
+            # button (project_widget.qc_upload_requested) — gate here once
+            # rather than at each call site so no future caller can bypass it.
+            logger.info("upload_stl_file: blocked — project is read-only")
+            return
         logger.info("upload_stl_file: Opening file dialog...")
         file_path, _ = get_open_file_name(
             self,

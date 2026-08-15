@@ -315,6 +315,7 @@ class ProjectNavPanel(QWidget):
         info_card = self._build_info_card()
         info_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(info_card, 0)
+        self._info_card = info_card
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -558,6 +559,12 @@ class ProjectNavPanel(QWidget):
     def select(self, key: str):
         self._navigate(key)
 
+    def set_read_only(self, read_only: bool):
+        """Disable just the info-card fields (photo/company/title/.../status)
+        — never the nav buttons below, so browsing between screens still
+        works while the project itself is opened/became read-only."""
+        self._info_card.setEnabled(not read_only)
+
     def get_info_data(self) -> dict:
         return {
             'company':          self._f_company.text(),
@@ -721,6 +728,12 @@ class TheProjectWidget(QWidget):
     # Args: updated ([{'id','tab_name','bundle_b64'}, ...] to reload/open),
     # removed_ids (tab ids no longer present after the merge, to close).
     viewer_tabs_conflict_resolved = pyqtSignal(list, list)
+    # Emitted from _update_read_only_ui whenever self._read_only changes —
+    # lets areas outside this widget's own screens (the 3D viewer's toolbar,
+    # Technical Overview, Drawing Scale) mirror the same read-only state so
+    # an abandoned-lock takeover (see core/file_lock.py) actually blocks
+    # every edit surface, not just this widget's own Save button.
+    read_only_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -884,6 +897,11 @@ class TheProjectWidget(QWidget):
             idx = self._stack.addWidget(widget)
             self._screen_widgets[key] = widget
             self._screen_idx[key] = idx
+            if self._read_only:
+                # This screen didn't exist yet the last time
+                # _update_read_only_ui ran (lazy creation) — apply the
+                # current state now instead of opening it wrongly editable.
+                widget.setEnabled(False)
             # Restore data saved during a language change
             if key in self._pending_restoration:
                 saved = self._pending_restoration.pop(key)
@@ -1179,12 +1197,16 @@ class TheProjectWidget(QWidget):
         can pull its current state, same as set_viewer_tabs does for the 3D viewer."""
         self._technical_overview = technical_overview
         self._technical_sidebar = technical_sidebar
+        # Refs are (re)assigned once at startup wiring — apply whatever
+        # read-only state already holds rather than assuming False.
+        technical_sidebar.setEnabled(not self._read_only)
 
     def set_scale_refs(self, scale_canvas, scale_sidebar) -> None:
         """Store direct refs to the Drawing Scale workspace so _save_project
         can pull its current state, same as set_technical_overview_refs."""
         self._scale_canvas = scale_canvas
         self._scale_sidebar = scale_sidebar
+        scale_sidebar.set_read_only(self._read_only)
 
     def show_qc_loading(self):
         """Show the loading overlay on the QC viewer area while a model is loading."""
@@ -2259,13 +2281,31 @@ class TheProjectWidget(QWidget):
         return result['read_only']
 
     def _update_read_only_ui(self):
-        """Grey out/disable the write affordances that a read-only-opened
-        project must not allow: saving and changing project protection."""
+        """Grey out/disable every edit surface a read-only-opened (or
+        takeover-demoted, see _handle_lock_taken_over) project must not
+        allow: saving, changing project protection, the info-card fields,
+        and every project screen — plus, via read_only_changed, the 3D
+        viewer's annotate/draw/render controls and new-file upload,
+        Technical Overview's sidebar, and Drawing Scale's shape tools."""
         read_only = self._read_only
         if hasattr(self, '_save_btn'):
             self._save_btn.setEnabled(not read_only)
         if hasattr(self, '_lock_btn'):
             self._lock_btn.setEnabled(not read_only)
+        if hasattr(self, '_nav'):
+            self._nav.set_read_only(read_only)
+        # All NAV_KEYS screens created so far — lazily-created ones pick up
+        # the current self._read_only when _ensure_screen creates them.
+        for w in self._screen_widgets.values():
+            if w is not None:
+                w.setEnabled(not read_only)
+        technical_sidebar = getattr(self, '_technical_sidebar', None)
+        if technical_sidebar is not None:
+            technical_sidebar.setEnabled(not read_only)
+        scale_sidebar = getattr(self, '_scale_sidebar', None)
+        if scale_sidebar is not None:
+            scale_sidebar.set_read_only(read_only)
+        self.read_only_changed.emit(read_only)
 
     def _warn_read_only(self):
         from ui.modal_utils import show_message_dialog

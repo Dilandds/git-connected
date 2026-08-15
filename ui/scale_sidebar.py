@@ -911,3 +911,17 @@ class ScaleSidebar(QWidget):
     def _on_clear_shapes(self):
         """Handle clear shapes button click - emit signal to clear drawing."""
         self.drawing_mode_changed.emit("clear")
+
+    def set_read_only(self, read_only: bool):
+        """Disable the shape tools while the project is read-only. If a
+        tool was already active, deactivate it first via the same path a
+        real click would take (re-clicking the active tool exits it and
+        tells ScaleCanvas to drop drawing_mode) — otherwise a mode picked
+        before read-only kicked in would keep letting canvas clicks create
+        shapes even with every button now disabled."""
+        if read_only and self._current_drawing_mode is not None:
+            self._on_drawing_mode_clicked(self._current_drawing_mode)
+        for btn in self._drawing_mode_buttons.values():
+            btn.setEnabled(not read_only)
+        self.clear_shapes_btn.setEnabled(not read_only)
+        self.reset_btn.setEnabled(not read_only)
