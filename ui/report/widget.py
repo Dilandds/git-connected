@@ -44,6 +44,7 @@ class ReportWidget(QWidget):
         self._project_info: dict = {}
         self._logo_pix:  Optional[QPixmap] = None
         self._logo_b64:  str = ""
+        self._read_only: bool = False
         self.setStyleSheet(f"background: {_BG};")
         self._build_ui()
         self._rebuild_all()
@@ -74,12 +75,12 @@ class ReportWidget(QWidget):
         t_col.addWidget(subtitle)
         tl.addLayout(t_col)
         tl.addStretch()
-        new_btn = QPushButton(t("project.report.new_report"))
-        new_btn.setStyleSheet(_BTN_PRIMARY)
-        new_btn.setFixedHeight(30)
-        new_btn.setCursor(Qt.PointingHandCursor)
-        new_btn.clicked.connect(self._add_report)
-        tl.addWidget(new_btn)
+        self._new_btn = QPushButton(t("project.report.new_report"))
+        self._new_btn.setStyleSheet(_BTN_PRIMARY)
+        self._new_btn.setFixedHeight(30)
+        self._new_btn.setCursor(Qt.PointingHandCursor)
+        self._new_btn.clicked.connect(self._add_report)
+        tl.addWidget(self._new_btn)
         root.addWidget(top)
 
         self._tabs_bar = QWidget()
@@ -108,6 +109,7 @@ class ReportWidget(QWidget):
         for report in self._reports:
             ed = ReportEditor(report, self._get_logo, self._set_logo)
             ed.changed.connect(self.changed)
+            ed.set_read_only(self._read_only)
             self._stack.addWidget(ed)
             self._editors.append(ed)
             if report.id >= self._next_id:
@@ -140,6 +142,7 @@ class ReportWidget(QWidget):
             close.setCursor(Qt.PointingHandCursor)
             close.setStyleSheet(_CLOSE_ACTIVE if is_active else _CLOSE_INACTIVE)
             close.clicked.connect(lambda _, idx=i: self._remove_report(idx))
+            close.setEnabled(not self._read_only)
             ch.addWidget(btn)
             ch.addWidget(close)
             self._tabs_layout.addWidget(container)
@@ -161,6 +164,7 @@ class ReportWidget(QWidget):
         self._reports.append(report)
         ed = ReportEditor(report, self._get_logo, self._set_logo)
         ed.changed.connect(self.changed)
+        ed.set_read_only(self._read_only)
         if self._project_info:
             ed.update_project_info(self._project_info)
         self._stack.addWidget(ed)
@@ -222,6 +226,34 @@ class ReportWidget(QWidget):
         self._project_info = info
         for ed in self._editors:
             ed.update_project_info(info)
+
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle for the app-wide read-only mode (see
+        core/file_lock.py / TheProjectWidget._update_read_only_ui) —
+        called by TheProjectWidget._update_read_only_ui() on every screen
+        that defines it. Unlike Report.locked (a one-directional business
+        "finalize" flag), calling this with True then False fully restores
+        editability, as long as the report itself isn't separately
+        finalized: the combining happens down in PageWidget.set_read_only,
+        which ORs this flag together with Report.locked at the control
+        level so unlocking read-only mode never re-enables a finalized
+        report.
+
+        Delegates to each ReportEditor.set_read_only(), which in turn
+        applies it to every PageWidget and its own not-yet-covered
+        controls (add-page button, page-tab close buttons). Here we also
+        gate this widget's own not-yet-covered controls: New Report and
+        report-tab close buttons. Report/page tab SWITCHING stays
+        clickable throughout — it's pure navigation, not an edit.
+
+        Never touches PageWidget's own setEnabled() — PageWidget IS a
+        QScrollArea, so disabling it would break scrolling, which is the
+        exact bug this method exists to avoid."""
+        self._read_only = read_only
+        self._new_btn.setEnabled(not read_only)
+        for ed in self._editors:
+            ed.set_read_only(read_only)
+        self._refresh_tabs()
 
     # ── serialisation ──────────────────────────────────────────────────────────
 

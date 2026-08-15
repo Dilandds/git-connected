@@ -28,6 +28,7 @@ class PageWidget(QScrollArea):
         self._is_first = is_first
         self._header: Optional[HeaderSection] = None
         self._locked   = False
+        self._read_only = False
 
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
@@ -108,3 +109,31 @@ class PageWidget(QScrollArea):
         self._flow.lock()
         if self._header:
             self._header.lock()
+
+    def unlock(self):
+        """Reverse of lock() — control-for-control mirror. Only ever called
+        by set_read_only() below, which already folds in the report's own
+        business .locked flag, so calling this directly would bypass that."""
+        self._locked = False
+        self._followup.setReadOnly(False)
+        self._flow.unlock()
+        if self._header:
+            self._header.unlock()
+
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle for the app-wide read-only mode (see
+        core/file_lock.py / TheProjectWidget._update_read_only_ui), kept
+        independent of Report.locked — the report's own one-directional
+        "finalize" business flag that lock() above was originally written
+        for. A control here ends up disabled if EITHER read_only is True
+        OR the report is separately business-locked, so calling this with
+        False never re-enables a finalized report. Never touches
+        self.setEnabled() — this class IS the QScrollArea; disabling it
+        would break scrolling, which is the exact regression this exists
+        to avoid."""
+        self._read_only = read_only
+        effective_locked = read_only or self._report.locked
+        if effective_locked:
+            self.lock()
+        else:
+            self.unlock()

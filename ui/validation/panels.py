@@ -139,6 +139,7 @@ class PreparationPanel(QScrollArea):
         self._session: Optional[ValidationSession] = None
         self._progress_cells: List[_ProgressCell] = []
         self._milestone_name_labels: List[QLabel] = []
+        self._read_only = False
 
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
@@ -379,6 +380,45 @@ class PreparationPanel(QScrollArea):
         for de in self._milestone_date_edits:
             de.setEnabled(False)
 
+    def unlock(self):
+        """Reverse of lock() — control-for-control mirror. Only ever called
+        by set_read_only() below, which already folds in the session's own
+        business .locked flag, so calling this directly would bypass that."""
+        self._add_contributor_btn.setEnabled(True)
+        self._stakeholder_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        for row in range(self._stakeholder_table.rowCount()):
+            combo = self._stakeholder_table.cellWidget(row, 3)
+            if combo:
+                combo.setEnabled(True)
+            pc = self._stakeholder_table.cellWidget(row, 4)
+            if pc:
+                pc._spin.setEnabled(True)
+        for btn in self._photo_btns:
+            btn.setEnabled(True)
+            # set_photo() fully replaces the stylesheet (rather than
+            # appending), which cleanly drops the "opacity: 0.5" fragment
+            # lock() tacked on above.
+            btn.set_photo(btn._photo_path)
+        for de in self._milestone_date_edits:
+            de.setEnabled(True)
+
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle for the app-wide read-only mode (see
+        core/file_lock.py / TheProjectWidget._update_read_only_ui), kept
+        independent of ValidationSession.locked — the signing/workflow
+        flag ValidationWidget already drives lock() with. A control here
+        ends up disabled if EITHER read_only is True OR the loaded session
+        is separately locked/signed, so calling this with False never
+        re-enables a signed session. Never touches self.setEnabled() —
+        this class IS the QScrollArea; disabling it would break scrolling,
+        which is the exact bug this method exists to avoid."""
+        self._read_only = read_only
+        effective_locked = read_only or bool(self._session and self._session.locked)
+        if effective_locked:
+            self.lock()
+        else:
+            self.unlock()
+
     def _on_milestone_date_changed(self, idx: int, date: QDate):
         dot = self._milestone_indicators[idx]
         null = QDate(2000, 1, 1)
@@ -558,6 +598,7 @@ class ReportPanel(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._session: Optional[ValidationSession] = None
+        self._read_only = False
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet(f"""
@@ -825,6 +866,44 @@ class ReportPanel(QScrollArea):
                     w = table.cellWidget(row, col)
                     if w:
                         w.setEnabled(False)
+
+    def unlock(self):
+        """Reverse of lock() — control-for-control mirror. Only ever called
+        by set_read_only() below, which already folds in the session's own
+        business .locked flag, so calling this directly would bypass that."""
+        for w in (self._r_location, self._r_decision_maker, self._r_presentation_lead):
+            w.setReadOnly(False)
+            # Restore the original input style rather than trying to peel
+            # off the "background/color" fragment lock() appended.
+            w.setStyleSheet(_INPUT)
+        for w in (self._r_overall_decision, self._r_attendees, self._r_attendee_remarks,
+                  self._r_ceo_feedback, self._r_risks, self._r_open_comments):
+            w.setReadOnly(False)
+        self._r_date.setEnabled(True)
+        self._r_time_from.setEnabled(True)
+        self._r_time_to.setEnabled(True)
+        self._mod_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        self._ap_table.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        self._add_mod_btn.setEnabled(True)
+        self._add_ap_btn.setEnabled(True)
+        for table in (self._mod_table, self._ap_table):
+            for row in range(table.rowCount()):
+                for col in range(table.columnCount()):
+                    w = table.cellWidget(row, col)
+                    if w:
+                        w.setEnabled(True)
+
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle for the app-wide read-only mode, kept independent
+        of ValidationSession.locked the same way PreparationPanel.set_read_only
+        does — see that docstring for the combining rule. Never touches
+        self.setEnabled() — this class IS the QScrollArea."""
+        self._read_only = read_only
+        effective_locked = read_only or bool(self._session and self._session.locked)
+        if effective_locked:
+            self.lock()
+        else:
+            self.unlock()
 
     def sync_to_session(self):
         if not self._session:

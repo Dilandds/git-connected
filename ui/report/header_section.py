@@ -679,3 +679,30 @@ class HeaderSection(QWidget):
                         item = del_row.layout().itemAt(j)
                         if item and item.widget():
                             item.widget().setEnabled(False)
+
+    def unlock(self):
+        """Reverse of lock() — control-for-control mirror, used by
+        PageWidget.set_read_only(False) to restore editability when the
+        report isn't separately business-locked."""
+        self._logo_btn.setEnabled(True)
+        self._project_photo_btn.setEnabled(True)
+        self._photo_clear_btn.setEnabled(True)
+        self._date_edit.setEnabled(True)
+        self._f_deadline.setReadOnly(False)
+        self._add_attendee_btn.setEnabled(True)
+        for w in (self._f_project, self._f_reference,
+                  self._f_pm, self._f_tm, self._f_ql,
+                  self._f_p1, self._f_p2, self._f_p3):
+            w.setReadOnly(False)
+        for hdr, name in self._att_col_widgets:
+            hdr.setReadOnly(False)
+            name.setReadOnly(False)
+        for col_w in self._att_col_containers:
+            layout = col_w.layout()
+            if layout and layout.count() > 0:
+                del_row = layout.itemAt(0)
+                if del_row and del_row.layout():
+                    for j in range(del_row.layout().count()):
+                        item = del_row.layout().itemAt(j)
+                        if item and item.widget():
+                            item.widget().setEnabled(True)

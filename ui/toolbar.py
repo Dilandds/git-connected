@@ -970,16 +970,18 @@ class ViewControlsToolbar(QWidget):
 
     def set_read_only(self, read_only: bool):
         """Grey out the controls that change what gets saved (annotate,
-        draw, render style) while the project is open read-only — leaves
-        pure-viewing controls (rotate/reset/2D views/screenshot/ruler)
-        untouched. Re-applying set_stl_loaded's own gating on the way back
-        out rather than blindly re-enabling, so a tool that's disabled
-        because no model is loaded doesn't light up just because read-only
-        was lifted."""
+        draw, render style, screenshot — screenshots are persisted into the
+        project file too, see ui/screenshot_panel.py) while the project is
+        open read-only — leaves pure-viewing controls (rotate/reset/2D
+        views/ruler) untouched. Re-applying set_stl_loaded's own gating on
+        the way back out rather than blindly re-enabling, so a tool that's
+        disabled because no model is loaded doesn't light up just because
+        read-only was lifted."""
         self._read_only = read_only
         self.render_mode_btn.setEnabled(not read_only)
         self.annotation_btn.setEnabled(self.stl_loaded and not read_only)
         self.draw_btn.setEnabled(self.stl_loaded and not read_only)
+        self.screenshot_btn.setEnabled(self.stl_loaded and not read_only)
 
     def _on_grid_clicked(self):
         """Handle grid toggle."""

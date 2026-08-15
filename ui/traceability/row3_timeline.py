@@ -48,6 +48,7 @@ class _StageTimelineRow(QWidget):
         super().__init__(parent)
         self._stages:  List[TraceStage] = []
         self._selected = 0
+        self._read_only = False
         self.setFixedHeight(_ROW_H)
         self.setStyleSheet(f'background: {_BG}; border-bottom: 2px solid {_BORDER};')
         self._build()
@@ -151,6 +152,7 @@ class _StageTimelineRow(QWidget):
             QPushButton:hover {{ background: #eff6ff; }}
         """)
         add.setCursor(Qt.PointingHandCursor)
+        add.setEnabled(not self._read_only)
         add.clicked.connect(self._add_stage)
         self._inner_l.addSpacing(12)
         self._inner_l.addWidget(add, 0, Qt.AlignVCenter)
@@ -214,6 +216,7 @@ class _StageTimelineRow(QWidget):
             }}
             QPushButton:hover {{ color: {_ACCENT}; }}
         """ + _TOOLTIP_STYLE)
+        dup_btn.setEnabled(not self._read_only)
         dup_btn.clicked.connect(lambda _, i=idx: self._duplicate_stage(i))
         top.addWidget(dup_btn, 0, Qt.AlignVCenter)
 
@@ -222,6 +225,7 @@ class _StageTimelineRow(QWidget):
         del_btn.setStyleSheet(_BTN_DEL_CIRCLE)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setToolTip(f'Remove {stage.name}')
+        del_btn.setEnabled(not self._read_only)
         del_btn.clicked.connect(lambda _, i=idx: self._remove_stage(i))
         top.addWidget(del_btn, 0, Qt.AlignVCenter)
 
@@ -281,12 +285,25 @@ class _StageTimelineRow(QWidget):
         self.stage_selected.emit(self._selected)
         self.changed.emit()
 
+    def set_read_only(self, read_only: bool):
+        """Disable add/duplicate/delete stage controls; rebuilding via
+        _refresh() also re-applies the flag to cards created/removed at
+        runtime. The card's own mousePressEvent (_select) is left
+        untouched — pure navigation ("click Stages to check tasks") with
+        no mutating branch. Prev/next scroll buttons are left alone too
+        (not mutating). _edit_stage (double-click) is gated separately
+        since it's a mutating trigger, not a button."""
+        self._read_only = read_only
+        self._refresh()
+
     def _select(self, idx: int):
         self._selected = idx
         self._refresh()
         self.stage_selected.emit(idx)
 
     def _edit_stage(self, idx: int):
+        if self._read_only:
+            return
         stage = self._stages[idx]
         dlg = _EditStageDialog(stage, self._stages, parent=self)
         result = dlg.exec_()

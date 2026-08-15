@@ -324,6 +324,7 @@ class _ControlPointCard(QWidget):
         # handler long enough for the OS gesture recogniser to reclassify the
         # trackpad tap as a swipe, switching Spaces in full-screen mode.
         self._expanded = False
+        self._read_only = False
         logger.debug('[QC Card] __init__ PRE-build  id=%d', cp.id)
         self._build_ui()
         logger.debug('[QC Card] __init__ POST-build  id=%d', cp.id)
@@ -403,6 +404,7 @@ class _ControlPointCard(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._cp.id))
         header_l.addWidget(del_btn)
+        self._del_btn = del_btn
 
         card_l.addWidget(header)
 
@@ -515,6 +517,18 @@ class _ControlPointCard(QWidget):
     def get_data(self) -> ControlPoint:
         return self._cp
 
+    def set_read_only(self, read_only: bool):
+        """Locks color picker, name, status menu, delete and comment
+        editing while read-only. The card stays visible/expanded so its
+        content can still be read."""
+        self._read_only = read_only
+        enabled = not read_only
+        self._badge.setEnabled(enabled)
+        self._name_edit.setEnabled(enabled)
+        self._status_btn.setEnabled(enabled)
+        self._del_btn.setEnabled(enabled)
+        self._comment_edit.setEnabled(enabled)
+
 
 # ── _ControlPointsPanel ───────────────────────────────────────────────────────
 
@@ -535,6 +549,7 @@ class _ControlPointsPanel(QWidget):
         self._general_cards: list[_ControlPointCard] = []    # always-visible, unscoped cards
         self._current_points: Optional[list] = None          # live reference to the active image's control_points list
         self._general_points: list = []                      # live reference to the general/unscoped list
+        self._read_only = False
         self._build_ui()
 
     def _build_ui(self):
@@ -737,6 +752,7 @@ class _ControlPointsPanel(QWidget):
             card = _ControlPointCard(cp, self)
             card.changed.connect(self.changed)
             card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=True))
+            card.set_read_only(self._read_only)
             self._cards_layout.insertWidget(stretch_idx, card)
             self._general_cards.append(card)
             stretch_idx += 1
@@ -746,6 +762,7 @@ class _ControlPointsPanel(QWidget):
                 card = _ControlPointCard(cp, self)
                 card.changed.connect(self.changed)
                 card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=False))
+                card.set_read_only(self._read_only)
                 self._cards_layout.insertWidget(stretch_idx, card)
                 self._cards.append(card)
                 stretch_idx += 1
@@ -782,6 +799,17 @@ class _ControlPointsPanel(QWidget):
     def _refresh_count(self):
         self._count_lbl.setText(str(len(self._cards) + len(self._general_cards)))
 
+    def set_read_only(self, read_only: bool):
+        """Applies to every currently-shown card (image-scoped + general)
+        and to any card created afterward (see _rebuild). The cards' own
+        scroll area and the help toggle are left untouched — scrolling and
+        checking control points must keep working."""
+        self._read_only = read_only
+        for card in self._cards:
+            card.set_read_only(read_only)
+        for card in self._general_cards:
+            card.set_read_only(read_only)
+
 
 # ── Image annotation view ────────────────────────────────────────────────────
 
@@ -806,6 +834,7 @@ class _ImageAnnotationView(QWidget):
         self._panning = False
         self._pan_start = None
         self._pan_start_offset = None
+        self._read_only = False
         self.setMinimumSize(100, 100)
         self.setCursor(Qt.CrossCursor)
         self.setMouseTracking(True)
@@ -827,6 +856,13 @@ class _ImageAnnotationView(QWidget):
         self._annotations = list(annotations)
         self._pending_dot = None
         self.update()
+
+    def set_read_only(self, read_only: bool):
+        """Blocks left-click "place a new control point"; wheel-zoom and
+        middle-click-drag pan are pure viewing and stay enabled — there is
+        no QPushButton here, so this is gated purely via a stored flag
+        checked inside mousePressEvent."""
+        self._read_only = read_only
 
     def _base_img_rect(self):
         """Image rect fitted (unzoomed) to the current widget size."""
@@ -914,6 +950,10 @@ class _ImageAnnotationView(QWidget):
             QTimer.singleShot(0, self.update)
             return
         if event.button() != Qt.LeftButton:
+            return
+        if self._read_only:
+            # Viewing (zoom/pan) stays enabled — only placing a NEW control
+            # point via left-click is blocked while read-only.
             return
         r = self._img_rect()
         if r.isNull() or not r.contains(event.pos()):
@@ -1045,6 +1085,7 @@ class _InspectionDropZone(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._read_only = False
         self.setAcceptDrops(True)
         self.setAlignment(Qt.AlignCenter)
         self.setFixedHeight(68)
@@ -1056,7 +1097,14 @@ class _InspectionDropZone(QLabel):
         )
         self.setStyleSheet(self._IDLE_SS)
 
+    def set_read_only(self, read_only: bool):
+        """Blocks both click-to-browse and drag-and-drop upload while
+        read-only; the zone stays visible."""
+        self._read_only = read_only
+
     def mousePressEvent(self, event):
+        if self._read_only:
+            return
         paths, _ = QFileDialog.getOpenFileNames(
             self, t('quality_control.drop_zone.dialog_title'), '',
             'Images (*.png *.jpg *.jpeg *.bmp *.webp)'
@@ -1065,6 +1113,8 @@ class _InspectionDropZone(QLabel):
             self.paths_chosen.emit(paths)
 
     def dragEnterEvent(self, event):
+        if self._read_only:
+            return
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
             self.setStyleSheet(self._HOVER_SS)
@@ -1073,6 +1123,8 @@ class _InspectionDropZone(QLabel):
         self.setStyleSheet(self._IDLE_SS)
 
     def dropEvent(self, event):
+        if self._read_only:
+            return
         self.setStyleSheet(self._IDLE_SS)
         paths = [u.toLocalFile() for u in event.mimeData().urls()
                  if u.toLocalFile().lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp'))]
@@ -1170,6 +1222,12 @@ class _InspThumbCard(QFrame):
         del_btn.move(64, -2)
         del_btn.clicked.connect(self.delete_requested)
         del_btn.raise_()
+        self._del_btn = del_btn
+
+    def set_delete_enabled(self, enabled: bool):
+        """Gates only the × delete button — image_clicked (click-to-view,
+        i.e. "check control points") stays enabled regardless."""
+        self._del_btn.setEnabled(enabled)
 
     def set_active(self, active: bool):
         self.setStyleSheet(self._ACTIVE_SS if active else self._IDLE_SS)
@@ -1224,6 +1282,9 @@ class _QCLeftPanel(QWidget):
         self._active_img_idx: int                 = -1   # -1 = 3D mode
         self._thumb_cards: list                   = []   # _InspThumbCard instances
         self._model_pills: list                   = []
+        self._model_close_btns: list              = []
+        self._model_add_btn                       = None
+        self._read_only: bool                     = False
         self._build_ui()
 
     # ── UI construction ───────────────────────────────────────────────────────
@@ -1323,7 +1384,9 @@ class _QCLeftPanel(QWidget):
         self._placeholder.setStyleSheet(
             f'color: {_ACCENT}; font-size: 13px; background: transparent; border: none; text-decoration: underline;'
         )
-        self._placeholder.mousePressEvent = lambda _: self.upload_requested.emit()
+        self._placeholder.mousePressEvent = (
+            lambda _: None if self._read_only else self.upload_requested.emit()
+        )
         self._3d_page_layout.addWidget(self._placeholder)
         self._mode_stack.addWidget(self._3d_page)   # index 0
 
@@ -1492,6 +1555,7 @@ class _QCLeftPanel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self._model_pills.clear()
+        self._model_close_btns.clear()
 
         for i, (label, vw) in enumerate(viewers):
             container = QWidget()
@@ -1533,6 +1597,8 @@ class _QCLeftPanel(QWidget):
                 QPushButton:hover {{ background: #ef4444; color: white; }}
             """)
             close_btn.clicked.connect(lambda _, viewer=vw: self.model_remove_requested.emit(viewer))
+            close_btn.setEnabled(not self._read_only)
+            self._model_close_btns.append(close_btn)
 
             ch.addWidget(btn)
             ch.addWidget(close_btn)
@@ -1554,6 +1620,8 @@ class _QCLeftPanel(QWidget):
             }}
         """)
         add_btn.clicked.connect(self.upload_requested.emit)
+        add_btn.setEnabled(not self._read_only)
+        self._model_add_btn = add_btn
         self._model_selector_l.addWidget(add_btn)
 
         self._model_selector_l.addStretch()
@@ -1722,6 +1790,7 @@ class _QCLeftPanel(QWidget):
         card = _InspThumbCard(pix)
         card.delete_requested.connect(lambda i=idx: self._delete_inspection_image(i))
         card.image_clicked.connect(lambda i=idx: self._toggle_image(i))
+        card.set_delete_enabled(not self._read_only)
         self._thumb_cards.insert(idx, card)
         self._insp_layout.insertWidget(idx, card)
 
@@ -1859,6 +1928,32 @@ class _QCLeftPanel(QWidget):
         except Exception:
             pass
 
+    def set_read_only(self, read_only: bool):
+        """Locks metadata fields, the inspection-image drop zone, per-
+        thumbnail delete buttons, standard-view capture (adds a new
+        inspection image), and the model-selector's add/close controls.
+        Left enabled: the inspection thumbnail strip's own click-to-view
+        (_InspThumbCard.image_clicked — literally "click on images to
+        check control points"), model pills' primary switch-click,
+        back-to-3D / fullscreen navigation, and zoom/pan on the viewer.
+        Left-click "place a new control point" inside the viewer is gated
+        separately via _ImageAnnotationView.set_read_only. Applied to any
+        thumbnail card or model pill created afterward too."""
+        self._read_only = read_only
+        enabled = not read_only
+        self._date_edit.setEnabled(enabled)
+        self._inspected_by.setEnabled(enabled)
+        self._comments.setEnabled(enabled)
+        self._drop_zone.set_read_only(read_only)
+        self._img_view.set_read_only(read_only)
+        self._snap_btn.setEnabled(enabled)
+        for card in self._thumb_cards:
+            card.set_delete_enabled(enabled)
+        if self._model_add_btn is not None:
+            self._model_add_btn.setEnabled(enabled)
+        for close_btn in self._model_close_btns:
+            close_btn.setEnabled(enabled)
+
     def get_data(self) -> dict:
         return {
             'inspection_date': self._date_edit.date().toString('yyyy-MM-dd'),
@@ -1923,7 +2018,13 @@ class _LogoDropZone(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setAcceptDrops(True)
         self._logo_data = ''
+        self._read_only = False
         self._refresh_style(False)
+
+    def set_read_only(self, read_only: bool):
+        """Blocks both click-to-browse and drag-and-drop logo upload while
+        read-only; the logo (if any) stays visible."""
+        self._read_only = read_only
 
     def _refresh_style(self, has_logo: bool):
         if not has_logo:
@@ -1946,6 +2047,8 @@ class _LogoDropZone(QLabel):
             """)
 
     def mousePressEvent(self, e):
+        if self._read_only:
+            return
         if e.button() == Qt.LeftButton:
             path, _ = QFileDialog.getOpenFileName(
                 self, t('quality_control.logo.dialog_title'), '',
@@ -1955,10 +2058,14 @@ class _LogoDropZone(QLabel):
                 self._load_image(path)
 
     def dragEnterEvent(self, e):
+        if self._read_only:
+            return
         if e.mimeData().hasUrls():
             e.acceptProposedAction()
 
     def dropEvent(self, e):
+        if self._read_only:
+            return
         urls = e.mimeData().urls()
         if urls:
             self._load_image(urls[0].toLocalFile())
@@ -2138,6 +2245,21 @@ class _CompanyInfoPanel(QWidget):
         if status in mapping:
             mapping[status].setChecked(True)
 
+    def set_read_only(self, read_only: bool):
+        """Locks the logo drop zone, all text fields, due-date, the 3
+        overall-status checkboxes, and waived-by. The panel's own scroll
+        area is left untouched."""
+        enabled = not read_only
+        self._logo.set_read_only(read_only)
+        self._designation.setEnabled(enabled)
+        self._reference.setEnabled(enabled)
+        self._manufacturer.setEnabled(enabled)
+        self._due_date.setEnabled(enabled)
+        self._cb_in_progress.setEnabled(enabled)
+        self._cb_approved.setEnabled(enabled)
+        self._cb_rejected.setEnabled(enabled)
+        self._waived_by.setEnabled(enabled)
+
     def get_data(self) -> dict:
         return {
             'logo_data':           self._logo.get_logo_data(),
@@ -2208,6 +2330,15 @@ class QualityControlWidget(QWidget):
 
     def update_project_info(self, info: dict):
         self._right_panel.update_project_info(info)
+
+    def set_read_only(self, read_only: bool):
+        """Delegates to all 3 panels. Clicking on inspection-image
+        thumbnails to check control points, switching between 3D models,
+        and zoom/pan inside the viewer all stay usable — see each panel's
+        own set_read_only for exactly what's gated."""
+        self._left_panel.set_read_only(read_only)
+        self._center_panel.set_read_only(read_only)
+        self._right_panel.set_read_only(read_only)
 
     # ── viewer lifecycle ──────────────────────────────────────────────────────
 

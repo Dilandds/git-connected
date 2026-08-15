@@ -331,10 +331,12 @@ class PartnerPanel(QScrollArea):
 
     def __init__(self, partner: CostPartner,
                  currency_fn: Callable[[], str],
+                 read_only: bool = False,
                  parent=None):
         super().__init__(parent)
         self._partner      = partner
         self._currency_fn  = currency_fn
+        self._read_only    = read_only
         self._project_info: dict = {}
         self._rate_cells:  List[QDoubleSpinBox] = []
         self._total_cells: List[QLabel]         = []
@@ -392,6 +394,7 @@ class PartnerPanel(QScrollArea):
         self._best_btn.setStyleSheet(_BTN_BEST_ON if self._partner.is_best else _BTN_BEST_OFF)
         self._best_btn.setText(t('project.cost.best_partner') if self._partner.is_best else t('project.cost.mark_best'))
         self._best_btn.clicked.connect(self._on_best_clicked)
+        self._best_btn.setEnabled(not self._read_only)
         title_row.addWidget(self._best_btn)
         cl.addLayout(title_row)
         cl.addWidget(_sep())
@@ -406,12 +409,14 @@ class PartnerPanel(QScrollArea):
         self._f_name = _field(self._partner.name)
         self._f_name.setText(self._partner.name)
         self._f_name.textChanged.connect(self._on_name_changed)
+        self._f_name.setEnabled(not self._read_only)
         left.addWidget(self._f_name)
 
         left.addWidget(_lbl(t('project.cost.activity_ph')))
         self._f_activity = _field(t('project.cost.activity_hint'))
         self._f_activity.setText(self._partner.activity)
         self._f_activity.textChanged.connect(lambda v: setattr(self._partner, 'activity', v) or self.changed.emit())
+        self._f_activity.setEnabled(not self._read_only)
         left.addWidget(self._f_activity)
         left.addStretch()
         grid.addLayout(left, 1)
@@ -424,12 +429,14 @@ class PartnerPanel(QScrollArea):
         self._f_start = _field(t('project.cost.date_ph'))
         self._f_start.setText(self._partner.start_date)
         self._f_start.textChanged.connect(lambda v: setattr(self._partner, 'start_date', v) or self.changed.emit())
+        self._f_start.setEnabled(not self._read_only)
         right.addWidget(self._f_start)
 
         right.addWidget(_lbl(t('project.cost.delivery_date')))
         self._f_delivery = _field(t('project.cost.date_ph'))
         self._f_delivery.setText(self._partner.delivery_date)
         self._f_delivery.textChanged.connect(lambda v: setattr(self._partner, 'delivery_date', v) or self.changed.emit())
+        self._f_delivery.setEnabled(not self._read_only)
         right.addWidget(self._f_delivery)
         right.addStretch()
         grid.addLayout(right, 1)
@@ -472,6 +479,8 @@ class PartnerPanel(QScrollArea):
         add_row_btn.setFixedHeight(26)
         add_row_btn.setCursor(Qt.PointingHandCursor)
         add_row_btn.clicked.connect(lambda _: self._add_task_row())
+        add_row_btn.setEnabled(not self._read_only)
+        self._add_row_btn = add_row_btn
         hdr.addSpacing(8)
         hdr.addWidget(add_row_btn)
         cl.addLayout(hdr)
@@ -560,6 +569,7 @@ class PartnerPanel(QScrollArea):
             }}
         """)
         self._tax_spin.valueChanged.connect(self._on_tax_changed)
+        self._tax_spin.setEnabled(not self._read_only)
         tax_row.addSpacing(8)
         tax_row.addWidget(self._tax_spin)
         self._tax_amount_lbl = _lbl("", muted=True, size=11)
@@ -600,18 +610,21 @@ class PartnerPanel(QScrollArea):
             c_inp = _field()
             c_inp.setText(task.component)
             c_inp.textChanged.connect(lambda v, t=task: setattr(t, 'component', v) or self.changed.emit())
+            c_inp.setEnabled(not self._read_only)
             self._table.setCellWidget(row, 0, c_inp)
 
             # Task
             t_inp = _field()
             t_inp.setText(task.task)
             t_inp.textChanged.connect(lambda v, t=task: setattr(t, 'task', v) or self.changed.emit())
+            t_inp.setEnabled(not self._read_only)
             self._table.setCellWidget(row, 1, t_inp)
 
             # Hours
             h_spin = _spin(decimals=1)
             h_spin.setValue(task.hours)
             h_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_hours_changed(v, t, r))
+            h_spin.setEnabled(not self._read_only)
             self._table.setCellWidget(row, 2, h_spin)
             self._hours_cells.append(h_spin)
 
@@ -619,6 +632,7 @@ class PartnerPanel(QScrollArea):
             r_spin = _spin(decimals=2, max_val=99999.0)
             r_spin.setValue(task.hourly_rate)
             r_spin.valueChanged.connect(lambda v, t=task, r=row: self._on_rate_changed(v, t, r))
+            r_spin.setEnabled(not self._read_only)
             self._table.setCellWidget(row, 3, r_spin)
             self._rate_cells.append(r_spin)
 
@@ -645,6 +659,7 @@ class PartnerPanel(QScrollArea):
                 QPushButton:hover { color: #ef4444; }
             """)
             del_btn.clicked.connect(lambda _, t=task: self._delete_task_row(t))
+            del_btn.setEnabled(not self._read_only)
             self._table.setCellWidget(row, 5, del_btn)
 
     def _delete_task_row(self, task: CostTask):
@@ -710,6 +725,24 @@ class PartnerPanel(QScrollArea):
         for i, (t, lbl) in enumerate(zip(self._partner.tasks, self._total_cells)):
             lbl.setText(self._fmt_total(t.total))
         self._refresh_totals()
+
+    def set_read_only(self, read_only: bool):
+        """Disable every partner-form edit control while the project is
+        read-only — never touches this panel's own scroll area (it's a
+        QScrollArea itself) so it keeps scrolling."""
+        self._read_only = read_only
+        enabled = not read_only
+        self._best_btn.setEnabled(enabled)
+        self._f_name.setEnabled(enabled)
+        self._f_activity.setEnabled(enabled)
+        self._f_start.setEnabled(enabled)
+        self._f_delivery.setEnabled(enabled)
+        self._add_row_btn.setEnabled(enabled)
+        self._tax_spin.setEnabled(enabled)
+        # Task rows are rebuilt from scratch here so their cell widgets
+        # (component/task text, hours/rate spins, delete button) pick up
+        # the new state — they read self._read_only at construction time.
+        self._rebuild_table()
 
 
 # ── ComparisonPanel ───────────────────────────────────────────────────────────
@@ -866,11 +899,13 @@ class TradeWidget(QWidget):
     def __init__(self, trade: CostTrade,
                  all_trades_fn: Callable[[], List[CostTrade]],
                  currency_fn: Callable[[], str],
+                 read_only: bool = False,
                  parent=None):
         super().__init__(parent)
         self._trade         = trade
         self._all_trades    = all_trades_fn
         self._currency_fn   = currency_fn
+        self._read_only     = read_only
         self._project_info: dict = {}
         self._current_sub   = 0   # 0=Overview 1=Comparison 2+=Partners
         self._partner_panels: List[PartnerPanel] = []
@@ -943,6 +978,7 @@ class TradeWidget(QWidget):
             close.setToolTip(f"Remove {partner.name}")
             close.setStyleSheet(_CLOSE_TAB_ACTIVE if is_active else _CLOSE_TAB_INACTIVE)
             close.clicked.connect(lambda _, pi=i: self._remove_partner(pi))
+            close.setEnabled(not self._read_only)
             ch.addWidget(btn)
             ch.addWidget(close)
             self._sub_layout.addWidget(container)
@@ -952,6 +988,7 @@ class TradeWidget(QWidget):
         add_btn.setFixedHeight(28)
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.clicked.connect(self._add_partner)
+        add_btn.setEnabled(not self._read_only)
         self._sub_layout.addWidget(add_btn)
         self._sub_layout.addStretch()
 
@@ -980,7 +1017,7 @@ class TradeWidget(QWidget):
         self._partner_panels.clear()
 
         for partner in self._trade.partners:
-            pp = PartnerPanel(partner, self._currency_fn)
+            pp = PartnerPanel(partner, self._currency_fn, read_only=self._read_only)
             pp.changed.connect(self.changed)
             pp.changed.connect(self._on_partner_data_changed)
             pp.best_toggled.connect(self._on_best_toggled)
@@ -997,7 +1034,7 @@ class TradeWidget(QWidget):
         )
         self._next_partner_id += 1
         self._trade.partners.append(p)
-        pp = PartnerPanel(p, self._currency_fn)
+        pp = PartnerPanel(p, self._currency_fn, read_only=self._read_only)
         pp.changed.connect(self.changed)
         pp.changed.connect(self._on_partner_data_changed)
         pp.best_toggled.connect(self._on_best_toggled)
@@ -1050,6 +1087,17 @@ class TradeWidget(QWidget):
         for pp in self._partner_panels:
             pp.refresh_currency()
 
+    def set_read_only(self, read_only: bool):
+        """Disable add/remove-partner controls for this trade and cascade
+        the lock into every partner panel. Overview/Comparison panels are
+        already pure display and need no changes; the sub-tab bar itself
+        (Overview/Comparison/partner-name buttons) stays fully clickable
+        since switching sub-views is navigation, not an edit."""
+        self._read_only = read_only
+        for pp in self._partner_panels:
+            pp.set_read_only(read_only)
+        self._refresh_sub_tabs()
+
     def get_best_summary(self) -> Optional[dict]:
         bp = self._trade.best_partner
         if not bp:
@@ -1077,6 +1125,7 @@ class EstimatedCostWidget(QWidget):
         self._trade_widgets: List[TradeWidget] = []
         self._current_trade  = 0
         self._currency       = "EUR"
+        self._read_only      = False
         self._project_info: dict = {}
         self.setStyleSheet(f"background-color: {_BG};")
         self._build_ui()
@@ -1174,7 +1223,7 @@ class EstimatedCostWidget(QWidget):
         self._trade_widgets.clear()
 
         for trade in self._trades:
-            tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency)
+            tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency, read_only=self._read_only)
             tw.changed.connect(self.changed)
             self._stack.addWidget(tw)
             self._trade_widgets.append(tw)
@@ -1198,7 +1247,9 @@ class EstimatedCostWidget(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_TAB_ACTIVE_L if is_active else _TAB_INACTIVE_L)
             btn.clicked.connect(lambda _, idx=i: self._switch_trade(idx))
-            btn.mouseDoubleClickEvent = lambda _e, idx=i: self._rename_trade(idx)
+            btn.mouseDoubleClickEvent = (
+                lambda _e, idx=i: None if self._read_only else self._rename_trade(idx)
+            )
 
             rename = QPushButton("✎")
             rename.setFixedSize(22, 28)
@@ -1206,6 +1257,7 @@ class EstimatedCostWidget(QWidget):
             rename.setToolTip("Rename trade")
             rename.setStyleSheet(_RENAME_TAB_ACTIVE if is_active else _RENAME_TAB_INACTIVE)
             rename.clicked.connect(lambda _, idx=i: self._rename_trade(idx))
+            rename.setEnabled(not self._read_only)
 
             close = QPushButton("×")
             close.setFixedSize(22, 28)
@@ -1213,6 +1265,7 @@ class EstimatedCostWidget(QWidget):
             close.setToolTip(f"{t('project.cost.remove_trade_tooltip')} {trade.name}")
             close.setStyleSheet(_CLOSE_TAB_ACTIVE if is_active else _CLOSE_TAB_INACTIVE)
             close.clicked.connect(lambda _, idx=i: self._remove_trade(idx))
+            close.setEnabled(not self._read_only)
 
             ch.addWidget(btn)
             ch.addWidget(rename)
@@ -1224,6 +1277,7 @@ class EstimatedCostWidget(QWidget):
         add_btn.setFixedHeight(28)
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.clicked.connect(self._add_trade)
+        add_btn.setEnabled(not self._read_only)
         self._trade_layout.addWidget(add_btn)
         self._trade_layout.addStretch()
 
@@ -1266,7 +1320,7 @@ class EstimatedCostWidget(QWidget):
         if new_name:
             trade.name = new_name
         self._trades.append(trade)
-        tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency)
+        tw = TradeWidget(trade, lambda: self._trades, lambda: self._currency, read_only=self._read_only)
         tw.changed.connect(self.changed)
         if self._project_info:
             tw.update_project_info(self._project_info)
@@ -1306,6 +1360,17 @@ class EstimatedCostWidget(QWidget):
         for tw in self._trade_widgets:
             tw.refresh_currency()
         self.changed.emit()
+
+    def set_read_only(self, read_only: bool):
+        """Disable currency selection and trade add/remove/rename, and
+        cascade the lock through every TradeWidget (and, through those,
+        every PartnerPanel). Trade/sub-tab switching stays fully
+        interactive — it's navigation, not an edit."""
+        self._read_only = read_only
+        self._currency_combo.setEnabled(not read_only)
+        for tw in self._trade_widgets:
+            tw.set_read_only(read_only)
+        self._refresh_trade_tabs()
 
     # ── data for Validation screen ─────────────────────────────────────────────
 

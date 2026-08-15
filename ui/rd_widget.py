@@ -488,9 +488,10 @@ class _ComponentRow(QFrame):
     edit_req   = pyqtSignal(str)
     delete_req = pyqtSignal(str)
 
-    def __init__(self, comp: RdComponent, number: int, active: bool, parent=None):
+    def __init__(self, comp: RdComponent, number: int, active: bool, read_only: bool = False, parent=None):
         super().__init__(parent)
         self._id = comp.id
+        self._read_only = read_only
         color = comp.color or _BADGE_COLORS[(number - 1) % len(_BADGE_COLORS)]
         self._set_style(active)
         self.setCursor(Qt.PointingHandCursor)
@@ -517,6 +518,7 @@ class _ComponentRow(QFrame):
         btn_menu.setCursor(Qt.PointingHandCursor)
         btn_menu.setStyleSheet('QPushButton { background: transparent; border: none; color: #94a3b8; font-size: 15px; }')
         btn_menu.clicked.connect(self._show_menu)
+        btn_menu.setEnabled(not self._read_only)
         row.addWidget(btn_menu)
 
     def _set_style(self, active: bool):
@@ -552,9 +554,10 @@ class _ProposalCard(QFrame):
     reject_req     = pyqtSignal(str)
     delete_req     = pyqtSignal(str)
 
-    def __init__(self, prop: MaterialProposal, parent=None):
+    def __init__(self, prop: MaterialProposal, read_only: bool = False, parent=None):
         super().__init__(parent)
         self._prop = prop
+        self._read_only = read_only
         self._build()
 
     def _build(self):
@@ -594,6 +597,7 @@ class _ProposalCard(QFrame):
             }}
         """)
         self._cb.toggled.connect(lambda v: self.toggled.emit(self._prop.id, v))
+        self._cb.setEnabled(not self._read_only)
         top_row.addWidget(self._cb)
         top_row.addStretch()
 
@@ -605,6 +609,7 @@ class _ProposalCard(QFrame):
             'QPushButton:hover { color: #475569; }'
         )
         btn_menu.clicked.connect(self._show_menu)
+        btn_menu.setEnabled(not self._read_only)
         top_row.addWidget(btn_menu)
         root.addLayout(top_row)
 
@@ -708,9 +713,10 @@ class _TechniqueCard(QFrame):
     reject_req = pyqtSignal(str)
     delete_req = pyqtSignal(str)
 
-    def __init__(self, prop: TechniqueProposal, parent=None):
+    def __init__(self, prop: TechniqueProposal, read_only: bool = False, parent=None):
         super().__init__(parent)
         self._prop = prop
+        self._read_only = read_only
         self._build()
 
     def _build(self):
@@ -750,6 +756,7 @@ class _TechniqueCard(QFrame):
             }}
         """)
         self._cb.toggled.connect(lambda v: self.toggled.emit(self._prop.id, v))
+        self._cb.setEnabled(not self._read_only)
         top_row.addWidget(self._cb)
         top_row.addStretch()
 
@@ -761,6 +768,7 @@ class _TechniqueCard(QFrame):
             'QPushButton:hover { color: #475569; }'
         )
         btn_menu.clicked.connect(self._show_menu)
+        btn_menu.setEnabled(not self._read_only)
         top_row.addWidget(btn_menu)
         root.addLayout(top_row)
 
@@ -857,8 +865,9 @@ class _TechniqueCard(QFrame):
 class _SelectionRow(QFrame):
     deselect = pyqtSignal(str)  # prop id
 
-    def __init__(self, prop: MaterialProposal, comp_name: str, parent=None):
+    def __init__(self, prop: MaterialProposal, comp_name: str, read_only: bool = False, parent=None):
         super().__init__(parent)
+        self._read_only = read_only
         self.setStyleSheet(f"""
             QFrame {{ background: {_CARD}; border: 1px solid {_BORDER};
                 border-radius: 8px; }}
@@ -898,6 +907,7 @@ class _SelectionRow(QFrame):
             QPushButton:hover { color: #ef4444; }
         """)
         btn_x.clicked.connect(lambda: self.deselect.emit(prop.id))
+        btn_x.setEnabled(not self._read_only)
         row.addWidget(btn_x)
 
 
@@ -915,6 +925,7 @@ class RdWidget(QWidget):
         self._cat_filter  = ''
         self._sup_filter  = ''
         self._search_text = ''
+        self._read_only   = False
         self._build_ui()
 
     # ── Build ─────────────────────────────────────────────────────────────────
@@ -980,6 +991,7 @@ class RdWidget(QWidget):
         """)
         btn_add.clicked.connect(self._add_component)
         lay.addWidget(btn_add)
+        self._btn_add = btn_add
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1207,6 +1219,7 @@ class RdWidget(QWidget):
         btn_clear.setStyleSheet(f'QPushButton {{ background: transparent; color: {_MUTED}; border: none; font-size: 11px; }}')
         btn_clear.clicked.connect(self._clear_selection)
         sel_hdr.addWidget(btn_clear)
+        self._btn_clear = btn_clear
         lay.addLayout(sel_hdr)
 
         sel_scroll = QScrollArea()
@@ -1237,6 +1250,7 @@ class RdWidget(QWidget):
             QPushButton:hover {{ background: {_ACCENT_H}; }}
         """)
         lay.addWidget(btn_req)
+        self._btn_req = btn_req
 
         btn_cmp = QPushButton(t('rd.compare_selected'))
         btn_cmp.setFixedHeight(34)
@@ -1574,7 +1588,7 @@ class RdWidget(QWidget):
                 w.setParent(None)
 
         for i, comp in enumerate(self._components):
-            row = _ComponentRow(comp, i + 1, comp.id == self._active_id)
+            row = _ComponentRow(comp, i + 1, comp.id == self._active_id, read_only=self._read_only)
             row.clicked.connect(self._on_comp_row_clicked)
             row.edit_req.connect(self._edit_component)
             row.delete_req.connect(self._delete_component)
@@ -1638,7 +1652,7 @@ class RdWidget(QWidget):
 
         self._empty_grid_lbl.hide()
         for idx, prop in enumerate(proposals):
-            card = _ProposalCard(prop)
+            card = _ProposalCard(prop, read_only=self._read_only)
             card.toggled.connect(self._on_proposal_toggled)
             card.edit_req.connect(self._on_edit_proposal)
             card.reject_req.connect(self._on_reject)
@@ -1668,7 +1682,7 @@ class RdWidget(QWidget):
 
         self._tech_empty_lbl.hide()
         for idx, tech in enumerate(techniques):
-            card = _TechniqueCard(tech)
+            card = _TechniqueCard(tech, read_only=self._read_only)
             card.toggled.connect(self._on_technique_toggled)
             card.edit_req.connect(self._on_edit_technique)
             card.reject_req.connect(self._on_reject_technique)
@@ -1700,7 +1714,7 @@ class RdWidget(QWidget):
 
         self._sel_empty.hide()
         for prop, comp_name in selected:
-            row = _SelectionRow(prop, comp_name)
+            row = _SelectionRow(prop, comp_name, read_only=self._read_only)
             row.deselect.connect(self._on_deselect)
             self._sel_lay.addWidget(row)
         self._sel_lay.addStretch()
@@ -1883,6 +1897,7 @@ class RdWidget(QWidget):
                 lambda nid=note_id, e=txt_edit:
                     self._save_note(comp_id, nid, 'text', e.text())
             )
+            txt_edit.setEnabled(not self._read_only)
             nl.addWidget(txt_edit)
 
             # Author + date row
@@ -1905,6 +1920,7 @@ class RdWidget(QWidget):
                 lambda nid=note_id, e=auth_edit:
                     self._save_note(comp_id, nid, 'author', e.text())
             )
+            auth_edit.setEnabled(not self._read_only)
 
             date_lbl = QLabel(f'· {note.date}')
             date_lbl.setStyleSheet(f'background: transparent; color: {_MUTED}; font-size: 10px;')
@@ -1920,6 +1936,7 @@ class RdWidget(QWidget):
             btn_del.clicked.connect(
                 lambda _, nid=note_id: self._delete_note(comp_id, nid)
             )
+            btn_del.setEnabled(not self._read_only)
 
             meta_row.addWidget(auth_edit, 1)
             meta_row.addWidget(date_lbl)
@@ -1978,6 +1995,34 @@ class RdWidget(QWidget):
                 if prop.status == 'selected':
                     result.append((prop, comp.name))
         return result
+
+    # ── Read-only ─────────────────────────────────────────────────────────────
+
+    def set_read_only(self, read_only: bool):
+        """Disable every component/proposal/technique/brief/note mutation
+        control while the project is read-only — deliberately leaves
+        component selection, tab switching (self._tabs itself) and the
+        search filter alone since those are navigation, not edits, and
+        never touches any of this widget's scroll areas so they keep
+        scrolling. Rows/cards are rebuilt from scratch here so their
+        embedded mutating sub-controls (⋮ menus, checkboxes, delete
+        buttons) pick up the new state — they read self._read_only at
+        construction time, so freshly-added rows/cards created afterwards
+        respect it too without any extra plumbing."""
+        self._read_only = read_only
+        enabled = not read_only
+        self._btn_add.setEnabled(enabled)
+        self._btn_clear.setEnabled(enabled)
+        self._btn_req.setEnabled(enabled)
+        self._rebuild_comp_rows()
+        self._rebuild_grid()
+        self._rebuild_technique_grid()
+        self._rebuild_selection()
+        self._rebuild_brief()  # also rebuilds the notes list
+        # _rebuild_brief() re-enables add-texture/add-note based only on
+        # whether a component is active; clamp both with read-only on top.
+        self._btn_add_prop.setEnabled(enabled and self._active_id is not None)
+        self._btn_note.setEnabled(enabled and self._active_id is not None)
 
     # ── Persistence ───────────────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ class ReportEditor(QWidget):
         self._current_page = 0
         self._page_widgets: List[PageWidget] = []
         self._next_page_id = 2
+        self._read_only = False
         self.setStyleSheet(f"background: {_BG};")
         self._build_ui()
         self._rebuild_pages()
@@ -87,7 +88,7 @@ class ReportEditor(QWidget):
                 close.setCursor(Qt.PointingHandCursor)
                 close.setStyleSheet(_CLOSE_ACTIVE if is_active else _CLOSE_INACTIVE)
                 close.clicked.connect(lambda _, idx=i: self._remove_page(idx))
-                close.setEnabled(not self._report.locked)
+                close.setEnabled(not (self._report.locked or self._read_only))
                 ch.addWidget(btn)
                 ch.addWidget(close)
                 self._page_layout.addWidget(container)
@@ -119,10 +120,7 @@ class ReportEditor(QWidget):
             self._page_widgets.append(pw)
             if page.id >= self._next_page_id:
                 self._next_page_id = page.id + 1
-
-        if self._report.locked:
-            for pw in self._page_widgets:
-                pw.lock()
+            pw.set_read_only(self._read_only)
 
     def _switch_page(self, idx: int):
         self._current_page = idx
@@ -140,6 +138,7 @@ class ReportEditor(QWidget):
             logo_fn=self._logo_fn, set_logo_fn=self._set_logo_fn
         )
         pw.changed.connect(self.changed)
+        pw.set_read_only(self._read_only)
         self._stack.addWidget(pw)
         self._page_widgets.append(pw)
         self._switch_page(len(self._report.pages) - 1)
@@ -172,3 +171,16 @@ class ReportEditor(QWidget):
     def refresh_logo(self):
         for pw in self._page_widgets:
             pw.refresh_logo(self._logo_fn)
+
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle, independent of Report.locked (which PageWidget
+        already folds in — see PageWidget.set_read_only). Also covers this
+        editor's own not-yet-covered controls: the add-page button, and
+        page-tab close buttons (_refresh_page_tabs already combines
+        read_only with the business flag there). Page/tab switching itself
+        stays clickable — it's pure navigation."""
+        self._read_only = read_only
+        for pw in self._page_widgets:
+            pw.set_read_only(read_only)
+        self._add_page_btn.setEnabled(not read_only)
+        self._refresh_page_tabs()

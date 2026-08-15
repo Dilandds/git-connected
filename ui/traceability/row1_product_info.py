@@ -41,6 +41,7 @@ class _ProductInfoRow(QFrame):
         self._planned_launch     = ''
         self._overall_progress   = 0
         self._product_image_b64 = ''
+        self._read_only = False
         self._zoom_lbl = None   # lazily-created floating hover-zoom preview
         self.setFixedHeight(152)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
@@ -252,7 +253,20 @@ class _ProductInfoRow(QFrame):
         if self._zoom_lbl is not None:
             self._zoom_lbl.hide()
 
+    def set_read_only(self, read_only: bool):
+        """Disable the photo-upload button and gate the two click-to-edit
+        labels (planned_launch / progress). Those labels aren't QPushButtons
+        so there's no .setEnabled() to call on them directly — instead
+        _edit() itself (the single place both mousePressEvent handlers
+        delegate to) bails out early while read-only, which is enough since
+        the whole handler is a mutating "open edit dialog" action with
+        nothing else to preserve."""
+        self._read_only = read_only
+        self._img_btn.setEnabled(not read_only)
+
     def _edit(self, field: str):
+        if self._read_only:
+            return
         from ui.modal_utils import FormModal
         if field == 'planned_launch':
             dlg = FormModal(self, t('project.traceability.edit_launch_title'), min_width=340)

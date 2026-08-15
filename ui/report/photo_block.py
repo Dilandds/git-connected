@@ -248,6 +248,13 @@ class PhotoBlockWidget(QFrame):
         self._comment.setReadOnly(True)
         self._remove_btn.hide()
 
+    def unlock(self):
+        """Reverse of lock() — used by PhotoBlockFlow.unlock()."""
+        self._locked = False
+        self._photo_btn.setEnabled(True)
+        self._comment.setReadOnly(False)
+        self._remove_btn.show()
+
 
 # ── Flow of blocks ─────────────────────────────────────────────────────────────
 
@@ -356,4 +363,12 @@ class PhotoBlockFlow(QWidget):
         self._add_btn.hide()
         for bw in self._block_widgets:
             bw.lock()
+        self._relayout()
+
+    def unlock(self):
+        """Reverse of lock() — used by PageWidget.set_read_only(False)."""
+        self._locked = False
+        self._add_btn.show()
+        for bw in self._block_widgets:
+            bw.unlock()
         self._relayout()

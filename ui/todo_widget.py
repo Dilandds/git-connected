@@ -467,6 +467,7 @@ class _TaskRow(QFrame):
         cb = _CheckButton(checked=self._task.done)
         cb.toggled.connect(lambda v: self.done_toggled.emit(self._task.id, v))
         row.addWidget(cb)
+        self._check_btn = cb
 
         info_col = QVBoxLayout()
         info_col.setSpacing(3)
@@ -508,6 +509,7 @@ class _TaskRow(QFrame):
 
         row.addLayout(info_col, 1)
 
+        self._action_btns = []
         for label, signal in [('Edit', self.edit_requested), ('Delete', self.delete_requested)]:
             btn = QPushButton(label)
             btn.setFixedHeight(24)
@@ -530,6 +532,15 @@ class _TaskRow(QFrame):
             """)
             btn.clicked.connect(lambda _checked, s=signal: s.emit(self._task.id))
             row.addWidget(btn)
+            self._action_btns.append(btn)
+
+    def set_read_only(self, read_only: bool):
+        """Locks the done-toggle checkbox and the Edit/Delete buttons; the
+        row itself stays visible and readable."""
+        enabled = not read_only
+        self._check_btn.setEnabled(enabled)
+        for btn in self._action_btns:
+            btn.setEnabled(enabled)
 
 
 # ─── Day panel (right side) ───────────────────────────────────────────────────
@@ -548,6 +559,7 @@ class _DayPanel(QWidget):
         super().__init__(parent)
         self._tasks: Dict[str, TodoTask] = {}
         self._date_str = ''
+        self._read_only = False
         self._build()
 
     def _build(self):
@@ -575,6 +587,7 @@ class _DayPanel(QWidget):
         btn_add.clicked.connect(self._add_task)
         hdr.addWidget(btn_add)
         root.addLayout(hdr)
+        self._btn_add = btn_add
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -638,11 +651,31 @@ class _DayPanel(QWidget):
                 row.edit_requested.connect(self._edit_task)
                 row.delete_requested.connect(self._delete_task)
                 row.done_toggled.connect(self._toggle_done)
+                row.set_read_only(self._read_only)
                 self._list_layout.addWidget(row)
 
         self._list_layout.addStretch()
 
+    def set_read_only(self, read_only: bool):
+        """Locks "Add task" and every currently-shown task row's
+        done-toggle/Edit/Delete controls; the day panel's own scroll area
+        (wrapping the task list) is left untouched. Applied to any task row
+        created by a future _refresh() call too."""
+        self._read_only = read_only
+        self._btn_add.setEnabled(not read_only)
+        for i in range(self._list_layout.count()):
+            item = self._list_layout.itemAt(i)
+            w = item.widget() if item else None
+            if isinstance(w, _TaskRow):
+                w.set_read_only(read_only)
+
     def open_add_dialog(self):
+        # Defense in depth: TodoWidget._on_date_clicked already skips this
+        # call while read-only (that's the fix for the calendar-click ->
+        # add-dialog gotcha), but guard here too since this is a public
+        # entry point other callers could reach directly.
+        if self._read_only:
+            return
         self._add_task()
 
     def _add_task(self):
@@ -693,6 +726,7 @@ class TodoWidget(QWidget):
         self._tasks: Dict[str, TodoTask] = {}
         self._fired: Set[str] = set()
         self._bubbles = []
+        self._read_only = False
         self._build_ui()
         self._start_timer()
 
@@ -757,11 +791,31 @@ class TodoWidget(QWidget):
         self._day_panel.set_date(date_str, self._tasks)
 
     def _on_date_clicked(self, _qdate):
+        # Gotcha: clicking ANY calendar day cell normally opens the "Add
+        # Task" dialog immediately (see _CustomCalendar._on_cell_clicked ->
+        # this slot), regardless of whether the selected date actually
+        # changed. That's the mutating half of a day-cell click, so it's
+        # skipped while read-only. selectionChanged -> _on_date_selected
+        # (only emitted when the date changes) is a separate connection and
+        # keeps firing normally, so the day panel still refreshes to show
+        # whichever day was clicked — "check todos" keeps working.
+        if self._read_only:
+            return
         self._day_panel.open_add_dialog()
 
     def _on_tasks_changed(self):
         self._calendar.refresh(self._tasks)
         self.changed.emit()
+
+    def set_read_only(self, read_only: bool):
+        """Calendar day selection (prev/next month navigation, and
+        selectionChanged -> the day panel refreshing to show that day's
+        tasks) stays usable — only the calendar-click's "open Add Task
+        dialog" side effect (see _on_date_clicked) and the day panel's own
+        edit controls (Add task, per-task Edit/Delete/done-toggle) are
+        locked."""
+        self._read_only = read_only
+        self._day_panel.set_read_only(read_only)
 
     # ── Reminder timer ────────────────────────────────────────────────────────
 

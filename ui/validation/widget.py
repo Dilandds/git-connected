@@ -27,6 +27,7 @@ class ValidationWidget(QWidget):
         self._sessions: List[ValidationSession] = [_default_session(1)]
         self._current_idx = 0
         self._next_id = 2
+        self._read_only = False
         self.setStyleSheet(f"background-color: {_BG};")
         self._build_ui()
         self._refresh_tabs()
@@ -54,12 +55,12 @@ class ValidationWidget(QWidget):
         t_col.addWidget(subtitle)
         tl.addLayout(t_col)
         tl.addStretch()
-        new_btn = QPushButton(t("project.validation.new_session"))
-        new_btn.setStyleSheet(_BTN_PRIMARY)
-        new_btn.setFixedHeight(30)
-        new_btn.setCursor(Qt.PointingHandCursor)
-        new_btn.clicked.connect(self._add_session)
-        tl.addWidget(new_btn)
+        self._new_btn = QPushButton(t("project.validation.new_session"))
+        self._new_btn.setStyleSheet(_BTN_PRIMARY)
+        self._new_btn.setFixedHeight(30)
+        self._new_btn.setCursor(Qt.PointingHandCursor)
+        self._new_btn.clicked.connect(self._add_session)
+        tl.addWidget(self._new_btn)
         root.addWidget(top)
 
         # ── session tabs ──
@@ -95,6 +96,32 @@ class ValidationWidget(QWidget):
         """Push Estimated Cost best-partner data into the preparation panel."""
         self._prep_panel.update_cost_summary(summary, currency, target_budget)
 
+    def set_read_only(self, read_only: bool):
+        """Two-way toggle for the app-wide read-only mode (see
+        core/file_lock.py / TheProjectWidget._update_read_only_ui) —
+        called by TheProjectWidget._update_read_only_ui() on every screen
+        that defines it. Unlike ValidationSession.locked (a one-directional
+        signing/workflow flag), calling this with True then False fully
+        restores editability, as long as the loaded session isn't
+        separately signed/locked: the combining happens down in
+        PreparationPanel.set_read_only / ReportPanel.set_read_only, which
+        OR this flag together with the session's own .locked at the
+        control level, so unlocking read-only mode never re-enables a
+        signed session.
+
+        Also gates this widget's own not-yet-covered controls: New Session
+        and session-tab delete buttons. Session-tab SWITCHING stays
+        clickable throughout — it's pure navigation, not an edit.
+
+        Never touches PreparationPanel/ReportPanel's own setEnabled() —
+        they're QScrollAreas themselves, so disabling them would break
+        scrolling, which is the exact bug this method exists to avoid."""
+        self._read_only = read_only
+        self._new_btn.setEnabled(not read_only)
+        self._prep_panel.set_read_only(read_only)
+        self._report_panel.set_read_only(read_only)
+        self._refresh_tabs()
+
     # ── session management ────────────────────────────────────────────────────
 
     def _refresh_tabs(self):
@@ -123,6 +150,7 @@ class ValidationWidget(QWidget):
             del_btn.setFixedSize(22, 28)
             del_btn.setCursor(Qt.PointingHandCursor)
             del_btn.clicked.connect(lambda _, idx=i: self._delete_session(idx))
+            del_btn.setEnabled(not self._read_only)
 
             if is_active:
                 name_btn.setStyleSheet(f"""
@@ -180,9 +208,13 @@ class ValidationWidget(QWidget):
         self._prep_panel.load_session(session)
         self._report_panel.load_session(session)
         self._sig_bar.set_signature(session.signature, session.locked)
-        if session.locked:
-            self._prep_panel.lock()
-            self._report_panel.lock()
+        # set_read_only() (rather than a plain `if session.locked: lock()`)
+        # so switching from a locked session's tab to an unlocked one also
+        # restores editability — it combines self._read_only with whatever
+        # the newly-loaded session's own .locked flag is, panel._session
+        # having just been reassigned by load_session() above.
+        self._prep_panel.set_read_only(self._read_only)
+        self._report_panel.set_read_only(self._read_only)
         self._refresh_tabs()
 
     def _add_session(self):
@@ -254,8 +286,8 @@ class ValidationWidget(QWidget):
         session.signature = sig
         session.locked = True
         self._sig_bar.set_signature(sig, True)
-        self._prep_panel.lock()
-        self._report_panel.lock()
+        self._prep_panel.set_read_only(self._read_only)
+        self._report_panel.set_read_only(self._read_only)
         self._refresh_tabs()
         self.changed.emit()
 

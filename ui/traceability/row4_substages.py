@@ -28,6 +28,8 @@ class _SubStagePanel(QWidget):
         self._stage: Optional[TraceStage] = None
         self._current_sub = 0
         self._is_main = False
+        self._read_only = False
+        self._current_table = None   # the live _PartsTable for the active sub-stage
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
@@ -181,12 +183,14 @@ class _SubStagePanel(QWidget):
             dup.setCursor(Qt.PointingHandCursor)
             dup.setToolTip(t('project.traceability.duplicate_substage'))
             dup.setStyleSheet(_da if is_active else _di)
+            dup.setEnabled(not self._read_only)
             dup.clicked.connect(lambda _, idx=i: self._duplicate_sub(idx))
 
             close = QPushButton('✕')
             close.setFixedSize(20, 26)
             close.setCursor(Qt.PointingHandCursor)
             close.setStyleSheet(_ca if is_active else _ci)
+            close.setEnabled(not self._read_only)
             close.clicked.connect(lambda _, idx=i: self._remove_sub(idx))
 
             ch.addWidget(btn); ch.addWidget(dup); ch.addWidget(close)
@@ -196,6 +200,7 @@ class _SubStagePanel(QWidget):
         add_btn.setStyleSheet(_BTN_SMALL)
         add_btn.setFixedHeight(26)
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setEnabled(not self._read_only)
         add_btn.clicked.connect(self._add_sub)
         self._tab_layout.addWidget(add_btn)
         self._tab_layout.addStretch()
@@ -210,6 +215,19 @@ class _SubStagePanel(QWidget):
                 return w.mapTo(self, QPoint(w.width() // 2, 0)).x()
         return self.width() // 2
 
+    def set_read_only(self, read_only: bool):
+        """Disable add/duplicate/close sub-stage tab controls and cascade
+        into the parts table for the currently-visible sub-stage.
+        _refresh_tabs() re-applies the flag to tabs created/removed at
+        runtime. The tab's own mousePressEvent (_switch_sub) is left
+        untouched — pure navigation ("click Substages to check tasks")
+        with no mutating branch. _rename_sub (double-click) is gated
+        separately since it's a mutating trigger, not a button."""
+        self._read_only = read_only
+        self._refresh_tabs()
+        if self._current_table is not None:
+            self._current_table.set_read_only(read_only)
+
     def _switch_sub(self, idx: int):
         self._current_sub = idx
         self._refresh_tabs()
@@ -217,6 +235,8 @@ class _SubStagePanel(QWidget):
         self.tab_switched.emit()
 
     def _rename_sub(self, idx: int):
+        if self._read_only:
+            return
         if not self._stage or idx >= len(self._stage.sub_stages):
             return
         sub = self._stage.sub_stages[idx]
@@ -285,6 +305,7 @@ class _SubStagePanel(QWidget):
                 item.widget().hide(); item.widget().setParent(None)
 
         if not self._stage or not self._stage.sub_stages:
+            self._current_table = None
             msg = QLabel(t('project.traceability.no_substages'))
             msg.setAlignment(Qt.AlignCenter)
             msg.setStyleSheet(
@@ -301,5 +322,7 @@ class _SubStagePanel(QWidget):
                             sub_num=idx + 1,
                             flat_mode=self._is_main)
         table.changed.connect(self.changed)
+        table.set_read_only(self._read_only)
+        self._current_table = table
         self._content_layout.addWidget(table)
         self._content_layout.addStretch()

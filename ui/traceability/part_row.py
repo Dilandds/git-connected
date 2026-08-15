@@ -77,6 +77,13 @@ class _FlatPartRow(QWidget):
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
+    def set_read_only(self, read_only: bool):
+        """Disable the edit/delete buttons and the inline comment editor
+        (typing directly into it mutates task.comments live)."""
+        self._edit_btn.setEnabled(not read_only)
+        self._del_btn.setEnabled(not read_only)
+        self._comm_edit.setEnabled(not read_only)
+
     def _build(self):
         self.setFixedHeight(_ROW_H)
         self.setStyleSheet(f"""
@@ -141,6 +148,7 @@ class _FlatPartRow(QWidget):
             self.data_changed.emit()
         comm_edit.textChanged.connect(_on_comment)
         lay.addWidget(comm_edit, 0, Qt.AlignVCenter)
+        self._comm_edit = comm_edit
 
         lay.addWidget(_date_cell(self._task.start_date))
         lay.addWidget(_date_cell(self._task.due_date))
@@ -164,10 +172,12 @@ class _FlatPartRow(QWidget):
         edit_btn.setStyleSheet(_ACT + f'QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ color: #1d6fc4; text-decoration: underline; }}')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._part))
+        self._edit_btn = edit_btn
         del_btn = QPushButton(t('project.traceability.task_delete_btn'))
         del_btn.setStyleSheet(_ACT + 'QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; text-decoration: underline; }')
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._part))
+        self._del_btn = del_btn
         actions_w = QWidget(); actions_w.setStyleSheet('background: transparent;')
         actions_l = QVBoxLayout(actions_w); actions_l.setContentsMargins(0, 0, 0, 0); actions_l.setSpacing(2)
         actions_l.addWidget(edit_btn, 0, Qt.AlignLeft)
@@ -227,12 +237,19 @@ class _StepRow(QFrame):
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._step))
         lay.addWidget(edit_btn)
+        self._edit_btn = edit_btn
 
         del_btn = QPushButton('✕')
         del_btn.setStyleSheet(_ACT + 'QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; }')
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._step))
         lay.addWidget(del_btn)
+        self._del_btn = del_btn
+
+    def set_read_only(self, read_only: bool):
+        """Leaf row (a single step) — just gate its own edit/delete buttons."""
+        self._edit_btn.setEnabled(not read_only)
+        self._del_btn.setEnabled(not read_only)
 
 
 # ── Task row (within a part group) ───────────────────────────────────────────
@@ -252,6 +269,7 @@ class _TaskRow(QWidget):
         self._sub_num   = sub_num
         self._part_num  = part_num
         self._steps_expanded = False
+        self._read_only = False
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
@@ -326,6 +344,7 @@ class _TaskRow(QWidget):
             self.data_changed.emit()
         comm_edit.textChanged.connect(_on_comment)
         lay.addWidget(comm_edit, 0, Qt.AlignVCenter)
+        self._comm_edit = comm_edit
 
         lay.addWidget(_date_cell(self._task.start_date))
         lay.addWidget(_date_cell(self._task.due_date))
@@ -352,16 +371,19 @@ class _TaskRow(QWidget):
         prog_l.addWidget(count_btn, 0, Qt.AlignVCenter)
         prog_l.addStretch()
         lay.addWidget(prog_w, 0, Qt.AlignVCenter)
+        self._count_btn = count_btn
 
         _ACT = 'QPushButton { background: transparent; border: none; font-size: 11px; font-weight: 600; padding: 2px 6px; }'
         edit_btn = QPushButton(t('project.traceability.task_edit_btn'))
         edit_btn.setStyleSheet(_ACT + f'QPushButton {{ color: {_ACCENT}; }} QPushButton:hover {{ color: #1d6fc4; text-decoration: underline; }}')
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self._task))
+        self._edit_btn = edit_btn
         del_btn = QPushButton(t('project.traceability.task_delete_btn'))
         del_btn.setStyleSheet(_ACT + 'QPushButton { color: #ef4444; } QPushButton:hover { color: #b91c1c; text-decoration: underline; }')
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self._task))
+        self._del_btn = del_btn
         actions_w = QWidget(); actions_w.setStyleSheet('background: transparent;')
         actions_l = QVBoxLayout(actions_w); actions_l.setContentsMargins(0, 0, 0, 0); actions_l.setSpacing(2)
         actions_l.addWidget(edit_btn, 0, Qt.AlignLeft)
@@ -394,6 +416,20 @@ class _TaskRow(QWidget):
 
         self._refresh_steps()
 
+    def set_read_only(self, read_only: bool):
+        """Disable edit/delete/comment-count buttons and the inline comment
+        editor, then cascade into every _StepRow — _refresh_steps() rebuilds
+        both the steps and the add-step footer, re-applying the flag to
+        rows added/removed at runtime. _steps_btn (expand/collapse) is left
+        untouched — pure navigation with no mutating branch inside
+        _toggle_steps()."""
+        self._read_only = read_only
+        self._edit_btn.setEnabled(not read_only)
+        self._del_btn.setEnabled(not read_only)
+        self._count_btn.setEnabled(not read_only)
+        self._comm_edit.setEnabled(not read_only)
+        self._refresh_steps()
+
     def _toggle_steps(self):
         self._steps_expanded = not self._steps_expanded
         self._steps_container.setVisible(self._steps_expanded)
@@ -410,6 +446,7 @@ class _TaskRow(QWidget):
             row = _StepRow(step, step_label)
             row.edit_requested.connect(self._edit_step)
             row.delete_requested.connect(self._delete_step)
+            row.set_read_only(self._read_only)
             self._steps_l.addWidget(row)
 
         # Add step footer
@@ -424,6 +461,7 @@ class _TaskRow(QWidget):
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
         """)
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setEnabled(not self._read_only)
         add_btn.clicked.connect(self._add_step)
         add_lay.addWidget(add_btn)
         add_lay.addStretch()
@@ -432,6 +470,8 @@ class _TaskRow(QWidget):
         self._steps_btn.setText(f'{"▼" if self._steps_expanded else "▶"} {t("project.traceability.steps_btn")} ({len(self._task.steps)})')
 
     def _add_step(self):
+        if self._read_only:
+            return
         dlg = _StepDialog(parent=self)
         if dlg.exec_() != QDialog.Accepted:
             return
@@ -477,6 +517,7 @@ class _PartGroupRow(QWidget):
         self._sub_num   = sub_num
         self._expanded  = True
         self._next_task_id = max((tk.id for tk in part.tasks), default=0) + 1
+        self._read_only = False
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
@@ -530,24 +571,30 @@ class _PartGroupRow(QWidget):
         add_task_btn.setStyleSheet(_BTN_SMALL)
         add_task_btn.setFixedHeight(26)
         add_task_btn.setCursor(Qt.PointingHandCursor)
+        add_task_btn.setEnabled(not self._read_only)
         add_task_btn.mousePressEvent = lambda e: (e.accept(), self._add_task())
         h_lay.addWidget(add_task_btn)
+        self._add_task_btn = add_task_btn
 
         edit_btn = QPushButton('✎')
         edit_btn.setStyleSheet(_BTN_ICON)
         edit_btn.setFixedSize(26, 26)
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.setToolTip(t('project.traceability.rename_group_tooltip'))
+        edit_btn.setEnabled(not self._read_only)
         edit_btn.mousePressEvent = lambda e: (e.accept(), self.edit_requested.emit(self._part))
         h_lay.addWidget(edit_btn)
+        self._edit_btn = edit_btn
 
         del_btn = QPushButton('🗑')
         del_btn.setStyleSheet(_BTN_DELETE)
         del_btn.setFixedSize(26, 26)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setToolTip(t('project.traceability.delete_group_tooltip'))
+        del_btn.setEnabled(not self._read_only)
         del_btn.mousePressEvent = lambda e: (e.accept(), self.delete_requested.emit(self._part))
         h_lay.addWidget(del_btn)
+        self._del_btn = del_btn
 
         self._root_l.addWidget(header)
 
@@ -559,6 +606,18 @@ class _PartGroupRow(QWidget):
         self._tasks_l.setSpacing(0)
         self._root_l.addWidget(self._tasks_container)
 
+        self._refresh_tasks()
+
+    def set_read_only(self, read_only: bool):
+        """Disable the header's add-task/edit/delete buttons and cascade
+        into every _TaskRow — _refresh_tasks() rebuilds both the tasks and
+        the add-task footer, re-applying the flag to rows added/removed at
+        runtime. The header's own mousePressEvent (_toggle, expand/collapse)
+        is left untouched — pure navigation with no mutating branch."""
+        self._read_only = read_only
+        self._add_task_btn.setEnabled(not read_only)
+        self._edit_btn.setEnabled(not read_only)
+        self._del_btn.setEnabled(not read_only)
         self._refresh_tasks()
 
     def _toggle(self):
@@ -578,6 +637,7 @@ class _PartGroupRow(QWidget):
             row.delete_requested.connect(self._delete_task)
             row.comment_requested.connect(self._show_comments)
             row.data_changed.connect(self.changed)
+            row.set_read_only(self._read_only)
             self._tasks_l.addWidget(row)
 
         # Add task footer
@@ -592,6 +652,7 @@ class _PartGroupRow(QWidget):
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
         """)
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setEnabled(not self._read_only)
         add_btn.clicked.connect(self._add_task)
         add_lay.addWidget(add_btn)
         add_lay.addStretch()
@@ -601,6 +662,8 @@ class _PartGroupRow(QWidget):
         self._count_lbl.setText(f'{n} task{"s" if n != 1 else ""}')
 
     def _add_task(self):
+        if self._read_only:
+            return
         dlg = _TaskDialog(parent=self)
         if dlg.exec_() != QDialog.Accepted:
             return

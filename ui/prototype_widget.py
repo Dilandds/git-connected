@@ -66,6 +66,7 @@ class _MainPhotoArea(QFrame):
     def __init__(self, b64: str = '', parent=None):
         super().__init__(parent)
         self._b64 = b64
+        self._read_only = False
         self._build()
 
     def _build(self):
@@ -155,12 +156,21 @@ class _MainPhotoArea(QFrame):
     def get_b64(self) -> str:
         return self._b64
 
+    def set_read_only(self, read_only: bool):
+        """Blocks the click-to-change/remove-photo actions while read-only —
+        the photo itself stays visible (clicking to view it is not gated,
+        there is no separate "view" affordance to preserve here)."""
+        self._read_only = read_only
+        self._remove_btn.setEnabled(not read_only)
+
     def _on_remove_clicked(self):
         self._b64 = ''
         self._refresh()
         self.changed.emit('')
 
     def mousePressEvent(self, _event):
+        if self._read_only:
+            return
         path, _ = QFileDialog.getOpenFileName(
             self, t('proto.select_photo'), '',
             'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
@@ -185,6 +195,7 @@ class _ThumbPhoto(QFrame):
         super().__init__(parent)
         self._index = index
         self._b64 = b64
+        self._read_only = False
         self._build()
 
     def _build(self):
@@ -271,6 +282,12 @@ class _ThumbPhoto(QFrame):
     def get_b64(self) -> str:
         return self._b64
 
+    def set_read_only(self, read_only: bool):
+        """Blocks the click-to-change/remove-photo actions while read-only —
+        the thumbnail stays visible."""
+        self._read_only = read_only
+        self._remove_btn.setEnabled(not read_only)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # Position remove button at top-right
@@ -283,6 +300,8 @@ class _ThumbPhoto(QFrame):
         self._remove_btn.raise_()
 
     def mousePressEvent(self, _event):
+        if self._read_only:
+            return
         path, _ = QFileDialog.getOpenFileName(
             self, t('proto.select_photo'), '',
             'Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp *.tiff)',
@@ -336,6 +355,11 @@ class _FileChip(QFrame):
         """)
         btn.clicked.connect(lambda: self.remove_requested.emit(self._index))
         row.addWidget(btn)
+        self._remove_btn = btn
+
+    def set_read_only(self, read_only: bool):
+        """Blocks removing this attached file while read-only."""
+        self._remove_btn.setEnabled(not read_only)
 
 
 # ── Version panel ──────────────────────────────────────────────────────────────
@@ -348,6 +372,7 @@ class _VersionPanel(QFrame):
         super().__init__(parent)
         self._v = version
         self._thumb_widgets: List[_ThumbPhoto] = []
+        self._read_only = False
         self._build()
 
     def _build(self):
@@ -397,6 +422,7 @@ class _VersionPanel(QFrame):
         """)
         btn_remove.clicked.connect(lambda: self.remove_requested.emit(self._v.id))
         panel_hdr.addWidget(btn_remove)
+        self._btn_remove = btn_remove
 
         root.addLayout(panel_hdr)
 
@@ -440,6 +466,7 @@ class _VersionPanel(QFrame):
         btn_add_photo.clicked.connect(self._add_photo_slot)
         gallery_hdr.addWidget(btn_add_photo)
         left.addLayout(gallery_hdr)
+        self._btn_add_photo = btn_add_photo
 
         # Gallery scroll area
         gallery_scroll = QScrollArea()
@@ -479,6 +506,7 @@ class _VersionPanel(QFrame):
         btn_attach.clicked.connect(self._attach_file)
         files_hdr.addWidget(btn_attach)
         left.addLayout(files_hdr)
+        self._btn_attach = btn_attach
 
         self._file_container = QWidget()
         self._file_container.setStyleSheet('background: transparent;')
@@ -576,6 +604,7 @@ class _VersionPanel(QFrame):
         thumb = _ThumbPhoto(index, b64)
         thumb.changed.connect(self._on_thumb_changed)
         thumb.remove_requested.connect(self._on_thumb_removed)
+        thumb.set_read_only(self._read_only)
         self._thumb_widgets.append(thumb)
         # Insert before the stretch
         pos = self._gallery_lay.count() - 1
@@ -669,11 +698,35 @@ class _VersionPanel(QFrame):
             for i, entry in enumerate(self._v.files):
                 chip = _FileChip(i, entry.get('name', ''))
                 chip.remove_requested.connect(self._remove_file)
+                chip.set_read_only(self._read_only)
                 self._file_lay.addWidget(chip)
         else:
             lbl = QLabel(t('proto.no_files'))
             lbl.setStyleSheet(f'color: {_MUTED}; font-size: 11px;')
             self._file_lay.addWidget(lbl)
+
+    def set_read_only(self, read_only: bool):
+        """Locks every edit control in this version panel — main photo,
+        photo gallery (change/remove), attached files (add/remove), status,
+        date and comments. Does not touch btn_remove's parent tab or the
+        scroll areas wrapping the gallery/panel (navigation/scrolling must
+        keep working)."""
+        self._read_only = read_only
+        enabled = not read_only
+        self._btn_remove.setEnabled(enabled)
+        self._btn_add_photo.setEnabled(enabled)
+        self._btn_attach.setEnabled(enabled)
+        self._status_combo.setEnabled(enabled)
+        self._date_edit.setEnabled(enabled)
+        self._comments_edit.setEnabled(enabled)
+        self._main_photo.set_read_only(read_only)
+        for thumb in self._thumb_widgets:
+            thumb.set_read_only(read_only)
+        for i in range(self._file_lay.count()):
+            item = self._file_lay.itemAt(i)
+            w = item.widget() if item else None
+            if isinstance(w, _FileChip):
+                w.set_read_only(read_only)
 
 
 # ── Tab button ─────────────────────────────────────────────────────────────────
@@ -743,6 +796,7 @@ class PrototypeWidget(QWidget):
         self._active_id: str = ''
         self._tab_buttons: dict = {}   # id -> _VersionTabBtn
         self._panels: dict = {}        # id -> _VersionPanel
+        self._read_only = False
         self._build_ui()
 
     def _build_ui(self):
@@ -801,6 +855,7 @@ class PrototypeWidget(QWidget):
         btn_add.clicked.connect(self._add_version)
         tab_row.addWidget(btn_add)
         root.addLayout(tab_row)
+        self._btn_add = btn_add
 
         # ── Separator under tabs ──────────────────────────────────────
         sep = QFrame()
@@ -883,6 +938,7 @@ class PrototypeWidget(QWidget):
         panel = _VersionPanel(v)
         panel.changed.connect(self.changed.emit)
         panel.remove_requested.connect(self._remove_version)
+        panel.set_read_only(self._read_only)
         panel.hide()
         self._panels[v.id] = panel
         self._stack_lay.insertWidget(self._stack_lay.count() - 1, panel)
@@ -904,6 +960,18 @@ class PrototypeWidget(QWidget):
 
     def _show_empty(self):
         self._empty_lbl.show()
+
+    def set_read_only(self, read_only: bool):
+        """Version tabs (_switch_to via _VersionTabBtn.clicked) stay
+        clickable — checking/viewing versions must keep working — and
+        neither scroll area (_tab_scroll, or the vertical scroll wrapping
+        _stack_container) is touched. Only "Add Version" and each version
+        panel's own edit controls are locked. Applies to any panel created
+        afterward too (see _create_panel)."""
+        self._read_only = read_only
+        self._btn_add.setEnabled(not read_only)
+        for panel in self._panels.values():
+            panel.set_read_only(read_only)
 
     # ── Persistence ────────────────────────────────────────────────────────────
 

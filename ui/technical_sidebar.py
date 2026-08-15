@@ -190,6 +190,7 @@ class TechnicalSidebar(QWidget):
         add_mfr_btn.clicked.connect(self._add_manufacturer_field)
         mfr_header.addWidget(add_mfr_btn)
         layout.addLayout(mfr_header)
+        self._add_mfr_btn = add_mfr_btn
 
         self._manufacturer_container = QVBoxLayout()
         self._manufacturer_container.setSpacing(4)
@@ -374,6 +375,30 @@ class TechnicalSidebar(QWidget):
         """Programmatically set annotation mode state."""
         self._annotation_mode = enabled
         self.annotate_btn.setChecked(enabled)
+
+    def set_read_only(self, read_only: bool):
+        """Disable every metadata edit control while the project is
+        read-only — deliberately leaves export_btn/export_pdf_btn alone
+        (exporting isn't an edit and shouldn't require write access), and
+        never touches the sidebar's own scroll area so it keeps scrolling."""
+        enabled = not read_only
+        self.upload_btn.setEnabled(enabled)
+        self._add_mfr_btn.setEnabled(enabled)
+        self.annotate_btn.setEnabled(enabled)
+        self.reset_btn.setEnabled(enabled)
+        self.property_edit.setEnabled(enabled)
+        self.title_edit.setEnabled(enabled)
+        self.start_date.setEnabled(enabled)
+        self.deadline_date.setEnabled(enabled)
+        self.comments_edit.setEnabled(enabled)
+        # Manufacturer rows: row 0 is a bare QLineEdit added directly to the
+        # layout; rows 1+ are a QWidget wrapping a QLineEdit + remove button
+        # — disabling that wrapper cascades to both children.
+        for i in range(self._manufacturer_container.count()):
+            item = self._manufacturer_container.itemAt(i)
+            w = item.widget() if item else None
+            if w is not None:
+                w.setEnabled(enabled)
 
     def get_metadata(self) -> dict:
         """Return all metadata fields as a dict."""

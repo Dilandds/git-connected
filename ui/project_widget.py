@@ -901,7 +901,10 @@ class TheProjectWidget(QWidget):
                 # This screen didn't exist yet the last time
                 # _update_read_only_ui ran (lazy creation) — apply the
                 # current state now instead of opening it wrongly editable.
-                widget.setEnabled(False)
+                if hasattr(widget, 'set_read_only'):
+                    widget.set_read_only(True)
+                else:
+                    widget.setEnabled(False)
             # Restore data saved during a language change
             if key in self._pending_restoration:
                 saved = self._pending_restoration.pop(key)
@@ -1199,7 +1202,10 @@ class TheProjectWidget(QWidget):
         self._technical_sidebar = technical_sidebar
         # Refs are (re)assigned once at startup wiring — apply whatever
         # read-only state already holds rather than assuming False.
-        technical_sidebar.setEnabled(not self._read_only)
+        if hasattr(technical_sidebar, 'set_read_only'):
+            technical_sidebar.set_read_only(self._read_only)
+        else:
+            technical_sidebar.setEnabled(not self._read_only)
 
     def set_scale_refs(self, scale_canvas, scale_sidebar) -> None:
         """Store direct refs to the Drawing Scale workspace so _save_project
@@ -2296,12 +2302,22 @@ class TheProjectWidget(QWidget):
             self._nav.set_read_only(read_only)
         # All NAV_KEYS screens created so far — lazily-created ones pick up
         # the current self._read_only when _ensure_screen creates them.
+        # Screens with their own set_read_only(bool) use it (disables only
+        # actual edit controls, keeps scrolling/view-navigation alive);
+        # anything without one yet falls back to the old blanket disable.
         for w in self._screen_widgets.values():
-            if w is not None:
+            if w is None:
+                continue
+            if hasattr(w, 'set_read_only'):
+                w.set_read_only(read_only)
+            else:
                 w.setEnabled(not read_only)
         technical_sidebar = getattr(self, '_technical_sidebar', None)
         if technical_sidebar is not None:
-            technical_sidebar.setEnabled(not read_only)
+            if hasattr(technical_sidebar, 'set_read_only'):
+                technical_sidebar.set_read_only(read_only)
+            else:
+                technical_sidebar.setEnabled(not read_only)
         scale_sidebar = getattr(self, '_scale_sidebar', None)
         if scale_sidebar is not None:
             scale_sidebar.set_read_only(read_only)

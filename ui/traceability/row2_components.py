@@ -27,6 +27,7 @@ class _ComponentsRow(QWidget):
         super().__init__(parent)
         self._components: List[TraceComponent] = []
         self._selected = 0
+        self._read_only = False
         self.setFixedHeight(108)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
         self._build()
@@ -105,6 +106,7 @@ class _ComponentsRow(QWidget):
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
         """)
         add.setCursor(Qt.PointingHandCursor)
+        add.setEnabled(not self._read_only)
         add.clicked.connect(self._add_component)
         self._cl.addWidget(add, 0, Qt.AlignVCenter)
 
@@ -194,6 +196,7 @@ class _ComponentsRow(QWidget):
             del_btn.setStyleSheet(_BTN_DEL_CIRCLE)
             del_btn.setCursor(Qt.PointingHandCursor)
             del_btn.setToolTip(f'Remove {comp.name}')
+            del_btn.setEnabled(not self._read_only)
             del_btn.clicked.connect(lambda _, i=idx: self._remove_component(i))
             row.addWidget(del_btn, 0, Qt.AlignTop)
 
@@ -205,6 +208,16 @@ class _ComponentsRow(QWidget):
         item.mousePressEvent       = lambda _, i=idx: self._select(i)
         item.mouseDoubleClickEvent = lambda _, i=idx: self._edit_component(i)
         return item
+
+    def set_read_only(self, read_only: bool):
+        """Disable the add-component button and each chip's del_btn;
+        rebuilding via _refresh() also re-applies the flag to chips
+        created/removed at runtime. The chip's own mousePressEvent (_select)
+        is left untouched — it's pure navigation ("click to check tasks")
+        with no mutating branch. _edit_component (opened via double-click)
+        is gated separately since it's a mutating trigger, not a button."""
+        self._read_only = read_only
+        self._refresh()
 
     def _select(self, idx: int):
         self._selected = idx
@@ -242,6 +255,8 @@ class _ComponentsRow(QWidget):
         self.changed.emit()
 
     def _edit_component(self, idx: int):
+        if self._read_only:
+            return
         comp = self._components[idx]
         dlg = _EditComponentDialog(comp, parent=self)
         result = dlg.exec_()

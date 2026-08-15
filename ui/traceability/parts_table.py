@@ -26,6 +26,7 @@ class _PartsTable(QWidget):
         self._sub_num   = sub_num
         self._flat      = flat_mode
         self._next_id   = max((p.id for p in sub_stage.parts), default=0) + 1
+        self._read_only = False
         self.setStyleSheet(f'background: {_CARD};')
         self._build()
 
@@ -120,6 +121,7 @@ class _PartsTable(QWidget):
             QPushButton:hover {{ color: #1d4ed8; text-decoration: underline; }}
         """)
         add_lbl.setCursor(Qt.PointingHandCursor)
+        add_lbl.setEnabled(not self._read_only)
         add_lbl.clicked.connect(self._add_part)
         lay.addWidget(add_lbl)
         lay.addStretch()
@@ -135,6 +137,7 @@ class _PartsTable(QWidget):
         """)
         add_btn.setFixedHeight(28)
         add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setEnabled(not self._read_only)
         add_btn.clicked.connect(self._add_part)
         lay.addWidget(add_btn, 0, Qt.AlignVCenter)
 
@@ -164,6 +167,7 @@ class _PartsTable(QWidget):
                 row.edit_requested.connect(self._edit_part)
                 row.delete_requested.connect(self._delete_part)
                 row.data_changed.connect(self.changed)
+                row.set_read_only(self._read_only)
                 self._rows_l.addWidget(row)
         else:
             for i, part in enumerate(self._sub.parts):
@@ -173,6 +177,7 @@ class _PartsTable(QWidget):
                 row.edit_requested.connect(self._edit_part)
                 row.delete_requested.connect(self._delete_part)
                 row.changed.connect(self.changed)
+                row.set_read_only(self._read_only)
                 self._rows_l.addWidget(row)
 
         # Rebuild footer so badge number stays correct
@@ -181,7 +186,18 @@ class _PartsTable(QWidget):
         self.layout().replaceWidget(old, self._footer)
         old.hide(); old.setParent(None)
 
+    def set_read_only(self, read_only: bool):
+        """Disable the add-part/add-task footer controls and cascade into
+        every part row (_FlatPartRow for the main/flat component,
+        _PartGroupRow otherwise). _refresh_rows() rebuilds both the footer
+        and the rows, so this also re-applies the flag to rows added or
+        removed at runtime."""
+        self._read_only = read_only
+        self._refresh_rows()
+
     def _add_part(self):
+        if self._read_only:
+            return
         if self._flat:
             dlg = _TaskDialog(parent=self)
             if dlg.exec_() != QDialog.Accepted:

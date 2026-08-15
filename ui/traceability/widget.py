@@ -93,6 +93,7 @@ class TraceabilityWidget(QWidget):
         super().__init__(parent)
         self._components: List[TraceComponent] = _default_components()
         self._current_component = 0
+        self._read_only = False
         self.setStyleSheet(f'background: {_BG};')
         self._build_ui()
         self._load_component(0)
@@ -170,6 +171,20 @@ class TraceabilityWidget(QWidget):
         self._update_arrow2()
 
     # ── public API (called by TheProjectWidget) ────────────────────────────────
+
+    def set_read_only(self, read_only: bool):
+        """Cascade read-only state into all 4 rows. Each row disables its
+        own mutating controls (add/remove/duplicate/edit buttons, inline
+        comment editors) while leaving its own QScrollArea and its
+        click-to-select/toggle handlers (component chip, stage card,
+        sub-stage tab, part-group header, task-steps toggle) live — so
+        users can still click through Product Components / Stages /
+        Sub-stages to inspect tasks, they just can't change anything."""
+        self._read_only = read_only
+        self._info_row.set_read_only(read_only)
+        self._comp_row.set_read_only(read_only)
+        self._stage_row.set_read_only(read_only)
+        self._sub_panel.set_read_only(read_only)
 
     def update_project_info(self, info: dict):
         self._info_row.update_project_info(info)
