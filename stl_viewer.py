@@ -683,6 +683,7 @@ class STLViewerWindow(QMainWindow):
         self.project_widget.restore_viewer_tab.connect(self._restore_viewer_tab_from_project)
         self.project_widget.clear_viewer_tabs.connect(self._clear_all_viewer_tabs)
         self.project_widget.viewer_tabs_sync_requested.connect(self._push_viewers_to_project)
+        self.project_widget.viewer_tabs_conflict_resolved.connect(self._reconcile_viewer_tabs_after_merge)
         self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
         self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
         self.project_widget.project_info_changed.connect(self.technical_sidebar.update_project_info)
@@ -2180,12 +2181,70 @@ class STLViewerWindow(QMainWindow):
         if not os.path.exists(tmp_path):
             return
         self._switch_mode("3d")
+        self._load_tab_bundle(tmp_path, original_name, tab_id)
+
+    def _load_tab_bundle(self, tmp_path: str, original_name: str, tab_id: str = ''):
+        """Decode+load one viewer-tab bundle into the tab structure, without
+        touching which workspace mode is currently visible. Split out of
+        _restore_viewer_tab_from_project (which switches to 3D mode first,
+        appropriate when opening a project) so
+        _reconcile_viewer_tabs_after_merge can reuse the same load logic
+        for a save-time merge fixup — that one must NOT yank the user into
+        a different workspace mode mid-task, since Save can be triggered
+        from anywhere."""
+        import os
+        if not os.path.exists(tmp_path):
+            return
         # force_editable=True — this bundle is the project's own tab, being
         # restored on whichever device opened the project, never a file
         # someone shared with this user (see _load_ecto_file's docstring).
         self._load_ecto_file(tmp_path, display_name_override=original_name, force_editable=True)
         if self._current_tab is not None:
             self._current_tab.tab_id = tab_id or uuid.uuid4().hex
+
+    def _reconcile_viewer_tabs_after_merge(self, updated: list, removed_ids: list):
+        """Bring the live 3D viewer back in sync right after a save's merge
+        changed a tab's content out from under this session — see
+        TheProjectWidget.viewer_tabs_conflict_resolved's docstring. Runs
+        silently in the background tab structure without switching
+        workspace mode (see _load_tab_bundle). Reopens each affected tab
+        from scratch (close + restore) rather than hot-swapping the live
+        pygfx scene in place — simpler and far lower-risk, and this only
+        ever runs right after a rare merge conflict."""
+        import base64, os, tempfile
+
+        def _index_by_id():
+            return {t.tab_id: i for i, t in enumerate(self.tabs) if t.tab_id}
+
+        for tid in removed_ids:
+            idx = _index_by_id().get(tid)
+            if idx is not None:
+                self._close_tab(idx)
+
+        for entry in updated:
+            tid = entry.get('id')
+            idx = _index_by_id().get(tid)
+            if idx is not None:
+                self._close_tab(idx)
+
+            b64 = entry.get('bundle_b64', '')
+            if not b64:
+                continue
+            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(b64))
+                self._load_tab_bundle(tmp_path, entry.get('tab_name', 'model.lyns'), tid or '')
+            except Exception as e:
+                logger.warning(f'_reconcile_viewer_tabs_after_merge: could not restore '
+                                f'"{entry.get("tab_name")}": {e}')
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+        logger.info(f"_reconcile_viewer_tabs_after_merge: updated={len(updated)} removed={len(removed_ids)}")
 
     def _restore_technical_overview_from_project(self, tmp_path: str):
         """Restore the Technical Overview workspace from a saved project's
