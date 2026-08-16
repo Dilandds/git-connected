@@ -571,6 +571,11 @@ def main():
             base_path / 'assets' / 'logo.png',
             base_path / 'assets' / 'logo.jpg',
         ]
+        from core.edition import is_lite
+        if is_lite():
+            # LYNS Lite gets its own splash before falling back to the
+            # shared commercial/education assets above.
+            splash_image_paths.insert(0, base_path / 'assets' / 'splash_lite.png')
         
         for img_path in splash_image_paths:
             if img_path.exists():
@@ -683,6 +688,15 @@ def main():
         except Exception as e:
             logger.debug(f"Could not log VTK/PyVista versions: {e}")
         window = STLViewerWindow()
+        # LYNS Lite: double-clicking a .lyns.review file (via the Windows
+        # file association core/file_association.py registers, or macOS
+        # Finder's Open With) launches this app with the file path as
+        # argv[1] — open it straight away instead of landing on an empty
+        # window. Only wired for Lite; other editions have no equivalent
+        # CLI-open path today.
+        from core.edition import is_lite
+        if is_lite() and len(sys.argv) > 1 and os.path.isfile(sys.argv[1]) and sys.argv[1].endswith('.lyns.review'):
+            window._lite_load_review_file(sys.argv[1])
         print("✓ Main window created successfully", file=sys.stderr)
         safe_flush(sys.stderr)
         logger.info("✓ Main window created successfully")

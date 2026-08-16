@@ -1,0 +1,244 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""
+PyInstaller spec file for LYNS360-Lite macOS build.
+LYNS Lite is the supplier-facing companion app — opens only .lyns.review
+files. See main_lite.py / core/edition.py for the edition split.
+"""
+
+import sys
+import os
+from pathlib import Path
+
+# Read version from single source of truth (core/version.py)
+sys.path.insert(0, os.getcwd())
+from core.version import __version__ as APP_VERSION
+
+block_cipher = None
+
+# Get project root directory (where spec file is located)
+# Build script changes to project directory, so use CWD for reliability
+# This is more reliable than SPECPATH which may have path resolution issues
+project_root = Path(os.getcwd())
+
+# License API endpoint — baked into the binary so it works out-of-the-box
+os.environ.setdefault(
+    'ECTOFORM_LICENSE_API_URL',
+    'https://license-validator.ectoform.workers.dev/api/public/validate-license'
+)
+
+# Debug: Print what we're checking
+print(f"[PyInstaller] Project root: {project_root}")
+print(f"[PyInstaller] Checking for assets/splash_lite.png: {(project_root / 'assets' / 'splash_lite.png').exists()}")
+print(f"[PyInstaller] Checking for assets/icon.icns: {(project_root / 'assets' / 'icon.icns').exists()}")
+
+# Build datas list with assets
+datas = [
+    ('ui', 'ui'),
+    ('core', 'core'),
+    ('i18n', 'i18n'),
+]
+
+# Add splash screen images if they exist
+splash_image_paths = [
+    ('assets/splash_lite.png', 'assets'),
+    ('assets/splash.png', 'assets'),
+    ('assets/splash.jpg', 'assets'),
+    ('assets/logo.png', 'assets'),
+    ('assets/logo.jpg', 'assets'),
+    ('assets/Logo_Ectoform_2_copy-removebg-preview.png', 'assets'),
+    ('assets/annotation_icon.png', 'assets'),
+    ('assets/toolbar_icon.png', 'assets'),
+    ('assets/xyz_gizmo.png', 'assets'),
+    ('assets/dropdown_arrow.png', 'assets'),
+    ('assets/arrow_up.png', 'assets'),
+    ('assets/arrow_down.png', 'assets'),
+]
+
+# Add entire textures directory if it exists
+textures_dir = project_root / 'assets' / 'textures'
+if textures_dir.exists() and textures_dir.is_dir():
+    datas.append(('assets/textures', 'assets/textures'))
+    print(f"[PyInstaller] [OK] Adding textures directory to bundle")
+else:
+    print(f"[PyInstaller] [X] Textures directory NOT found: {textures_dir}")
+
+for src_path, dst_path in splash_image_paths:
+    full_path = project_root / src_path
+    if full_path.exists():
+        print(f"[PyInstaller] [OK] Adding to bundle: {src_path}")
+        datas.append((src_path, dst_path))
+    else:
+        print(f"[PyInstaller] [X] NOT found: {full_path}")
+
+print(f"[PyInstaller] Final datas list has {len(datas)} items")
+
+a = Analysis(
+    ['main_lite.py'],
+    pathex=[],
+    binaries=[],
+    datas=datas,
+    hiddenimports=[
+        # PyQt5 modules
+        'PyQt5',
+        'PyQt5.QtCore',
+        'PyQt5.QtGui',
+        'PyQt5.QtWidgets',
+        'PyQt5.sip',
+        # PyVista and VTK
+        'pyvista',
+        'pyvistaqt',
+        'vtkmodules',
+        'vtkmodules.all',
+        'vtkmodules.qt.QVTKRenderWindowInteractor',
+        # Pygfx and deps (WebGPU viewer, avoids Windows black screen)
+        'pygfx',
+        'wgpu',
+        'trimesh',
+        'rendercanvas',
+        'rendercanvas.qt',
+        'scipy',
+        'viewer_widget_pygfx',
+        # NumPy
+        'numpy',
+        'numpy.core._methods',
+        'numpy.lib.format',
+        # ReportLab for PDF export
+        'reportlab',
+        'reportlab.pdfgen',
+        'reportlab.lib',
+        'reportlab.platypus',
+        # Requests for license validation
+        'requests',
+        'urllib3',
+        # Custom modules
+        'stl_viewer',
+        'viewer_widget',
+        'viewer_widget_offscreen',
+        'ui.sidebar_panel',
+        'ui.toolbar',
+        'ui.styles',
+        'ui.components',
+        'ui.license_dialog',
+        'core.mesh_calculator',
+        'core.license_validator',
+        'core.image_utils',
+        'core.procedural_textures',
+        # HEIC (iPhone) to JPEG conversion in annotation mode
+        'PIL',
+        'PIL.Image',
+        'pillow_heif',
+        # Standard library modules that might be missed
+        'logging',
+        'pathlib',
+        'datetime',
+        'io',
+        'json',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        # PyQt6 (not used)
+        'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets',
+        # Unused PyQt5 modules
+        'PyQt5.QtWebEngine', 'PyQt5.QtWebEngineWidgets', 'PyQt5.QtWebEngineCore',
+        'PyQt5.QtBluetooth', 'PyQt5.QtNfc',
+        'PyQt5.QtLocation', 'PyQt5.QtPositioning',
+        'PyQt5.QtMultimedia', 'PyQt5.QtMultimediaWidgets', 'PyQt5.QtMultimediaQuick',
+        'PyQt5.QtQuick', 'PyQt5.QtQml', 'PyQt5.QtQuickWidgets',
+        'PyQt5.QtSql',
+        'PyQt5.QtXml', 'PyQt5.QtXmlPatterns',
+        'PyQt5.QtNetwork',
+        'PyQt5.QtSvg',
+        'PyQt5.QtDesigner', 'PyQt5.QtHelp',
+        # Test files
+        'test_minimal_pyqt6', 'test_pyvista_qt', 'test_pyvista_simple', 'test_volume_methods',
+        'check_results',
+        # VTK web modules (not needed)
+        'vtkmodules.web', 'vtkmodules.qt.web',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='LYNS360-Lite',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=True,  # Enable stripping for size reduction
+    upx=True,
+    console=False,  # Windowed app, no console
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=True,  # Enable stripping for size reduction
+    upx=True,
+    upx_exclude=[],
+    name='LYNS360-Lite',
+)
+
+# Debug icon for BUNDLE
+bundle_icon_path = project_root / 'assets' / 'icon.icns'
+bundle_icon = str(bundle_icon_path) if bundle_icon_path.exists() else None
+if bundle_icon:
+    print(f"[PyInstaller] [OK] Icon will be used for BUNDLE: {bundle_icon}")
+else:
+    print(f"[PyInstaller] [X] Icon NOT found for BUNDLE: {bundle_icon_path}")
+
+app = BUNDLE(
+    coll,
+    name='LYNS360-Lite.app',
+    icon=bundle_icon,
+        bundle_identifier='com.ectoform.lite',
+    info_plist={
+        'NSPrincipalClass': 'NSApplication',
+        'NSHighResolutionCapable': 'True',
+        'CFBundleShortVersionString': APP_VERSION,
+        'CFBundleVersion': APP_VERSION,
+        'NSHumanReadableCopyright': 'Copyright © 2024',
+        'LSMinimumSystemVersion': '10.13',
+        # Associates .lyns.review supplier-review files with this app so
+        # Finder shows the app's icon on them (and double-click opens LYNS
+        # Lite) — the macOS equivalent of the Windows file-association
+        # registration in core/file_association.py. Uses its OWN UTI
+        # (distinct from the commercial/education com.lyns360.project),
+        # since Lite opens a different file type entirely.
+        'CFBundleDocumentTypes': [
+            {
+                'CFBundleTypeName': 'LYNS360 Supplier Review',
+                'CFBundleTypeRole': 'Editor',
+                'LSHandlerRank': 'Owner',
+                'CFBundleTypeIconFile': 'icon.icns',
+                'LSItemContentTypes': ['com.lyns360.review'],
+            },
+        ],
+        'UTExportedTypeDeclarations': [
+            {
+                'UTTypeIdentifier': 'com.lyns360.review',
+                'UTTypeDescription': 'LYNS360 Supplier Review',
+                'UTTypeConformsTo': ['public.data'],
+                'UTTypeIconFile': 'icon.icns',
+                'UTTypeTagSpecification': {
+                    'public.filename-extension': ['review', 'lyns.review'],
+                },
+            },
+        ],
+    },
+)

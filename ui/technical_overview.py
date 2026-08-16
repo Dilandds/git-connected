@@ -51,6 +51,21 @@ class ArrowAnnotation:
     label: str = "Point"
     created_at: Optional[datetime] = None
     is_validated: bool = False
+    # Reader-mode read/unread state — same purpose and same session-only
+    # lifetime as ui/annotation_panel.py's Annotation.is_read (never
+    # serialized in get_annotations_data/load_from_ecto below, so it
+    # always starts unread on a fresh open, just like the 3D pins).
+    is_read: bool = False
+    # Same shape/purpose as ui/annotation_panel.py's Annotation fields of
+    # the same name — added for parity with the 3D viewer's Supplier
+    # Review Workflow conversation (see ui/annotation_popup.py). added_by
+    # is 'supplier' for an arrow a reviewer placed themselves in LYNS
+    # Lite; supplier_notes/pm_notes are the back-and-forth thread on top
+    # of this arrow's own text/image_paths, each entry
+    # {'id', 'author_name'/'supplier_name', 'text', 'image_paths', 'added_at'}.
+    added_by: Optional[str] = None
+    supplier_notes: list = field(default_factory=list)
+    pm_notes: list = field(default_factory=list)
 
 
 class ImageCanvas(QWidget):
@@ -244,6 +259,23 @@ class ImageCanvas(QWidget):
         painter.setPen(QColor(_ink))
         painter.drawText(helper_rect, Qt.AlignCenter, t("technical.upload_formats"))
 
+    @staticmethod
+    def _effective_color(ann: ArrowAnnotation) -> str:
+        """Resolve the color an arrow/badge should actually render with.
+
+        Outside LYNS Lite this is unchanged: the annotation's own color
+        (validated green, a picked color, or the ARROW_COLOR default).
+        In Lite, an annotation still at the untouched default falls back
+        to the read/unread pair (see ArrowAnnotation.is_read) instead of
+        plain black, so a supplier can tell at a glance which of the PM's
+        existing points they've already opened — same green/blue split
+        ui/annotation_panel.py uses for 3D pins in reader mode."""
+        from core.edition import is_lite
+        if is_lite() and (not ann.color or ann.color == ARROW_COLOR):
+            from ui.annotation_panel import READER_READ_COLOR, READER_UNREAD_COLOR
+            return READER_READ_COLOR if ann.is_read else READER_UNREAD_COLOR
+        return ann.color if ann.color else ARROW_COLOR
+
     def _draw_arrow(self, painter: QPainter, ann: ArrowAnnotation, number: int, img_rect: QRectF):
         """Draw a callout arrow from the origin (badge) to the annotation target (tip)."""
         target = self._normalised_to_widget(ann.target_x, ann.target_y)
@@ -253,8 +285,13 @@ class ImageCanvas(QWidget):
         # Use stored origin coordinates
         origin = self._normalised_to_widget(ann.origin_x, ann.origin_y)
 
-        # Use per-annotation color
-        base_color = QColor(ann.color if ann.color else ARROW_COLOR)
+        # Use per-annotation color — in LYNS Lite, an annotation that never
+        # got an explicit color (still at the ARROW_COLOR default) falls
+        # back to the read/unread pair instead, same priority order as
+        # ui/annotation_panel.py's AnnotationCard._get_indicator_color: an
+        # explicit/validated color always wins, read/unread only fills in
+        # for ones that never got one.
+        base_color = QColor(self._effective_color(ann))
         if is_selected:
             color = QColor(ARROW_SELECTED_COLOR)
         elif is_hovered:
@@ -277,7 +314,7 @@ class ImageCanvas(QWidget):
         badge_size = ARROW_BADGE_SIZE
         badge_rect = QRectF(origin.x() - badge_size / 2, origin.y() - badge_size / 2, badge_size, badge_size)
         painter.setPen(Qt.NoPen)
-        badge_color = QColor(ann.color if ann.color else ARROW_COLOR) if not is_selected else QColor(ARROW_SELECTED_COLOR)
+        badge_color = QColor(self._effective_color(ann)) if not is_selected else QColor(ARROW_SELECTED_COLOR)
         painter.setBrush(QBrush(badge_color))
         painter.drawEllipse(badge_rect)
 
@@ -655,13 +692,26 @@ class TechnicalAnnotationPanel(QWidget):
         from ui.annotation_panel import (
             _format_annotation_date, _format_annotation_time,
             _ANNO_CARD_PENDING, _ANNO_CARD_VALIDATED, _ANNO_CARD_HOVER,
-            _ANNO_CARD_BORDER, _ANNO_CARD_BORDER_HOVER,
+            _ANNO_CARD_READER_UNREAD, _ANNO_CARD_BORDER, _ANNO_CARD_BORDER_HOVER,
             _rounded_text_pixmap, _checkmark_pixmap,
+            READER_READ_COLOR, READER_UNREAD_COLOR,
         )
+        from core.edition import is_lite
 
         VALIDATED_GREEN = '#4ade80'
-        ann_color = VALIDATED_GREEN if ann.is_validated else (ann.color or ARROW_COLOR)
-        card_bg = _ANNO_CARD_VALIDATED if ann.is_validated else _ANNO_CARD_PENDING
+        lite = is_lite()
+        if lite:
+            # A supplier is viewing the PM's existing points — same
+            # green(unread)/blue(read) split as the 3D viewer's reader
+            # mode, mirrored in ImageCanvas._effective_color for the
+            # badge/arrow on the canvas itself.
+            ann_color = ann.color if (ann.color and ann.color != ARROW_COLOR) else (
+                READER_READ_COLOR if ann.is_read else READER_UNREAD_COLOR
+            )
+            card_bg = _ANNO_CARD_VALIDATED if ann.is_read else _ANNO_CARD_READER_UNREAD
+        else:
+            ann_color = VALIDATED_GREEN if ann.is_validated else (ann.color or ARROW_COLOR)
+            card_bg = _ANNO_CARD_VALIDATED if ann.is_validated else _ANNO_CARD_PENDING
 
         card = QFrame()
         card.setObjectName("technicalAnnoCard")
@@ -746,7 +796,20 @@ class TechnicalAnnotationPanel(QWidget):
         status_row.setSpacing(4)
         status_icon = QLabel()
         status_lbl = QLabel()
-        if ann.is_validated:
+        if lite:
+            # Reader-mode read/unread status — matches AnnotationCard._update_style
+            # in ui/annotation_panel.py (same status_secondary color for both
+            # states, checkmark only once read).
+            status_color = default_theme.text_secondary
+            if ann.is_read:
+                status_icon.setPixmap(_checkmark_pixmap(11, status_color))
+                status_icon.setVisible(True)
+                status_lbl.setText(t("annotation.read"))
+            else:
+                status_icon.setVisible(False)
+                status_lbl.setText(t("annotation.unread"))
+            status_lbl.setStyleSheet(f"color: {status_color}; font-size: 13px; background: transparent; border: none;")
+        elif ann.is_validated:
             status_icon.setPixmap(_checkmark_pixmap(11, VALIDATED_GREEN))
             status_icon.setVisible(True)
             status_lbl.setText(t("annotation.validated"))
@@ -900,6 +963,9 @@ class TechnicalOverviewWidget(QWidget):
                 'label': ann.label,
                 'created_at': ann.created_at.isoformat() if ann.created_at else None,
                 'is_validated': ann.is_validated,
+                'added_by': ann.added_by,
+                'supplier_notes': ann.supplier_notes,
+                'pm_notes': ann.pm_notes,
             })
         return result
 
@@ -929,6 +995,9 @@ class TechnicalOverviewWidget(QWidget):
                 label=ad.get('label', 'Point'),
                 created_at=created,
                 is_validated=ad.get('is_validated', False),
+                added_by=ad.get('added_by'),
+                supplier_notes=ad.get('supplier_notes', []),
+                pm_notes=ad.get('pm_notes', []),
             )
             self._annotations.append(ann)
             self._next_id = max(self._next_id, ann.id + 1)
@@ -936,6 +1005,63 @@ class TechnicalOverviewWidget(QWidget):
         self.annotation_panel.refresh(self._annotations)
         self._passcode_hash = passcode_hash
         self._reader_mode = bool(passcode_hash)
+
+    def import_annotation(self, data: dict) -> ArrowAnnotation:
+        """Append one arrow annotation from a supplier's returned
+        .lyns.review (via ui/project_widget.py's supplier-review import
+        merge flow). Mirrors ui/annotation_panel.py's AnnotationPanel.
+        import_annotation: renumbers the id if it collides with one
+        already present, since the supplier's id sequence started from
+        the same base as this document's did at export time."""
+        created = None
+        if data.get('created_at'):
+            try:
+                created = datetime.fromisoformat(data['created_at'])
+            except Exception:
+                pass
+        existing_ids = {a.id for a in self._annotations}
+        new_id = data['id']
+        if new_id in existing_ids:
+            new_id = (max(existing_ids) + 1) if existing_ids else 1
+            logger.info(f"TechnicalOverview.import_annotation: id {data['id']} collides with an "
+                        f"existing annotation, renumbering to {new_id}")
+        ann = ArrowAnnotation(
+            id=new_id,
+            target_x=data['target_x'],
+            target_y=data['target_y'],
+            origin_x=data.get('origin_x', 0.0),
+            origin_y=data.get('origin_y', 0.0),
+            text=data.get('text', ''),
+            margin_side=data.get('margin_side', 'left'),
+            color=data.get('color', ARROW_COLOR),
+            image_paths=data.get('image_paths', []),
+            label=data.get('label', 'Point'),
+            created_at=created,
+            is_validated=data.get('is_validated', False),
+            added_by=data.get('added_by'),
+            supplier_notes=data.get('supplier_notes', []),
+            pm_notes=data.get('pm_notes', []),
+        )
+        self._annotations.append(ann)
+        self._next_id = max(self._next_id, ann.id + 1)
+        self.canvas.set_annotations(self._annotations)
+        self.annotation_panel.refresh(self._annotations)
+        logger.info(f"TechnicalOverview.import_annotation: merged in annotation id={ann.id}")
+        return ann
+
+    def add_supplier_notes(self, annotation_id: int, notes: list) -> bool:
+        """Append supplier feedback note(s) to an EXISTING arrow's thread —
+        used by the merge-import flow when a supplier commented on one of
+        the PM's own annotations rather than adding a new one. Mirrors
+        ui/annotation_panel.py's AnnotationPanel.add_supplier_notes.
+        Returns False if the annotation no longer exists locally (e.g. the
+        PM deleted it after exporting)."""
+        ann = next((a for a in self._annotations if a.id == annotation_id), None)
+        if ann is None:
+            return False
+        ann.supplier_notes.extend(notes)
+        self.annotation_panel.refresh(self._annotations)
+        return True
 
     def get_document_path(self) -> Optional[str]:
         """Return the file path of the currently loaded document image, if available."""
@@ -980,10 +1106,12 @@ class TechnicalOverviewWidget(QWidget):
             return None
 
     def _on_annotation_placed(self, tx: float, ty: float, ox: float, oy: float):
+        from core.edition import is_lite
         ann = ArrowAnnotation(
             id=self._next_id, target_x=tx, target_y=ty,
             origin_x=ox, origin_y=oy,
-            created_at=datetime.now()
+            created_at=datetime.now(),
+            added_by='supplier' if is_lite() else None,
         )
         self._next_id += 1
         self._annotations.append(ann)
@@ -1017,11 +1145,53 @@ class TechnicalOverviewWidget(QWidget):
             self.annotation_panel.refresh(self._annotations)
 
     def _on_open_popup(self, ann_id: int):
-        """Open the AnnotationPopup for editing text and images on this arrow."""
+        """Open this arrow's popup — AnnotationPopup (editable) in 360,
+        AnnotationViewerPopup (original locked, reply-only) in LYNS Lite,
+        the same split ui/annotation_panel.py's AnnotationPanel makes for
+        the 3D viewer's own annotations (see its _on_card_clicked)."""
         ann = next((a for a in self._annotations if a.id == ann_id), None)
         if not ann:
             return
         from datetime import datetime
+        from core.edition import is_lite
+
+        if is_lite():
+            from ui.annotation_viewer_popup import AnnotationViewerPopup
+            # Mark read on open, same as AnnotationPanel.mark_as_read for
+            # the 3D viewer's pins — flips this arrow's badge/card from
+            # unread (green) to read (blue) the moment the supplier looks
+            # at it.
+            if not ann.is_read:
+                ann.is_read = True
+                self.canvas.repaint()
+                self.annotation_panel.refresh(self._annotations)
+            # Same place stl_viewer.py's _on_open_viewer_popup_requested
+            # reads this from — the loaded .lyns.review envelope's own
+            # 'supplier', found via the top-level window since this widget
+            # has no direct reference to it.
+            current_supplier = None
+            envelope = getattr(self.window(), '_lite_review_envelope', None)
+            if envelope:
+                current_supplier = envelope.get('supplier')
+            display_number = self._annotations.index(ann) + 1
+            popup = AnnotationViewerPopup(
+                annotation_id=ann.id,
+                point=(ann.target_x, ann.target_y),
+                text=ann.text,
+                image_paths=list(ann.image_paths),
+                label=ann.label,
+                created_at=ann.created_at or datetime.now(),
+                display_number=display_number,
+                supplier_notes=ann.supplier_notes,
+                pm_notes=ann.pm_notes,
+                added_by=ann.added_by,
+                current_supplier=current_supplier,
+                parent=self,
+            )
+            popup.note_added.connect(self._on_supplier_note_added)
+            popup.show()
+            return
+
         from ui.annotation_popup import AnnotationPopup
         display_number = self._annotations.index(ann) + 1
         popup = AnnotationPopup(
@@ -1032,11 +1202,37 @@ class TechnicalOverviewWidget(QWidget):
             label=ann.label,
             created_at=ann.created_at or datetime.now(),
             display_number=display_number,
+            supplier_notes=ann.supplier_notes,
+            pm_notes=ann.pm_notes,
+            added_by=ann.added_by,
             parent=self
         )
         popup.annotation_validated.connect(self._on_popup_validated)
         popup.annotation_deleted.connect(self._on_delete_annotation)
+        # Was never connected before — every follow-up comment posted in
+        # the popup's conversation composer rendered fine while the popup
+        # stayed open (AnnotationPopup keeps its own in-memory pm_notes)
+        # but vanished the moment it closed, since nothing wrote it back
+        # onto this ArrowAnnotation. Mirrors stl_viewer.py's
+        # _on_annotation_pm_note_added for the 3D viewer's annotations.
+        popup.note_added.connect(self._on_note_added)
         popup.show()
+
+    def _on_note_added(self, ann_id: int, note: dict):
+        """A PM's follow-up comment (360's AnnotationPopup) — persist it so
+        it survives the popup closing and round-trips through export/
+        import (see get_annotations_data/load_from_ecto)."""
+        ann = next((a for a in self._annotations if a.id == ann_id), None)
+        if ann is not None:
+            ann.pm_notes.append(note)
+
+    def _on_supplier_note_added(self, ann_id: int, note: dict):
+        """A supplier's feedback (Lite's AnnotationViewerPopup) — stored
+        separately from the PM's own pm_notes, same split
+        ui/annotation_panel.py's Annotation makes."""
+        ann = next((a for a in self._annotations if a.id == ann_id), None)
+        if ann is not None:
+            ann.supplier_notes.append(note)
 
     def _on_popup_validated(self, ann_id: int, text: str, image_paths: list, label: str):
         """Handle popup Done — save text, images, label back to the annotation and mark validated."""

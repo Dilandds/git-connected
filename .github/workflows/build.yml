@@ -154,6 +154,54 @@ jobs:
         echo "- ✅ Education executable verified" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Education build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
 
+    # ---- Lite Edition ----
+    - name: Build Lite edition
+      run: |
+        rm -rf build dist
+        chmod +x build_mac_lite.sh
+        ./build_mac_lite.sh
+
+    - name: Verify Lite .app bundle exists
+      run: |
+        if [ ! -d "dist/LYNS360-Lite.app" ]; then
+          echo "Error: Lite .app bundle not found"
+          exit 1
+        fi
+        echo "✓ Lite .app bundle created successfully"
+
+    - name: Verify Lite executable
+      run: |
+        EXE_PATH="dist/LYNS360-Lite.app/Contents/MacOS/LYNS360-Lite"
+        if [ ! -f "$EXE_PATH" ]; then
+          echo "Error: Lite executable not found"
+          exit 1
+        fi
+        file "$EXE_PATH"
+        echo "✓ Lite executable verified"
+
+    - name: Upload Lite .app as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Lite-macOS-${{ matrix.os }}
+        path: dist/LYNS360-Lite.app
+        retention-days: 30
+
+    - name: Upload Lite DMG as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Lite-DMG-${{ matrix.os }}
+        path: LYNS360-Lite-*-macOS-*.dmg
+        retention-days: 30
+
+    - name: Lite build summary
+      run: |
+        echo "## Build Summary (Lite)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite .app bundle created" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite executable verified" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+
   build-windows:
     name: Build on Windows
     runs-on: windows-latest
@@ -276,3 +324,35 @@ jobs:
         echo "- ✅ Education EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
         echo "- ✅ Education ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
         echo "- ✅ Education build completed on Windows" >> $env:GITHUB_STEP_SUMMARY
+
+    # ---- Lite Edition ----
+    - name: Build Lite edition
+      run: |
+        Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+        powershell -ExecutionPolicy Bypass -File build_windows_lite.ps1
+
+    - name: Verify Lite EXE exists
+      run: |
+        $exePath = "dist\LYNS360-Lite.exe"
+        if (-not (Test-Path $exePath)) {
+          Write-Host "Error: Lite EXE not found at $exePath" -ForegroundColor Red
+          exit 1
+        }
+        Write-Host "✓ Lite EXE created successfully: $exePath" -ForegroundColor Green
+        $fileInfo = Get-Item $exePath
+        Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Cyan
+
+    - name: Upload Lite ZIP as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Lite-Windows.zip
+        path: LYNS360-Lite-Windows.zip
+        retention-days: 30
+
+    - name: Lite build summary
+      run: |
+        echo "## Build Summary (Lite)" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Lite build completed on Windows" >> $env:GITHUB_STEP_SUMMARY

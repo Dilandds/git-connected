@@ -194,12 +194,32 @@ class ControlPoint:
     comment: str = ''
     annotation_id: Optional[int] = None
     color: str = ''
+    # 'supplier' for a point added in LYNS Lite — see _on_image_point_added
+    # and _ControlPointsPanel._rebuild. It decides whether a supplier
+    # viewing an exported review sees this point's own card as locked or
+    # editable, and — once merged back into 360 (see
+    # ui/project_widget.py's _merge_supplier_quality_control /
+    # core/annotation_merge.py's diff_quality_control) — which points are
+    # new. Note that `id` here is NOT a stable identity — _renumber_group
+    # reassigns it to a photo-scoped 1..N display position on every
+    # rebuild — so this flag, not id, is what read-only locking and
+    # diff_quality_control's content-match key off.
+    added_by: Optional[str] = None
+    # The supplier's own display name at the moment they placed this point
+    # — resolved once (see _current_supplier_display_name below) rather
+    # than looked up later, so it stays correct even if the supplier's
+    # registry entry is edited afterward or the point survives across
+    # several review round-trips (same reasoning core/supplier_registry.py
+    # already documents for why suppliers get a stable id instead of just
+    # a name). Only meaningful when added_by == 'supplier'.
+    added_by_name: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
             'id': self.id, 'name': self.name, 'status': self.status,
             'comment': self.comment, 'annotation_id': self.annotation_id,
-            'color': self.color,
+            'color': self.color, 'added_by': self.added_by,
+            'added_by_name': self.added_by_name,
         }
 
     @staticmethod
@@ -208,6 +228,7 @@ class ControlPoint:
             id=d.get('id', 0), name=d.get('name', ''),
             status=d.get('status', 'to_check'), comment=d.get('comment', ''),
             annotation_id=d.get('annotation_id'), color=d.get('color', ''),
+            added_by=d.get('added_by'), added_by_name=d.get('added_by_name'),
         )
 
 
@@ -293,6 +314,17 @@ def _badge_pixmap(text: str, color: str, size: int = 28) -> QPixmap:
 
 
 from core.image_utils import pixmap_to_b64 as _pixmap_to_b64, b64_to_pixmap as _b64_to_pixmap
+
+
+def _current_supplier_display_name(widget: QWidget) -> str:
+    """Best-effort supplier display name for 'added by' labels in LYNS
+    Lite — resolved from the loaded review envelope (stl_viewer.py's
+    _lite_review_envelope), the same source ui/technical_overview.py's
+    _on_open_popup already reads for its own supplier attribution."""
+    envelope = getattr(widget.window(), '_lite_review_envelope', None)
+    supplier = (envelope or {}).get('supplier') or {}
+    from core.supplier_registry import Supplier
+    return Supplier.from_dict(supplier).display_name or t('quality_control.card.supplier_fallback')
 
 
 def _vsep() -> QFrame:
@@ -408,6 +440,17 @@ class _ControlPointCard(QWidget):
 
         card_l.addWidget(header)
 
+        # Small "by: <supplier name>" caption — only for a point the
+        # supplier placed themselves (added_by == 'supplier'), so the PM
+        # can tell which points came back from a review at a glance once
+        # merged into 360, without needing to open anything (see
+        # ControlPoint.added_by_name's docstring for why the name itself,
+        # not just the flag, is stored on the point).
+        self._added_by_label = QLabel()
+        self._added_by_label.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+        card_l.addWidget(self._added_by_label)
+        self._refresh_added_by_label()
+
         self._comment_edit = QTextEdit()
         self._comment_edit.setPlaceholderText(t('quality_control.card.comment_placeholder'))
         self._comment_edit.setFixedHeight(58)
@@ -440,6 +483,15 @@ class _ControlPointCard(QWidget):
         self._badge.setIcon(QIcon(_badge_pixmap(str(self._cp.id), color)))
         self._badge.setIconSize(self._badge.size())
 
+    def _refresh_added_by_label(self):
+        if self._cp.added_by == 'supplier':
+            name = self._cp.added_by_name or t('quality_control.card.supplier_fallback')
+            self._added_by_label.setText(t('quality_control.card.added_by').format(name=name))
+            self._added_by_label.setVisible(True)
+        else:
+            self._added_by_label.clear()
+            self._added_by_label.setVisible(False)
+
     def _pick_color(self):
         from ui.draw_color_picker import DrawColorPicker
         picker = DrawColorPicker(self)
@@ -457,6 +509,8 @@ class _ControlPointCard(QWidget):
             comment=self._cp.comment,
             annotation_id=self._cp.annotation_id,
             color=hex_color,
+            added_by=self._cp.added_by,
+            added_by_name=self._cp.added_by_name,
         )
         self._refresh_badge()
         self.changed.emit()
@@ -752,7 +806,7 @@ class _ControlPointsPanel(QWidget):
             card = _ControlPointCard(cp, self)
             card.changed.connect(self.changed)
             card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=True))
-            card.set_read_only(self._read_only)
+            card.set_read_only(self._card_read_only(cp))
             self._cards_layout.insertWidget(stretch_idx, card)
             self._general_cards.append(card)
             stretch_idx += 1
@@ -762,7 +816,7 @@ class _ControlPointsPanel(QWidget):
                 card = _ControlPointCard(cp, self)
                 card.changed.connect(self.changed)
                 card.delete_requested.connect(lambda cp_id: self._delete_point(cp_id, general=False))
-                card.set_read_only(self._read_only)
+                card.set_read_only(self._card_read_only(cp))
                 self._cards_layout.insertWidget(stretch_idx, card)
                 self._cards.append(card)
                 stretch_idx += 1
@@ -799,6 +853,18 @@ class _ControlPointsPanel(QWidget):
     def _refresh_count(self):
         self._count_lbl.setText(str(len(self._cards) + len(self._general_cards)))
 
+    def _card_read_only(self, cp: 'ControlPoint') -> bool:
+        """Whether cp's own card should lock — the project's own read-only
+        state (self._read_only) always wins; otherwise, in LYNS Lite, a
+        point the PM already had (added_by != 'supplier') is locked so the
+        supplier can comment/status-check without touching the PM's own
+        control points, while a point the supplier placed themselves stays
+        fully editable. Outside Lite this second part never applies."""
+        if self._read_only:
+            return True
+        from core.edition import is_lite
+        return is_lite() and cp.added_by != 'supplier'
+
     def set_read_only(self, read_only: bool):
         """Applies to every currently-shown card (image-scoped + general)
         and to any card created afterward (see _rebuild). The cards' own
@@ -806,9 +872,9 @@ class _ControlPointsPanel(QWidget):
         checking control points must keep working."""
         self._read_only = read_only
         for card in self._cards:
-            card.set_read_only(read_only)
+            card.set_read_only(self._card_read_only(card.get_data()))
         for card in self._general_cards:
-            card.set_read_only(read_only)
+            card.set_read_only(self._card_read_only(card.get_data()))
 
 
 # ── Image annotation view ────────────────────────────────────────────────────
@@ -1198,9 +1264,13 @@ class _InspThumbCard(QFrame):
     _IDLE_SS   = f'QFrame {{ background: {_SURFACE}; border: 1px solid {_BORDER}; border-radius: 8px; }}'
     _ACTIVE_SS = f'QFrame {{ background: {_SURFACE}; border: 2px solid {_ACCENT}; border-radius: 8px; }}'
 
-    def __init__(self, pixmap: QPixmap, parent=None):
+    def __init__(self, pixmap: QPixmap, added_by: Optional[str] = None,
+                 added_by_name: Optional[str] = None, parent=None):
         super().__init__(parent)
-        self.setFixedSize(84, 84)
+        # Fixed height always reserves the caption strip (even when blank)
+        # so every card in the strip lines up the same regardless of
+        # whether it's a supplier-added image — see the label below.
+        self.setFixedSize(84, 98)
         self.setStyleSheet(self._IDLE_SS)
         self.setMouseTracking(True)
         self._pixmap = pixmap
@@ -1217,6 +1287,19 @@ class _InspThumbCard(QFrame):
         img.setMouseTracking(True)
         img.enterEvent = self._on_hover_enter
         img.leaveEvent = self._on_hover_leave
+
+        # Small "by: <supplier name>" caption — mirrors _ControlPointCard's
+        # own added-by label, so the PM can tell a supplier-added image
+        # apart from their own at a glance once merged into 360.
+        if added_by == 'supplier':
+            name = added_by_name or t('quality_control.card.supplier_fallback')
+            added_by_lbl = QLabel(t('quality_control.card.added_by').format(name=name), self)
+            added_by_lbl.setGeometry(2, 83, 80, 13)
+            added_by_lbl.setAlignment(Qt.AlignCenter)
+            added_by_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 7px; background: transparent; border: none;')
+            fm = added_by_lbl.fontMetrics()
+            added_by_lbl.setText(fm.elidedText(added_by_lbl.text(), Qt.ElideRight, 78))
+            added_by_lbl.setToolTip(name)
 
         del_btn = _DeleteBtn(self)
         del_btn.move(64, -2)
@@ -1416,7 +1499,12 @@ class _QCLeftPanel(QWidget):
         self._insp_scroll.setWidgetResizable(True)
         self._insp_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._insp_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._insp_scroll.setFixedHeight(100)
+        # _InspThumbCard is 98px tall (grew from 84 to fit its "by:
+        # <supplier name>" caption strip) + 4px top/bottom layout margins
+        # + room for the horizontal scrollbar when it appears — 100 was
+        # already tight for the old 84px cards and started clipping the
+        # caption once cards grew.
+        self._insp_scroll.setFixedHeight(128)
         self._insp_scroll.setStyleSheet('background: transparent; border: none;')
 
         self._insp_container = QWidget()
@@ -1717,8 +1805,14 @@ class _QCLeftPanel(QWidget):
         self._img_view.set_annotations(img['annotations'])
         number = len(img['annotations'])
         color = _BADGE_PALETTE[(number - 1) % len(_BADGE_PALETTE)]
+        from core.edition import is_lite
+        lite = is_lite()
         img['control_points'].append(
-            ControlPoint(id=number, name='', status='to_check', color=color, annotation_id=number)
+            ControlPoint(
+                id=number, name='', status='to_check', color=color, annotation_id=number,
+                added_by='supplier' if lite else None,
+                added_by_name=_current_supplier_display_name(self) if lite else None,
+            )
         )
         self.image_activated.emit(img)
         self.changed.emit()
@@ -1776,18 +1870,23 @@ class _QCLeftPanel(QWidget):
                 self._add_inspection_image(pix)
 
     def _add_inspection_image(self, pix: QPixmap):
+        from core.edition import is_lite
+        lite = is_lite()
         img = {
             'id': self._next_img_id, 'image_b64': _pixmap_to_b64(pix),
             'annotations': [], 'control_points': [],
+            'added_by': 'supplier' if lite else None,
+            'added_by_name': _current_supplier_display_name(self) if lite else None,
         }
         self._next_img_id += 1
         self._images.append(img)
-        self._insert_thumb_card(len(self._images) - 1, pix)
+        self._insert_thumb_card(len(self._images) - 1, pix, img.get('added_by'), img.get('added_by_name'))
         self.changed.emit()
 
-    def _insert_thumb_card(self, idx: int, pix: QPixmap):
+    def _insert_thumb_card(self, idx: int, pix: QPixmap, added_by: Optional[str] = None,
+                            added_by_name: Optional[str] = None):
         """Insert a thumbnail card before the trailing stretch."""
-        card = _InspThumbCard(pix)
+        card = _InspThumbCard(pix, added_by=added_by, added_by_name=added_by_name)
         card.delete_requested.connect(lambda i=idx: self._delete_inspection_image(i))
         card.image_clicked.connect(lambda i=idx: self._toggle_image(i))
         card.set_delete_enabled(not self._read_only)
@@ -1821,7 +1920,7 @@ class _QCLeftPanel(QWidget):
         for i, img in enumerate(self._images):
             pix = _b64_to_pixmap(img['image_b64'])
             if pix:
-                self._insert_thumb_card(i, pix)
+                self._insert_thumb_card(i, pix, img.get('added_by'), img.get('added_by_name'))
         # Restore active highlight
         if 0 <= self._active_img_idx < len(self._thumb_cards):
             self._thumb_cards[self._active_img_idx].set_active(True)
@@ -1938,12 +2037,24 @@ class _QCLeftPanel(QWidget):
         back-to-3D / fullscreen navigation, and zoom/pan on the viewer.
         Left-click "place a new control point" inside the viewer is gated
         separately via _ImageAnnotationView.set_read_only. Applied to any
-        thumbnail card or model pill created afterward too."""
+        thumbnail card or model pill created afterward too.
+
+        The 3 metadata fields (date/inspected by/comments) additionally
+        always lock in LYNS Lite regardless of the read_only arg passed
+        in — callers elsewhere (ui/project_widget.py) also call this with
+        the project's own file-lock read_only state, which for a
+        supplier's review file is normally False. The drop zone / image
+        capture / model controls are deliberately NOT included in that
+        Lite lock — the reviewer must still be able to take new
+        screenshots and upload images (explicit product decision, unlike
+        every other QC field)."""
         self._read_only = read_only
         enabled = not read_only
-        self._date_edit.setEnabled(enabled)
-        self._inspected_by.setEnabled(enabled)
-        self._comments.setEnabled(enabled)
+        from core.edition import is_lite
+        metadata_enabled = enabled and not is_lite()
+        self._date_edit.setEnabled(metadata_enabled)
+        self._inspected_by.setEnabled(metadata_enabled)
+        self._comments.setEnabled(metadata_enabled)
         self._drop_zone.set_read_only(read_only)
         self._img_view.set_read_only(read_only)
         self._snap_btn.setEnabled(enabled)
@@ -1964,6 +2075,7 @@ class _QCLeftPanel(QWidget):
                     'id': img['id'], 'image_b64': img['image_b64'],
                     'annotations': [list(a) for a in img['annotations']],
                     'control_points': [cp.to_dict() for cp in img['control_points']],
+                    'added_by': img.get('added_by'), 'added_by_name': img.get('added_by_name'),
                 }
                 for img in self._images
             ],
@@ -1995,6 +2107,7 @@ class _QCLeftPanel(QWidget):
                 'id': img_id, 'image_b64': img.get('image_b64', ''),
                 'annotations': [tuple(a) for a in img.get('annotations', [])],
                 'control_points': cps,
+                'added_by': img.get('added_by'), 'added_by_name': img.get('added_by_name'),
             })
             max_id = max(max_id, img_id)
         self._next_img_id = max_id + 1
@@ -2248,9 +2361,16 @@ class _CompanyInfoPanel(QWidget):
     def set_read_only(self, read_only: bool):
         """Locks the logo drop zone, all text fields, due-date, the 3
         overall-status checkboxes, and waived-by. The panel's own scroll
-        area is left untouched."""
-        enabled = not read_only
-        self._logo.set_read_only(read_only)
+        area is left untouched.
+
+        Always locks in LYNS Lite too, regardless of the read_only arg —
+        this is the PM's own Company/Part Information, not something a
+        supplier review ever hands editing rights over for (see
+        _QCLeftPanel.set_read_only's matching docstring for why the
+        project's file-lock read_only state alone isn't enough here)."""
+        from core.edition import is_lite
+        enabled = not read_only and not is_lite()
+        self._logo.set_read_only(read_only or is_lite())
         self._designation.setEnabled(enabled)
         self._reference.setEnabled(enabled)
         self._manufacturer.setEnabled(enabled)

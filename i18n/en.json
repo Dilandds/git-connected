@@ -5,10 +5,15 @@
     "technical": "📋 Technical Overview",
     "drawing_scale": "📐 Drawing Scale",
     "project": "📁 The Project",
-    "help": "❓ Help"
+    "help": "❓ Help",
+    "lite_new_review": "＋ New Review",
+    "lite_open_review": "📂 Open Review…",
+    "lite_save_review": "💾 Save Review",
+    "lite_save_review_as": "💾 Save Review As…"
   },
   "sidebar": {
     "title": "LYNS 360",
+    "title_lite": "LYNS Lite",
     "upload_btn": "Upload 3D File",
     "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .DXF / .LYNS",
     "upload_tooltip": "Upload STL, STEP, 3DM, OBJ, IGES, or DXF file for 3D visualization",
@@ -205,7 +210,10 @@
     "photos_label": "Photos:",
     "no_photos": "No photos attached",
     "select_photos_title": "Select Photos",
-    "zoom_tooltip": "Click to zoom"
+    "zoom_tooltip": "Click to zoom",
+    "conversation_label": "Conversation ({count})",
+    "reply_placeholder": "Add a reply…",
+    "post_reply": "Post Comment"
   },
   "arrow": {
     "panel_title": "Arrows",
@@ -501,6 +509,8 @@
       "protected": "🔒  Protected",
       "no_project": "No project open",
       "not_logged_in": "Not logged in  ▾",
+      "export_review": "📤  Export Review",
+      "import_review": "📥  Import Review",
       "tip_new": "Create a new empty project",
       "tip_open": "Open an existing .lyns.pjt file",
       "tip_save": "Save the current project",
@@ -508,7 +518,9 @@
       "tip_print": "Print or export the current section as PDF",
       "tip_password": "Set or remove project password protection",
       "tip_protected": "Project is password-protected — click to change or remove",
-      "tip_unlocked": "Set a password to protect this project"
+      "tip_unlocked": "Set a password to protect this project",
+      "tip_export_review": "Export a filtered .lyns.review file for one supplier to comment on in LYNS Lite",
+      "tip_import_review": "Import a .lyns.review file a supplier sent back"
     },
     "version_history": {
       "title": "Version History",
@@ -1284,7 +1296,9 @@
     "card": {
       "color_tooltip": "Click to change color",
       "name_placeholder": "Control point name...",
-      "comment_placeholder": "Enter your comments..."
+      "comment_placeholder": "Enter your comments...",
+      "added_by": "by: {name}",
+      "supplier_fallback": "Supplier"
     },
     "status": {
       "compliant": "Compliant",
@@ -1386,5 +1400,56 @@
     "discard": "Discard",
     "stopped_status": "Stopped — {time}  ·  {frames} frames",
     "frames_count": "{count} frames"
+  },
+  "export_review": {
+    "dialog_title": "Export Supplier Review",
+    "tab_group": "3D Model",
+    "no_tabs": "Load a 3D model in a viewer tab before exporting a supplier review.",
+    "qc_group": "Quality Control Images",
+    "qc_image_label": "Image #{id}",
+    "no_qc_images": "No Quality Control images to share yet.",
+    "supplier_group": "Supplier",
+    "new_supplier": "＋ New supplier…",
+    "supplier_name_placeholder": "Contact name",
+    "supplier_company_placeholder": "Company",
+    "supplier_contact_placeholder": "Email or phone",
+    "supplier_required": "Enter a supplier name or company.",
+    "tabs_required": "Select at least one 3D model to include.",
+    "cancel": "Cancel",
+    "export_btn": "Export .lyns.review",
+    "save_dialog_title": "Export as LYNS Supplier Review",
+    "bundle_failed": "Failed to bundle the selected 3D model.",
+    "write_failed": "Failed to write the .lyns.review file.",
+    "success": "Supplier review exported!\n\n{filename}\n\nSend this file to your supplier — they open it in LYNS Lite."
+  },
+  "import_review": {
+    "dialog_title": "Import Supplier Review",
+    "open_dialog_title": "Import a Supplier Review",
+    "read_failed": "Failed to read the .lyns.review file.",
+    "unknown_supplier_warning": "This review file doesn't match any supplier in this project's registry. Import it anyway?",
+    "success": "Imported supplier review from {supplier}.\n\nSave the project to keep it."
+  },
+  "annotation_merge": {
+    "dialog_title": "Merge Annotations — {tab}",
+    "subtitle": "{supplier} sent back changes to this 3D model. Choose what to add.",
+    "new_group": "New Annotations",
+    "new_pin_subtitle": "new pin from supplier",
+    "updated_group": "Updated Annotations",
+    "updated_subtitle": "{count} new comment(s) from supplier",
+    "new_drawings_group": "New Drawings",
+    "new_drawing_subtitle": "drawing from supplier",
+    "new_screenshots_group": "New Screenshots",
+    "new_screenshot_subtitle": "new from supplier",
+    "render_group": "Render",
+    "render_item_label": "Render/material updated",
+    "render_subtitle": "supplier changed how the model looks",
+    "drawing_scale_group": "Drawing Scale",
+    "drawing_scale_item_label": "{count} new shape(s)",
+    "new_qc_images_group": "New Inspection Images",
+    "new_qc_image_subtitle": "new from supplier",
+    "new_qc_points_group": "New Control Points",
+    "new_qc_points_item_label": "{count} new control point(s)",
+    "apply_btn": "Add Selected",
+    "skip_all": "Skip All"
   }
 }

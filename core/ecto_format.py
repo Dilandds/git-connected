@@ -91,12 +91,15 @@ class EctoFormat:
                 used purely as internal storage for the *same* editable session
                 (e.g. project-file save/reload) — those should stay editable.
             screenshots: Optional list of {'path': <file on disk>, 'timestamp': str,
-                'id': str} for screenshots captured against this tab's model.
-                'id' is a stable per-screenshot identity assigned once at
-                capture (see ui/screenshot_panel.py) — used to name the file
-                inside the bundle so an untouched screenshot re-zips
+                'id': str, 'note': str} for screenshots captured against this
+                tab's model. 'id' is a stable per-screenshot identity assigned
+                once at capture (see ui/screenshot_panel.py) — used to name
+                the file inside the bundle so an untouched screenshot re-zips
                 identically every time, and to merge screenshots per-item
                 instead of as one opaque list (see core/project_merge.py).
+                'note' is the free-text caption a PM or supplier attaches
+                (ui/screenshot_panel.py's ScreenshotCard.name_edit) — optional,
+                defaults to ''.
 
         Returns:
             tuple: (success: bool, message_or_path: str, creator_token: str|None)
@@ -131,37 +134,57 @@ class EctoFormat:
             images_dir = os.path.join(temp_dir, 'images')
             processed_annotations = []
             has_images = False
-            
-            for ann in annotations:
-                ann_copy = ann.copy()
-                new_image_paths = []
-                
-                for i, img_path in enumerate(ann.get('image_paths', [])):
+
+            def _copy_photo_set(img_paths, name_prefix):
+                """Copy a list of on-disk image paths into images_dir, tagging
+                each filename with name_prefix so calls for the same
+                annotation's own photos vs. its supplier_notes' photos never
+                collide. Returns the rewritten (bundle-relative) path list.
+                Mutates the enclosing has_images flag via nonlocal."""
+                nonlocal has_images
+                new_paths = []
+                for i, img_path in enumerate(img_paths):
                     if os.path.exists(img_path):
-                        # Create images directory if needed
                         if not os.path.exists(images_dir):
                             os.makedirs(images_dir)
                             has_images = True
-                        
-                        # Get original extension
                         _, ext = os.path.splitext(img_path)
-                        # Create new filename within bundle
-                        new_filename = f"annotation_{ann['id']}_photo_{i+1}{ext}"
+                        new_filename = f"{name_prefix}_{i+1}{ext}"
                         new_path = os.path.join(images_dir, new_filename)
-                        
-                        # Copy image
                         try:
                             shutil.copy2(img_path, new_path)
-                            # Store relative path within bundle
-                            new_image_paths.append(f"images/{new_filename}")
+                            new_paths.append(f"images/{new_filename}")
                             logger.info(f"export: Copied image to {new_path}")
                         except Exception as e:
                             logger.warning(f"export: Failed to copy image {img_path}: {e}")
                     else:
-                        # Keep original path if file doesn't exist
-                        new_image_paths.append(img_path)
-                
-                ann_copy['image_paths'] = new_image_paths
+                        new_paths.append(img_path)
+                return new_paths
+
+            for ann in annotations:
+                ann_copy = ann.copy()
+                ann_copy['image_paths'] = _copy_photo_set(
+                    ann.get('image_paths', []), f"annotation_{ann['id']}_photo"
+                )
+                # Supplier feedback notes and the PM's own follow-up
+                # comments each carry their own photos, independent of the
+                # annotation's own image_paths above — see
+                # Annotation.supplier_notes / Annotation.pm_notes in
+                # ui/annotation_panel.py. Both round-trip the same way.
+                for notes_key in ('supplier_notes', 'pm_notes'):
+                    notes = ann.get(notes_key, [])
+                    if not notes:
+                        continue
+                    new_notes = []
+                    for note in notes:
+                        note_copy = dict(note)
+                        note_copy['image_paths'] = _copy_photo_set(
+                            note.get('image_paths', []),
+                            f"annotation_{ann['id']}_{notes_key}_{note.get('id', '0')}_photo"
+                        )
+                        new_notes.append(note_copy)
+                    ann_copy[notes_key] = new_notes
+
                 processed_annotations.append(ann_copy)
             
             # 3. Create annotations.json with the requested reader_mode
@@ -239,6 +262,7 @@ class EctoFormat:
                                 'id': shot_id,
                                 'image_path': f"screenshots/{new_filename}",
                                 'timestamp': shot.get('timestamp', ''),
+                                'note': shot.get('note', ''),
                             })
                             logger.info(f"export: Copied screenshot to {new_path}")
                         except Exception as e:
@@ -383,20 +407,23 @@ class EctoFormat:
                     annotations_data = json.load(f)
                 
                 annotations = annotations_data.get('annotations', [])
-                
-                # Resolve relative image paths to absolute paths in temp dir
-                for ann in annotations:
-                    resolved_paths = []
-                    for img_path in ann.get('image_paths', []):
+
+                def _resolve_photo_set(img_paths):
+                    resolved = []
+                    for img_path in img_paths:
                         if not os.path.isabs(img_path):
                             full_path = os.path.join(temp_dir, img_path)
-                            if os.path.exists(full_path):
-                                resolved_paths.append(full_path)
-                            else:
-                                resolved_paths.append(img_path)
+                            resolved.append(full_path if os.path.exists(full_path) else img_path)
                         else:
-                            resolved_paths.append(img_path)
-                    ann['image_paths'] = resolved_paths
+                            resolved.append(img_path)
+                    return resolved
+
+                # Resolve relative image paths to absolute paths in temp dir
+                for ann in annotations:
+                    ann['image_paths'] = _resolve_photo_set(ann.get('image_paths', []))
+                    for notes_key in ('supplier_notes', 'pm_notes'):
+                        for note in ann.get(notes_key, []):
+                            note['image_paths'] = _resolve_photo_set(note.get('image_paths', []))
 
             # Read drawings (optional - for 3D model drawings on surface)
             drawings = []
@@ -451,6 +478,7 @@ class EctoFormat:
                                     'id': item.get('id') or '',
                                     'image_path': abs_path,
                                     'timestamp': item.get('timestamp', ''),
+                                    'note': item.get('note', ''),
                                 })
                     logger.info(f"import_ecto: Loaded {len(screenshots)} screenshots")
                 except Exception as e:

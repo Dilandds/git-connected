@@ -599,6 +599,9 @@ class ScreenshotEditorDialog(QDialog):
         """)
         report_btn.clicked.connect(self._save_to_report)
         bottom.addWidget(report_btn)
+        from core.edition import is_lite
+        if is_lite():
+            report_btn.hide()
 
         apply_btn = QPushButton(t("screenshot_editor.apply_close"))
         apply_btn.setCursor(Qt.PointingHandCursor)

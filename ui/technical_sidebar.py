@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
 from ui.styles import default_theme, make_font, sidebar_section_card_stylesheet, get_button_style, TOOLTIP_STYLE
 from i18n import t, on_language_changed
-from core.edition import is_education
+from core.edition import is_education, is_lite
 
 logger = logging.getLogger(__name__)
 
@@ -380,11 +380,23 @@ class TechnicalSidebar(QWidget):
         """Disable every metadata edit control while the project is
         read-only — deliberately leaves export_btn/export_pdf_btn alone
         (exporting isn't an edit and shouldn't require write access), and
-        never touches the sidebar's own scroll area so it keeps scrolling."""
-        enabled = not read_only
+        never touches the sidebar's own scroll area so it keeps scrolling.
+
+        In LYNS Lite, metadata always locks regardless of the read_only
+        arg passed in — callers elsewhere (ui/project_widget.py) also call
+        this with the project's own file-lock read_only state, which for a
+        supplier's review file is normally False and would otherwise
+        re-enable everything a moment after the Lite lock at startup
+        (stl_viewer.py) applied it. annotate_btn is the one exception and
+        stays enabled even though everything else locks — the supplier
+        can't touch the document's own metadata (title/manufacturer/dates/
+        comments) but can still add annotations, mirroring the same
+        "reader mode but can still annotate" bypass used for the 3D
+        viewer's annotation button (ui/toolbar.py's set_reader_mode)."""
+        enabled = not read_only and not is_lite()
         self.upload_btn.setEnabled(enabled)
         self._add_mfr_btn.setEnabled(enabled)
-        self.annotate_btn.setEnabled(enabled)
+        self.annotate_btn.setEnabled(enabled or is_lite())
         self.reset_btn.setEnabled(enabled)
         self.property_edit.setEnabled(enabled)
         self.title_edit.setEnabled(enabled)

@@ -26,6 +26,10 @@ from ui.styles import default_theme, make_font, dropdown_arrow_url as _get_arrow
 from ui.modal_utils import FormModal
 from i18n import t, on_language_changed
 from core.identity import get_display_name
+from core.supplier_registry import Supplier, find_supplier
+from core.review_format import (
+    build_review_envelope, save_review_file, load_review_file, filter_quality_control,
+)
 
 _ARROW_URL = _get_arrow()
 
@@ -565,6 +569,15 @@ class ProjectNavPanel(QWidget):
         works while the project itself is opened/became read-only."""
         self._info_card.setEnabled(not read_only)
 
+    def set_visible_keys(self, keys: Optional[set]):
+        """Show only nav buttons whose key is in `keys`; None/omitted shows
+        everything. Used by LYNS Lite (see TheProjectWidget._build_ui) to cut
+        the sidebar down to just Quality Control — the only Project section
+        a supplier review ever includes — without touching _NAV_ITEMS or the
+        lazy screen-registry machinery that everything else here relies on."""
+        for key, btn in self._buttons.items():
+            btn.setVisible(keys is None or key in keys)
+
     def get_info_data(self) -> dict:
         return {
             'company':          self._f_company.text(),
@@ -728,6 +741,15 @@ class TheProjectWidget(QWidget):
     # Args: updated ([{'id','tab_name','bundle_b64'}, ...] to reload/open),
     # removed_ids (tab ids no longer present after the merge, to close).
     viewer_tabs_conflict_resolved = pyqtSignal(list, list)
+    # Emitted from _merge_supplier_annotations right after new screenshots
+    # from a supplier review are appended onto a tab's own data (tab_id).
+    # screenshot_panel is one shared widget that only repaints from
+    # tab.screenshots on tab switch (see stl_viewer.py's _on_tab_changed) —
+    # without this, a screenshot merged into the tab the PM is currently
+    # looking at silently doesn't appear until they switch away and back,
+    # which reads as "the screenshot never came through" even though it's
+    # already in the data.
+    viewer_tab_screenshots_merged = pyqtSignal(str)
     # Emitted from _update_read_only_ui whenever self._read_only changes —
     # lets areas outside this widget's own screens (the 3D viewer's toolbar,
     # Technical Overview, Drawing Scale) mirror the same read-only state so
@@ -747,6 +769,16 @@ class TheProjectWidget(QWidget):
         self._loaded_snapshot: Optional[dict] = None  # data as last read from/written to disk — merge base
         self._component_syncing = False  # guard against brief↔traceability sync loops
         self._viewer_tabs: list = []  # TabState list injected from main window before save
+        # Supplier registry for the Supplier Review Workflow (see
+        # core/supplier_registry.py) — real entities with stable ids so a
+        # returned .lyns.review can always be re-attributed to the right
+        # supplier, saved/loaded under the 'suppliers' top-level key.
+        self._suppliers: list = []
+        # Imported (returned) supplier reviews — tagged, opaque blobs, saved
+        # under the 'supplier_reviews' top-level key. Per-section display of
+        # this data is intentionally out of scope for now (see plan doc);
+        # this only stores and re-surfaces what came back.
+        self._supplier_reviews: list = []
         # Direct refs to the Technical Overview workspace, injected from the main
         # window (it lives outside The Project) so save/load can reach it the
         # same way _viewer_tabs lets us reach the 3D viewer tabs.
@@ -813,14 +845,32 @@ class TheProjectWidget(QWidget):
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
 
-        # Eagerly load only the default screen shown at startup
-        self._nav.select('brief')
-        self._ensure_screen('brief')
-        info = self._nav.get_info_data()
-        if (ec := self._screen_widgets.get('estimated_cost')) is not None:
-            ec.update_project_info(info)
-        if (rw := self._screen_widgets.get('report')) is not None:
-            rw.update_project_info(info)
+        from core.edition import is_lite
+        if is_lite():
+            # LYNS Lite only ever shows Quality Control and Report — the two
+            # Project sections a supplier review includes — and its project
+            # info card is always read-only (the supplier can comment, not
+            # edit the PM's project details). See core/review_format.py for
+            # what a .lyns.review envelope actually contains.
+            self._nav.set_visible_keys({'quality_control', 'report'})
+            self._nav.set_read_only(True)
+            self._nav.select('quality_control')
+            self._ensure_screen('quality_control')
+            # Unlike QC (where the supplier can add comments/control
+            # points), the Report is always locked in Lite — a supplier
+            # can view the PM's report but never edit it.
+            report_widget = self._ensure_screen('report')
+            if hasattr(report_widget, 'set_read_only'):
+                report_widget.set_read_only(True)
+        else:
+            # Eagerly load only the default screen shown at startup
+            self._nav.select('brief')
+            self._ensure_screen('brief')
+            info = self._nav.get_info_data()
+            if (ec := self._screen_widgets.get('estimated_cost')) is not None:
+                ec.update_project_info(info)
+            if (rw := self._screen_widgets.get('report')) is not None:
+                rw.update_project_info(info)
 
     def _build_top_bar(self) -> QWidget:
         bar = QWidget()
@@ -873,6 +923,28 @@ class TheProjectWidget(QWidget):
         self._lock_btn.setToolTip(t('project.topbar.tip_password'))
         self._lock_btn.clicked.connect(self._on_password_btn)
         self._lock_btn.hide()
+
+        # Export Review / Import Review now live in the File menu (main mode
+        # bar, stl_viewer.py) alongside New/Open/Save/Password — same
+        # "hidden but kept for compat" treatment as those buttons above,
+        # since _retranslate_topbar still references these widgets. Not
+        # added to the File menu at all in LYNS Lite: Export/Import Review
+        # are PM-side actions (LYNS360 sends, receives back) — Lite is the
+        # recipient app, it never originates or re-imports a .lyns.review
+        # itself (see stl_viewer.py's File menu construction).
+        self._export_review_btn = QPushButton(t('project.topbar.export_review'))
+        self._export_review_btn.setStyleSheet(_BTN_TOOLBAR); self._export_review_btn.setFixedHeight(28)
+        self._export_review_btn.setCursor(Qt.PointingHandCursor)
+        self._export_review_btn.setToolTip(t('project.topbar.tip_export_review'))
+        self._export_review_btn.clicked.connect(self._export_supplier_review)
+        self._export_review_btn.hide()
+
+        self._import_review_btn = QPushButton(t('project.topbar.import_review'))
+        self._import_review_btn.setStyleSheet(_BTN_TOOLBAR); self._import_review_btn.setFixedHeight(28)
+        self._import_review_btn.setCursor(Qt.PointingHandCursor)
+        self._import_review_btn.setToolTip(t('project.topbar.tip_import_review'))
+        self._import_review_btn.clicked.connect(self._import_supplier_review)
+        self._import_review_btn.hide()
 
         layout.addWidget(self._print_btn)
 
@@ -1123,6 +1195,10 @@ class TheProjectWidget(QWidget):
         self._save_btn.setToolTip(t('project.topbar.tip_save'))
         self._print_btn.setText(t('project.topbar.print'))
         self._print_btn.setToolTip(t('project.topbar.tip_print'))
+        self._export_review_btn.setText(t('project.topbar.export_review'))
+        self._export_review_btn.setToolTip(t('project.topbar.tip_export_review'))
+        self._import_review_btn.setText(t('project.topbar.import_review'))
+        self._import_review_btn.setToolTip(t('project.topbar.tip_import_review'))
         self._update_lock_btn()
         if not self._project_path:
             self._project_name_lbl.setText(t('project.topbar.no_project'))
@@ -1270,6 +1346,12 @@ class TheProjectWidget(QWidget):
                 self._scale_canvas.reset_workspace()
             if hasattr(self._scale_sidebar, 'reset'):
                 self._scale_sidebar.reset()
+
+        # Suppliers and any imported reviews belong to the project being
+        # closed too — same "only-set-if-truthy never resets" class of bug
+        # already fixed elsewhere in this method, so reset unconditionally.
+        self._suppliers = []
+        self._supplier_reviews = []
 
         # Release this session's lock on whatever project is being closed —
         # otherwise it stays marked as "open" until the app itself quits.
@@ -1420,12 +1502,26 @@ class TheProjectWidget(QWidget):
 
         # Bundle the Drawing Scale workspace (source drawing + calibration/shapes)
         data['drawing_scale'] = self._bundle_drawing_scale()
+
+        # Supplier registry + any imported supplier reviews (Supplier Review Workflow)
+        data['suppliers'] = self._suppliers
+        data['supplier_reviews'] = self._supplier_reviews
         return data
 
-    def _save_project(self, path: str) -> bool:
+    def _save_project(self, path: str, allow_interactive: bool = True) -> bool:
         """Write the project to `path`. Returns False without writing
         anything if the user cancelled a conflict-resolution prompt along
-        the way — callers must check this before reporting success."""
+        the way — callers must check this before reporting success.
+
+        allow_interactive=False (used by _autosave) skips writing entirely,
+        without ever putting a dialog on screen, whenever a real conflict
+        would need a person to pick a side — seeing "Someone Else Also
+        Changed This Project" pop up unprompted, background-timer-driven,
+        in the middle of whatever the user is actually doing (e.g. Export/
+        Import Supplier Review) is worse than just leaving this autosave
+        tick's changes pending in memory for 30s and trying again. Only an
+        explicit Save (_on_save_project/_on_save_project_as) ever shows
+        that prompt."""
         now = datetime.now(timezone.utc).isoformat()
         user = get_display_name()
         if self._created_by is None:
@@ -1444,9 +1540,9 @@ class TheProjectWidget(QWidget):
         if self._project_password_hash:
             data['password_hash'] = self._project_password_hash
 
-        final_data = self._resolve_save_conflicts(path, data)
+        final_data = self._resolve_save_conflicts(path, data, allow_interactive=allow_interactive)
         if final_data is None:
-            return False  # user cancelled the conflict-resolution prompt — nothing written
+            return False  # cancelled, or (allow_interactive=False) a conflict needs a person — nothing written
 
         # Archive whatever's currently on disk before overwriting it — a
         # manual, on-demand recovery net independent of whatever folder-
@@ -1468,7 +1564,7 @@ class TheProjectWidget(QWidget):
         logger.info(f'Project saved to {path} by {user}')
         return True
 
-    def _resolve_save_conflicts(self, path: str, local_data: dict) -> Optional[dict]:
+    def _resolve_save_conflicts(self, path: str, local_data: dict, allow_interactive: bool = True) -> Optional[dict]:
         """Re-reads what's actually on disk and three-way merges it with
         local_data if someone else saved since this session last touched
         the file. Returns the data to write, or None if the user cancelled
@@ -1487,6 +1583,21 @@ class TheProjectWidget(QWidget):
 
         if remote_data == self._loaded_snapshot:
             return local_data  # nobody else touched it since we loaded/last saved
+
+        # The file on disk differs from what this session last saw — but
+        # that's only a real conflict if another *machine* is the one that
+        # changed it. Same-device drift (this session's own re-encoding of
+        # viewer_tabs/technical_overview embeds a fresh zip timestamp on
+        # every save even when nothing inside changed — see the comment
+        # below) has no other legitimate editor to ask about, so it's
+        # always safe to just keep local_data and move on. Only prompt when
+        # the lock sidecar currently shows (or last showed) a different
+        # machine_fingerprint than this one.
+        from core.file_lock import read_lock
+        from core.machine_id import get_machine_fingerprint
+        lock_data = read_lock(path)
+        if not lock_data or lock_data.get('machine_fingerprint') == get_machine_fingerprint():
+            return local_data
 
         base_data = dict(self._loaded_snapshot)
         local_data = dict(local_data)
@@ -1559,10 +1670,21 @@ class TheProjectWidget(QWidget):
             # an already-conflicting field elsewhere (e.g. the sidebar Title
             # copied into Report/Brief/Quality Control) into one prompt instead
             # of asking the same question several times for one edit.
-            interactive = field_conflicts_only(fold_linked_conflicts(conflicts))
-            if interactive:
+            field_conflicts = field_conflicts_only(fold_linked_conflicts(conflicts))
+            if field_conflicts:
+                if not allow_interactive:
+                    # Autosave hit a real conflict — someone/something else
+                    # (another machine, a sync tool) genuinely changed one of
+                    # these same fields since this session last saved. Don't
+                    # put a dialog on screen from a background timer; leave
+                    # this tick's changes unsaved (still in memory, still
+                    # marked dirty) and let the next autosave tick — or an
+                    # explicit Save, which does prompt — pick it back up.
+                    logger.info(f'_resolve_save_conflicts: autosave found {len(field_conflicts)} '
+                                f'conflicting field(s), deferring to next tick / explicit save')
+                    return None
                 from ui.merge_conflict_dialog import MergeConflictDialog
-                dlg = MergeConflictDialog(self, interactive)
+                dlg = MergeConflictDialog(self, field_conflicts)
                 if dlg.exec_() != QDialog.Accepted:
                     return None  # cancelled — abort this save entirely, try again later
                 dlg.apply_resolutions()
@@ -1712,7 +1834,7 @@ class TheProjectWidget(QWidget):
         try:
             mesh = pv.read(tmp_model)
             screenshots_payload = [
-                {'path': s['image_path'], 'timestamp': s.get('timestamp', ''), 'id': s.get('id')}
+                {'path': s['image_path'], 'timestamp': s.get('timestamp', ''), 'id': s.get('id'), 'note': s.get('note', '')}
                 for s in (structural.get('screenshots') or [])
                 if s.get('image_path') and os.path.exists(s['image_path'])
             ]
@@ -1804,6 +1926,7 @@ class TheProjectWidget(QWidget):
                         'image_path': shot['image_path'],
                         'image_bytes': Path(shot['image_path']).read_bytes(),
                         'timestamp': shot.get('timestamp', ''),
+                        'note': shot.get('note', ''),
                     })
                 except Exception as e:
                     logger.warning(f'_decode_viewer_tab: could not read screenshot bytes: {e}')
@@ -1836,118 +1959,151 @@ class TheProjectWidget(QWidget):
 
     def _bundle_viewer_tabs(self) -> list:
         """For each viewer tab with a loaded mesh, create a .lyns bundle and return as base64 entries."""
-        from core.ecto_format import EctoFormat
+        result = []
+        for tab in self._viewer_tabs:
+            entry = self._bundle_one_viewer_tab(tab)
+            if entry is not None:
+                result.append(entry)
+        return result
+
+    def bundle_viewer_tab_by_id(self, tab_id: str) -> Optional[dict]:
+        """Bundle a single viewer tab by its stable tab_id — used by the
+        Export Supplier Review flow, which only ever ships one PM-selected
+        tab rather than every open tab (see _bundle_viewer_tabs)."""
+        for tab in self._viewer_tabs:
+            if getattr(tab, 'tab_id', None) == tab_id:
+                return self._bundle_one_viewer_tab(tab)
+        return None
+
+    def get_exportable_viewer_tabs(self) -> list:
+        """[(tab_id, tab_name), ...] for every open tab with a loaded mesh —
+        the choices offered by ui/export_review_dialog.py's tab picker."""
         result = []
         for tab in self._viewer_tabs:
             vw = getattr(tab, 'viewer_widget', None)
             mesh = getattr(vw, 'current_mesh', None) if vw is not None else None
             if mesh is None:
                 continue
-            annotations = []
-            ap = getattr(tab, 'annotation_panel', None)
-            if ap is not None and hasattr(ap, 'export_annotations'):
-                try:
-                    annotations = ap.export_annotations() or []
-                except Exception:
-                    annotations = []
-            drawings = []
-            if vw is not None and hasattr(vw, 'get_draw_strokes'):
-                try:
-                    drawings = vw.get_draw_strokes() or []
-                except Exception:
-                    pass
-            texture_data = None
-            if vw is not None and hasattr(vw, 'get_texture_data'):
-                try:
-                    texture_data = vw.get_texture_data()
-                except Exception:
-                    pass
-            # Visual style (solid/wireframe/shaded) lives on the viewer
-            # widget itself, independent of any material/texture preset —
-            # fold it into the same texture.json bundle entry (piggybacking
-            # on the already-round-tripped 'material' blob) rather than
-            # adding a new top-level bundle key, so it's never lost even
-            # when there's no material preset to otherwise trigger one.
-            render_mode = getattr(vw, '_render_mode', None) if vw is not None else None
-            if render_mode:
-                texture_data = dict(texture_data) if texture_data else {}
-                texture_data['render_mode'] = render_mode
-            logger.info(f'_bundle_viewer_tabs: tab "{tab.filename or "?"}" bundling render_mode={render_mode!r} '
-                        f'(has vw={vw is not None}, vw._render_mode present={hasattr(vw, "_render_mode") if vw is not None else False})')
-            # Write each captured screenshot's QPixmap out to a temp PNG so
-            # EctoFormat.export can copy it into the bundle like annotation
-            # images — tab.screenshots only holds in-memory pixmaps.
-            screenshots_payload = []
-            tmp_screenshot_files = []
-            for pixmap, ts, sid in (getattr(tab, 'screenshots', None) or []):
-                try:
-                    fd_s, tmp_shot_path = tempfile.mkstemp(suffix='.png')
-                    os.close(fd_s)
-                    if pixmap is not None and not pixmap.isNull() and pixmap.save(tmp_shot_path, 'PNG'):
-                        screenshots_payload.append({'path': tmp_shot_path, 'timestamp': ts, 'id': sid})
-                        tmp_screenshot_files.append(tmp_shot_path)
-                    else:
-                        os.remove(tmp_shot_path)
-                except Exception as e:
-                    logger.warning(f'_bundle_viewer_tabs: could not stage screenshot: {e}')
-            tab_name = tab.filename or 'model.stl'
-            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
-            os.close(fd)
+            result.append((getattr(tab, 'tab_id', None) or '', tab.filename or 'model.stl'))
+        return result
+
+    def _bundle_one_viewer_tab(self, tab) -> Optional[dict]:
+        """Bundle a single TabState into a {'id','tab_name','bundle_b64'} entry,
+        or None if it has no loaded mesh. Shared by _bundle_viewer_tabs (all
+        open tabs, for project save) and bundle_viewer_tab_by_id (one PM-picked
+        tab, for supplier review export)."""
+        from core.ecto_format import EctoFormat
+        vw = getattr(tab, 'viewer_widget', None)
+        mesh = getattr(vw, 'current_mesh', None) if vw is not None else None
+        if mesh is None:
+            return None
+        annotations = []
+        ap = getattr(tab, 'annotation_panel', None)
+        if ap is not None and hasattr(ap, 'export_annotations'):
             try:
-                success, _, creator_token = EctoFormat.export(
-                    mesh=mesh,
-                    annotations=annotations,
-                    output_path=tmp_path,
-                    source_format='stl',
-                    original_filename=tab_name,
-                    drawings=drawings,
-                    texture_data=texture_data,
-                    reader_mode=False,
-                    screenshots=screenshots_payload,
-                )
-                if success:
-                    # This bundle is just this session's own storage format for
-                    # restoring the tab on reload, not a file shared with anyone
-                    # else — register the token so import_ecto's sender/reader
-                    # check recognizes it as ours and reopens it editable instead
-                    # of read-only. Without this, every restored tab silently
-                    # landed in "Reader Mode - View Only".
-                    if creator_token:
-                        try:
-                            from core.creator_registry import register_creator_token
-                            register_creator_token(creator_token)
-                        except ImportError:
-                            pass
-                    bundle_bytes = Path(tmp_path).read_bytes()
-                    # id — assigned once when the tab was created (see
-                    # stl_viewer.py's _create_new_tab), never reassigned —
-                    # is what lets the merge engine recognize "this is the
-                    # same tab, edited" across two devices instead of only
-                    # ever being able to compare the whole viewer_tabs list
-                    # as one opaque blob. Fall back to a fresh id for the
-                    # rare case a tab somehow has none (shouldn't happen on
-                    # a live session, but never write an id-less entry).
-                    tab_id = getattr(tab, 'tab_id', None) or uuid.uuid4().hex
-                    result.append({
-                        'id': tab_id,
-                        'tab_name': tab_name,
-                        'bundle_b64': base64.b64encode(bundle_bytes).decode(),
-                    })
+                annotations = ap.export_annotations() or []
+            except Exception:
+                annotations = []
+        drawings = []
+        if vw is not None and hasattr(vw, 'get_draw_strokes'):
+            try:
+                drawings = vw.get_draw_strokes() or []
+            except Exception:
+                pass
+        texture_data = None
+        if vw is not None and hasattr(vw, 'get_texture_data'):
+            try:
+                texture_data = vw.get_texture_data()
+            except Exception:
+                pass
+        # Visual style (solid/wireframe/shaded) lives on the viewer
+        # widget itself, independent of any material/texture preset —
+        # fold it into the same texture.json bundle entry (piggybacking
+        # on the already-round-tripped 'material' blob) rather than
+        # adding a new top-level bundle key, so it's never lost even
+        # when there's no material preset to otherwise trigger one.
+        render_mode = getattr(vw, '_render_mode', None) if vw is not None else None
+        if render_mode:
+            texture_data = dict(texture_data) if texture_data else {}
+            texture_data['render_mode'] = render_mode
+        logger.info(f'_bundle_one_viewer_tab: tab "{tab.filename or "?"}" bundling render_mode={render_mode!r} '
+                    f'(has vw={vw is not None}, vw._render_mode present={hasattr(vw, "_render_mode") if vw is not None else False})')
+        # Write each captured screenshot's QPixmap out to a temp PNG so
+        # EctoFormat.export can copy it into the bundle like annotation
+        # images — tab.screenshots only holds in-memory pixmaps.
+        screenshots_payload = []
+        tmp_screenshot_files = []
+        for shot in (getattr(tab, 'screenshots', None) or []):
+            pixmap, ts, sid = shot[0], shot[1], shot[2]
+            note = shot[3] if len(shot) > 3 else ''
+            try:
+                fd_s, tmp_shot_path = tempfile.mkstemp(suffix='.png')
+                os.close(fd_s)
+                if pixmap is not None and not pixmap.isNull() and pixmap.save(tmp_shot_path, 'PNG'):
+                    screenshots_payload.append({'path': tmp_shot_path, 'timestamp': ts, 'id': sid, 'note': note})
+                    tmp_screenshot_files.append(tmp_shot_path)
                 else:
-                    logger.warning(f'_bundle_viewer_tabs: export failed for tab "{tab_name}"')
+                    os.remove(tmp_shot_path)
             except Exception as e:
-                logger.warning(f'_bundle_viewer_tabs: could not bundle tab "{tab_name}": {e}')
-            finally:
+                logger.warning(f'_bundle_one_viewer_tab: could not stage screenshot: {e}')
+        tab_name = tab.filename or 'model.stl'
+        fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+        os.close(fd)
+        try:
+            success, _, creator_token = EctoFormat.export(
+                mesh=mesh,
+                annotations=annotations,
+                output_path=tmp_path,
+                source_format='stl',
+                original_filename=tab_name,
+                drawings=drawings,
+                texture_data=texture_data,
+                reader_mode=False,
+                screenshots=screenshots_payload,
+            )
+            if success:
+                # This bundle is just this session's own storage format for
+                # restoring the tab on reload, not a file shared with anyone
+                # else — register the token so import_ecto's sender/reader
+                # check recognizes it as ours and reopens it editable instead
+                # of read-only. Without this, every restored tab silently
+                # landed in "Reader Mode - View Only".
+                if creator_token:
+                    try:
+                        from core.creator_registry import register_creator_token
+                        register_creator_token(creator_token)
+                    except ImportError:
+                        pass
+                bundle_bytes = Path(tmp_path).read_bytes()
+                # id — assigned once when the tab was created (see
+                # stl_viewer.py's _create_new_tab), never reassigned —
+                # is what lets the merge engine recognize "this is the
+                # same tab, edited" across two devices instead of only
+                # ever being able to compare the whole viewer_tabs list
+                # as one opaque blob. Fall back to a fresh id for the
+                # rare case a tab somehow has none (shouldn't happen on
+                # a live session, but never write an id-less entry).
+                tab_id = getattr(tab, 'tab_id', None) or uuid.uuid4().hex
+                return {
+                    'id': tab_id,
+                    'tab_name': tab_name,
+                    'bundle_b64': base64.b64encode(bundle_bytes).decode(),
+                }
+            logger.warning(f'_bundle_one_viewer_tab: export failed for tab "{tab_name}"')
+            return None
+        except Exception as e:
+            logger.warning(f'_bundle_one_viewer_tab: could not bundle tab "{tab_name}": {e}')
+            return None
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            for shot_path in tmp_screenshot_files:
                 try:
-                    os.remove(tmp_path)
+                    os.remove(shot_path)
                 except OSError:
                     pass
-                for shot_path in tmp_screenshot_files:
-                    try:
-                        os.remove(shot_path)
-                    except OSError:
-                        pass
-        return result
 
     def _bundle_technical_overview(self) -> Optional[dict]:
         """Bundle the Technical Overview workspace (document + annotations +
@@ -2150,6 +2306,9 @@ class TheProjectWidget(QWidget):
         # Restore the Drawing Scale workspace, if the save included one
         self._restore_drawing_scale(data.get('drawing_scale'))
 
+        self._suppliers = data.get('suppliers', [])
+        self._supplier_reviews = data.get('supplier_reviews', [])
+
         self._project_path = path
         self._project_password_hash = stored_hash
         self._created_by = data.get('created_by')
@@ -2161,6 +2320,488 @@ class TheProjectWidget(QWidget):
         self._update_title()
         self._update_read_only_ui()
         logger.info(f'Project loaded from {path} (read_only={opening_read_only})')
+
+    # ── Supplier Review Workflow (export) ───────────────────────────────────
+
+    def _export_supplier_review(self):
+        """Export a .lyns.review supplier package — the PM picks one or more
+        open 3D tabs, a subset of QC images, and a supplier (existing or
+        new). Technical Overview, Drawing Scale, and the Report are always
+        included whole (no per-section picker, same as project_info) — the
+        Report opens read-only in LYNS Lite (see TheProjectWidget's
+        is_lite() branch). Opened by a supplier in LYNS Lite; see
+        ui/export_review_dialog.py and core/review_format.py for the shapes
+        involved."""
+        from ui.modal_utils import show_message_dialog, show_error_dialog
+        # Tab list must be fresh — self._viewer_tabs is only ever a snapshot
+        # pushed in on save/mode-switch (see viewer_tabs_sync_requested's
+        # own docstring); without this an export right after opening a new
+        # tab could offer a stale/empty list.
+        self.viewer_tabs_sync_requested.emit()
+        tabs = self.get_exportable_viewer_tabs()
+        if not tabs:
+            show_message_dialog(self, t('export_review.dialog_title'), t('export_review.no_tabs'))
+            return
+
+        qc_widget = self._ensure_screen('quality_control')
+        qc_data_full = qc_widget.get_data() if qc_widget is not None and hasattr(qc_widget, 'get_data') else {}
+        qc_images = qc_data_full.get('images', [])
+
+        # Suspend autosave for the rest of this flow — same reasoning as
+        # _import_supplier_review's identical guard: registering a new
+        # supplier below calls mark_unsaved(), and a 30s autosave tick
+        # landing while ExportReviewDialog (or the save-location picker) is
+        # still open would pop its own conflict prompt right on top of it.
+        self._autosave_timer.stop()
+        try:
+            from ui.export_review_dialog import ExportReviewDialog
+            dlg = ExportReviewDialog(tabs, qc_images, self._suppliers, parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            result = dlg.get_result()
+            if result is None:
+                return
+
+            viewer_tabs = [
+                entry for tid in result['tab_ids']
+                if (entry := self.bundle_viewer_tab_by_id(tid)) is not None
+            ]
+            if not viewer_tabs:
+                show_error_dialog(self, t('export_review.dialog_title'), t('export_review.bundle_failed'))
+                return
+
+            technical_overview = self._bundle_technical_overview()
+            drawing_scale = self._bundle_drawing_scale()
+            quality_control = filter_quality_control(qc_data_full, result['image_ids']) if qc_data_full else None
+            project_info = self._nav.get_info_data()
+            report_widget = self._ensure_screen('report')
+            report = report_widget.get_data() if report_widget is not None and hasattr(report_widget, 'get_data') else None
+
+            supplier = result['supplier']
+            if result.get('is_new_supplier'):
+                self._suppliers.append(supplier)
+                self.mark_unsaved()
+
+            envelope = build_review_envelope(
+                exported_by=get_display_name(),
+                original_filename=os.path.basename(self._project_path) if self._project_path else 'project',
+                supplier=supplier,
+                viewer_tabs=viewer_tabs,
+                technical_overview=technical_overview,
+                drawing_scale=drawing_scale,
+                quality_control=quality_control,
+                project_info=project_info,
+                report=report,
+            )
+
+            sup = Supplier.from_dict(supplier)
+            default_stem = (sup.company or sup.name or 'supplier').strip().replace(' ', '_') or 'supplier'
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, t('export_review.save_dialog_title'), f'{default_stem}.lyns.review',
+                'LYNS Review (*.lyns.review);;All Files (*)'
+            )
+            if not file_path:
+                return
+            if not file_path.endswith('.lyns.review'):
+                file_path += '.lyns.review'
+
+            try:
+                save_review_file(envelope, file_path)
+            except Exception as e:
+                logger.error(f'_export_supplier_review: failed to write {file_path}: {e}')
+                show_error_dialog(self, t('export_review.dialog_title'), f"{t('export_review.write_failed')}\n{e}")
+                return
+
+            logger.info(f'_export_supplier_review: exported {file_path} for supplier {sup.display_name} '
+                        f'({len(viewer_tabs)} tab(s))')
+            show_message_dialog(
+                self, t('export_review.dialog_title'),
+                t('export_review.success').format(filename=os.path.basename(file_path))
+            )
+        finally:
+            self._autosave_timer.start()
+
+    # ── Supplier Review Workflow (import) ───────────────────────────────────
+
+    def _import_supplier_review(self):
+        """Import a .lyns.review file a supplier sent back. Stores it as a
+        tagged, mostly-opaque blob (see __init__'s self._supplier_reviews
+        docstring), then runs the per-section merge steps below (3D tabs,
+        Technical Overview, Drawing Scale, Quality Control) that let the PM
+        Add/Ignore each new/changed item live into the open project."""
+        from ui.modal_utils import show_message_dialog, show_error_dialog, ask_yes_no_dialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, t('import_review.open_dialog_title'), '',
+            'LYNS Review (*.lyns.review);;All Files (*)'
+        )
+        if not file_path:
+            return
+
+        # Suspend autosave for the whole import: mark_unsaved() below plus
+        # the Merge Annotations dialog can otherwise overlap with a 30s
+        # autosave tick, which pops its own "Someone Else Also Changed This
+        # Project" conflict prompt (_resolve_save_conflicts) right on top of
+        # whatever this flow is already showing — confusing, and not a
+        # second thing the user needs to resolve in the middle of importing
+        # a review. _autosave() also checks activeModalWidget() as a general
+        # backstop, but owning the window explicitly here doesn't depend on
+        # that lining up with Qt's nested-event-loop timing.
+        self._autosave_timer.stop()
+        try:
+            try:
+                envelope = load_review_file(file_path)
+            except Exception as e:
+                logger.error(f'_import_supplier_review: failed to read {file_path}: {e}')
+                show_error_dialog(self, t('import_review.dialog_title'), f"{t('import_review.read_failed')}\n{e}")
+                return
+
+            incoming_supplier = envelope.get('supplier') or {}
+            supplier_id = incoming_supplier.get('id')
+            existing = find_supplier(self._suppliers, supplier_id) if supplier_id else None
+            if existing is None:
+                # Unrecognized supplier (e.g. a stale export, or a review file
+                # from a different project entirely) — warn but don't block the
+                # import; register it into this project's registry so it's at
+                # least resolvable from here on.
+                if not ask_yes_no_dialog(self, t('import_review.dialog_title'), t('import_review.unknown_supplier_warning')):
+                    return
+                if supplier_id:
+                    self._suppliers.append(incoming_supplier)
+
+            entry = {
+                'supplier_id': supplier_id,
+                'supplier': incoming_supplier,
+                'imported_at': datetime.now(timezone.utc).isoformat(),
+                'source_filename': os.path.basename(file_path),
+                'raw_data': envelope,
+            }
+            self._supplier_reviews.append(entry)
+            self.mark_unsaved()
+
+            sup = Supplier.from_dict(incoming_supplier)
+
+            merged_count = self._merge_supplier_annotations(envelope, sup.display_name)
+            self._merge_supplier_technical_overview(envelope, sup.display_name)
+            self._merge_supplier_drawing_scale(envelope, sup.display_name)
+            self._merge_supplier_quality_control(envelope, sup.display_name)
+
+            logger.info(f'_import_supplier_review: imported {file_path} from supplier {sup.display_name}')
+            show_message_dialog(
+                self, t('import_review.dialog_title'),
+                t('import_review.success').format(supplier=sup.display_name)
+            )
+        finally:
+            self._autosave_timer.start()
+
+    def _merge_supplier_annotations(self, envelope: dict, supplier_name: str) -> int:
+        """For each 3D tab in the returned envelope that's currently open in
+        this session, diff its annotations, drawing strokes, screenshots,
+        and render/material against the live tab (see
+        core/annotation_merge.py) and — if there's anything new or changed
+        — let the PM Add/Ignore each item via AnnotationMergeDialog. Tabs
+        not currently open are skipped (nothing live to merge into); a
+        summary is logged either way. Returns how many tabs had anything
+        actually applied."""
+        import base64
+        import tempfile
+        import uuid as uuid_mod
+        from core.ecto_format import EctoFormat
+        from core.annotation_merge import diff_annotations, diff_drawings, diff_screenshots, render_changed, has_changes
+        from ui.annotation_merge_dialog import AnnotationMergeDialog
+        from ui.annotation_panel import PENDING_COLOR
+        from PyQt5.QtGui import QPixmap
+
+        self.viewer_tabs_sync_requested.emit()
+        live_tabs_by_id = {getattr(t, 'tab_id', None): t for t in self._viewer_tabs if getattr(t, 'tab_id', None)}
+
+        merged_tab_count = 0
+        skipped_tabs = []
+        for viewer_tab in envelope.get('viewer_tabs') or []:
+            tab_id = viewer_tab.get('id')
+            tab = live_tabs_by_id.get(tab_id)
+            if tab is None or getattr(tab, 'annotation_panel', None) is None:
+                skipped_tabs.append(viewer_tab.get('tab_name', tab_id))
+                continue
+
+            b64 = viewer_tab.get('bundle_b64', '')
+            if not b64:
+                continue
+            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(b64))
+                _, remote_annotations, _, _, remote_drawings, remote_texture, remote_screenshots = \
+                    EctoFormat.import_ecto(tmp_path)
+            except Exception as e:
+                logger.warning(f'_merge_supplier_annotations: could not read tab "{viewer_tab.get("tab_name")}": {e}')
+                continue
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            if not remote_annotations and not remote_drawings and not remote_screenshots and not remote_texture:
+                continue
+
+            vw = getattr(tab, 'viewer_widget', None)
+            local_drawings = vw.get_draw_strokes() if vw is not None and hasattr(vw, 'get_draw_strokes') else []
+            local_texture = vw.get_texture_data() if vw is not None and hasattr(vw, 'get_texture_data') else None
+            # remote_texture came back through _bundle_one_viewer_tab, which
+            # always folds the viewer's render_mode into texture_data (see
+            # its own comment on why) — fold it in here too so an untouched
+            # material doesn't look "changed" just because only one side
+            # carries a render_mode key (this alone used to make Render
+            # show up in the merge dialog on every single import, even
+            # when the supplier changed nothing).
+            local_render_mode = getattr(vw, '_render_mode', None) if vw is not None else None
+            if local_render_mode:
+                local_texture = dict(local_texture) if local_texture else {}
+                local_texture['render_mode'] = local_render_mode
+            local_screenshot_ids = [{'id': s[2]} for s in (getattr(tab, 'screenshots', None) or [])]
+
+            local_annotations = tab.annotation_panel.export_annotations()
+            diff = diff_annotations(local_annotations, remote_annotations or [])
+            diff['drawings'] = diff_drawings(local_drawings, remote_drawings or [])
+            diff['screenshots'] = diff_screenshots(local_screenshot_ids, remote_screenshots or [])
+            diff['render'] = remote_texture if (remote_texture and render_changed(local_texture, remote_texture)) else None
+            if not has_changes(diff):
+                continue
+
+            dlg = AnnotationMergeDialog(tab.filename or tab_id, supplier_name, diff, parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                continue
+            result = dlg.get_result()
+            if result is None:
+                continue
+
+            applied_any = False
+            for entry in result['new']:
+                new_ann = tab.annotation_panel.import_annotation(entry['remote'])
+                if vw is not None and hasattr(vw, 'add_annotation_marker'):
+                    display_number = tab.annotation_panel.get_display_number(new_ann.id)
+                    vw.add_annotation_marker(
+                        new_ann.id, new_ann.point, new_ann.color or PENDING_COLOR,
+                        display_date=str(display_number),
+                    )
+                applied_any = True
+            for entry in result['updated']:
+                if tab.annotation_panel.add_supplier_notes(entry['annotation_id'], entry['new_notes']):
+                    applied_any = True
+            new_drawings = result.get('drawings') or []
+            if new_drawings and vw is not None and hasattr(vw, 'restore_draw_strokes'):
+                # restore_draw_strokes replaces the whole stroke list (see its
+                # own docstring) rather than appending — feed it back
+                # everything already there plus the picked new ones so
+                # nothing the PM already drew gets lost.
+                vw.restore_draw_strokes(local_drawings + new_drawings)
+                applied_any = True
+
+            new_screenshots = result.get('screenshots') or []
+            if new_screenshots:
+                # Just adding new ones — see core/annotation_merge.py's
+                # diff_screenshots docstring — never merged field by field.
+                added_tuples = []
+                for shot in new_screenshots:
+                    pix = QPixmap(shot.get('image_path', ''))
+                    if pix.isNull():
+                        continue
+                    added_tuples.append((pix, shot.get('timestamp', ''), shot.get('id') or uuid_mod.uuid4().hex, shot.get('note', '')))
+                if added_tuples:
+                    # Writes straight to the tab's own data list; if this
+                    # tab is the one currently showing in the (single,
+                    # shared) screenshot panel right now, the
+                    # viewer_tab_screenshots_merged signal below tells
+                    # stl_viewer.py to repaint it immediately instead of
+                    # waiting for the next tab switch.
+                    tab.screenshots = list(getattr(tab, 'screenshots', None) or []) + added_tuples
+                    applied_any = True
+                    self.viewer_tab_screenshots_merged.emit(tab_id)
+
+            remote_render = result.get('render')
+            if remote_render and vw is not None:
+                # Whole-field, atomic — same "take the entire updated one,
+                # never merge individual material sliders" rule
+                # core/project_merge.py already applies for two 360
+                # sessions (see _merge_viewer_tab_content), now applied the
+                # same way whether the change came from 360 or Lite.
+                render_mode = remote_render.get('render_mode')
+                if render_mode and hasattr(vw, 'set_render_mode'):
+                    vw.set_render_mode(render_mode)
+                if hasattr(vw, '_apply_material_preset_to_mesh'):
+                    for part_texture in remote_render.get('parts_textures', []):
+                        part_id = part_texture.get('part_id')
+                        if part_id is not None and hasattr(vw, 'apply_material_preset_to_part'):
+                            vw.apply_material_preset_to_part(part_id, part_texture)
+                    mesh_obj = getattr(vw, '_mesh_obj', None)
+                    has_root_texture = any(
+                        remote_render.get(key)
+                        for key in ('albedo_map_path', 'albedo_map', 'use_texture_maps', 'image_file')
+                    ) and not remote_render.get('parts_textures')
+                    if mesh_obj is not None and has_root_texture:
+                        vw._apply_material_preset_to_mesh(mesh_obj, remote_render)
+                applied_any = True
+
+            if applied_any:
+                merged_tab_count += 1
+                self.mark_unsaved()
+
+        if skipped_tabs:
+            logger.info(f'_merge_supplier_annotations: skipped (not open): {skipped_tabs}')
+        return merged_tab_count
+
+    def _merge_supplier_drawing_scale(self, envelope: dict, supplier_name: str) -> bool:
+        """The Drawing Scale workspace isn't per-tab like the 3D viewer's
+        annotations, so this runs once per import rather than once per
+        viewer tab. Diffs the returned envelope's shapes against what's
+        live now (see core/annotation_merge.py's diff_drawing_scale) and —
+        if the supplier added any — lets the PM Add/Ignore them as one
+        summary item via the same AnnotationMergeDialog used for viewer
+        tabs. Only shapes are added here (calibration/unit/border settings
+        are left alone) — "just add them", not a full-state replacement.
+        Returns whether anything was applied."""
+        from core.annotation_merge import diff_drawing_scale, drawing_scale_new_count
+        from ui.annotation_merge_dialog import AnnotationMergeDialog
+
+        sc = self._scale_canvas
+        if sc is None or not hasattr(sc, 'get_state') or not hasattr(sc, 'set_state'):
+            return False
+        remote_state = (envelope.get('drawing_scale') or {}).get('state') or {}
+        if not remote_state:
+            return False
+        local_state = sc.get_state()
+        diff_ds = diff_drawing_scale(local_state, remote_state)
+        if drawing_scale_new_count(diff_ds) == 0:
+            return False
+
+        dlg = AnnotationMergeDialog(t('mode_bar.drawing_scale'), supplier_name, {'drawing_scale': diff_ds}, parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return False
+        result = dlg.get_result()
+        picked = result.get('drawing_scale') if result else None
+        if not picked:
+            return False
+
+        merged_state = dict(local_state)
+        for shape_type, new_items in picked.items():
+            merged_state[shape_type] = list(local_state.get(shape_type) or []) + new_items
+        sc.set_state(merged_state)
+        self.mark_unsaved()
+        logger.info(f'_merge_supplier_drawing_scale: added {drawing_scale_new_count(picked)} '
+                    f'shape(s) from supplier {supplier_name}')
+        return True
+
+    def _merge_supplier_technical_overview(self, envelope: dict, supplier_name: str) -> bool:
+        """Technical Overview isn't per-tab like the 3D viewer's
+        annotations, so this runs once per import rather than once per
+        viewer tab. Diffs the returned envelope's arrow annotations
+        against what's live now — reusing the same id-based new-vs-updated
+        matching core/annotation_merge.py's diff_annotations already does
+        for 3D tabs, since ArrowAnnotation carries the same id/added_by/
+        supplier_notes shape (see ui/technical_overview.py) — and lets the
+        PM Add/Ignore each item via the same AnnotationMergeDialog. Returns
+        whether anything was applied."""
+        from core.annotation_merge import diff_annotations, has_changes
+        from ui.annotation_merge_dialog import AnnotationMergeDialog
+
+        to = self._technical_overview
+        if to is None or not hasattr(to, 'get_annotations_data') or not hasattr(to, 'import_annotation'):
+            return False
+        remote_entry = envelope.get('technical_overview')
+        if not remote_entry or not remote_entry.get('bundle_b64'):
+            return False
+
+        remote_structural, temp_dir = self._decode_technical_overview(remote_entry)
+        try:
+            remote_annotations = remote_structural.get('annotations') or []
+            if not remote_annotations:
+                return False
+            local_annotations = to.get_annotations_data()
+            diff = diff_annotations(local_annotations, remote_annotations)
+            if not has_changes(diff):
+                return False
+
+            dlg = AnnotationMergeDialog(t('mode_bar.technical'), supplier_name, diff, parent=self)
+            if dlg.exec_() != QDialog.Accepted:
+                return False
+            result = dlg.get_result()
+            if result is None:
+                return False
+
+            applied_any = False
+            for entry in result['new']:
+                to.import_annotation(entry['remote'])
+                applied_any = True
+            for entry in result['updated']:
+                if to.add_supplier_notes(entry['annotation_id'], entry['new_notes']):
+                    applied_any = True
+
+            if applied_any:
+                self.mark_unsaved()
+                logger.info(f'_merge_supplier_technical_overview: merged in changes from supplier {supplier_name}')
+            return applied_any
+        finally:
+            if temp_dir and os.path.exists(temp_dir):
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _merge_supplier_quality_control(self, envelope: dict, supplier_name: str) -> bool:
+        """Quality Control isn't per-tab either, so — like Technical
+        Overview and Drawing Scale — this runs once per import. Diffs the
+        returned envelope's inspection images against what's live now (see
+        core/annotation_merge.py's diff_quality_control) and lets the PM
+        Add/Ignore each new inspection image / new control point via the
+        same AnnotationMergeDialog. Existing images/points are never
+        touched or replaced — same "just add new" rule used everywhere
+        else in this workflow. Returns whether anything was applied."""
+        from core.annotation_merge import diff_quality_control, qc_new_count
+        from ui.annotation_merge_dialog import AnnotationMergeDialog
+
+        remote_qc = envelope.get('quality_control')
+        if not remote_qc:
+            return False
+        qc_widget = self._ensure_screen('quality_control')
+        if qc_widget is None or not hasattr(qc_widget, 'get_data') or not hasattr(qc_widget, 'set_data'):
+            return False
+        local_data = qc_widget.get_data()
+        local_images = local_data.get('images', [])
+        remote_images = remote_qc.get('images', [])
+        diff_qc = diff_quality_control(local_images, remote_images)
+        if qc_new_count(diff_qc) == 0:
+            return False
+
+        dlg = AnnotationMergeDialog(
+            t('project.nav.quality_control'), supplier_name,
+            {'qc_images': diff_qc['new_images'], 'qc_points': diff_qc['new_points']},
+            parent=self,
+        )
+        if dlg.exec_() != QDialog.Accepted:
+            return False
+        result = dlg.get_result()
+        if result is None:
+            return False
+
+        new_images = result.get('qc_images') or []
+        new_points = result.get('qc_points') or []
+        if not new_images and not new_points:
+            return False
+
+        merged_images = [dict(img) for img in local_images]
+        by_id = {img.get('id'): img for img in merged_images}
+        for entry in new_points:
+            img = by_id.get(entry['image_id'])
+            if img is None:
+                continue
+            img['annotations'] = list(img.get('annotations', [])) + [entry['annotation']]
+            img['control_points'] = list(img.get('control_points', [])) + [entry['control_point']]
+        merged_images.extend(new_images)
+
+        merged_data = dict(local_data)
+        merged_data['images'] = merged_images
+        qc_widget.set_data(merged_data)
+        self.mark_unsaved()
+        logger.info(f'_merge_supplier_quality_control: added {len(new_images)} image(s), '
+                    f'{len(new_points)} point(s) from supplier {supplier_name}')
+        return True
 
     def _update_lock_btn(self):
         """Update the password button appearance to reflect the current lock state."""
@@ -2361,9 +3002,23 @@ class TheProjectWidget(QWidget):
         # (or switched to read-only by _handle_lock_taken_over) could still
         # get silently written to disk the next time this timer fires.
         if self._project_path and self._unsaved_changes and not self._read_only:
+            from PyQt5.QtWidgets import QApplication
+            if QApplication.activeModalWidget() is not None:
+                # A modal is already up — skip this tick; the timer fires
+                # again in 30s, so it picks the save back up as soon as
+                # nothing else is open.
+                return
             try:
-                self._save_project(self._project_path)
-                logger.debug('Autosaved project')
+                # allow_interactive=False — a background timer must never put
+                # a "Someone Else Also Changed This Project" dialog on screen
+                # unprompted (see _save_project's docstring). If there's a
+                # real conflict, this just skips writing for now; the change
+                # stays pending (_unsaved_changes stays True) for the next
+                # tick or an explicit Save to pick up.
+                if self._save_project(self._project_path, allow_interactive=False):
+                    logger.debug('Autosaved project')
+                else:
+                    logger.debug('Autosave deferred (conflict needs an explicit Save)')
             except Exception as e:
                 logger.warning(f'Autosave failed: {e}')
 

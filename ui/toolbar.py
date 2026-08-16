@@ -1768,7 +1768,17 @@ class ViewControlsToolbar(QWidget):
         self.record_btn.set_label(t("toolbar.record"))
 
     def set_reader_mode(self, enabled: bool):
-        """Enable or disable reader mode (disables annotation button)."""
+        """Enable or disable reader mode (disables annotation button).
+
+        In LYNS Lite, the supplier is allowed to add NEW annotation pins even
+        on a bundle that's otherwise reader-mode (the PM's own annotations
+        still lock via AnnotationPanel.set_reader_mode, called separately) —
+        see Annotation.added_by / AnnotationPanel.add_annotation for how new
+        pins get tagged, and the plan doc's "reader mode but can add" note.
+        """
+        from core.edition import is_lite
+        if enabled and is_lite():
+            enabled = False
         if enabled:
             self.annotation_btn.setEnabled(False)
             self.annotation_btn.setToolTip(t("toolbar.reader_mode_tooltip"))

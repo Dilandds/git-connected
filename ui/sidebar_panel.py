@@ -17,9 +17,18 @@ from ui.components import (
 )
 from ui.styles import get_button_style, default_theme, make_font, sidebar_section_card_stylesheet, _dropdown_arrow_url
 from i18n import t, on_language_changed
-from core.edition import is_education
+from core.edition import is_education, is_lite
 
 logger = logging.getLogger(__name__)
+
+
+def _sidebar_title_text() -> str:
+    """LYNS Lite branding on the upload card's own title, instead of the
+    full LYNS360 name — every other sidebar.title caller (retranslate on
+    language change included) goes through this so the two never drift
+    apart."""
+    return t("sidebar.title_lite") if is_lite() else t("sidebar.title")
+
 
 _ICON_COLOR = QColor("#8b5cf6")
 
@@ -400,7 +409,7 @@ class SidebarPanel(QWidget):
         upload_card_layout.setSpacing(10)
         
         # Title label
-        self._title_label = QLabel(t("sidebar.title"))
+        self._title_label = QLabel(_sidebar_title_text())
         self._title_label.setObjectName("titleLabel")
         title_font = make_font(size=16, bold=True)
         self._title_label.setFont(title_font)
@@ -2020,7 +2029,7 @@ class SidebarPanel(QWidget):
 
     def retranslate(self):
         """Update all sidebar labels for the current language."""
-        self._title_label.setText(t("sidebar.title"))
+        self._title_label.setText(_sidebar_title_text())
         self.upload_btn.setText(t("sidebar.upload_btn"))
         self.upload_btn.setToolTip(t("sidebar.upload_tooltip"))
         self._info_label.setText(t("sidebar.upload_info"))

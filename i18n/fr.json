@@ -5,10 +5,15 @@
     "technical": "📋 Fiche technique",
     "drawing_scale": "📐 Mode échelle 2D",
     "project": "📁 Le Projet",
-    "help": "❓ Aide"
+    "help": "❓ Aide",
+    "lite_new_review": "＋ Nouvelle révision",
+    "lite_open_review": "📂 Ouvrir une révision…",
+    "lite_save_review": "💾 Enregistrer la révision",
+    "lite_save_review_as": "💾 Enregistrer la révision sous…"
   },
   "sidebar": {
     "title": "LYNS 360",
+    "title_lite": "LYNS Lite",
     "upload_btn": "Importer un Fichier 3D",
     "upload_info": ".3DM / .STEP / .STL / .OBJ / .IGES / .DXF / .LYNS",
     "upload_tooltip": "Importer ou déposer directement un fichier STL, STEP, 3DM, OBJ, IGES ou DXF ",
@@ -205,7 +210,10 @@
     "photos_label": "Photos :",
     "no_photos": "Aucune photo jointe",
     "select_photos_title": "Sélectionner des photos",
-    "zoom_tooltip": "Cliquer pour zoomer"
+    "zoom_tooltip": "Cliquer pour zoomer",
+    "conversation_label": "Conversation ({count})",
+    "reply_placeholder": "Ajouter une réponse…",
+    "post_reply": "Publier le commentaire"
   },
   "arrow": {
     "panel_title": "Flèches",
@@ -501,6 +509,8 @@
       "protected": "🔒  Protégé",
       "no_project": "Aucun projet ouvert",
       "not_logged_in": "Non connecté  ▾",
+      "export_review": "📤  Exporter révision",
+      "import_review": "📥  Importer révision",
       "tip_new": "Créer un nouveau projet ",
       "tip_open": "Ouvrir un fichier .lyns.pjt existant",
       "tip_save": "Enregistrer le projet actuel",
@@ -508,7 +518,9 @@
       "tip_print": "Imprimer ou exporter la section en PDF",
       "tip_password": "Définir ou supprimer la protection par mot de passe",
       "tip_protected": "Projet protégé par mot de passe — cliquer pour modifier ou supprimer",
-      "tip_unlocked": "Définir un mot de passe pour protéger ce projet"
+      "tip_unlocked": "Définir un mot de passe pour protéger ce projet",
+      "tip_export_review": "Exporter un fichier .lyns.review filtré pour qu'un fournisseur commente dans LYNS Lite",
+      "tip_import_review": "Importer un fichier .lyns.review renvoyé par un fournisseur"
     },
     "version_history": {
       "title": "Historique des versions",
@@ -1284,7 +1296,9 @@
     "card": {
       "color_tooltip": "Cliquer pour changer la couleur",
       "name_placeholder": "Nom du point de contrôle...",
-      "comment_placeholder": "Entrez vos commentaires..."
+      "comment_placeholder": "Entrez vos commentaires...",
+      "added_by": "par : {name}",
+      "supplier_fallback": "Fournisseur"
     },
     "status": {
       "compliant": "Conforme",
@@ -1386,5 +1400,56 @@
     "discard": "Ignorer",
     "stopped_status": "Arrêté — {time}  ·  {frames} images",
     "frames_count": "{count} images"
+  },
+  "export_review": {
+    "dialog_title": "Exporter une révision fournisseur",
+    "tab_group": "Modèle 3D",
+    "no_tabs": "Chargez un modèle 3D dans un onglet avant d'exporter une révision fournisseur.",
+    "qc_group": "Images de contrôle qualité",
+    "qc_image_label": "Image nº{id}",
+    "no_qc_images": "Aucune image de contrôle qualité à partager pour le moment.",
+    "supplier_group": "Fournisseur",
+    "new_supplier": "＋ Nouveau fournisseur…",
+    "supplier_name_placeholder": "Nom du contact",
+    "supplier_company_placeholder": "Société",
+    "supplier_contact_placeholder": "E-mail ou téléphone",
+    "supplier_required": "Saisissez un nom ou une société de fournisseur.",
+    "tabs_required": "Sélectionnez au moins un modèle 3D à inclure.",
+    "cancel": "Annuler",
+    "export_btn": "Exporter .lyns.review",
+    "save_dialog_title": "Exporter comme révision fournisseur LYNS",
+    "bundle_failed": "Échec de la préparation du modèle 3D sélectionné.",
+    "write_failed": "Échec de l'écriture du fichier .lyns.review.",
+    "success": "Révision fournisseur exportée !\n\n{filename}\n\nEnvoyez ce fichier à votre fournisseur — il l'ouvre dans LYNS Lite."
+  },
+  "import_review": {
+    "dialog_title": "Importer une révision fournisseur",
+    "open_dialog_title": "Importer une révision fournisseur",
+    "read_failed": "Échec de la lecture du fichier .lyns.review.",
+    "unknown_supplier_warning": "Ce fichier de révision ne correspond à aucun fournisseur du registre de ce projet. L'importer quand même ?",
+    "success": "Révision fournisseur importée depuis {supplier}.\n\nEnregistrez le projet pour la conserver."
+  },
+  "annotation_merge": {
+    "dialog_title": "Fusionner les annotations — {tab}",
+    "subtitle": "{supplier} a renvoyé des modifications pour ce modèle 3D. Choisissez ce qu'il faut ajouter.",
+    "new_group": "Nouvelles annotations",
+    "new_pin_subtitle": "nouveau point du fournisseur",
+    "updated_group": "Annotations mises à jour",
+    "updated_subtitle": "{count} nouveau(x) commentaire(s) du fournisseur",
+    "new_drawings_group": "Nouveaux dessins",
+    "new_drawing_subtitle": "dessin du fournisseur",
+    "new_screenshots_group": "Nouvelles captures d'écran",
+    "new_screenshot_subtitle": "nouveau du fournisseur",
+    "render_group": "Rendu",
+    "render_item_label": "Rendu/matériau mis à jour",
+    "render_subtitle": "le fournisseur a changé l'apparence du modèle",
+    "drawing_scale_group": "Échelle de dessin",
+    "drawing_scale_item_label": "{count} nouvelle(s) forme(s)",
+    "new_qc_images_group": "Nouvelles images d'inspection",
+    "new_qc_image_subtitle": "nouveau du fournisseur",
+    "new_qc_points_group": "Nouveaux points de contrôle",
+    "new_qc_points_item_label": "{count} nouveau(x) point(s) de contrôle",
+    "apply_btn": "Ajouter la sélection",
+    "skip_all": "Tout ignorer"
   }
 }

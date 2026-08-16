@@ -142,25 +142,49 @@ class Annotation:
     id: int
     point: tuple  # (x, y, z) in world coordinates
     text: str = ""
-    is_validated: bool = False  # Gray (pending) vs Black (validated)
     image_paths: List[str] = field(default_factory=list)
     is_expanded: bool = True
     is_read: bool = False  # For reader mode: Green (unread) vs Blue (read)
     label: str = "Point"  # Editable display name (default "Point")
     created_at: datetime = field(default_factory=datetime.now)
     color: Optional[str] = None  # Optional hex color for this annotation
-    
+    # Set to 'supplier' for pins added in LYNS Lite on an otherwise
+    # reader-mode bundle (see AnnotationPanel.add_annotation) — lets a later
+    # merge-back (Supplier Review Workflow, Milestone 4) tell which pins are
+    # the PM's originals vs. new ones the supplier contributed. None for
+    # every annotation added normally in LYNS360 itself.
+    added_by: Optional[str] = None
+    # Feedback a supplier attached to this (usually the PM's own, pre-
+    # existing) annotation in LYNS Lite, without touching the original
+    # text/image_paths above — those stay the PM's, locked. Each entry:
+    # {'id', 'supplier_id', 'supplier_name', 'text', 'image_paths', 'added_at'}.
+    # Displayed stacked ("mounted one after another") in
+    # ui/annotation_viewer_popup.py; merged in from a returned .lyns.review
+    # via AnnotationPanel.add_supplier_notes (see core/annotation_merge.py).
+    supplier_notes: List[dict] = field(default_factory=list)
+    # The PM's own follow-up comments in LYNS360, added the same way after
+    # the original text/image_paths above — a genuine back-and-forth
+    # conversation instead of a single overwritable comment box. Each
+    # entry: {'id', 'author_name', 'text', 'image_paths', 'added_at'}.
+    # Interleaved with supplier_notes by added_at in both ui/annotation_popup.py
+    # (360) and ui/annotation_viewer_popup.py (Lite) so both sides read the
+    # same conversation; round-trips through a .lyns.review export/import
+    # like supplier_notes does (see core/ecto_format.py).
+    pm_notes: List[dict] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
             'id': self.id,
             'point': list(self.point),
             'text': self.text,
-            'is_validated': self.is_validated,
             'image_paths': self.image_paths,
             'label': self.label,
             'color': self.color,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'added_by': self.added_by,
+            'supplier_notes': self.supplier_notes,
+            'pm_notes': self.pm_notes,
         }
     
     def display_date(self) -> str:
@@ -184,11 +208,13 @@ class Annotation:
             id=data['id'],
             point=tuple(data['point']),
             text=data.get('text', ''),
-            is_validated=data.get('is_validated', False),
             image_paths=data.get('image_paths', []),
             label=data.get('label', 'Point'),
             color=data.get('color'),
             created_at=created,
+            added_by=data.get('added_by'),
+            supplier_notes=data.get('supplier_notes', []),
+            pm_notes=data.get('pm_notes', []),
         )
 
 
@@ -208,6 +234,7 @@ class AnnotationCard(QFrame):
         self.annotation = annotation
         self._reader_mode = reader_mode
         self._display_number = display_number if display_number is not None else annotation.id
+        self._label_locked = self._compute_label_locked()
         self.setObjectName("annotationCard")
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setCursor(Qt.PointingHandCursor)
@@ -258,17 +285,8 @@ class AnnotationCard(QFrame):
             }}
         """)
         self.label_edit.setFixedHeight(24)
+        self.label_edit.setReadOnly(self._label_locked)
         self.label_edit.editingFinished.connect(self._on_label_editing_finished)
-
-        # Description preview — shows the annotation note text inline, same as
-        # the Technical Overview annotation card, so you don't have to click
-        # the card just to see what it says.
-        self.desc_label = QLabel(self._desc_preview_text())
-        self.desc_label.setStyleSheet(
-            f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent;"
-        )
-        self.desc_label.setWordWrap(True)
-        self.desc_label.setVisible(bool(self.annotation.text))
 
         # Status row: checkmark icon (drawn, not Unicode) + text (avoids poor rendering on Windows)
         status_row = QWidget()
@@ -288,7 +306,6 @@ class AnnotationCard(QFrame):
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(2)
         info_layout.addWidget(self.label_edit)
-        info_layout.addWidget(self.desc_label)
         info_layout.addWidget(status_row)
         
         layout.addLayout(info_layout, 1)  # stretch
@@ -329,16 +346,13 @@ class AnnotationCard(QFrame):
         self.delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.annotation.id))
         layout.addWidget(self.delete_btn)
     
-    def _desc_preview_text(self) -> str:
-        """Return the truncated note text for the inline preview, matching
-        the Technical Overview card's 60-character preview. Left blank when
-        there's no text yet — the status row below already shows "Click to
-        edit" for pending annotations, so repeating it here would show the
-        same sentence twice on one card."""
-        text = self.annotation.text or ""
-        if len(text) > 60:
-            return text[:60] + "…"
-        return text
+    def _compute_label_locked(self) -> bool:
+        """A supplier in LYNS Lite can rename their own pins but must not be
+        able to relabel a point the PM already placed (added_by != 'supplier')
+        — mirrors the existing-content-locked/new-content-editable split used
+        for the popup conversation and for Quality Control control points."""
+        from core.edition import is_lite
+        return is_lite() and self.annotation.added_by != 'supplier'
 
     def _on_label_editing_finished(self):
         """Handle label edit - emit to panel."""
@@ -399,12 +413,12 @@ class AnnotationCard(QFrame):
             return self.annotation.color
         if self._reader_mode:
             return READER_READ_COLOR if self.annotation.is_read else READER_UNREAD_COLOR
-        if self.annotation.is_validated:
-            return VALIDATED_COLOR
         return PENDING_COLOR
-    
+
     def _update_style(self):
-        """Update the card style based on validation status and reader mode."""
+        """Update the card style based on reader mode's read/unread state.
+        There's no separate "validated" state any more — outside reader
+        mode every card just uses the same default look."""
         indicator_color = self._get_indicator_color()
         status_color = default_theme.text_secondary
         if self._reader_mode:
@@ -420,13 +434,6 @@ class AnnotationCard(QFrame):
                 self.status_icon.setVisible(False)
                 self.status_label.setText(t("annotation.unread"))
                 self.status_label.setStyleSheet('color: %s; background: transparent;' % status_color)
-        elif self.annotation.is_validated:
-            validated_color = '#4ade80'   # light green
-            base_grad = _ANNO_CARD_VALIDATED
-            self.status_icon.setPixmap(_checkmark_pixmap(12, validated_color))
-            self.status_icon.setVisible(True)
-            self.status_label.setText(t("annotation.validated"))
-            self.status_label.setStyleSheet('color: %s; background: transparent;' % validated_color)
         else:
             base_grad = _ANNO_CARD_PENDING
             self.status_icon.setPixmap(QPixmap())
@@ -474,24 +481,26 @@ class AnnotationCard(QFrame):
             self.coord_label.setText(f"{date_text}\n{time_text}")
         else:
             self.coord_label.setText(str(self._display_number))
+        self._label_locked = self._compute_label_locked()
+        self.label_edit.setReadOnly(self._label_locked)
         self.label_edit.blockSignals(True)
         self.label_edit.setText(annotation.label)
         self.label_edit.blockSignals(False)
-        self.desc_label.setText(self._desc_preview_text())
-        self.desc_label.setVisible(bool(self.annotation.text))
         self._update_style()
         self._update_tooltip()
     
     def _update_tooltip(self):
         """Update the hover tooltip with annotation details."""
-        status = "✓ Validated" if self.annotation.is_validated else "⏳ Pending - Click to edit"
         date_str = _format_annotation_date(self.annotation.created_at, include_time=True) if self.annotation.created_at else f"#{self.annotation.id}"
-        
+
         tooltip_parts = [
             f"<b>{self.annotation.label}</b> #{self._display_number}",
-            f"<br><b>Status:</b> {status}",
-            f"<br><b>Date:</b> {date_str}",
         ]
+        # Only reader mode still has a status worth calling out — read/unread.
+        if self._reader_mode:
+            status = t("annotation.read") if self.annotation.is_read else t("annotation.unread")
+            tooltip_parts.append(f"<br><b>Status:</b> {status}")
+        tooltip_parts.append(f"<br><b>Date:</b> {date_str}")
         
         if self.annotation.text:
             # Truncate long text
@@ -716,22 +725,31 @@ class AnnotationPanel(QWidget):
         self._update_texts()
     
     def set_reader_mode(self, enabled: bool):
-        """Enable or disable reader mode (view-only)."""
+        """Enable or disable reader mode (view-only).
+
+        In LYNS Lite, `enabled` is still True for the whole bundle (it
+        locks the PM's own annotations — see AnnotationCard and
+        AnnotationPanel.add_annotation's is_lite() bypass) but the
+        "Reader Mode - View Only" banner doesn't apply there: the supplier
+        can add new pins and post comments, so telling them the panel is
+        view-only is simply wrong. Lite shows the same header 360 shows
+        outside reader mode instead — just the instructions text, no banner."""
         self._reader_mode = enabled
-        
-        if enabled:
+        from core.edition import is_lite
+        show_banner = enabled and not is_lite()
+
+        if show_banner:
             # Show reader mode banner, hide instructions
             self.reader_mode_banner.show()
             self.instructions_label.hide()
-            # Hide clear button
-            self.clear_btn.hide()
         else:
             # Show instructions, hide banner
             self.reader_mode_banner.hide()
             self.instructions_label.show()
-            # Show clear button
-            self.clear_btn.show()
-        
+        # Clear button stays hidden for any reader-mode bundle, Lite
+        # included — there's still nothing a supplier should be clearing.
+        self.clear_btn.setVisible(not enabled)
+
         # Update all cards: badge and dot must follow color in both reader and editor modes
         for card in self.annotation_cards.values():
             card._reader_mode = enabled
@@ -746,21 +764,27 @@ class AnnotationPanel(QWidget):
         picks up the next color in the shared palette (cycling), so consecutive
         points are easy to tell apart at a glance instead of all starting out
         the same gray."""
+        from core.edition import is_lite
         color = PALETTE[len(self.annotations) % len(PALETTE)]
         annotation = Annotation(
             id=self._next_id,
             point=point,
             text="",
-            is_validated=False,  # Pending
             image_paths=[],
             color=color,
+            added_by='supplier' if is_lite() else None,
         )
         self._next_id += 1
         self.annotations.append(annotation)
-        
+
         # Create card (display_number = position in list, 1-based)
         display_number = len(self.annotations)  # we just appended
-        card = AnnotationCard(annotation, reader_mode=self._reader_mode, display_number=display_number)
+        # A pin just placed by the supplier is always editable, even when the
+        # rest of this bundle (the PM's own annotations) is reader-mode —
+        # see ui/toolbar.py's set_reader_mode for the matching "can still add"
+        # bypass on the toolbar button.
+        card_reader_mode = False if is_lite() else self._reader_mode
+        card = AnnotationCard(annotation, reader_mode=card_reader_mode, display_number=display_number)
         card.clicked.connect(self._on_card_clicked)
         card.delete_requested.connect(self._on_delete_requested)
         card.focus_requested.connect(self._on_focus_requested)
@@ -777,9 +801,79 @@ class AnnotationPanel(QWidget):
         
         self.annotation_added.emit(annotation)
         logger.info(f"Annotation added: id={annotation.id}, point={point}")
-        
+
         return annotation
-    
+
+    def import_annotation(self, data: dict) -> Annotation:
+        """Append one annotation from external data (a supplier's returned
+        .lyns.review, via the merge-import flow in ui/project_widget.py /
+        core/annotation_merge.py) — appends, unlike load_annotations which
+        replaces the whole list.
+
+        Renumbers the id if it collides with one already present: the
+        supplier's id sequence started from the same base as this tab's did
+        at export time, so if the PM added new annotations locally after
+        exporting, a genuinely new id on each side can coincide."""
+        annotation = Annotation.from_dict(data)
+        existing_ids = {a.id for a in self.annotations}
+        if annotation.id in existing_ids:
+            new_id = (max(existing_ids) + 1) if existing_ids else 1
+            logger.info(f"import_annotation: id {annotation.id} collides with an "
+                        f"existing annotation, renumbering to {new_id}")
+            annotation.id = new_id
+        if annotation.id >= self._next_id:
+            self._next_id = annotation.id + 1
+        self.annotations.append(annotation)
+
+        display_number = len(self.annotations)
+        card = AnnotationCard(annotation, reader_mode=False, display_number=display_number)
+        card.clicked.connect(self._on_card_clicked)
+        card.delete_requested.connect(self._on_delete_requested)
+        card.focus_requested.connect(self._on_focus_requested)
+        card.label_edited.connect(self._on_label_edited)
+        card.color_changed.connect(self._on_card_color_changed)
+        card.hover_changed.connect(self.annotation_hovered.emit)
+
+        self.annotation_cards[annotation.id] = card
+        self.content_layout.addWidget(card)
+        self.empty_label.hide()
+        self.clear_btn.setEnabled(True)
+
+        self.annotation_added.emit(annotation)
+        logger.info(f"import_annotation: merged in annotation id={annotation.id}")
+        return annotation
+
+    def add_supplier_notes(self, annotation_id: int, notes: list) -> bool:
+        """Append supplier feedback note(s) to an EXISTING annotation's
+        thread (see Annotation.supplier_notes) — used by the merge-import
+        flow when a supplier commented on one of the PM's own annotations
+        rather than adding a new one. Returns False if the annotation no
+        longer exists locally (e.g. the PM deleted it after exporting)."""
+        annotation = self.get_annotation_by_id(annotation_id)
+        if annotation is None:
+            return False
+        annotation.supplier_notes.extend(notes)
+        card = self.annotation_cards.get(annotation_id)
+        if card is not None:
+            card.update_annotation(annotation)
+        return True
+
+    def add_pm_notes(self, annotation_id: int, notes: list) -> bool:
+        """Append the PM's own follow-up comment(s) to an annotation's
+        thread (see Annotation.pm_notes) — used by ui/annotation_popup.py's
+        conversation composer so the PM can keep replying without
+        overwriting the original text/image_paths. Mirrors
+        add_supplier_notes above; returns False if the annotation no
+        longer exists."""
+        annotation = self.get_annotation_by_id(annotation_id)
+        if annotation is None:
+            return False
+        annotation.pm_notes.extend(notes)
+        card = self.annotation_cards.get(annotation_id)
+        if card is not None:
+            card.update_annotation(annotation)
+        return True
+
     def remove_annotation(self, annotation_id: int, skip_emit: bool = False):
         """Remove an annotation by ID and renumber remaining (1, 2, 3...).
         
@@ -929,17 +1023,18 @@ class AnnotationPanel(QWidget):
         self.clear_all_requested.emit()
     
     def validate_annotation(self, annotation_id: int, text: str, image_paths: list, label: str = "Point"):
-        """Validate an annotation (turn black) with text and images."""
+        """Commit the popup's Done button: save text/images/label onto the
+        live annotation (there's no separate validated/pending state any
+        more — every annotation looks the same once it has this)."""
         annotation = self.get_annotation_by_id(annotation_id)
         if annotation:
-            annotation.is_validated = True
             annotation.text = text
             annotation.image_paths = image_paths
             annotation.label = label or "Point"
-            
+
             # Update card display
             if annotation_id in self.annotation_cards:
                 self.annotation_cards[annotation_id].update_annotation(annotation)
-            
+
             self.annotation_validated.emit(annotation_id, text, image_paths, label or "Point")
-            logger.info(f"Annotation validated: id={annotation_id}")
+            logger.info(f"Annotation updated: id={annotation_id}")

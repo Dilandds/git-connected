@@ -129,7 +129,7 @@ class TabState:
     thumbnail: Any = None  # QPixmap thumbnail for the Overview tab
     reader_mode: bool = False  # True when this tab's annotations are view-only (see _load_ecto_file)
     tab_id: Optional[str] = None  # stable identity across save/restore — see core/project_merge.py's viewer_tabs merger
-    screenshots: list = field(default_factory=list)  # [(QPixmap, timestamp_str), ...] — screenshot_panel is one shared widget, swapped per tab on switch (see _save_current_tab_state / _on_tab_changed)
+    screenshots: list = field(default_factory=list)  # [(QPixmap, timestamp_str, id, note), ...] — screenshot_panel is one shared widget, swapped per tab on switch (see _save_current_tab_state / _on_tab_changed)
 
 
 # ── Background thread: runs screencapture -i and emits result ─────────────────
@@ -381,13 +381,27 @@ class STLViewerWindow(QMainWindow):
             QMenu::item:selected {{ background-color: {default_theme.button_primary}; color: #ffffff; }}
             QMenu::separator {{ height: 1px; background: {default_theme.border_standard}; margin: 4px 0; }}
         """)
-        _file_menu.addAction(t('project.topbar.new'), lambda: self.project_widget._on_new_project())
-        _file_menu.addAction(t('project.topbar.open'), lambda: self.project_widget._on_open_project())
-        _file_menu.addAction(t('project.topbar.save'), lambda: self.project_widget._on_save_project())
-        _file_menu.addAction(t('project.topbar.save_as'), lambda: self.project_widget._on_save_project_as())
-        _file_menu.addAction(t('project.topbar.version_history'), lambda: self.project_widget._show_version_history())
-        _file_menu.addSeparator()
-        _file_menu.addAction(t('project.topbar.password'), lambda: self.project_widget._on_password_btn())
+        from core.edition import is_lite
+        if is_lite():
+            # LYNS Lite never manages a .lyns.pjt project — it only ever
+            # opens/saves the one .lyns.review file a supplier was sent.
+            # See _lite_new_project/_lite_open_review/_lite_save_review below.
+            _file_menu.addAction(t('mode_bar.lite_new_review'), lambda: self._lite_new_project())
+            _file_menu.addAction(t('mode_bar.lite_open_review'), lambda: self._lite_open_review())
+            _file_menu.addAction(t('mode_bar.lite_save_review'), lambda: self._lite_save_review())
+            _file_menu.addAction(t('mode_bar.lite_save_review_as'), lambda: self._lite_save_review_as())
+        else:
+            _file_menu.addAction(t('project.topbar.new'), lambda: self.project_widget._on_new_project())
+            _file_menu.addAction(t('project.topbar.open'), lambda: self.project_widget._on_open_project())
+            _file_menu.addAction(t('project.topbar.save'), lambda: self.project_widget._on_save_project())
+            _file_menu.addAction(t('project.topbar.save_as'), lambda: self.project_widget._on_save_project_as())
+            _file_menu.addAction(t('project.topbar.version_history'), lambda: self.project_widget._show_version_history())
+            _file_menu.addSeparator()
+            # Supplier Review Workflow — see core/review_format.py.
+            _file_menu.addAction(t('project.topbar.export_review'), lambda: self.project_widget._export_supplier_review())
+            _file_menu.addAction(t('project.topbar.import_review'), lambda: self.project_widget._import_supplier_review())
+            _file_menu.addSeparator()
+            _file_menu.addAction(t('project.topbar.password'), lambda: self.project_widget._on_password_btn())
         self._mode_file_btn.setMenu(_file_menu)
 
         self._mode_3d_btn = QPushButton(t("mode_bar.viewer_3d"))
@@ -634,6 +648,17 @@ class STLViewerWindow(QMainWindow):
         self.technical_sidebar.export_requested.connect(self._tech_export_ecto)
         self.technical_sidebar.export_pdf_requested.connect(self._tech_export_pdf)
         self.technical_sidebar.reset_requested.connect(self._tech_reset)
+        from core.edition import is_lite
+        if is_lite():
+            # LYNS Lite never edits the technical document's own metadata
+            # (property/title/manufacturer/dates/comments) or uploads a new
+            # one — only annotate + the two export buttons stay usable (see
+            # TechnicalSidebar.set_read_only's is_lite() bypass). Set once,
+            # unconditionally, here rather than per load-path, since Lite
+            # stays Lite for its whole session regardless of how a document
+            # got loaded (a fresh review, or one reopened via file
+            # association — see main.py).
+            self.technical_sidebar.set_read_only(True)
         self._tech_ecto_exported = False
         self._tech_splitter.addWidget(self.technical_sidebar)
 
@@ -691,6 +716,7 @@ class STLViewerWindow(QMainWindow):
         self.project_widget.clear_viewer_tabs.connect(self._clear_all_viewer_tabs)
         self.project_widget.viewer_tabs_sync_requested.connect(self._push_viewers_to_project)
         self.project_widget.viewer_tabs_conflict_resolved.connect(self._reconcile_viewer_tabs_after_merge)
+        self.project_widget.viewer_tab_screenshots_merged.connect(self._on_tab_screenshots_merged)
         self.project_widget.qc_model_remove_requested.connect(self._on_qc_model_remove)
         self.project_widget.qc_upload_requested.connect(self.upload_stl_file)
         self.project_widget.project_info_changed.connect(self.technical_sidebar.update_project_info)
@@ -963,10 +989,16 @@ class STLViewerWindow(QMainWindow):
         self._mode_file_btn.setText(t("mode_bar.file"))
         _file_menu = self._mode_file_btn.menu()
         if _file_menu is not None:
+            from core.edition import is_lite
             _actions = _file_menu.actions()
-            _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
-                       'project.topbar.save_as', 'project.topbar.version_history', None,
-                       'project.topbar.password')
+            if is_lite():
+                _labels = ('mode_bar.lite_new_review', 'mode_bar.lite_open_review',
+                           'mode_bar.lite_save_review', 'mode_bar.lite_save_review_as')
+            else:
+                _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
+                           'project.topbar.save_as', 'project.topbar.version_history', None,
+                           'project.topbar.export_review', 'project.topbar.import_review', None,
+                           'project.topbar.password')
             for _act, _key in zip(_actions, _labels):
                 if _key:
                     _act.setText(t(_key))
@@ -2266,6 +2298,18 @@ class STLViewerWindow(QMainWindow):
 
         logger.info(f"_reconcile_viewer_tabs_after_merge: updated={len(updated)} removed={len(removed_ids)}")
 
+    def _on_tab_screenshots_merged(self, tab_id: str):
+        """A supplier-review import (ui/project_widget.py's
+        _merge_supplier_annotations) just appended new screenshots onto
+        the tab with this tab_id. screenshot_panel is one shared widget
+        that only repaints from tab.screenshots on tab switch — if the
+        merged-into tab is the one currently visible, refresh it now so
+        the new screenshot shows up immediately instead of only after
+        switching tabs away and back."""
+        tab = self._current_tab
+        if tab is not None and getattr(tab, 'tab_id', None) == tab_id:
+            self.screenshot_panel.set_screenshots(tab.screenshots)
+
     def _restore_technical_overview_from_project(self, tmp_path: str):
         """Restore the Technical Overview workspace from a saved project's
         embedded .ecto bundle. Same import path as opening a standalone
@@ -2315,6 +2359,270 @@ class STLViewerWindow(QMainWindow):
             show_moving_border=state.get('show_moving_border', True),
             show_ref_lines=state.get('show_ref_lines', True),
             pdf_locked=state.get('pdf_locked', False),
+        )
+
+    # ── LYNS Lite: Supplier Review Workflow (open/save a .lyns.review) ─────
+
+    def _lite_has_review_loaded(self) -> bool:
+        return getattr(self, '_lite_review_envelope', None) is not None
+
+    def _lite_confirm_discard(self) -> bool:
+        """Whatever's currently open (3D tabs, QC comments/photos, any
+        feedback not yet saved back) belongs to the review being replaced.
+        Lite has no reliable per-field dirty-tracking the way the full
+        project editor does (see TheProjectWidget._unsaved_changes — never
+        set by the supplier-feedback composer or new-pin flows), so unlike
+        project_widget's own _confirm_discard this always asks whenever a
+        review is loaded, rather than trying to guess if anything changed."""
+        from ui.modal_utils import MessageModal, BaseModal
+        dlg = MessageModal(
+            self, t('project.msg.unsaved_title'), t('project.msg.unsaved_body'),
+            theme=BaseModal.LIGHT,
+            primary_text=t('project.msg.unsaved_discard'),
+            secondary_text=t('common.cancel'),
+        )
+        result = {'discard': False}
+        dlg.primary_btn.clicked.connect(lambda: (result.update(discard=True), dlg.accept()))
+        if dlg.secondary_btn:
+            dlg.secondary_btn.clicked.connect(lambda: (result.update(discard=False), dlg.reject()))
+        dlg.exec_()
+        return result['discard']
+
+    def _lite_new_project(self):
+        """LYNS Lite's File > New Review — close whatever's currently
+        loaded and return to a blank workspace, ready to open a different
+        review without it combining with the one just closed."""
+        if self._lite_has_review_loaded() and not self._lite_confirm_discard():
+            return
+        # Reuses TheProjectWidget's own reset (clears every viewer tab, QC,
+        # Technical Overview, Drawing Scale, and the project-info card) —
+        # its own _unsaved_changes guard is a no-op here since Lite never
+        # sets that flag, so this proceeds straight to the reset.
+        self.project_widget._on_new_project()
+        self._lite_review_path = None
+        self._lite_review_envelope = None
+        self.setWindowTitle("LYNS Lite")
+        logger.info("_lite_new_project: workspace reset")
+
+    def _lite_open_review(self):
+        """LYNS Lite's File > Open Review — pick a .lyns.review file and
+        load it. See _lite_load_review_file for what actually happens."""
+        if self._lite_has_review_loaded() and not self._lite_confirm_discard():
+            return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, t('mode_bar.lite_open_review'), '',
+            'LYNS Review (*.lyns.review);;All Files (*)'
+        )
+        if not file_path:
+            return
+        self._lite_load_review_file(file_path)
+
+    def _lite_load_review_file(self, file_path: str):
+        """Decode a .lyns.review envelope and load each section into the
+        same widgets a full LYNS360 project would use — just restricted to
+        what TheProjectWidget shows when is_lite() (see its _build_ui):
+        only the Quality Control nav item, plus the always-present 3D
+        Viewer / Technical Overview / Drawing Scale workspaces. Also used
+        for the file-association double-click open path (see main.py).
+
+        Each 3D tab is loaded with force_reader_mode=True — a supplier
+        review is never "this machine's own editable project," even when
+        LYNS360 and Lite happen to run on the same machine (see
+        _load_ecto_file's docstring for why the plain creator_token check
+        isn't enough on its own). The PM's existing annotations stay
+        locked; the Lite-only "can still add new pins" bypass lives in
+        ui/toolbar.py's set_reader_mode, and the "can still attach
+        feedback to an existing pin" composer lives in
+        ui/annotation_viewer_popup.py's AnnotationViewerPopup.
+
+        Always resets the workspace first (see TheProjectWidget._on_new_project)
+        regardless of what was open before — opening a second review used to
+        just load its viewer tabs/QC/etc. on top of whatever the first one
+        left behind, so two reviews' 3D tabs and Quality Control data ended
+        up combined in one workspace instead of the second one replacing
+        the first. Confirming whether to discard unsaved work is the
+        caller's job (see _lite_open_review) — by the time this runs, the
+        decision to load has already been made, so this proceeds unconditionally.
+        """
+        import base64
+        import tempfile
+        from core.review_format import load_review_file
+        try:
+            envelope = load_review_file(file_path)
+        except Exception as e:
+            logger.error(f'_lite_load_review_file: failed to read {file_path}: {e}')
+            show_error_dialog(self, "Error", f"Failed to open .lyns.review file:\n{e}")
+            return
+
+        self.project_widget._on_new_project()
+
+        # Kept around for _lite_save_review to preserve supplier/original
+        # filename/exported_by and to know which tab_ids to re-bundle.
+        self._lite_review_path = file_path
+        self._lite_review_envelope = envelope
+
+        # A review can bundle more than one open 3D model — each becomes its
+        # own tab (see ui/export_review_dialog.py's multi-select tab picker).
+        viewer_tabs = envelope.get('viewer_tabs') or []
+        if viewer_tabs:
+            self._switch_mode("3d")
+        for viewer_tab in viewer_tabs:
+            if not viewer_tab.get('bundle_b64'):
+                continue
+            fd, tmp_path = tempfile.mkstemp(suffix='.lyns')
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(viewer_tab['bundle_b64']))
+                self._load_ecto_file(
+                    tmp_path,
+                    display_name_override=viewer_tab.get('tab_name'),
+                    force_editable=False,
+                    force_reader_mode=True,
+                )
+                if self._current_tab is not None:
+                    self._current_tab.tab_id = viewer_tab.get('id') or uuid.uuid4().hex
+            except Exception as e:
+                logger.warning(f'_lite_load_review_file: could not load a viewer tab: {e}')
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+        technical_overview = envelope.get('technical_overview')
+        if technical_overview and technical_overview.get('bundle_b64'):
+            fd, tmp_path = tempfile.mkstemp(suffix='.ecto')
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(technical_overview['bundle_b64']))
+                self._restore_technical_overview_from_project(tmp_path)
+            except Exception as e:
+                logger.warning(f'_lite_load_review_file: could not load technical_overview: {e}')
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+        drawing_scale = envelope.get('drawing_scale')
+        if drawing_scale and drawing_scale.get('file_b64'):
+            ext = drawing_scale.get('file_ext') or '.png'
+            fd, tmp_path = tempfile.mkstemp(suffix=ext)
+            os.close(fd)
+            try:
+                Path(tmp_path).write_bytes(base64.b64decode(drawing_scale['file_b64']))
+                # Takes ownership of tmp_path — does not delete it (see its own docstring).
+                self._restore_drawing_scale_from_project(
+                    tmp_path, drawing_scale.get('state', {}), drawing_scale.get('file_name', '')
+                )
+            except Exception as e:
+                logger.warning(f'_lite_load_review_file: could not load drawing_scale: {e}')
+
+        qc_data = envelope.get('quality_control')
+        if qc_data is not None:
+            qc_widget = self.project_widget._ensure_screen('quality_control')
+            if hasattr(qc_widget, 'set_data'):
+                qc_widget.set_data(qc_data)
+
+        # Report — always read-only in Lite (locked once at _build_ui time,
+        # see TheProjectWidget's is_lite() branch), so this just needs the
+        # data loaded in, same as QC above.
+        report_data = envelope.get('report')
+        if report_data is not None:
+            report_widget = self.project_widget._ensure_screen('report')
+            if hasattr(report_widget, 'set_data'):
+                report_widget.set_data(report_data)
+
+        project_info = envelope.get('project_info')
+        if project_info is not None:
+            self.project_widget._nav.set_info_data(project_info)
+        self.project_widget._nav.set_read_only(True)
+
+        self._switch_mode("project")
+        original_name = envelope.get('original_filename') or 'Review'
+        self.setWindowTitle(f"LYNS Lite - {original_name}")
+        logger.info(f'_lite_load_review_file: loaded {file_path}')
+
+    def _lite_save_review_as(self):
+        """LYNS Lite's File > Save Review As — always prompts for a new
+        location, even when a review is already loaded from/saved to one."""
+        self._lite_save_review(force_dialog=True)
+
+    def _lite_save_review(self, force_dialog: bool = False):
+        """LYNS Lite's File > Save Review — re-bundles every open 3D tab that
+        came from the review, Technical Overview, Drawing Scale, and the QC
+        screen's current data (which is where the supplier's comments/
+        control-point edits live) back into a .lyns.review file, preserving
+        the supplier/original_filename/exported_by identity from whatever
+        was opened.
+
+        force_dialog — Save Review As (see above): always ask where to
+        save, even if this review already has a known path."""
+        envelope_in = getattr(self, '_lite_review_envelope', None)
+        if envelope_in is None:
+            from ui.modal_utils import show_message_dialog
+            show_message_dialog(self, t('mode_bar.lite_save_review'), t('export_review.no_tabs'))
+            return
+
+        # Fresh tab snapshot before bundling — same reasoning as every other
+        # save path (see TheProjectWidget.viewer_tabs_sync_requested's docstring).
+        self.project_widget.viewer_tabs_sync_requested.emit()
+        original_ids = [vt.get('id') for vt in (envelope_in.get('viewer_tabs') or []) if vt.get('id')]
+        viewer_tabs = [
+            entry for tid in original_ids
+            if (entry := self.project_widget.bundle_viewer_tab_by_id(tid)) is not None
+        ]
+        if not viewer_tabs:
+            viewer_tabs = envelope_in.get('viewer_tabs') or []
+
+        qc_widget = self.project_widget._ensure_screen('quality_control')
+        quality_control = qc_widget.get_data() if hasattr(qc_widget, 'get_data') else None
+
+        technical_overview = self.project_widget._bundle_technical_overview()
+        drawing_scale = self.project_widget._bundle_drawing_scale()
+
+        from core.review_format import build_review_envelope, save_review_file
+        envelope_out = build_review_envelope(
+            exported_by=envelope_in.get('exported_by', ''),
+            original_filename=envelope_in.get('original_filename', 'project'),
+            supplier=envelope_in.get('supplier', {}),
+            viewer_tabs=viewer_tabs,
+            technical_overview=technical_overview or envelope_in.get('technical_overview'),
+            drawing_scale=drawing_scale or envelope_in.get('drawing_scale'),
+            quality_control=quality_control if quality_control is not None else envelope_in.get('quality_control'),
+            project_info=envelope_in.get('project_info'),
+            # Report is locked read-only for the whole Lite session (see
+            # TheProjectWidget's is_lite() branch) — nothing to re-bundle,
+            # just carry the original data through unchanged.
+            report=envelope_in.get('report'),
+        )
+
+        path = None if force_dialog else getattr(self, '_lite_review_path', None)
+        if not path:
+            default_name = os.path.basename(getattr(self, '_lite_review_path', None) or 'review.lyns.review')
+            path, _ = QFileDialog.getSaveFileName(
+                self, t('mode_bar.lite_save_review_as' if force_dialog else 'mode_bar.lite_save_review'),
+                default_name, 'LYNS Review (*.lyns.review);;All Files (*)'
+            )
+            if not path:
+                return
+            if not path.endswith('.lyns.review'):
+                path += '.lyns.review'
+
+        try:
+            save_review_file(envelope_out, path)
+        except Exception as e:
+            logger.error(f'_lite_save_review: failed to write {path}: {e}')
+            show_error_dialog(self, "Error", f"Failed to save .lyns.review file:\n{e}")
+            return
+
+        self._lite_review_path = path
+        self._lite_review_envelope = envelope_out
+        logger.info(f'_lite_save_review: saved {path}')
+        from ui.modal_utils import show_message_dialog
+        show_message_dialog(
+            self, t('mode_bar.lite_save_review'),
+            t('export_review.success').format(filename=os.path.basename(path))
         )
 
     def _clear_all_viewer_tabs(self):
@@ -3540,15 +3848,14 @@ class STLViewerWindow(QMainWindow):
             annotations_with_display = []
             for i, ann in enumerate(annotations):
                 display_number = i + 1
+                # An explicit/palette color (see AnnotationPanel.add_annotation)
+                # always wins, in reader mode too — read/unread only decides
+                # the fallback for annotations that never got one, same as
+                # the sidebar card's own _get_indicator_color.
                 if reader_mode:
-                    color = VALIDATED_COLOR if ann.is_read else PENDING_COLOR
+                    color = getattr(ann, 'color', None) or (VALIDATED_COLOR if ann.is_read else PENDING_COLOR)
                 else:
-                    if getattr(ann, 'color', None):
-                        color = ann.color
-                    elif ann.is_validated:
-                        color = VALIDATED_COLOR
-                    else:
-                        color = PENDING_COLOR
+                    color = getattr(ann, 'color', None) or PENDING_COLOR
                 annotations_with_display.append((ann.id, display_number, color))
             vw.update_annotation_labels_from_list(annotations_with_display)
         logger.info(f"_on_annotation_deleted: Annotation {annotation_id} removed, markers renumbered")
@@ -3572,11 +3879,15 @@ class STLViewerWindow(QMainWindow):
             label=annotation.label,
             created_at=annotation.created_at,
             display_number=display_num,
+            supplier_notes=annotation.supplier_notes,
+            pm_notes=annotation.pm_notes,
+            added_by=annotation.added_by,
             parent=self
         )
-        
+
         popup.annotation_validated.connect(self._on_popup_validated)
         popup.annotation_deleted.connect(self._on_popup_deleted)
+        popup.note_added.connect(self._on_annotation_pm_note_added)
         popup.finished.connect(lambda: self._on_annotation_popup_closed(annotation_id))
         
         vw = self.viewer_widget
@@ -3588,13 +3899,24 @@ class STLViewerWindow(QMainWindow):
     
     def _on_open_viewer_popup_requested(self, annotation_id: int):
         from ui.annotation_viewer_popup import AnnotationViewerPopup
-        
+        from core.edition import is_lite
+
         if self.annotation_panel is None:
             return
         annotation = self.annotation_panel.get_annotation_by_id(annotation_id)
         if annotation is None:
             return
-        
+
+        # Only set inside LYNS Lite with a review actually loaded — that's
+        # what makes the popup show the "add your feedback" composer (see
+        # AnnotationViewerPopup's docstring). Outside Lite this is a plain
+        # read-only popup, same as always.
+        current_supplier = None
+        if is_lite():
+            envelope = getattr(self, '_lite_review_envelope', None)
+            if envelope:
+                current_supplier = envelope.get('supplier')
+
         display_num = self.annotation_panel.get_display_number(annotation.id)
         popup = AnnotationViewerPopup(
             annotation_id=annotation.id,
@@ -3604,35 +3926,54 @@ class STLViewerWindow(QMainWindow):
             label=annotation.label,
             created_at=annotation.created_at,
             display_number=display_num,
+            supplier_notes=annotation.supplier_notes,
+            pm_notes=annotation.pm_notes,
+            added_by=annotation.added_by,
+            current_supplier=current_supplier,
             parent=self
         )
-        
+        popup.note_added.connect(self._on_annotation_note_added)
+
         self.annotation_panel.mark_as_read(annotation_id)
         vw = self.viewer_widget
-        
+
         if vw and hasattr(vw, 'set_annotation_selected'):
             vw.set_annotation_selected(annotation_id, True)
-        
+
         popup.finished.connect(lambda: self._on_annotation_popup_closed(annotation_id))
         popup.show()
-        
+
         logger.info(f"_on_open_viewer_popup_requested: Opened viewer popup for annotation {annotation_id}")
+
+    def _on_annotation_note_added(self, annotation_id: int, note: dict):
+        """A supplier just submitted feedback on an existing annotation in
+        LYNS Lite's AnnotationViewerPopup — store it on the live annotation
+        so it's included the next time this tab is bundled (Save Review)."""
+        if self.annotation_panel is not None:
+            self.annotation_panel.add_supplier_notes(annotation_id, [note])
+
+    def _on_annotation_pm_note_added(self, annotation_id: int, note: dict):
+        """The PM just posted a follow-up comment on an existing annotation
+        in LYNS360's AnnotationPopup — store it on the live annotation so
+        it's included the next time this tab is exported (Export Review),
+        letting the supplier see the PM's reply on their next Lite session."""
+        if self.annotation_panel is not None:
+            self.annotation_panel.add_pm_notes(annotation_id, [note])
     
     def _on_popup_validated(self, annotation_id: int, text: str, image_paths: list, label: str = "Point"):
         if self.annotation_panel:
             self.annotation_panel.validate_annotation(annotation_id, text, image_paths, label)
         vw = self.viewer_widget
         if vw and hasattr(vw, 'update_annotation_marker_color'):
-            # Validating used to force the marker to the plain "validated" green
-            # even when the point had its own color (custom pick, or the
-            # auto-assigned palette color) — so the 3D marker and the sidebar
-            # badge would show two different colors for the same point. Follow
-            # the same "explicit color wins" rule used everywhere else the
-            # marker color is computed (e.g. after deleting/renumbering).
+            # No more "validated" marker color to switch to on Done — keep
+            # whatever color the point already had (explicit pick, or the
+            # auto-assigned palette color from AnnotationPanel.add_annotation),
+            # same "explicit color wins" rule used everywhere else the marker
+            # color is computed (e.g. after deleting/renumbering).
             annotation = self.annotation_panel.get_annotation_by_id(annotation_id) if self.annotation_panel else None
-            marker_color = getattr(annotation, 'color', None) or VALIDATED_COLOR
+            marker_color = getattr(annotation, 'color', None) or PENDING_COLOR
             vw.update_annotation_marker_color(annotation_id, marker_color)
-        logger.info(f"_on_popup_validated: Annotation {annotation_id} validated")
+        logger.info(f"_on_popup_validated: Annotation {annotation_id} updated")
     
     def _on_popup_deleted(self, annotation_id: int):
         if self.annotation_panel:
@@ -3645,7 +3986,7 @@ class STLViewerWindow(QMainWindow):
             vw.set_annotation_selected(annotation_id, False)
     
     def _on_annotation_validated(self, annotation_id: int, text: str, image_paths: list, label: str = "Point"):
-        logger.info(f"_on_annotation_validated: Annotation {annotation_id} validated")
+        logger.info(f"_on_annotation_validated: Annotation {annotation_id} updated")
     
     def _on_focus_annotation(self, annotation_id: int):
         vw = self.viewer_widget
@@ -3670,15 +4011,12 @@ class STLViewerWindow(QMainWindow):
         reader_mode = self.annotation_panel.is_reader_mode()
         for i, ann in enumerate(annotations):
             display_number = i + 1
+            # Explicit/palette color always wins, reader mode included —
+            # see the matching comment in _on_annotation_deleted.
             if reader_mode:
-                color = VALIDATED_COLOR if ann.is_read else PENDING_COLOR
+                color = getattr(ann, 'color', None) or (VALIDATED_COLOR if ann.is_read else PENDING_COLOR)
             else:
-                if getattr(ann, 'color', None):
-                    color = ann.color
-                elif ann.is_validated:
-                    color = VALIDATED_COLOR
-                else:
-                    color = PENDING_COLOR
+                color = getattr(ann, 'color', None) or PENDING_COLOR
             if hasattr(vw, 'add_annotation_marker'):
                 vw.add_annotation_marker(ann.id, ann.point, color, display_date=str(display_number))
     
@@ -3872,12 +4210,11 @@ class STLViewerWindow(QMainWindow):
                 for i, ann_data in enumerate(annotations):
                     ann_id = ann_data['id']
                     point = tuple(ann_data['point'])
-                    is_validated = ann_data.get('is_validated', False)
                     is_read = ann_data.get('is_read', False)
                     if reader_mode:
-                        color = '#1821b4' if is_read else '#36cd2e'
+                        color = ann_data.get('color') or ('#1821b4' if is_read else '#36cd2e')
                     else:
-                        color = '#1821b4' if is_validated else '#909d92'
+                        color = ann_data.get('color') or '#909d92'
                     if vw and hasattr(vw, 'add_annotation_marker'):
                         vw.add_annotation_marker(ann_id, point, color, display_date=str(i + 1))
                 
@@ -3895,7 +4232,7 @@ class STLViewerWindow(QMainWindow):
         return True
     
     def _load_ecto_file(self, ecto_path: str, display_name_override: Optional[str] = None,
-                         force_editable: bool = False):
+                         force_editable: bool = False, force_reader_mode: bool = False):
         """Load an .ecto bundle file.
 
         display_name_override — when the bundle was written to a temp path
@@ -3912,6 +4249,18 @@ class STLViewerWindow(QMainWindow):
         session's save/restore format for its own tabs. Without this
         override, reopening your own project on a second device always
         landed every tab in read-only "Reader Mode" for no real reason.
+
+        force_reader_mode — used by _lite_load_review_file. The creator-
+        token check above assumes "this machine created it" means "this is
+        my own editable content," which breaks the Supplier Review
+        Workflow when LYNS360 and LYNS Lite happen to run on the same
+        machine (e.g. testing, or a shared workstation): the PM's own
+        creator token is already registered locally, so without this flag
+        the review's existing annotations would incorrectly open fully
+        editable in Lite — no supplier-feedback composer at all, and no
+        protection against silently overwriting the PM's original comment.
+        A supplier review is never "your own project," regardless of which
+        machine exported it, so this always wins over the token check.
         """
         logger.info(f"_load_ecto_file: Loading .ecto file: {ecto_path}")
 
@@ -3926,6 +4275,8 @@ class STLViewerWindow(QMainWindow):
             model_path, annotations, reader_mode, temp_dir, drawings, texture_data, screenshots = EctoFormat.import_ecto(ecto_path)
             if force_editable:
                 reader_mode = False
+            if force_reader_mode:
+                reader_mode = True
 
             if model_path is None:
                 show_error_dialog(
@@ -4006,11 +4357,9 @@ class STLViewerWindow(QMainWindow):
                     point = tuple(ann_data['point'])
                     if reader_mode:
                         is_read = ann_data.get('is_read', False)
-                        color = VALIDATED_COLOR if is_read else PENDING_COLOR
+                        color = ann_data.get('color') or (VALIDATED_COLOR if is_read else PENDING_COLOR)
                     else:
-                        is_validated = ann_data.get('is_validated', False)
-                        ann_color = ann_data.get('color', None)
-                        color = ann_color if ann_color else (VALIDATED_COLOR if is_validated else PENDING_COLOR)
+                        color = ann_data.get('color') or PENDING_COLOR
                     if vw and hasattr(vw, 'add_annotation_marker'):
                         vw.add_annotation_marker(ann_id, point, color, display_date=str(i + 1))
                 
@@ -4073,7 +4422,10 @@ class STLViewerWindow(QMainWindow):
                     try:
                         pix = _QPixmap(shot['image_path'])
                         if not pix.isNull():
-                            restored_shots.append((pix, shot.get('timestamp', ''), shot.get('id') or uuid.uuid4().hex))
+                            restored_shots.append((
+                                pix, shot.get('timestamp', ''), shot.get('id') or uuid.uuid4().hex,
+                                shot.get('note', ''),
+                            ))
                     except Exception:
                         pass
                 tab.screenshots = restored_shots

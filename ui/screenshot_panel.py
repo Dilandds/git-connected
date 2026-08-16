@@ -42,8 +42,10 @@ class ScreenshotCard(QFrame):
     delete_requested       = pyqtSignal(int)
     save_requested         = pyqtSignal(int)
     save_to_report_requested = pyqtSignal(int)
+    note_changed           = pyqtSignal(int, str)
+    pixmap_edited          = pyqtSignal(int, QPixmap)
 
-    def __init__(self, index: int, pixmap: QPixmap, timestamp: str, parent=None):
+    def __init__(self, index: int, pixmap: QPixmap, timestamp: str, note: str = '', parent=None):
         super().__init__(parent)
         self.index = index
         self.pixmap = pixmap
@@ -79,7 +81,7 @@ class ScreenshotCard(QFrame):
         cam_label = QLabel("📷")
         cam_label.setStyleSheet(f"color: {default_theme.text_primary}; font-size: 10px; background: transparent;")
         header.addWidget(cam_label)
-        self.name_edit = QLineEdit(f"Image {index + 1}")
+        self.name_edit = QLineEdit(note or f"Image {index + 1}")
         self.name_edit.setStyleSheet(f"""
             QLineEdit {{
                 color: {default_theme.text_primary};
@@ -98,6 +100,14 @@ class ScreenshotCard(QFrame):
         self.name_edit.setPlaceholderText("Name")
         self.name_edit.setCursor(Qt.IBeamCursor)
         self.name_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Persist as this screenshot's note (see ScreenshotPanel._on_note_changed)
+        # — this field used to be purely cosmetic (reset on every tab switch);
+        # it's now the actual caption/detail a PM or supplier attaches, carried
+        # through export/import (core/ecto_format.py's screenshots.json) and
+        # shown in the Supplier Review merge dialog for new screenshots.
+        self.name_edit.editingFinished.connect(
+            lambda: self.note_changed.emit(self.index, self.name_edit.text().strip())
+        )
         header.addWidget(self.name_edit)
 
         ts_label = QLabel(timestamp)
@@ -264,6 +274,9 @@ class ScreenshotCard(QFrame):
         """ + _icon_btn_style)
         self.report_btn.clicked.connect(lambda: self.save_to_report_requested.emit(self.index))
         actions.addWidget(self.report_btn)
+        from core.edition import is_lite
+        if is_lite():
+            self.report_btn.hide()
 
         layout.addLayout(actions)
 
@@ -345,10 +358,15 @@ class ScreenshotCard(QFrame):
         editor.exec_()
 
     def _on_pixmap_updated(self, new_pixmap: QPixmap):
-        """Update the card's pixmap after editing."""
+        """Update the card's pixmap after editing (arrows/text drawn in the
+        editor get baked into the image itself). Also tells the owning
+        ScreenshotPanel so its screenshots list — the thing that actually
+        gets exported/bundled — carries the edit, not just this card's
+        in-memory copy."""
         self.pixmap = new_pixmap
         self._rebuild_thumb_source()
         self._update_thumbnail()
+        self.pixmap_edited.emit(self.index, new_pixmap)
 
     def update_index(self, new_index: int):
         self.index = new_index
@@ -363,7 +381,7 @@ class ScreenshotPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.screenshots = []  # list of (QPixmap, timestamp_str, id) — id is stable across edits, assigned once at capture (see add_screenshot); used by core/project_merge.py to merge screenshots per-item across machines
+        self.screenshots = []  # list of (QPixmap, timestamp_str, id, note) — id is stable across edits, assigned once at capture (see add_screenshot); used by core/project_merge.py to merge screenshots per-item across machines. note is the card's editable caption (see ScreenshotCard.name_edit / _on_note_changed).
         self.cards = []        # list of ScreenshotCard widgets
         self.setMinimumWidth(280)
         self.setStyleSheet(f"background-color: {default_theme.card_background};")
@@ -556,13 +574,15 @@ class ScreenshotPanel(QWidget):
     def add_screenshot(self, pixmap: QPixmap):
         """Add a captured screenshot to the panel."""
         ts = datetime.now().strftime("%H:%M:%S")
-        self.screenshots.append((pixmap, ts, uuid.uuid4().hex))
+        self.screenshots.append((pixmap, ts, uuid.uuid4().hex, ''))
         idx = len(self.screenshots) - 1
 
         card = ScreenshotCard(idx, pixmap, ts)
         card.delete_requested.connect(self._on_delete)
         card.save_requested.connect(self._on_save)
         card.save_to_report_requested.connect(self._on_save_to_report)
+        card.note_changed.connect(self._on_note_changed)
+        card.pixmap_edited.connect(self._on_pixmap_edited)
         self.cards.append(card)
 
         # Add to grid
@@ -582,12 +602,14 @@ class ScreenshotPanel(QWidget):
         caller can finalize it via complete_pending_card() once the pixmap is ready."""
         ts = datetime.now().strftime("%H:%M:%S")
         # Reserve a slot in screenshots with a null pixmap; index stays stable.
-        self.screenshots.append((QPixmap(), ts, uuid.uuid4().hex))
+        self.screenshots.append((QPixmap(), ts, uuid.uuid4().hex, ''))
         idx = len(self.screenshots) - 1
         card = ScreenshotCard(idx, None, ts)
         card.delete_requested.connect(self._on_delete)
         card.save_requested.connect(self._on_save)
         card.save_to_report_requested.connect(self._on_save_to_report)
+        card.note_changed.connect(self._on_note_changed)
+        card.pixmap_edited.connect(self._on_pixmap_edited)
         self.cards.append(card)
         row = idx // GRID_COLUMNS
         col = idx % GRID_COLUMNS
@@ -606,28 +628,34 @@ class ScreenshotPanel(QWidget):
             idx = self.cards.index(card)
         except ValueError:
             return
-        ts, sid = self.screenshots[idx][1], self.screenshots[idx][2]
-        self.screenshots[idx] = (pixmap, ts, sid)
+        ts, sid, note = self.screenshots[idx][1], self.screenshots[idx][2], self.screenshots[idx][3]
+        self.screenshots[idx] = (pixmap, ts, sid, note)
         card.set_pixmap(pixmap)
 
     def set_screenshots(self, items: list):
-        """Replace all screenshots with the given (pixmap, timestamp, id)
-        tuples. Used when switching tabs — this panel widget is shared
-        across all tabs, but each tab now keeps its own screenshot list
-        (see stl_viewer.py's _save_current_tab_state / _on_tab_changed)."""
+        """Replace all screenshots with the given (pixmap, timestamp, id,
+        note) tuples — a legacy 3-tuple (pre-note) is also accepted and
+        just gets an empty note. Used when switching tabs — this panel
+        widget is shared across all tabs, but each tab now keeps its own
+        screenshot list (see stl_viewer.py's _save_current_tab_state /
+        _on_tab_changed)."""
         for card in self.cards:
             self.grid_layout.removeWidget(card)
             card.deleteLater()
         self.cards.clear()
         self.screenshots.clear()
 
-        for pixmap, ts, sid in items or []:
-            self.screenshots.append((pixmap, ts, sid))
+        for item in items or []:
+            pixmap, ts, sid = item[0], item[1], item[2]
+            note = item[3] if len(item) > 3 else ''
+            self.screenshots.append((pixmap, ts, sid, note))
             idx = len(self.screenshots) - 1
-            card = ScreenshotCard(idx, pixmap, ts)
+            card = ScreenshotCard(idx, pixmap, ts, note=note)
             card.delete_requested.connect(self._on_delete)
             card.save_requested.connect(self._on_save)
             card.save_to_report_requested.connect(self._on_save_to_report)
+            card.note_changed.connect(self._on_note_changed)
+            card.pixmap_edited.connect(self._on_pixmap_edited)
             self.cards.append(card)
             row = idx // GRID_COLUMNS
             col = idx % GRID_COLUMNS
@@ -674,7 +702,7 @@ class ScreenshotPanel(QWidget):
     def _on_save(self, index: int):
         if index < 0 or index >= len(self.screenshots):
             return
-        pixmap, _, _ = self.screenshots[index]
+        pixmap = self.screenshots[index][0]
         # Open editor so user can annotate before saving
         title = f"Image {index + 1}"
         if index < len(self.cards):
@@ -690,17 +718,32 @@ class ScreenshotPanel(QWidget):
                 self.cards[index]._rebuild_thumb_source()
                 self.cards[index]._update_thumbnail()
             if index < len(self.screenshots):
-                ts, sid = self.screenshots[index][1], self.screenshots[index][2]
-                self.screenshots[index] = (result_pixmap, ts, sid)
+                ts, sid, note = self.screenshots[index][1], self.screenshots[index][2], self.screenshots[index][3]
+                self.screenshots[index] = (result_pixmap, ts, sid, note)
 
         editor.pixmap_updated.connect(_do_save)
         editor.exec_()
 
     def _on_save_to_report(self, index: int):
         if 0 <= index < len(self.screenshots):
-            pixmap, _, _ = self.screenshots[index]
+            pixmap = self.screenshots[index][0]
             if pixmap and not pixmap.isNull():
                 self.save_to_report.emit(pixmap)
+
+    def _on_note_changed(self, index: int, note: str):
+        """A card's name/caption field was edited — persist it as this
+        screenshot's note (see ScreenshotCard.name_edit)."""
+        if 0 <= index < len(self.screenshots):
+            pixmap, ts, sid = self.screenshots[index][0], self.screenshots[index][1], self.screenshots[index][2]
+            self.screenshots[index] = (pixmap, ts, sid, note)
+
+    def _on_pixmap_edited(self, index: int, pixmap: QPixmap):
+        """A card was opened (click on thumbnail) and arrows/text were drawn
+        on it — persist the annotated pixmap into screenshots so it's what
+        actually gets exported/bundled, not just what the card shows."""
+        if 0 <= index < len(self.screenshots):
+            ts, sid, note = self.screenshots[index][1], self.screenshots[index][2], self.screenshots[index][3]
+            self.screenshots[index] = (pixmap, ts, sid, note)
 
     def _on_clear_all(self):
         if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):
