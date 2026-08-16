@@ -5,9 +5,8 @@ shows the app's icon on those files instead of a generic blank-page icon
 ui/annotation_icon.py's get_app_window_icon(), both ultimately derived
 from assets/logo.png).
 
-Commercial and Education both open .lyns.pjt and share one ProgID — see
-stl_viewer_mac_education.spec's comment on why that's safe (a user only
-ever has one edition installed). LYNS Lite opens a *different* file type
+Commercial opens .lyns.pjt under one ProgID (a user only ever has one
+edition installed). LYNS Lite opens a *different* file type
 (.lyns.review) and gets its own ProgID so the two associations don't
 collide if someone ever has both a full edition and Lite installed at
 once (e.g. a PM who's also acting as a reviewer).

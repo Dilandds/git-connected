@@ -11,9 +11,9 @@ permissions:
   contents: write  # needed to create a GitHub Release
 
 jobs:
-  # ─── Windows: builds Commercial + Education + Lite EXEs ───────────────────
+  # ─── Windows: builds Commercial + Lite EXEs ────────────────────────────────
   build-windows:
-    name: Build Windows (Commercial + Education + Lite)
+    name: Build Windows (Commercial + Lite)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: echo "version=$(python -c 'from core.version import __version__; print(__version__)')" >> $GITHUB_OUTPUT
 
-      - name: Build Commercial + Education + Lite EXEs into release-staging
+      - name: Build Commercial + Lite EXEs into release-staging
         shell: pwsh
         run: |
           $V = "${{ steps.ver.outputs.version }}"
@@ -44,10 +44,6 @@ jobs:
           Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
           powershell -ExecutionPolicy Bypass -File build_windows.ps1
           Copy-Item "dist\LYNS360-Setup-$V.exe" "release-staging\LYNS360-Setup-$V.exe" -Force
-
-          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-          powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
-          Copy-Item "dist\LYNS360-Education-Setup-$V.exe" "release-staging\LYNS360-Education-Setup-$V.exe" -Force
 
           Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
           powershell -ExecutionPolicy Bypass -File build_windows_lite.ps1
@@ -62,9 +58,9 @@ jobs:
           path: release-staging/*.exe
           retention-days: 7
 
-  # ─── macOS: builds Commercial + Education + Lite DMGs (Apple Silicon) ─────
+  # ─── macOS: builds Commercial + Lite DMGs (Apple Silicon) ─────────────────
   build-macos:
-    name: Build macOS ${{ matrix.os }} (Commercial + Education + Lite)
+    name: Build macOS ${{ matrix.os }} (Commercial + Lite)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -102,12 +98,6 @@ jobs:
           chmod +x build_mac.sh
           ./build_mac.sh
 
-      - name: Build Education DMG
-        run: |
-          rm -rf build dist
-          chmod +x build_mac_education.sh
-          ./build_mac_education.sh
-
       - name: Build Lite DMG
         run: |
           rm -rf build dist
@@ -120,7 +110,6 @@ jobs:
           V="${{ steps.meta.outputs.version }}"
           A="${{ steps.meta.outputs.arch }}"
           cp "LYNS360-${V}-macOS-${A}.dmg"           "release-staging/"
-          cp "LYNS360-Education-${V}-macOS-${A}.dmg" "release-staging/"
           cp "LYNS360-Lite-${V}-macOS-${A}.dmg"      "release-staging/"
           ls -la release-staging
 
@@ -206,10 +195,6 @@ jobs:
                   "windows":     info(f"LYNS360-Setup-{version}.exe"),
                   "macos_arm64": info(f"LYNS360-{version}-macOS-arm64.dmg"),
               },
-              "education": {
-                  "windows":     info(f"LYNS360-Education-Setup-{version}.exe"),
-                  "macos_arm64": info(f"LYNS360-Education-{version}-macOS-arm64.dmg"),
-              },
               "lite": {
                   "windows":     info(f"LYNS360-Lite-Setup-{version}.exe"),
                   "macos_arm64": info(f"LYNS360-Lite-{version}-macOS-arm64.dmg"),
@@ -237,8 +222,6 @@ jobs:
           files: |
             release/LYNS360-Setup-${{ steps.ver.outputs.version }}.exe
             release/LYNS360-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
-            release/LYNS360-Education-Setup-${{ steps.ver.outputs.version }}.exe
-            release/LYNS360-Education-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/LYNS360-Lite-Setup-${{ steps.ver.outputs.version }}.exe
             release/LYNS360-Lite-${{ steps.ver.outputs.version }}-macOS-arm64.dmg
             release/version.json
@@ -283,10 +266,8 @@ jobs:
           # 2) Latest copy — strip version from filenames so URLs are stable
           STAGE=$(mktemp -d)
           cp "release/LYNS360-Setup-${V}.exe"                        "$STAGE/LYNS360-Setup.exe"
-          cp "release/LYNS360-Education-Setup-${V}.exe"              "$STAGE/LYNS360-Education-Setup.exe"
           cp "release/LYNS360-Lite-Setup-${V}.exe"                   "$STAGE/LYNS360-Lite-Setup.exe"
           cp "release/LYNS360-${V}-macOS-arm64.dmg"                  "$STAGE/LYNS360-macOS-arm64.dmg"
-          cp "release/LYNS360-Education-${V}-macOS-arm64.dmg"        "$STAGE/LYNS360-Education-macOS-arm64.dmg"
           cp "release/LYNS360-Lite-${V}-macOS-arm64.dmg"             "$STAGE/LYNS360-Lite-macOS-arm64.dmg"
           cp "release/version.json"                                  "$STAGE/version.json"
           cp "release/SHA256SUMS.txt"                                "$STAGE/SHA256SUMS.txt"

@@ -106,54 +106,6 @@ jobs:
         echo "- ✅ Executable verified" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
 
-    # ---- Education Edition ----
-    - name: Build Education edition
-      run: |
-        rm -rf build dist
-        chmod +x build_mac_education.sh
-        ./build_mac_education.sh
-
-    - name: Verify Education .app bundle exists
-      run: |
-        if [ ! -d "dist/LYNS360-Education.app" ]; then
-          echo "Error: Education .app bundle not found"
-          exit 1
-        fi
-        echo "✓ Education .app bundle created successfully"
-
-    - name: Verify Education executable
-      run: |
-        EXE_PATH="dist/LYNS360-Education.app/Contents/MacOS/LYNS360-Education"
-        if [ ! -f "$EXE_PATH" ]; then
-          echo "Error: Education executable not found"
-          exit 1
-        fi
-        file "$EXE_PATH"
-        echo "✓ Education executable verified"
-
-    - name: Upload Education .app as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LYNS360-Education-macOS-${{ matrix.os }}
-        path: dist/LYNS360-Education.app
-        retention-days: 30
-
-    - name: Upload Education DMG as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LYNS360-Education-DMG-${{ matrix.os }}
-        path: LYNS360-Education-*-macOS-*.dmg
-        retention-days: 30
-
-    - name: Education build summary
-      run: |
-        echo "## Build Summary (Education)" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Education .app bundle created" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Education executable verified" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Education build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
-
     # ---- Lite Edition ----
     - name: Build Lite edition
       run: |
@@ -292,38 +244,6 @@ jobs:
         echo "- ✅ EXE created successfully" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ ZIP distribution created (LYNS360-Windows.zip)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Build completed on Windows" >> $GITHUB_STEP_SUMMARY
-
-    # ---- Education Edition ----
-    - name: Build Education edition
-      run: |
-        Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-        powershell -ExecutionPolicy Bypass -File build_windows_education.ps1
-
-    - name: Verify Education EXE exists
-      run: |
-        $exePath = "dist\LYNS360-Education.exe"
-        if (-not (Test-Path $exePath)) {
-          Write-Host "Error: Education EXE not found at $exePath" -ForegroundColor Red
-          exit 1
-        }
-        Write-Host "✓ Education EXE created successfully: $exePath" -ForegroundColor Green
-        $fileInfo = Get-Item $exePath
-        Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Cyan
-
-    - name: Upload Education ZIP as artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LYNS360-Education-Windows.zip
-        path: LYNS360-Education-Windows.zip
-        retention-days: 30
-
-    - name: Education build summary
-      run: |
-        echo "## Build Summary (Education)" >> $env:GITHUB_STEP_SUMMARY
-        echo "- ✅ Education EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
-        echo "- ✅ Education ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
-        echo "- ✅ Education build completed on Windows" >> $env:GITHUB_STEP_SUMMARY
 
     # ---- Lite Edition ----
     - name: Build Lite edition
