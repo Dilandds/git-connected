@@ -79,6 +79,23 @@ def load_review_file(file_path: str) -> dict:
     return data
 
 
+def ensure_review_extension(file_path: str) -> str:
+    """Normalize a save-dialog result onto exactly one trailing
+    '.lyns.review'. Windows' native Save dialog only reasons about the
+    text after the LAST dot when deciding whether a typed name already
+    carries the current filter's extension — for a compound extension
+    like '.lyns.review' it doesn't recognize "supplier.lyns.review" as
+    already complete, and appends the filter's extension again, producing
+    "supplier.lyns.review.lyns.review". Strip any such duplication before
+    conditionally appending, so this is safe to call regardless of
+    whether Windows already did (or didn't) append anything."""
+    while file_path.endswith('.lyns.review.lyns.review'):
+        file_path = file_path[:-len('.lyns.review')]
+    if not file_path.endswith('.lyns.review'):
+        file_path += '.lyns.review'
+    return file_path
+
+
 def is_review_file(file_path: str) -> bool:
     try:
         load_review_file(file_path)

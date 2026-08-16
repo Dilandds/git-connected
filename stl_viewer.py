@@ -2581,7 +2581,7 @@ class STLViewerWindow(QMainWindow):
         technical_overview = self.project_widget._bundle_technical_overview()
         drawing_scale = self.project_widget._bundle_drawing_scale()
 
-        from core.review_format import build_review_envelope, save_review_file
+        from core.review_format import build_review_envelope, save_review_file, ensure_review_extension
         envelope_out = build_review_envelope(
             exported_by=envelope_in.get('exported_by', ''),
             original_filename=envelope_in.get('original_filename', 'project'),
@@ -2606,8 +2606,7 @@ class STLViewerWindow(QMainWindow):
             )
             if not path:
                 return
-            if not path.endswith('.lyns.review'):
-                path += '.lyns.review'
+            path = ensure_review_extension(path)
 
         try:
             save_review_file(envelope_out, path)

@@ -29,6 +29,7 @@ from core.identity import get_display_name
 from core.supplier_registry import Supplier, find_supplier
 from core.review_format import (
     build_review_envelope, save_review_file, load_review_file, filter_quality_control,
+    ensure_review_extension,
 )
 
 _ARROW_URL = _get_arrow()
@@ -2402,8 +2403,7 @@ class TheProjectWidget(QWidget):
             )
             if not file_path:
                 return
-            if not file_path.endswith('.lyns.review'):
-                file_path += '.lyns.review'
+            file_path = ensure_review_extension(file_path)
 
             try:
                 save_review_file(envelope, file_path)
