@@ -2397,8 +2397,12 @@ class TheProjectWidget(QWidget):
 
             sup = Supplier.from_dict(supplier)
             default_stem = (sup.company or sup.name or 'supplier').strip().replace(' ', '_') or 'supplier'
+            # Pass the bare stem, not '{stem}.lyns.review' — a default
+            # filename that already ends in the filter's own compound
+            # extension is exactly what triggers Windows' native Save
+            # dialog to double it (see ensure_review_extension's docstring).
             file_path, _ = QFileDialog.getSaveFileName(
-                self, t('export_review.save_dialog_title'), f'{default_stem}.lyns.review',
+                self, t('export_review.save_dialog_title'), default_stem,
                 'LYNS Review (*.lyns.review);;All Files (*)'
             )
             if not file_path:

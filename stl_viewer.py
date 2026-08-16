@@ -2599,10 +2599,14 @@ class STLViewerWindow(QMainWindow):
 
         path = None if force_dialog else getattr(self, '_lite_review_path', None)
         if not path:
-            default_name = os.path.basename(getattr(self, '_lite_review_path', None) or 'review.lyns.review')
+            # Bare stem, not '...lyns.review' — an already-dotted default
+            # filename is what triggers Windows' native Save dialog to
+            # double the extension (see ensure_review_extension's docstring).
+            existing = os.path.basename(getattr(self, '_lite_review_path', None) or 'review.lyns.review')
+            default_stem = ensure_review_extension(existing)[:-len('.lyns.review')]
             path, _ = QFileDialog.getSaveFileName(
                 self, t('mode_bar.lite_save_review_as' if force_dialog else 'mode_bar.lite_save_review'),
-                default_name, 'LYNS Review (*.lyns.review);;All Files (*)'
+                default_stem, 'LYNS Review (*.lyns.review);;All Files (*)'
             )
             if not path:
                 return

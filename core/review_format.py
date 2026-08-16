@@ -82,18 +82,25 @@ def load_review_file(file_path: str) -> dict:
 def ensure_review_extension(file_path: str) -> str:
     """Normalize a save-dialog result onto exactly one trailing
     '.lyns.review'. Windows' native Save dialog only reasons about the
-    text after the LAST dot when deciding whether a typed name already
-    carries the current filter's extension — for a compound extension
-    like '.lyns.review' it doesn't recognize "supplier.lyns.review" as
-    already complete, and appends the filter's extension again, producing
-    "supplier.lyns.review.lyns.review". Strip any such duplication before
-    conditionally appending, so this is safe to call regardless of
-    whether Windows already did (or didn't) append anything."""
-    while file_path.endswith('.lyns.review.lyns.review'):
-        file_path = file_path[:-len('.lyns.review')]
-    if not file_path.endswith('.lyns.review'):
-        file_path += '.lyns.review'
-    return file_path
+    text after the LAST dot when deciding whether a typed/pre-filled name
+    already carries the current filter's extension — for a compound
+    extension like '.lyns.review' it doesn't recognize
+    "supplier.lyns.review" as already complete, and appends its own
+    (sometimes partial: just ".review") extension on top, producing
+    "supplier.lyns.review.lyns.review" or "supplier.lyns.review.review".
+    Strip whichever known variant is present — longest first, so the
+    fully-doubled case doesn't only get half-stripped — then apply
+    exactly one canonical suffix. Safe to call regardless of what
+    Windows already did (or didn't) append; callers should also avoid
+    pre-filling the dialog's default filename with the extension already
+    on it (see _export_supplier_review / _lite_save_review) since an
+    already-dotted default name is what triggers this Windows behavior
+    in the first place."""
+    for suffix in ('.lyns.review.lyns.review', '.lyns.review.review', '.lyns.review', '.review'):
+        if file_path.endswith(suffix):
+            file_path = file_path[:-len(suffix)]
+            break
+    return file_path + '.lyns.review'
 
 
 def is_review_file(file_path: str) -> bool:
