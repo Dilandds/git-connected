@@ -447,7 +447,7 @@ class _ControlPointCard(QWidget):
         # ControlPoint.added_by_name's docstring for why the name itself,
         # not just the flag, is stored on the point).
         self._added_by_label = QLabel()
-        self._added_by_label.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
+        self._added_by_label.setStyleSheet(f'color: {_MUTED}; font-size: 12px; background: transparent; border: none;')
         card_l.addWidget(self._added_by_label)
         self._refresh_added_by_label()
 
@@ -1270,7 +1270,7 @@ class _InspThumbCard(QFrame):
         # Fixed height always reserves the caption strip (even when blank)
         # so every card in the strip lines up the same regardless of
         # whether it's a supplier-added image — see the label below.
-        self.setFixedSize(84, 98)
+        self.setFixedSize(84, 102)
         self.setStyleSheet(self._IDLE_SS)
         self.setMouseTracking(True)
         self._pixmap = pixmap
@@ -1294,9 +1294,9 @@ class _InspThumbCard(QFrame):
         if added_by == 'supplier':
             name = added_by_name or t('quality_control.card.supplier_fallback')
             added_by_lbl = QLabel(t('quality_control.card.added_by').format(name=name), self)
-            added_by_lbl.setGeometry(2, 83, 80, 13)
+            added_by_lbl.setGeometry(2, 83, 80, 17)
             added_by_lbl.setAlignment(Qt.AlignCenter)
-            added_by_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 7px; background: transparent; border: none;')
+            added_by_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
             fm = added_by_lbl.fontMetrics()
             added_by_lbl.setText(fm.elidedText(added_by_lbl.text(), Qt.ElideRight, 78))
             added_by_lbl.setToolTip(name)
