@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
 
 from ui.styles import default_theme
 from ui.loading_overlay import LoadingOverlay
+from ui.traceability.shared import _MarqueeLabel
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -350,23 +351,10 @@ class _ControlPointCard(QWidget):
     def __init__(self, cp: ControlPoint, parent=None):
         super().__init__(parent)
         self._cp = cp
-        # Start collapsed so the QTextEdit (comment_edit) is never shown during
-        # card construction.  On macOS, setVisible(True) on a QTextEdit triggers
-        # full NSTextView initialisation (~150ms), which blocks the click-event
-        # handler long enough for the OS gesture recogniser to reclassify the
-        # trackpad tap as a swipe, switching Spaces in full-screen mode.
-        self._expanded = False
         self._read_only = False
         logger.debug('[QC Card] __init__ PRE-build  id=%d', cp.id)
         self._build_ui()
         logger.debug('[QC Card] __init__ POST-build  id=%d', cp.id)
-        # The comment field should be visible without an extra click — but
-        # showing the QTextEdit synchronously here (still inside whatever
-        # click handler created this card) risks the same macOS Mission
-        # Control Space-switch bug the collapsed-by-default workaround above
-        # exists to avoid. Deferring the reveal to the next event-loop tick
-        # keeps that protection while still auto-expanding.
-        QTimer.singleShot(0, self._reveal_comment)
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
@@ -451,31 +439,7 @@ class _ControlPointCard(QWidget):
         card_l.addWidget(self._added_by_label)
         self._refresh_added_by_label()
 
-        self._comment_edit = QTextEdit()
-        self._comment_edit.setPlaceholderText(t('quality_control.card.comment_placeholder'))
-        self._comment_edit.setFixedHeight(58)
-        self._comment_edit.setStyleSheet(_TEXTEDIT)
-        self._comment_edit.setFocusPolicy(Qt.ClickFocus)
-        logger.debug('[QC Card] comment_edit focusPolicy=%s', int(self._comment_edit.focusPolicy()))
-
-        import time as _time
-        _t = _time.perf_counter()
-        self._comment_edit.setText(self._cp.comment)
-        logger.debug('[QC Card] setText took %.0fms', (_time.perf_counter() - _t) * 1000)
-
-        self._comment_edit.textChanged.connect(self._on_comment_changed)
-
-        _t = _time.perf_counter()
-        self._comment_edit.setVisible(self._expanded)
-        logger.debug('[QC Card] setVisible(%s) took %.0fms', self._expanded, (_time.perf_counter() - _t) * 1000)
-
-        _t = _time.perf_counter()
-        card_l.addWidget(self._comment_edit)
-        logger.debug('[QC Card] addWidget(comment) took %.0fms', (_time.perf_counter() - _t) * 1000)
-
-        _t = _time.perf_counter()
         outer.addWidget(card)
-        logger.debug('[QC Card] addWidget(card) took %.0fms', (_time.perf_counter() - _t) * 1000)
 
     def _refresh_badge(self):
         color = self._cp.color or _BADGE_PALETTE[self._cp.id % len(_BADGE_PALETTE)]
@@ -551,17 +515,8 @@ class _ControlPointCard(QWidget):
             self._refresh_status_btn()
             self.changed.emit()
 
-    def _reveal_comment(self):
-        """Show the comment field automatically — no arrow/click needed."""
-        self._expanded = True
-        self._comment_edit.setVisible(True)
-
     def _on_name_changed(self, text: str):
         self._cp.name = text
-        self.changed.emit()
-
-    def _on_comment_changed(self):
-        self._cp.comment = self._comment_edit.toPlainText()
         self.changed.emit()
 
     def set_number(self, n: int):
@@ -572,16 +527,15 @@ class _ControlPointCard(QWidget):
         return self._cp
 
     def set_read_only(self, read_only: bool):
-        """Locks color picker, name, status menu, delete and comment
-        editing while read-only. The card stays visible/expanded so its
-        content can still be read."""
+        """Locks color picker, name, status menu and delete while
+        read-only. The card stays visible/expanded so its content can
+        still be read."""
         self._read_only = read_only
         enabled = not read_only
         self._badge.setEnabled(enabled)
         self._name_edit.setEnabled(enabled)
         self._status_btn.setEnabled(enabled)
         self._del_btn.setEnabled(enabled)
-        self._comment_edit.setEnabled(enabled)
 
 
 # ── _ControlPointsPanel ───────────────────────────────────────────────────────
@@ -1290,16 +1244,18 @@ class _InspThumbCard(QFrame):
 
         # Small "by: <supplier name>" caption — mirrors _ControlPointCard's
         # own added-by label, so the PM can tell a supplier-added image
-        # apart from their own at a glance once merged into 360.
+        # apart from their own at a glance once merged into 360. Auto-
+        # scrolls to reveal the full text when it overflows this strip —
+        # same _MarqueeLabel used for Traceability's sub-stage tab titles
+        # (ui/traceability/shared.py), reused here rather than reimplemented.
         if added_by == 'supplier':
             name = added_by_name or t('quality_control.card.supplier_fallback')
-            added_by_lbl = QLabel(t('quality_control.card.added_by').format(name=name), self)
+            added_by_lbl = _MarqueeLabel(t('quality_control.card.added_by').format(name=name), self)
             added_by_lbl.setGeometry(2, 83, 80, 17)
-            added_by_lbl.setAlignment(Qt.AlignCenter)
-            added_by_lbl.setStyleSheet(f'color: {_MUTED}; font-size: 9px; background: transparent; border: none;')
-            fm = added_by_lbl.fontMetrics()
-            added_by_lbl.setText(fm.elidedText(added_by_lbl.text(), Qt.ElideRight, 78))
-            added_by_lbl.setToolTip(name)
+            font = QFont()
+            font.setPixelSize(9)
+            added_by_lbl.setFont(font)
+            added_by_lbl.setColor(_MUTED)
 
         del_btn = _DeleteBtn(self)
         del_btn.move(64, -2)

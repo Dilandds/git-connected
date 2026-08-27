@@ -28,6 +28,7 @@ class _ComponentsRow(QWidget):
         self._components: List[TraceComponent] = []
         self._selected = 0
         self._read_only = False
+        self._zoom_lbl = None  # shared floating preview — see _show_zoom_preview
         self.setFixedHeight(108)
         self.setStyleSheet(f'background: {_CARD}; border-bottom: 1px solid {_BORDER};')
         self._build()
@@ -80,6 +81,7 @@ class _ComponentsRow(QWidget):
         self._refresh()
 
     def _refresh(self):
+        self._hide_zoom_preview()  # about to delete the thumbnail widgets it's anchored to
         while self._cl.count():
             item = self._cl.takeAt(0)
             w = item.widget()
@@ -160,6 +162,13 @@ class _ComponentsRow(QWidget):
             if pix is not None:
                 img.setPixmap(pix.scaled(_IMG_SIZE, _IMG_SIZE,
                                          Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
+                # Hover-zoom preview — the pill's own thumbnail is a small
+                # fixed circle, too small to make out any detail, so hovering
+                # floats an enlarged copy next to it (mirrors row1's product
+                # photo hover-zoom in row1_product_info.py).
+                img_frame.setCursor(Qt.PointingHandCursor)
+                img_frame.enterEvent = lambda e, b64=comp.image_b64, w=img_frame: self._show_zoom_preview(b64, w)
+                img_frame.leaveEvent = lambda e: self._hide_zoom_preview()
             else:
                 img.setText('📦')
                 img.setStyleSheet('font-size: 20px; background: transparent; border: none;')
@@ -208,6 +217,38 @@ class _ComponentsRow(QWidget):
         item.mousePressEvent       = lambda _, i=idx: self._select(i)
         item.mouseDoubleClickEvent = lambda _, i=idx: self._edit_component(i)
         return item
+
+    # ── hover-zoom preview ───────────────────────────────────────────────────
+
+    def _show_zoom_preview(self, image_b64: str, anchor: QWidget):
+        """Float an enlarged copy of a component's photo next to its small
+        thumbnail while the mouse hovers over it — same pattern as row1's
+        product-photo hover-zoom (row1_product_info.py)."""
+        from core.image_utils import b64_to_pixmap
+        pix = b64_to_pixmap(image_b64)
+        if pix is None:
+            return
+        scaled = pix.scaled(320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if self._zoom_lbl is None:
+            self._zoom_lbl = QLabel(None, Qt.ToolTip | Qt.FramelessWindowHint)
+            self._zoom_lbl.setStyleSheet(f"""
+                QLabel {{
+                    background: {_CARD};
+                    border: 2px solid {_ACCENT};
+                    border-radius: 8px;
+                    padding: 4px;
+                }}
+            """)
+        self._zoom_lbl.setPixmap(scaled)
+        self._zoom_lbl.adjustSize()
+        pos = anchor.mapToGlobal(QPoint(anchor.width() + 14, 0))
+        self._zoom_lbl.move(pos)
+        self._zoom_lbl.show()
+        self._zoom_lbl.raise_()
+
+    def _hide_zoom_preview(self):
+        if self._zoom_lbl is not None:
+            self._zoom_lbl.hide()
 
     def set_read_only(self, read_only: bool):
         """Disable the add-component button and each chip's del_btn;

@@ -846,7 +846,7 @@ class TheProjectWidget(QWidget):
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
 
-        from core.edition import is_lite
+        from core.edition import is_lite, is_core
         if is_lite():
             # LYNS Lite only ever shows Quality Control and Report — the two
             # Project sections a supplier review includes — and its project
@@ -863,6 +863,17 @@ class TheProjectWidget(QWidget):
             report_widget = self._ensure_screen('report')
             if hasattr(report_widget, 'set_read_only'):
                 report_widget.set_read_only(True)
+        elif is_core():
+            # LYNS Core has no "The Project" section at all — stl_viewer.py
+            # never shows the mode button that would switch to this
+            # widget's page, so nothing here is ever seen. Don't eagerly
+            # build the 'brief' screen the way Commercial/Education do
+            # below; it would just be wasted startup work. New/Open/Save
+            # Project still work unchanged for the 3D Viewer/Technical
+            # Overview/Drawing Scale data — see core/edition.py's is_core
+            # docstring for why: _gather_live_data/_load_project already
+            # tolerate every one of these 14 nav screens staying None.
+            pass
         else:
             # Eagerly load only the default screen shown at startup
             self._nav.select('brief')

@@ -10,6 +10,7 @@ from PyQt5.QtCore import pyqtSignal, Qt, QTimer
 from PyQt5.QtGui import QColor
 from ui.styles import default_theme, TOOLTIP_STYLE
 from ui.modal_utils import BaseModal
+from i18n import t
 
 
 from ui.color_palette import PALETTE as PRESET_COLORS
@@ -124,7 +125,7 @@ class DrawColorPicker(QWidget):
         layout.setContentsMargins(8, 8, 8, 10)
         layout.setSpacing(6)
 
-        title = QLabel("Pen Color")
+        title = QLabel(t('color_picker.title'))
         title.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: bold; border: none;")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
@@ -152,7 +153,7 @@ class DrawColorPicker(QWidget):
             grid.addWidget(btn, i // 4, i % 4)
         layout.addLayout(grid)
 
-        custom_btn = QPushButton("More colors…")
+        custom_btn = QPushButton(t('color_picker.more_colors'))
         custom_btn.setMinimumHeight(30)
         custom_btn.setCursor(Qt.PointingHandCursor)
         custom_btn.setStyleSheet(f"""
@@ -182,7 +183,7 @@ class DrawColorPicker(QWidget):
         self.close()
 
     def _pick_custom(self):
-        wrapper = BaseModal(self.parent(), "Choose Pen Color")
+        wrapper = BaseModal(self.parent(), t('color_picker.dialog_title'))
         outer = wrapper._root
         outer.setSpacing(14)
 
@@ -225,8 +226,8 @@ class DrawColorPicker(QWidget):
         # Styled OK / Cancel row
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
-        cancel_btn = QPushButton("Cancel")
-        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton(t('common.cancel'))
+        ok_btn = QPushButton(t('common.ok'))
         for b in (cancel_btn, ok_btn):
             b.setFixedHeight(36)
             b.setMinimumWidth(100)

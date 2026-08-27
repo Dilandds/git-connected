@@ -196,6 +196,15 @@
     "validated": "Validated",
     "read": "Read",
     "unread": "Unread",
+    "change_color_tooltip": "Click to change color",
+    "remove_tooltip": "Remove annotation",
+    "tooltip_status": "Status:",
+    "tooltip_date": "Date:",
+    "tooltip_note": "Note:",
+    "tooltip_photos": "Photos:",
+    "tooltip_photos_count": "{count} attached",
+    "first_comment_pm": "PM",
+    "first_comment_supplier": "Supplier",
     "confirm_clear": "Clear All Annotations?",
     "confirm_clear_msg": "This will remove all annotations. This cannot be undone.",
     "delete_annotation": "Delete Annotation",
@@ -361,7 +370,13 @@
     "reset_workspace": "🔄 Reset Workspace",
     "add_manufacturer_tooltip": "Add another manufacturer",
     "upload_prompt": "Click or drag to upload",
-    "upload_formats": "JPEG · PNG · PDF"
+    "upload_formats": "JPEG · PNG · PDF",
+    "annotation_panel": {
+      "title": "Annotation mode",
+      "instructions": "Click on the image to place arrows.\nEach annotation is shown in this panel.",
+      "color_tooltip": "Change arrow color",
+      "confirm_clear_msg": "Delete all {count} annotations?"
+    }
   },
   "scale": {
     "title": "📐 Drawing Scale",
@@ -649,12 +664,8 @@
       "start_date": "📅  Start Date",
       "due_date": "📅  Due Date",
       "global_status": "Global Status",
-      "overall_progress": "Overall Progress",
-      "click_edit_progress": "Click to edit progress",
       "edit_launch_title": "Edit Planned Launch",
       "launch_ph": "dd/mm/yyyy or milestone name",
-      "edit_progress_title": "Edit Overall Progress",
-      "progress_field": "Progress (0–100)",
       "components_title": "Product Components",
       "dbl_click_edit": "Double-click to edit",
       "add_component": "＋  Add Component",
@@ -1196,7 +1207,6 @@
     "no_component": "Select a component on the left to view and edit its brief.",
     "selection": "Selection",
     "clear_all": "Clear all",
-    "request_samples": "Request samples",
     "compare_selected": "Compare selected",
     "compare_title": "Compare proposals",
     "component_brief": "Component brief",
@@ -1451,5 +1461,10 @@
     "new_qc_points_item_label": "{count} new control point(s)",
     "apply_btn": "Add Selected",
     "skip_all": "Skip All"
+  },
+  "color_picker": {
+    "title": "Pen Color",
+    "more_colors": "More colors…",
+    "dialog_title": "Choose Pen Color"
   }
 }

@@ -1241,17 +1241,6 @@ class RdWidget(QWidget):
         sel_scroll.setWidget(self._sel_container)
         lay.addWidget(sel_scroll)
 
-        btn_req = QPushButton(t('rd.request_samples'))
-        btn_req.setFixedHeight(34)
-        btn_req.setCursor(Qt.PointingHandCursor)
-        btn_req.setStyleSheet(f"""
-            QPushButton {{ background: {_ACCENT}; color: white; border: none;
-                border-radius: 6px; font-size: 12px; font-weight: 600; }}
-            QPushButton:hover {{ background: {_ACCENT_H}; }}
-        """)
-        lay.addWidget(btn_req)
-        self._btn_req = btn_req
-
         btn_cmp = QPushButton(t('rd.compare_selected'))
         btn_cmp.setFixedHeight(34)
         btn_cmp.setCursor(Qt.PointingHandCursor)
@@ -2013,7 +2002,6 @@ class RdWidget(QWidget):
         enabled = not read_only
         self._btn_add.setEnabled(enabled)
         self._btn_clear.setEnabled(enabled)
-        self._btn_req.setEnabled(enabled)
         self._rebuild_comp_rows()
         self._rebuild_grid()
         self._rebuild_technique_grid()

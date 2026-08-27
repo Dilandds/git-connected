@@ -216,6 +216,31 @@ class _PartBadge(QWidget):
         p.end()
 
 
+def _date_based_progress_pct(start_date: str, due_date: str, fallback: int) -> int:
+    """Task-card progress bar: how far today sits between a task's start
+    and due date, as a percentage — 0% before start, 100% once today
+    reaches (or passes) the due date, moving linearly in between.
+
+    start_date/due_date are free-text fields (see _TaskDialog — there's no
+    date picker, just a QLineEdit with a "dd/mm/yyyy" placeholder), so
+    either one can be blank or not actually a date. When that happens, or
+    when due_date isn't after start_date, this falls back to the task's
+    own manually-set progress value instead of showing a meaningless
+    percentage."""
+    from PyQt5.QtCore import QDate
+    start = QDate.fromString((start_date or '').strip(), 'dd/MM/yyyy')
+    due = QDate.fromString((due_date or '').strip(), 'dd/MM/yyyy')
+    if not start.isValid() or not due.isValid():
+        return max(0, min(100, fallback))
+    today = QDate.currentDate()
+    total = start.daysTo(due)
+    if total > 0:
+        elapsed = start.daysTo(today)
+        return max(0, min(100, int(elapsed * 100 / total)))
+    # Same-day (or due before start) task — no span to take a fraction of.
+    return 100 if today >= due else 0
+
+
 class _ProgressBar(QWidget):
     """Thin horizontal progress bar drawn via QPainter."""
 

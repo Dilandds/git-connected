@@ -387,7 +387,14 @@ class TaskDetailPanel(QWidget):
         today = QDate.currentDate()
         total   = task.start.daysTo(task.end)
         elapsed = task.start.daysTo(today)
-        pct = max(0, min(100, int(elapsed * 100 / total))) if total > 0 else 0
+        if total > 0:
+            pct = max(0, min(100, int(elapsed * 100 / total)))
+        else:
+            # Same-day (or end before start) task — there's no span to take
+            # a fraction of, so it's just "has today reached it yet?"
+            # instead of always reading 0%, which was wrong from the
+            # moment the task's own day arrived.
+            pct = 100 if today >= task.end else 0
 
         if today > task.end:
             delay_days = task.end.daysTo(today)

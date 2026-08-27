@@ -6,7 +6,6 @@ from PyQt5.QtCore import Qt, pyqtSignal, QSize, QEvent, QPoint
 from PyQt5.QtGui import QIcon
 from ui.styles import make_font
 from .shared import _CARD, _BORDER, _TEXT, _MUTED, _ACCENT, _TOOLTIP_STYLE
-from .shared import _ProgressBar
 from i18n import t
 # "Statut global" mirrors the project sidebar's own status field (info['status']
 # is 'in_progress'/'awaiting'/'completed'/'cancelled'), not a traceability
@@ -22,14 +21,6 @@ _LAUNCH_TOOLTIP = f"""
     }}
 """ + _TOOLTIP_STYLE
 
-_PROG_LABEL_STYLE = f"""
-    QLabel {{
-        color: {_ACCENT};
-        background: transparent;
-        border: none;
-    }}
-""" + _TOOLTIP_STYLE
-
 _IMG_SIZE = 130
 
 
@@ -39,7 +30,6 @@ class _ProductInfoRow(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._planned_launch     = ''
-        self._overall_progress   = 0
         self._product_image_b64 = ''
         self._read_only = False
         self._zoom_lbl = None   # lazily-created floating hover-zoom preview
@@ -121,24 +111,6 @@ class _ProductInfoRow(QFrame):
         )
         sc.addWidget(self._status_lbl)
         root.addLayout(sc)
-        root.addWidget(self._vdiv())
-
-        # Overall progress (editable)
-        pc = QVBoxLayout(); pc.setSpacing(4); pc.setAlignment(Qt.AlignVCenter)
-        pt = QLabel(t('project.traceability.overall_progress'))
-        pt.setStyleSheet(f'color: {_MUTED}; font-size: 10px; background: transparent; border: none;')
-        pc.addWidget(pt)
-        self._prog_lbl = QLabel('0 %')
-        self._prog_lbl.setFont(make_font(size=22, bold=True))
-        self._prog_lbl.setStyleSheet(_PROG_LABEL_STYLE)
-        self._prog_lbl.setCursor(Qt.PointingHandCursor)
-        self._prog_lbl.setToolTip(t('project.traceability.click_edit_progress'))
-        self._prog_lbl.mousePressEvent = lambda _: self._edit('progress')
-        pc.addWidget(self._prog_lbl)
-        self._prog_bar = _ProgressBar(0)
-        self._prog_bar.setFixedSize(100, 7)
-        pc.addWidget(self._prog_bar)
-        root.addLayout(pc)
 
         root.addSpacing(60)   # right free space
 
@@ -254,13 +226,13 @@ class _ProductInfoRow(QFrame):
             self._zoom_lbl.hide()
 
     def set_read_only(self, read_only: bool):
-        """Disable the photo-upload button and gate the two click-to-edit
-        labels (planned_launch / progress). Those labels aren't QPushButtons
-        so there's no .setEnabled() to call on them directly — instead
-        _edit() itself (the single place both mousePressEvent handlers
-        delegate to) bails out early while read-only, which is enough since
-        the whole handler is a mutating "open edit dialog" action with
-        nothing else to preserve."""
+        """Disable the photo-upload button and gate the click-to-edit
+        planned_launch label. That label isn't a QPushButton so there's no
+        .setEnabled() to call on it directly — instead _edit() itself (the
+        single place its mousePressEvent handler delegates to) bails out
+        early while read-only, which is enough since the whole handler is
+        a mutating "open edit dialog" action with nothing else to
+        preserve."""
         self._read_only = read_only
         self._img_btn.setEnabled(not read_only)
 
@@ -278,21 +250,6 @@ class _ProductInfoRow(QFrame):
                 self._planned_launch = f.text().strip()
                 self._set_launch_text(self._planned_launch or '—')
                 self.changed.emit()
-        elif field == 'progress':
-            dlg = FormModal(self, t('project.traceability.edit_progress_title'), min_width=300)
-            f = dlg.add_hfield(t('project.traceability.progress_field'), QLineEdit(str(self._overall_progress)))
-            f.setPlaceholderText('0 – 100')
-            dlg.finish()
-            f.setFocus()
-            if dlg.exec_() == QDialog.Accepted:
-                try:
-                    v = max(0, min(100, int(f.text())))
-                    self._overall_progress = v
-                    self._prog_lbl.setText(f'{v} %')
-                    self._prog_bar.set_value(v)
-                    self.changed.emit()
-                except ValueError:
-                    pass
 
     def _set_launch_text(self, value: str):
         self._launch_lbl.setText(
@@ -345,7 +302,6 @@ class _ProductInfoRow(QFrame):
     def get_extra_data(self) -> dict:
         return {
             'planned_launch':    self._planned_launch,
-            'overall_progress':  self._overall_progress,
             'product_image_b64': self._product_image_b64,
         }
 
@@ -353,11 +309,8 @@ class _ProductInfoRow(QFrame):
         from core.image_utils import migrate_path_to_b64
         data = migrate_path_to_b64(data, 'product_image_path', 'product_image_b64')
         self._planned_launch    = data.get('planned_launch', '')
-        self._overall_progress  = data.get('overall_progress', 0)
         self._product_image_b64 = data.get('product_image_b64', '')
         self._set_launch_text(self._planned_launch or '—')
-        self._prog_lbl.setText(f'{self._overall_progress} %')
-        self._prog_bar.set_value(self._overall_progress)
         if self._product_image_b64:
             self._apply_image(self._product_image_b64)
         else:

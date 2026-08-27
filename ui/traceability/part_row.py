@@ -7,7 +7,7 @@ from .models import TracePart, TraceTask, TraceStep
 from .shared import (
     _TEXT, _MUTED, _BORDER, _CARD, _BG, _ACCENT,
     _PART_PALETTE, _BTN_SMALL, _BTN_ICON, _BTN_DELETE,
-    _PartBadge, _ProgressBar, _status_badge,
+    _PartBadge, _ProgressBar, _status_badge, _date_based_progress_pct,
 )
 from .dialogs import _TaskDialog, _StepDialog, _CommentsDialog, _PartDialog
 from ui.modal_utils import ask_yes_no_dialog
@@ -159,10 +159,11 @@ class _FlatPartRow(QWidget):
         prog_l = QHBoxLayout(prog_w); prog_l.setContentsMargins(0, 0, 0, 0); prog_l.setSpacing(10)
         pct_bar = QWidget(); pct_bar.setStyleSheet('background: transparent;')
         pct_bar_l = QVBoxLayout(pct_bar); pct_bar_l.setContentsMargins(0, 0, 0, 0); pct_bar_l.setSpacing(4)
-        pct_lbl = QLabel(f'{self._task.progress} %')
+        pct = _date_based_progress_pct(self._task.start_date, self._task.due_date, self._task.progress)
+        pct_lbl = QLabel(f'{pct} %')
         pct_lbl.setStyleSheet(f'color: {_TEXT}; font-size: 12px; font-weight: 700; background: transparent; border: none;')
         pct_bar_l.addWidget(pct_lbl)
-        pct_bar_l.addWidget(_ProgressBar(self._task.progress))
+        pct_bar_l.addWidget(_ProgressBar(pct))
         prog_l.addWidget(pct_bar)
         prog_l.addStretch()
         lay.addWidget(prog_w, 0, Qt.AlignVCenter)
@@ -355,10 +356,11 @@ class _TaskRow(QWidget):
         prog_l = QHBoxLayout(prog_w); prog_l.setContentsMargins(0, 0, 0, 0); prog_l.setSpacing(10)
         pct_bar = QWidget(); pct_bar.setStyleSheet('background: transparent;')
         pct_bar_l = QVBoxLayout(pct_bar); pct_bar_l.setContentsMargins(0, 0, 0, 0); pct_bar_l.setSpacing(4)
-        pct_lbl = QLabel(f'{self._task.progress} %')
+        pct = _date_based_progress_pct(self._task.start_date, self._task.due_date, self._task.progress)
+        pct_lbl = QLabel(f'{pct} %')
         pct_lbl.setStyleSheet(f'color: {_TEXT}; font-size: 12px; font-weight: 700; background: transparent; border: none;')
         pct_bar_l.addWidget(pct_lbl)
-        pct_bar_l.addWidget(_ProgressBar(self._task.progress))
+        pct_bar_l.addWidget(_ProgressBar(pct))
         prog_l.addWidget(pct_bar)
         n_comments = len(self._task.comments)
         count_btn = QPushButton(f'  {n_comments}')

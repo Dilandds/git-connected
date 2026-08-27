@@ -31,12 +31,12 @@ jobs:
       run: |
         brew install create-dmg
     
-    - name: Build application
+    - name: Build 360 edition
       run: |
         chmod +x build_mac.sh
         ./build_mac.sh
     
-    - name: Verify .app bundle exists
+    - name: Verify 360 .app bundle exists
       run: |
         if [ ! -d "dist/LYNS360.app" ]; then
           echo "Error: .app bundle not found"
@@ -44,7 +44,7 @@ jobs:
         fi
         echo "✓ .app bundle created successfully"
 
-    - name: Verify executable
+    - name: Verify 360 executable
       run: |
         EXE_PATH="dist/LYNS360.app/Contents/MacOS/LYNS360"
         if [ ! -f "$EXE_PATH" ]; then
@@ -54,7 +54,7 @@ jobs:
         file "$EXE_PATH"
         echo "✓ Executable verified"
 
-    - name: Check app structure
+    - name: Check 360 app structure
       run: |
         echo "App bundle contents:"
         ls -la "dist/LYNS360.app/Contents/"
@@ -65,14 +65,14 @@ jobs:
         echo "Bundled data files:"
         find "dist/LYNS360.app" -name "*.qss" -o -name "splash.png" -o -name "icon.icns" | head -10
 
-    - name: Test app launch (headless)
+    - name: Test 360 app launch (headless)
       run: |
         # Try to run the app in headless mode to check for immediate crashes
         # This will fail if there are missing dependencies
         timeout 10 "dist/LYNS360.app/Contents/MacOS/LYNS360" --version 2>&1 || echo "App launch test completed"
         echo "✓ App executable runs (may exit immediately without GUI)"
 
-    - name: Check DMG file
+    - name: Check 360 DMG file
       run: |
         DMG_FILE=$(ls LYNS360-*-macOS-*.dmg 2>/dev/null | head -1)
         if [ -n "$DMG_FILE" ]; then
@@ -82,7 +82,7 @@ jobs:
           echo "Warning: DMG file not found"
         fi
 
-    - name: Upload .app bundle as artifact
+    - name: Upload 360 .app as artifact
       uses: actions/upload-artifact@v4
       with:
         name: LYNS360-macOS-${{ matrix.os }}
@@ -90,7 +90,7 @@ jobs:
           dist/LYNS360.app
         retention-days: 30
 
-    - name: Upload DMG as artifact
+    - name: Upload 360 DMG as artifact
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -99,7 +99,7 @@ jobs:
           LYNS360-*-macOS-*.dmg
         retention-days: 30
     
-    - name: Build summary
+    - name: 360 build summary
       run: |
         echo "## Build Summary (Commercial)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ App bundle created" >> $GITHUB_STEP_SUMMARY
@@ -154,6 +154,54 @@ jobs:
         echo "- ✅ Lite executable verified" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ Lite build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
 
+    # ---- Core Edition ----
+    - name: Build Core edition
+      run: |
+        rm -rf build dist
+        chmod +x build_mac_core.sh
+        ./build_mac_core.sh
+
+    - name: Verify Core .app bundle exists
+      run: |
+        if [ ! -d "dist/LYNS360-Core.app" ]; then
+          echo "Error: Core .app bundle not found"
+          exit 1
+        fi
+        echo "✓ Core .app bundle created successfully"
+
+    - name: Verify Core executable
+      run: |
+        EXE_PATH="dist/LYNS360-Core.app/Contents/MacOS/LYNS360-Core"
+        if [ ! -f "$EXE_PATH" ]; then
+          echo "Error: Core executable not found"
+          exit 1
+        fi
+        file "$EXE_PATH"
+        echo "✓ Core executable verified"
+
+    - name: Upload Core .app as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Core-macOS-${{ matrix.os }}
+        path: dist/LYNS360-Core.app
+        retention-days: 30
+
+    - name: Upload Core DMG as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Core-DMG-${{ matrix.os }}
+        path: LYNS360-Core-*-macOS-*.dmg
+        retention-days: 30
+
+    - name: Core build summary
+      run: |
+        echo "## Build Summary (Core)" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Core .app bundle created" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Core executable verified" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Core build completed on ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+
   build-windows:
     name: Build on Windows
     runs-on: windows-latest
@@ -174,11 +222,11 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller>=6.0.0
     
-    - name: Build application
+    - name: Build 360 edition
       run: |
         powershell -ExecutionPolicy Bypass -File build_windows.ps1
     
-    - name: Verify EXE exists
+    - name: Verify 360 EXE exists
       run: |
         $exePath = "dist\LYNS360.exe"
         if (-not (Test-Path $exePath)) {
@@ -189,13 +237,13 @@ jobs:
         $fileInfo = Get-Item $exePath
         Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Cyan
     
-    - name: Verify executable
+    - name: Verify 360 executable
       run: |
         $exePath = "dist\LYNS360.exe"
         Get-Item $exePath | Select-Object Name, Length, LastWriteTime
         Write-Host "✓ Executable verified"
     
-    - name: Check bundled files
+    - name: Check 360 bundled files
       run: |
         Write-Host "Checking for bundled assets..."
         $exePath = "dist\LYNS360.exe"
@@ -204,7 +252,7 @@ jobs:
         }
         Write-Host "Note: PyInstaller bundles files inside the EXE"
     
-    - name: Test EXE (basic)
+    - name: Test 360 EXE (basic)
       run: |
         # Try to run EXE with --version or similar (may not work, but tests basic execution)
         $exePath = "dist\LYNS360.exe"
@@ -213,7 +261,7 @@ jobs:
         Get-Item $exePath | Format-List
         Write-Host "✓ EXE file verified (GUI apps can't be tested headless)"
     
-    - name: Copy launcher .bat files to dist
+    - name: Copy launcher .bat files to 360 dist
       run: |
         Copy-Item ECTOFORM_SoftwareOpenGL.bat dist\ -ErrorAction SilentlyContinue
         Copy-Item ECTOFORM_Offscreen.bat dist\ -ErrorAction SilentlyContinue
@@ -221,7 +269,7 @@ jobs:
         Copy-Item LAUNCHERS_README.txt dist\ -ErrorAction SilentlyContinue
         Get-ChildItem dist\*.bat, dist\*.txt -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  Added $_" }
     
-    - name: Create ZIP distribution
+    - name: Create 360 ZIP distribution
       run: |
         $zipPath = "LYNS360-Windows.zip"
         if (Test-Path $zipPath) {
@@ -231,14 +279,14 @@ jobs:
         $zipInfo = Get-Item $zipPath
         Write-Host "✓ Created $zipPath ($([math]::Round($zipInfo.Length / 1MB, 2)) MB)" -ForegroundColor Green
 
-    - name: Upload ZIP as artifact
+    - name: Upload 360 ZIP as artifact
       uses: actions/upload-artifact@v4
       with:
         name: LYNS360-Windows.zip
         path: LYNS360-Windows.zip
         retention-days: 30
 
-    - name: Build summary
+    - name: 360 build summary
       run: |
         echo "## Build Summary (Commercial)" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ EXE created successfully" >> $GITHUB_STEP_SUMMARY
@@ -276,3 +324,35 @@ jobs:
         echo "- ✅ Lite EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
         echo "- ✅ Lite ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
         echo "- ✅ Lite build completed on Windows" >> $env:GITHUB_STEP_SUMMARY
+
+    # ---- Core Edition ----
+    - name: Build Core edition
+      run: |
+        Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+        powershell -ExecutionPolicy Bypass -File build_windows_core.ps1
+
+    - name: Verify Core EXE exists
+      run: |
+        $exePath = "dist\LYNS360-Core.exe"
+        if (-not (Test-Path $exePath)) {
+          Write-Host "Error: Core EXE not found at $exePath" -ForegroundColor Red
+          exit 1
+        }
+        Write-Host "✓ Core EXE created successfully: $exePath" -ForegroundColor Green
+        $fileInfo = Get-Item $exePath
+        Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Cyan
+
+    - name: Upload Core ZIP as artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LYNS360-Core-Windows.zip
+        path: LYNS360-Core-Windows.zip
+        retention-days: 30
+
+    - name: Core build summary
+      run: |
+        echo "## Build Summary (Core)" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Core EXE created successfully" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Core ZIP distribution created" >> $env:GITHUB_STEP_SUMMARY
+        echo "- ✅ Core build completed on Windows" >> $env:GITHUB_STEP_SUMMARY

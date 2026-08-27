@@ -681,7 +681,7 @@ class ScreenshotPanel(QWidget):
     # ---- private slots ----
 
     def _on_delete(self, index: int):
-        if not confirm_dialog(self, "Delete Screenshot", "Are you sure to delete the photo?"):
+        if not confirm_dialog(self, t('screenshot.delete_title'), t('screenshot.delete_msg')):
             return
 
         if 0 <= index < len(self.cards):
@@ -746,7 +746,7 @@ class ScreenshotPanel(QWidget):
             self.screenshots[index] = (pixmap, ts, sid, note)
 
     def _on_clear_all(self):
-        if confirm_dialog(self, "Clear All Screenshots", "Are you sure you want to delete all screenshots?"):
+        if confirm_dialog(self, t('screenshot.clear_all_title'), t('screenshot.clear_all_msg')):
             self.clear_all()
 
     def _update_texts(self):

@@ -22,7 +22,7 @@ from PyQt5.QtGui import (
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.modal_utils import show_message_dialog, ask_yes_no_dialog
 
-from i18n import t
+from i18n import t, on_language_changed
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,11 @@ class ImageCanvas(QWidget):
         self._pixmap: Optional[QPixmap] = None
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
+        # Keep auto-fitting the image to the canvas on every resize until
+        # the user manually zooms (wheelEvent) — see resizeEvent's
+        # docstring for why this needs to keep re-fitting rather than
+        # fitting only once.
+        self._auto_fit = True
         self._panning = False
         self._pan_start = QPointF()
         self._annotations: List[ArrowAnnotation] = []
@@ -103,6 +108,7 @@ class ImageCanvas(QWidget):
         self._pixmap = pixmap
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
+        self._auto_fit = True
         self._fit_image()
         self.update()
 
@@ -111,6 +117,7 @@ class ImageCanvas(QWidget):
         self._annotations.clear()
         self._zoom = 1.0
         self._pan_offset = QPointF(0, 0)
+        self._auto_fit = True
         self.update()
 
     def set_annotation_mode(self, enabled: bool):
@@ -406,11 +413,27 @@ class ImageCanvas(QWidget):
             return
         factor = 1.1 if event.angleDelta().y() > 0 else 0.9
         self._zoom = max(0.1, min(self._zoom * factor, 10.0))
+        # The user has now taken manual control of zoom — stop overriding
+        # it with an auto-fit on the next resize (see resizeEvent).
+        self._auto_fit = False
         self.update()
 
     def resizeEvent(self, event):
+        """Keep the image fit to the canvas across every resize — not just
+        the first one — until the user manually zooms (wheelEvent).
+        Restoring a saved project (see stl_viewer.py's
+        _restore_technical_overview_from_project) loads the image while
+        this canvas is still on a hidden workspace page, before it's ever
+        been laid out to its real size, so the very first _fit_image() call
+        fits against a placeholder size far smaller than the canvas ends up
+        being once the Technical Overview workspace is actually shown. The
+        previous guard here (`self._zoom == 1.0`) only ever re-fit once,
+        right after set_image() reset it to 1.0 — since _fit_image()
+        immediately changes _zoom away from 1.0, every subsequent resize
+        (including the one that finally gives this widget its real size)
+        was silently ignored, leaving the image stuck tiny forever."""
         super().resizeEvent(event)
-        if self._pixmap and self._zoom == 1.0:
+        if self._pixmap and self._auto_fit:
             self._fit_image()
             self.update()
 
@@ -496,6 +519,7 @@ class TechnicalAnnotationPanel(QWidget):
         self._cards: List[QFrame] = []
         self._annotations: List[ArrowAnnotation] = []
         self._init_ui()
+        on_language_changed(self._update_texts)
 
     def _show_color_palette(self, anchor: QPushButton, ann_id: int, current_color: str):
         if self._palette_popup is not None:
@@ -568,10 +592,11 @@ class TechnicalAnnotationPanel(QWidget):
         anno_icon.setStyleSheet("background: transparent; border: none;")
         title_row.addWidget(anno_icon)
 
-        title_label = QLabel("Annotation mode")
+        title_label = QLabel(t('technical.annotation_panel.title'))
         title_label.setFont(make_font(size=15, bold=True))
         title_label.setStyleSheet("color: #FFFFFF; background: transparent; border: none;")
         title_row.addWidget(title_label)
+        self._title_label = title_label
         title_row.addStretch()
 
         close_btn = QPushButton("✕")
@@ -609,12 +634,13 @@ class TechnicalAnnotationPanel(QWidget):
         """)
         header_layout.addWidget(divider)
 
-        instructions = QLabel("Click on the image to place arrows.\nEach annotation is shown in this panel.")
+        instructions = QLabel(t('technical.annotation_panel.instructions'))
         instructions.setWordWrap(True)
         instructions.setStyleSheet(
             "color: rgba(255, 255, 255, 0.95); font-size: 11px; background: transparent; border: none;"
         )
         header_layout.addWidget(instructions)
+        self._instructions_label = instructions
 
         layout.addWidget(header)
 
@@ -641,7 +667,7 @@ class TechnicalAnnotationPanel(QWidget):
         btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setSpacing(8)
 
-        clear_btn = QPushButton("Clear All")
+        clear_btn = QPushButton(t('annotation.clear_all'))
         clear_btn.setFixedHeight(32)
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setStyleSheet(f"""
@@ -660,6 +686,7 @@ class TechnicalAnnotationPanel(QWidget):
         clear_btn.clicked.connect(self._on_clear_all)
         btn_layout.addWidget(clear_btn)
         btn_layout.addStretch()
+        self._clear_btn = clear_btn
         layout.addWidget(btn_frame)
 
     def eventFilter(self, obj, event):
@@ -693,9 +720,10 @@ class TechnicalAnnotationPanel(QWidget):
             _format_annotation_date, _format_annotation_time,
             _ANNO_CARD_PENDING, _ANNO_CARD_VALIDATED, _ANNO_CARD_HOVER,
             _ANNO_CARD_READER_UNREAD, _ANNO_CARD_BORDER, _ANNO_CARD_BORDER_HOVER,
-            _rounded_text_pixmap, _checkmark_pixmap,
+            _rounded_text_pixmap, _checkmark_pixmap, get_first_comment,
             READER_READ_COLOR, READER_UNREAD_COLOR,
         )
+        from ui.traceability.shared import _MarqueeLabel
         from core.edition import is_lite
 
         VALIDATED_GREEN = '#4ade80'
@@ -748,7 +776,7 @@ class TechnicalAnnotationPanel(QWidget):
         color_btn = QPushButton()
         color_btn.setFixedSize(18, 18)
         color_btn.setCursor(Qt.PointingHandCursor)
-        color_btn.setToolTip("Change arrow color")
+        color_btn.setToolTip(t('technical.annotation_panel.color_tooltip'))
         color_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {ann_color};
@@ -774,21 +802,32 @@ class TechnicalAnnotationPanel(QWidget):
         info.setContentsMargins(0, 0, 0, 0)
         info.setSpacing(2)
 
-        title = QLabel(ann.label or "Point")
+        title = QLabel(ann.label or t('annotation.point'))
         title.setFont(make_font(size=14, bold=True))
         title.setStyleSheet(f"color: {default_theme.text_primary}; background-color: transparent; border: none;")
         info.addWidget(title)
 
-        # Note: when there's no text yet, leave this preview blank rather than
-        # falling back to "Click to edit" — the status row right below already
-        # shows that same "Click to edit" message, so filling this in too made
-        # the card show the sentence twice.
-        desc_text = (ann.text[:60] + "…") if len(ann.text) > 60 else ann.text
-        desc = QLabel(desc_text)
-        desc.setStyleSheet(f"font-size: 13px; color: {default_theme.text_secondary}; background-color: transparent; border: none;")
-        desc.setWordWrap(True)
-        desc.setVisible(bool(desc_text))
-        info.addWidget(desc)
+        # First comment in this annotation's conversation (its own text, or
+        # whoever's note came first if it has none — see get_first_comment),
+        # attributed and shown right on the card face instead of requiring
+        # the popup to be opened. Marquee-scrolls when the wording is too
+        # long to fit instead of wrapping/clipping (see _MarqueeLabel).
+        # Left blank (not shown at all) when there's no comment yet — the
+        # status row right below already covers that ("Click to edit").
+        first_comment = get_first_comment(ann)
+        comment_preview = _MarqueeLabel('')
+        comment_preview.setStyleSheet("background-color: transparent;")
+        comment_preview.setColor(default_theme.text_secondary)
+        preview_font = make_font(size=12)
+        preview_font.setItalic(True)
+        comment_preview.setFont(preview_font)
+        comment_preview.setFixedHeight(16)
+        if first_comment is not None:
+            preview_text, preview_author = first_comment
+            comment_preview.setText(f"{preview_author}: {preview_text}")
+        else:
+            comment_preview.hide()
+        info.addWidget(comment_preview)
 
         # Status row — green checkmark when validated, grey pending otherwise
         status_row = QHBoxLayout()
@@ -842,7 +881,7 @@ class TechnicalAnnotationPanel(QWidget):
         del_btn = QPushButton("✕")
         del_btn.setFixedSize(28, 28)
         del_btn.setCursor(Qt.PointingHandCursor)
-        del_btn.setToolTip("Remove annotation")
+        del_btn.setToolTip(t('annotation.remove_tooltip'))
         del_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -868,10 +907,26 @@ class TechnicalAnnotationPanel(QWidget):
 
     def _on_clear_all(self):
         if self._annotations:
-            if ask_yes_no_dialog(self, "Clear All Annotations",
-                                 f"Delete all {len(self._annotations)} annotations?"):
+            if ask_yes_no_dialog(
+                self, t('annotation.confirm_clear'),
+                t('technical.annotation_panel.confirm_clear_msg').format(count=len(self._annotations))
+            ):
                 for ann in list(self._annotations):
                     self.annotation_deleted.emit(ann.id)
+
+    def _update_texts(self):
+        """Refresh translated labels — see AnnotationCard.retranslate's
+        docstring (ui/annotation_panel.py) for why a persistent widget needs
+        this explicit push on a language switch instead of picking it up on
+        its own. Cards are rebuilt from scratch via refresh() rather than
+        patched in place, since _create_card already fully rebuilds them on
+        every call and cheaply so (no QTextEdit reveal timing concerns like
+        the 3D annotation card has)."""
+        self._title_label.setText(t('technical.annotation_panel.title'))
+        self._instructions_label.setText(t('technical.annotation_panel.instructions'))
+        self._clear_btn.setText(t('annotation.clear_all'))
+        if self._annotations:
+            self.refresh(self._annotations)
 
 
 class TechnicalOverviewWidget(QWidget):

@@ -196,6 +196,15 @@
     "validated": "Validé",
     "read": "Lu",
     "unread": "Non lu",
+    "change_color_tooltip": "Cliquer pour changer la couleur",
+    "remove_tooltip": "Supprimer l'annotation",
+    "tooltip_status": "Statut :",
+    "tooltip_date": "Date :",
+    "tooltip_note": "Note :",
+    "tooltip_photos": "Photos :",
+    "tooltip_photos_count": "{count} jointe(s)",
+    "first_comment_pm": "Chef de projet",
+    "first_comment_supplier": "Fournisseur",
     "confirm_clear": "Effacer toutes les annotations ?",
     "confirm_clear_msg": "Cela supprimera toutes les annotations. Cette action est irréversible.",
     "delete_annotation": "Supprimer l'annotation",
@@ -361,7 +370,13 @@
     "reset_workspace": "🔄 Réinitialiser l'Espace",
     "add_manufacturer_tooltip": "Ajouter un autre fabricant",
     "upload_prompt": "Cliquer ou glisser pour téléverser",
-    "upload_formats": "JPEG · PNG · PDF"
+    "upload_formats": "JPEG · PNG · PDF",
+    "annotation_panel": {
+      "title": "Mode annotation",
+      "instructions": "Cliquez sur l'image pour placer des flèches.\nChaque annotation s'affiche dans ce panneau.",
+      "color_tooltip": "Changer la couleur de la flèche",
+      "confirm_clear_msg": "Supprimer les {count} annotations ?"
+    }
   },
   "scale": {
     "title": "📐 Mise à l'échelle 2D",
@@ -649,12 +664,8 @@
       "start_date": "📅  Date de début",
       "due_date": "📅  Date d'échéance",
       "global_status": "Statut global",
-      "overall_progress": "Progression globale",
-      "click_edit_progress": "Cliquer pour modifier la progression",
       "edit_launch_title": "Modifier le lancement prévu",
       "launch_ph": "jj/mm/aaaa ou nom de jalon",
-      "edit_progress_title": "Modifier la progression globale",
-      "progress_field": "Progression (0–100)",
       "components_title": "Composants du Produit",
       "dbl_click_edit": "Double-cliquer pour modifier",
       "add_component": "＋ Ajouter un composant",
@@ -1196,7 +1207,6 @@
     "no_component": "Sélectionnez un composant à gauche pour voir et modifier son brief.",
     "selection": "Sélection",
     "clear_all": "Tout effacer",
-    "request_samples": "Demander des échantillons",
     "compare_selected": "Comparer la sélection",
     "compare_title": "Comparer les propositions",
     "component_brief": "Brief du composant",
@@ -1451,5 +1461,10 @@
     "new_qc_points_item_label": "{count} nouveau(x) point(s) de contrôle",
     "apply_btn": "Ajouter la sélection",
     "skip_all": "Tout ignorer"
+  },
+  "color_picker": {
+    "title": "Couleur du stylo",
+    "more_colors": "Plus de couleurs…",
+    "dialog_title": "Choisir la couleur du stylo"
   }
 }

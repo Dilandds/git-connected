@@ -489,6 +489,53 @@ def run_screenshot_mode(app, window, outdir):
     logger.info("screenshot-mode: complete")
 
 
+def _dismiss_splash_with_blur(splash: QSplashScreen, window, duration_ms: int = 650, steps: int = 36):
+    """Close the splash with a smooth blur+fade instead of an abrupt close.
+
+    Steps the blur radius and window opacity by hand (0 -> heavily
+    blurred/opaque -> transparent) instead of using QPropertyAnimation on a
+    QGraphicsEffect. That first version looked like a plain instant
+    show/hide with no visible transition — QPropertyAnimation drives its
+    updates off its own internal timer inside a nested QEventLoop, and
+    during a busy startup (icon loading, etc. still settling) Qt can
+    coalesce or skip repaints between timer ticks, so only the very first
+    and very last frame actually reached the screen. Explicitly calling
+    repaint() + processEvents() on every step forces every intermediate
+    frame to actually paint before moving on, so the blur/fade is visible
+    the whole way through regardless of what else is going on.
+
+    time.sleep() paces the steps at real wall-clock speed; processEvents()
+    right after each repaint() is what makes it actually visible frame by
+    frame (a bare sleep() with no event processing would just freeze the
+    splash for the whole duration instead of animating it).
+
+    Finishes with the normal splash.finish(window) — closes the splash and
+    raises/activates the main window, exactly like the plain
+    splash.finish(window) call this replaces.
+    """
+    import time
+    from PyQt5.QtWidgets import QGraphicsBlurEffect, QApplication
+    from PyQt5.QtCore import QEasingCurve
+
+    blur = QGraphicsBlurEffect(splash)
+    blur.setBlurRadius(0)
+    splash.setGraphicsEffect(blur)
+
+    ease = QEasingCurve(QEasingCurve.InCubic)
+    step_delay = (duration_ms / 1000.0) / steps
+    max_blur = 28.0
+
+    for i in range(1, steps + 1):
+        progress = ease.valueForProgress(i / steps)
+        blur.setBlurRadius(max_blur * progress)
+        splash.setWindowOpacity(1.0 - progress)
+        splash.repaint()
+        QApplication.processEvents()
+        time.sleep(step_delay)
+
+    splash.finish(window)
+
+
 def main():
     """Initialize and run the ECTOFORM application."""
     print("=" * 50, file=sys.stderr)
@@ -571,12 +618,16 @@ def main():
             base_path / 'assets' / 'logo.png',
             base_path / 'assets' / 'logo.jpg',
         ]
-        from core.edition import is_lite
+        from core.edition import is_lite, is_core
         if is_lite():
             # LYNS Lite gets its own splash before falling back to the
             # shared commercial/education assets above.
             splash_image_paths.insert(0, base_path / 'assets' / 'splash_lite.png')
-        
+        elif is_core():
+            # LYNS Core gets its own splash before falling back to the
+            # shared commercial/education assets above.
+            splash_image_paths.insert(0, base_path / 'assets' / 'splash_core.png')
+
         for img_path in splash_image_paths:
             if img_path.exists():
                 splash_pixmap = QPixmap(str(img_path))
@@ -728,8 +779,8 @@ def main():
             run_screenshot_mode(app, window, screenshot_outdir)
             return 0
 
-        # Finish splash screen
-        splash.finish(window)
+        # Finish splash screen — blurs and fades out rather than closing abruptly.
+        _dismiss_splash_with_blur(splash, window)
 
         # First-run only: suggest a display name from the OS account and let
         # the user confirm/edit it once. Every save/lock/merge-conflict

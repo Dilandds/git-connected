@@ -381,7 +381,7 @@ class STLViewerWindow(QMainWindow):
             QMenu::item:selected {{ background-color: {default_theme.button_primary}; color: #ffffff; }}
             QMenu::separator {{ height: 1px; background: {default_theme.border_standard}; margin: 4px 0; }}
         """)
-        from core.edition import is_lite
+        from core.edition import is_lite, is_core
         if is_lite():
             # LYNS Lite never manages a .lyns.pjt project — it only ever
             # opens/saves the one .lyns.review file a supplier was sent.
@@ -396,10 +396,16 @@ class STLViewerWindow(QMainWindow):
             _file_menu.addAction(t('project.topbar.save'), lambda: self.project_widget._on_save_project())
             _file_menu.addAction(t('project.topbar.save_as'), lambda: self.project_widget._on_save_project_as())
             _file_menu.addAction(t('project.topbar.version_history'), lambda: self.project_widget._show_version_history())
-            _file_menu.addSeparator()
-            # Supplier Review Workflow — see core/review_format.py.
-            _file_menu.addAction(t('project.topbar.export_review'), lambda: self.project_widget._export_supplier_review())
-            _file_menu.addAction(t('project.topbar.import_review'), lambda: self.project_widget._import_supplier_review())
+            # LYNS Core has no "The Project" section (see core/edition.py's
+            # is_core docstring) — Export/Import Supplier Review bundle QC
+            # images and project_info, neither of which exist in Core, so
+            # skip them entirely rather than offering a review that would
+            # only ever carry the 3D tab/Technical Overview/Drawing Scale.
+            if not is_core():
+                _file_menu.addSeparator()
+                # Supplier Review Workflow — see core/review_format.py.
+                _file_menu.addAction(t('project.topbar.export_review'), lambda: self.project_widget._export_supplier_review())
+                _file_menu.addAction(t('project.topbar.import_review'), lambda: self.project_widget._import_supplier_review())
             _file_menu.addSeparator()
             _file_menu.addAction(t('project.topbar.password'), lambda: self.project_widget._on_password_btn())
         self._mode_file_btn.setMenu(_file_menu)
@@ -428,7 +434,16 @@ class STLViewerWindow(QMainWindow):
         mode_bar_layout.addWidget(self._mode_3d_btn)
         mode_bar_layout.addWidget(self._mode_tech_btn)
         mode_bar_layout.addWidget(self._mode_scale_btn)
-        mode_bar_layout.addWidget(self._mode_project_btn)
+        if is_core():
+            # LYNS Core has no "The Project" section at all — hide the
+            # button rather than skip creating it, so every other place
+            # that already references it (the uniform mode-bar styling
+            # loop above, _switch_mode, _retranslate_ui) keeps working
+            # unchanged, same "hide, don't delete" pattern
+            # ui/project_widget.py's own hidden topbar buttons use.
+            self._mode_project_btn.hide()
+        else:
+            mode_bar_layout.addWidget(self._mode_project_btn)
         mode_bar_layout.addStretch()
 
         # Language toggle button (EN/FR)
@@ -989,11 +1004,17 @@ class STLViewerWindow(QMainWindow):
         self._mode_file_btn.setText(t("mode_bar.file"))
         _file_menu = self._mode_file_btn.menu()
         if _file_menu is not None:
-            from core.edition import is_lite
+            from core.edition import is_lite, is_core
             _actions = _file_menu.actions()
             if is_lite():
                 _labels = ('mode_bar.lite_new_review', 'mode_bar.lite_open_review',
                            'mode_bar.lite_save_review', 'mode_bar.lite_save_review_as')
+            elif is_core():
+                # No Export/Import Review or the separator around them —
+                # see this same is_core() branch in the File menu build.
+                _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
+                           'project.topbar.save_as', 'project.topbar.version_history', None,
+                           'project.topbar.password')
             else:
                 _labels = ('project.topbar.new', 'project.topbar.open', 'project.topbar.save',
                            'project.topbar.save_as', 'project.topbar.version_history', None,

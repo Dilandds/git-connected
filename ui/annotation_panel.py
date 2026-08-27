@@ -7,7 +7,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QScrollArea, QFrame, QTextEdit, QLineEdit, QSizePolicy, QGraphicsDropShadowEffect
@@ -16,6 +16,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.color_palette import PALETTE
+from ui.traceability.shared import _MarqueeLabel
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,42 @@ def _format_annotation_time(dt: datetime) -> str:
     return f"{dt.hour}:{dt.minute:02d}"
 
 
+def get_first_comment(annotation) -> Optional[Tuple[str, str]]:
+    """The earliest comment in an annotation's conversation — its own
+    original text if it has one, otherwise whichever of supplier_notes/
+    pm_notes came first by added_at (e.g. a supplier's own new pin, which
+    has no original text but does have their first note). Duck-typed so
+    it works for both ui.annotation_panel.Annotation (3D viewer) and
+    ui.technical_overview.ArrowAnnotation (Technical Overview) — both
+    share the same text/supplier_notes/pm_notes/added_by shape.
+
+    Returns (text, author_label) so the card face can show it without
+    opening the popup (see AnnotationCard's comment-preview row and
+    ui/technical_overview.py's _create_card), or None if the annotation
+    has no comment content at all yet.
+    """
+    if annotation.text:
+        # Attribute to whoever actually created this annotation — a
+        # supplier's own new pin in Lite (added_by == 'supplier'), or the
+        # PM otherwise.
+        author = t('annotation.first_comment_supplier') if annotation.added_by == 'supplier' \
+            else t('annotation.first_comment_pm')
+        return annotation.text, author
+
+    entries = [('supplier', n) for n in getattr(annotation, 'supplier_notes', [])] + \
+              [('pm', n) for n in getattr(annotation, 'pm_notes', [])]
+    entries = [(side, n) for side, n in entries if n.get('text')]
+    if not entries:
+        return None
+    entries.sort(key=lambda e: e[1].get('added_at') or '')
+    side, note = entries[0]
+    if side == 'supplier':
+        author = note.get('supplier_name') or t('annotation.first_comment_supplier')
+    else:
+        author = note.get('author_name') or t('annotation.first_comment_pm')
+    return note['text'], author
+
+
 @dataclass
 class Annotation:
     """Data class for a 3D annotation."""
@@ -241,7 +278,8 @@ class AnnotationCard(QFrame):
         self.init_ui()
         self._update_style()
         self._update_tooltip()
-    
+        self._update_comment_preview()
+
     def init_ui(self):
         """Initialize the card UI."""
         self.setFrameShape(QFrame.StyledPanel)
@@ -256,7 +294,7 @@ class AnnotationCard(QFrame):
         self.point_indicator = QPushButton()
         self.point_indicator.setFixedSize(dot_size, dot_size)
         self.point_indicator.setCursor(Qt.PointingHandCursor)
-        self.point_indicator.setToolTip("Click to change color")
+        self.point_indicator.setToolTip(t("annotation.change_color_tooltip"))
         self.point_indicator.clicked.connect(self._open_color_picker)
         layout.addWidget(self.point_indicator)
         
@@ -270,7 +308,7 @@ class AnnotationCard(QFrame):
         # Editable label (replaces "Point 1")
         self.label_edit = QLineEdit()
         self.label_edit.setText(self.annotation.label)
-        self.label_edit.setPlaceholderText("Point")
+        self.label_edit.setPlaceholderText(t("annotation.point"))
         title_font = make_font(size=14, bold=True)
         self.label_edit.setFont(title_font)
         self.label_edit.setStyleSheet(f"""
@@ -301,13 +339,29 @@ class AnnotationCard(QFrame):
         self.status_label = QLabel()
         self.status_label.setStyleSheet(f"color: {default_theme.text_secondary}; font-size: 13px; background-color: transparent;")
         status_layout.addWidget(self.status_label, 1)
-        
+
+        # First comment preview — the earliest message in this annotation's
+        # conversation (its own text, or whoever's note came first if it
+        # has none — see get_first_comment), shown right on the card face
+        # so seeing what a point is about doesn't require opening it.
+        # Marquee-scrolls on its own (see _MarqueeLabel) when the wording
+        # is too long to fit the card's width instead of just clipping it.
+        self.comment_preview = _MarqueeLabel('')
+        self.comment_preview.setStyleSheet(f"background-color: transparent;")
+        self.comment_preview.setColor(default_theme.text_secondary)
+        preview_font = make_font(size=12)
+        preview_font.setItalic(True)
+        self.comment_preview.setFont(preview_font)
+        self.comment_preview.setFixedHeight(16)
+        self.comment_preview.hide()
+
         info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(2)
         info_layout.addWidget(self.label_edit)
         info_layout.addWidget(status_row)
-        
+        info_layout.addWidget(self.comment_preview)
+
         layout.addLayout(info_layout, 1)  # stretch
         layout.addStretch()
         
@@ -327,7 +381,7 @@ class AnnotationCard(QFrame):
         self.delete_btn = QPushButton("✕")
         self.delete_btn.setFixedSize(28, 28)
         self.delete_btn.setCursor(Qt.PointingHandCursor)
-        self.delete_btn.setToolTip("Remove annotation")
+        self.delete_btn.setToolTip(t("annotation.remove_tooltip"))
         self.delete_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
@@ -488,7 +542,37 @@ class AnnotationCard(QFrame):
         self.label_edit.blockSignals(False)
         self._update_style()
         self._update_tooltip()
-    
+        self._update_comment_preview()
+
+    def retranslate(self):
+        """Refresh every translated string on this already-built card —
+        the placeholder, both tooltips, the status label (via _update_style)
+        and the hover tooltip (via _update_tooltip). Needed because a card
+        is built once and lives for the rest of the session; unlike a
+        dialog that gets reconstructed on each open (e.g. DrawColorPicker),
+        nothing here refreshes on a language switch unless explicitly told
+        to — see AnnotationPanel._update_texts, which calls this for every
+        card on the on_language_changed hook."""
+        self.label_edit.setPlaceholderText(t("annotation.point"))
+        self.point_indicator.setToolTip(t("annotation.change_color_tooltip"))
+        self.delete_btn.setToolTip(t("annotation.remove_tooltip"))
+        self._update_style()
+        self._update_tooltip()
+        self._update_comment_preview()
+
+    def _update_comment_preview(self):
+        """Show the conversation's first comment (see get_first_comment)
+        right on the card face, attributed to whoever wrote it — hidden
+        entirely if there's no comment yet. Uses _MarqueeLabel so long
+        wording scrolls into view instead of just getting clipped."""
+        first = get_first_comment(self.annotation)
+        if first is None:
+            self.comment_preview.hide()
+            return
+        text, author = first
+        self.comment_preview.setText(f"{author}: {text}")
+        self.comment_preview.show()
+
     def _update_tooltip(self):
         """Update the hover tooltip with annotation details."""
         date_str = _format_annotation_date(self.annotation.created_at, include_time=True) if self.annotation.created_at else f"#{self.annotation.id}"
@@ -499,16 +583,17 @@ class AnnotationCard(QFrame):
         # Only reader mode still has a status worth calling out — read/unread.
         if self._reader_mode:
             status = t("annotation.read") if self.annotation.is_read else t("annotation.unread")
-            tooltip_parts.append(f"<br><b>Status:</b> {status}")
-        tooltip_parts.append(f"<br><b>Date:</b> {date_str}")
-        
+            tooltip_parts.append(f"<br><b>{t('annotation.tooltip_status')}</b> {status}")
+        tooltip_parts.append(f"<br><b>{t('annotation.tooltip_date')}</b> {date_str}")
+
         if self.annotation.text:
             # Truncate long text
             text_preview = self.annotation.text[:100] + "..." if len(self.annotation.text) > 100 else self.annotation.text
-            tooltip_parts.append(f"<br><b>Note:</b> {text_preview}")
-        
+            tooltip_parts.append(f"<br><b>{t('annotation.tooltip_note')}</b> {text_preview}")
+
         if self.annotation.image_paths:
-            tooltip_parts.append(f"<br><b>Photos:</b> {len(self.annotation.image_paths)} attached")
+            photos_count = t('annotation.tooltip_photos_count').format(count=len(self.annotation.image_paths))
+            tooltip_parts.append(f"<br><b>{t('annotation.tooltip_photos')}</b> {photos_count}")
         
         self.setToolTip("".join(tooltip_parts))
 
@@ -934,11 +1019,16 @@ class AnnotationPanel(QWidget):
                 card.update_annotation(ann, display_number=i + 1)
 
     def _update_texts(self):
-        """Refresh translated labels."""
+        """Refresh translated labels — the panel's own chrome, plus every
+        already-built card (see AnnotationCard.retranslate's docstring for
+        why cards need this explicit push instead of picking it up on
+        their own)."""
         self.title_label.setText(t("annotation.panel_title"))
         self.instructions_label.setText(t("annotation.subtitle"))
         self.clear_btn.setText(t("annotation.clear_all"))
         self.empty_label.setText(t("annotation.no_annotations_short"))
+        for card in self.annotation_cards.values():
+            card.retranslate()
     
     def load_annotations(self, data: List[dict]):
         """Load annotations from serialized data."""
