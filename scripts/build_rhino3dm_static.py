@@ -131,8 +131,17 @@ def main() -> None:
         )
     print(f"[build_rhino3dm_static] Built: {built_pyds[0]} ({built_pyds[0].stat().st_size} bytes)")
 
-    import rhino3dm as _installed  # the pip-installed copy `pip install -r requirements.txt` put in place
-    installed_dir = Path(_installed.__file__).resolve().parent
+    # Locate the pip-installed copy in a *subprocess* rather than importing
+    # it here directly — on Windows, importing rhino3dm loads _rhino3dm.pyd
+    # into this process and keeps it locked for the process's lifetime,
+    # which makes the unlink() below fail with WinError 5 (Access is
+    # denied). A subprocess exits (and releases the lock) before we try to
+    # delete anything.
+    locate = subprocess.run(
+        [sys.executable, "-c", "import rhino3dm, os; print(os.path.dirname(rhino3dm.__file__))"],
+        check=True, capture_output=True, text=True,
+    )
+    installed_dir = Path(locate.stdout.strip())
     print(f"[build_rhino3dm_static] Overwriting installed package at: {installed_dir}")
 
     # Remove the old (dynamically-linked) compiled extension(s) first so a
