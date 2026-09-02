@@ -98,6 +98,7 @@ jobs:
         path: |
           LYNS360-*-macOS-*.dmg
         retention-days: 30
+        compression-level: 0  # DMG is already compressed — re-zipping just wastes upload/download time
     
     - name: 360 build summary
       run: |
@@ -146,6 +147,7 @@ jobs:
         name: LYNS360-Lite-DMG-${{ matrix.os }}
         path: LYNS360-Lite-*-macOS-*.dmg
         retention-days: 30
+        compression-level: 0  # DMG is already compressed — re-zipping just wastes upload/download time
 
     - name: Lite build summary
       run: |
@@ -194,6 +196,7 @@ jobs:
         name: LYNS360-Core-DMG-${{ matrix.os }}
         path: LYNS360-Core-*-macOS-*.dmg
         retention-days: 30
+        compression-level: 0  # DMG is already compressed — re-zipping just wastes upload/download time
 
     - name: Core build summary
       run: |
@@ -285,6 +288,7 @@ jobs:
         name: LYNS360-Windows.zip
         path: LYNS360-Windows.zip
         retention-days: 30
+        compression-level: 0  # already a ZIP — re-zipping just wastes upload/download time
 
     - name: 360 build summary
       run: |
@@ -317,6 +321,7 @@ jobs:
         name: LYNS360-Lite-Windows.zip
         path: LYNS360-Lite-Windows.zip
         retention-days: 30
+        compression-level: 0  # already a ZIP — re-zipping just wastes upload/download time
 
     - name: Lite build summary
       run: |
@@ -349,6 +354,7 @@ jobs:
         name: LYNS360-Core-Windows.zip
         path: LYNS360-Core-Windows.zip
         retention-days: 30
+        compression-level: 0  # already a ZIP — re-zipping just wastes upload/download time
 
     - name: Core build summary
       run: |
