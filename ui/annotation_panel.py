@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QFrame, QTextEdit, QLineEdit, QSizePolicy, QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen
+from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QBrush, QPen, QFontMetrics
 from ui.styles import default_theme, make_font, TOOLTIP_STYLE
 from ui.color_palette import PALETTE
 from ui.traceability.shared import _MarqueeLabel
@@ -352,7 +352,7 @@ class AnnotationCard(QFrame):
         preview_font = make_font(size=12)
         preview_font.setItalic(True)
         self.comment_preview.setFont(preview_font)
-        self.comment_preview.setFixedHeight(16)
+        self.comment_preview.setFixedHeight(QFontMetrics(preview_font).height() + 4)
         self.comment_preview.hide()
 
         info_layout = QVBoxLayout()

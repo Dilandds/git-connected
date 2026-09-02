@@ -821,7 +821,7 @@ class TechnicalAnnotationPanel(QWidget):
         preview_font = make_font(size=12)
         preview_font.setItalic(True)
         comment_preview.setFont(preview_font)
-        comment_preview.setFixedHeight(16)
+        comment_preview.setFixedHeight(QFontMetrics(preview_font).height() + 4)
         if first_comment is not None:
             preview_text, preview_author = first_comment
             comment_preview.setText(f"{preview_author}: {preview_text}")
