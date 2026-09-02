@@ -30,7 +30,34 @@ from pathlib import Path
 
 RHINO3DM_VERSION = "8.17.0"  # keep in sync with the version used elsewhere
 REPO_URL = "https://github.com/mcneel/rhino3dm.git"
-STATIC_RUNTIME_FLAG = "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"
+
+# Two real build attempts on Windows CI (12+ min each) confirmed:
+#   1. CMAKE_MSVC_RUNTIME_LIBRARY alone: rhino3dm's own src/CMakeLists.txt
+#      (cmake_minimum_required 3.16) picked it up fine, but draco — a
+#      separate, standalone CMake project of its own (its own
+#      `cmake <draco_src_dir>` invocation, pinned at
+#      cmake_minimum_required 3.12) — silently ignored it, since
+#      CMAKE_MSVC_RUNTIME_LIBRARY only takes effect under CMake policy
+#      CMP0091 "NEW", which a project only gets by default at >= 3.15.
+#   2. Adding CMAKE_POLICY_DEFAULT_CMP0091=NEW to force that policy on
+#      draco's build too: same LNK2038 mismatch anyway. draco.lib stayed
+#      dynamically linked regardless.
+# So instead of relying on the CMP0091 property mechanism at all, force
+# the actual compile flags directly — the traditional, pre-CMP0091
+# mechanism (CMake seeds CMAKE_<LANG>_FLAGS_RELEASE with its own /MD
+# default as a CACHE variable only if one doesn't already exist; supplying
+# it via -D on the command line pre-empts that default entirely,
+# regardless of policy state). /O2 /Ob2 /DNDEBUG are CMake's own stock
+# MSVC Release defaults, kept here so we're only swapping /MD for /MT, not
+# also dropping optimization.
+_RELEASE_FLAGS = "/MT /O2 /Ob2 /DNDEBUG"
+STATIC_RUNTIME_ARGS = [
+    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
+    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+    f"-DCMAKE_C_FLAGS_RELEASE={_RELEASE_FLAGS}",
+    f"-DCMAKE_CXX_FLAGS_RELEASE={_RELEASE_FLAGS}",
+]
+STATIC_RUNTIME_FLAG = "".join(f"'{arg}', " for arg in STATIC_RUNTIME_ARGS)
 
 
 def run(cmd, **kwargs):
@@ -58,7 +85,7 @@ def patch_setup_py(setup_py: Path) -> None:
         )
     text = text.replace(
         draco_anchor,
-        f'command = [\'cmake\', \'-A\', osplatform, \'{STATIC_RUNTIME_FLAG}\', f"{{draco_src_dir}}"]',
+        f'command = [\'cmake\', \'-A\', osplatform, {STATIC_RUNTIME_FLAG}f"{{draco_src_dir}}"]',
     )
 
     rhino_anchor = 'ext.sourcedir+"/src"]'
@@ -70,7 +97,7 @@ def patch_setup_py(setup_py: Path) -> None:
         )
     text = text.replace(
         rhino_anchor,
-        f'\'{STATIC_RUNTIME_FLAG}\',\n                        {rhino_anchor}',
+        f'{STATIC_RUNTIME_FLAG}\n                        {rhino_anchor}',
     )
 
     setup_py.write_text(text)
