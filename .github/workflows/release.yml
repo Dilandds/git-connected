@@ -30,6 +30,9 @@ jobs:
           pip install -r requirements.txt
           pip install "pyinstaller>=6.0.0"
 
+      - name: Rebuild rhino3dm with a statically-linked runtime
+        run: python scripts\build_rhino3dm_static.py
+
       - name: Read version
         id: ver
         shell: bash
