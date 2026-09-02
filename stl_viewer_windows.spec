@@ -61,6 +61,9 @@ splash_image_paths = [
     ('assets/icon.ico', 'assets'),
     ('assets/zoom_plus.png', 'assets'),
     ('assets/zoom_minus.png', 'assets'),
+    # Bundled for the automatic vcredist self-repair fallback — see
+    # core/vcredist_repair.py and build_windows.ps1's download step.
+    ('assets/vc_redist.x64.exe', 'assets'),
 ]
 
 # Add entire textures directory if it exists

@@ -49,6 +49,9 @@ splash_image_paths = [
     ('assets/arrow_up.png', 'assets'),
     ('assets/arrow_down.png', 'assets'),
     ('assets/icon.ico', 'assets'),
+    # Bundled for the automatic vcredist self-repair fallback — see
+    # core/vcredist_repair.py and build_windows_lite.ps1's download step.
+    ('assets/vc_redist.x64.exe', 'assets'),
 ]
 
 # Add entire textures directory if it exists

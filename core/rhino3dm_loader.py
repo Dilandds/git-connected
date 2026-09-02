@@ -86,7 +86,21 @@ class Rhino3dmLoader:
             pyvista.PolyData: PyVista mesh object, or None if failed
         """
         try:
-            import rhino3dm
+            try:
+                import rhino3dm
+            except ImportError as e:
+                # On Windows, this is usually "DLL load failed while importing
+                # rhino3dm" — the Visual C++ runtime rhino3dm's compiled
+                # extension needs isn't on this machine (or our bundled copy
+                # of it didn't take). Try a one-time silent self-repair
+                # instead of just failing, so the user never has to go
+                # download anything themselves.
+                from core.vcredist_repair import is_dll_load_error, attempt_repair
+                if is_dll_load_error(e) and attempt_repair():
+                    logger.info("Rhino3dmLoader: VC++ runtime repaired, retrying import")
+                    import rhino3dm  # retry now that the runtime is installed
+                else:
+                    raise
 
             logger.info(f"Rhino3dmLoader: Attempting to load 3DM file with rhino3dm: {file_path}")
 

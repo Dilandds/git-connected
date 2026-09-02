@@ -21,6 +21,15 @@ if ((Test-Path "assets/logo.png") -and (-not (Test-Path "assets/icon.ico"))) {
     python scripts/convert_logo_to_icons.py 2>&1 | Out-Null
 }
 
+# Download the Microsoft VC++ 2015-2022 x64 redistributable installer if we
+# don't already have a cached copy. It gets bundled into the app as a
+# silent, automatic self-repair fallback for rhino3dm's "DLL load failed"
+# error on machines missing that runtime (see core/vcredist_repair.py).
+if (-not (Test-Path "assets\vc_redist.x64.exe")) {
+    Write-Host "Downloading vc_redist.x64.exe..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "assets\vc_redist.x64.exe"
+}
+
 # Clean
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 

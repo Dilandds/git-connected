@@ -40,6 +40,15 @@ else {
     Write-Host "Warning: assets\logo.png not found. Icon files may not be available." -ForegroundColor Yellow
 }
 
+# Download the Microsoft VC++ 2015-2022 x64 redistributable installer if we
+# don't already have a cached copy. It gets bundled into the app as a
+# silent, automatic self-repair fallback for rhino3dm's "DLL load failed"
+# error on machines missing that runtime (see core/vcredist_repair.py).
+if (-not (Test-Path "assets\vc_redist.x64.exe")) {
+    Write-Host "Downloading vc_redist.x64.exe..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "assets\vc_redist.x64.exe"
+}
+
 # Clean previous builds
 Write-Host "Cleaning previous builds..." -ForegroundColor Yellow
 if (Test-Path "build") {
