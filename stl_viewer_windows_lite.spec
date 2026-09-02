@@ -85,6 +85,20 @@ except Exception as e:
     print(f"[PyInstaller] Warning: Could not collect casadi DLLs: {e}")
     print("[PyInstaller] casadi DLLs may need to be manually added")
 
+# Bundle the MSVC runtime DLLs (from the build machine's System32) so that
+# rhino3dm's compiled _rhino3dm.pyd doesn't depend on the target machine
+# already having the Visual C++ Redistributable installed — without it,
+# importing rhino3dm fails with "DLL load failed while importing rhino3dm".
+_msvc_runtime_dlls = ('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'concrt140.dll')
+_system32 = Path(os.environ.get('WINDIR', r'C:\Windows')) / 'System32'
+for _dll_name in _msvc_runtime_dlls:
+    _dll_path = _system32 / _dll_name
+    if _dll_path.exists():
+        binaries_list.append((str(_dll_path), '.'))
+        print(f"[PyInstaller] [OK] Bundling MSVC runtime DLL: {_dll_name}")
+    else:
+        print(f"[PyInstaller] [X] MSVC runtime DLL not found on build machine: {_dll_name}")
+
 a = Analysis(
     ['main_lite.py'],
     pathex=[],
