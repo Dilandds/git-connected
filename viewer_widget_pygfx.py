@@ -592,12 +592,14 @@ class STLViewerWidget(QWidget):
 
         _result = [None]
         _done = threading.Event()
+        self._last_load_error = None
 
         def _cpu_work():
             try:
                 _result[0] = self._cpu_load_file(file_path)
             except Exception as e:
                 logger.error(f"load_stl (pygfx): background parse failed: {e}", exc_info=True)
+                self._last_load_error = str(e)
             finally:
                 _done.set()
 
@@ -736,6 +738,7 @@ class STLViewerWidget(QWidget):
         except Exception as e:
             self._loading_overlay.hide_loading()
             logger.error(f"load_stl (pygfx): GPU phase error: {e}", exc_info=True)
+            self._last_load_error = str(e)
             return False
 
     def _cpu_load_file(self, file_path: str) -> dict:

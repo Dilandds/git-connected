@@ -266,15 +266,6 @@ class Rhino3dmLoader:
         except Exception as e:
             detail = f"Error analyzing file: {str(e)}"
 
-        error_msg = (
-            f"Failed to load 3DM file: {file_path}\n\n"
-            f"Details: {detail}\n\n"
-            "rhino3dm failed to convert the geometry to a mesh.\n"
-            "Please ensure:\n"
-            "1. The file is a valid 3DM format\n"
-            "2. rhino3dm is properly installed (pip install rhino3dm)\n"
-            "3. The file contains meshable geometry (Mesh, Brep, Surface, or Extrusion)\n"
-            "4. The file is not corrupted"
-        )
+        error_msg = f"Failed to load 3DM file: {file_path}\n\nDetails: {detail}"
         logger.error(f"Rhino3dmLoader: {error_msg}")
-        raise ValueError(error_msg)
+        raise ValueError(detail)

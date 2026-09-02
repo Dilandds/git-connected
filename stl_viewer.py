@@ -2696,10 +2696,12 @@ class STLViewerWindow(QMainWindow):
                 file_type = "IGES"
             else:
                 file_type = "STL"
+            detail = getattr(tab.viewer_widget, '_last_load_error', None)
+            detail_line = f"\n\nDetails: {detail}" if detail else ""
             show_error_dialog(
                 self,
                 "Error",
-                f"Failed to load {file_type} file:\n{file_path}\n\nPlease ensure the file is a valid {file_type} format."
+                f"Failed to load {file_type} file:\n{file_path}\n\nPlease ensure the file is a valid {file_type} format.{detail_line}"
             )
         else:
             filename = Path(file_path).name
